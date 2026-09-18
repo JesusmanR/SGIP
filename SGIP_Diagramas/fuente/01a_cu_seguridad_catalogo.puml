@@ -1,0 +1,32 @@
+@startuml
+!include comun.iuml
+left to right direction
+
+actor "Administrador" as ADM
+actor "Vendedor" as VEN
+actor "Cliente" as CLI
+
+rectangle "SGIP — Seguridad y catálogo" {
+  usecase "CU-01\nIniciar sesión" as CU01
+  usecase "CU-02\nCerrar sesión" as CU02
+  usecase "CU-03\nGestionar usuarios y roles" as CU03
+  usecase "CU-04\nRegistrar producto" as CU04
+  usecase "CU-05\nEditar producto" as CU05
+  usecase "CU-06\nDesactivar producto" as CU06
+  usecase "CU-07\nConsultar catálogo" as CU07
+  usecase "CU-08\nConsultar producto por código" as CU08
+}
+
+ADM --> CU01
+ADM --> CU02
+ADM --> CU03
+ADM --> CU04
+ADM --> CU05
+ADM --> CU06
+VEN --> CU01
+VEN --> CU07
+VEN --> CU08
+CLI --> CU01
+CLI --> CU07
+CLI --> CU08
+@enduml

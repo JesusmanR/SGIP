@@ -1,0 +1,134 @@
+@startuml
+!include comun.iuml
+
+package "modelo — comercial, facturación y auditoría" {
+
+  class Usuario {
+    - id : int
+    - nombre : String
+    - correo : String
+    - claveHash : String
+    - rol : Rol
+    - activo : boolean
+    - bloqueado : boolean
+    + verificarClave(clave : String) : boolean
+  }
+
+  class Cliente {
+    - id : int
+    - razonSocial : String
+    - nit : String
+    - correo : String
+    - telefono : String
+    - autorizacionDatos : LocalDateTime
+  }
+
+  class Cotizacion {
+    - id : long
+    - fechaEmision : LocalDate
+    - fechaVencimiento : LocalDate
+    - estado : EstadoCotizacion
+    - subtotal : BigDecimal
+    - iva : BigDecimal
+    - total : BigDecimal
+    + agregarItem(i : CotizacionItem) : void
+    + vigente() : boolean
+    + recalcular() : void
+  }
+
+  class CotizacionItem {
+    - id : long
+    - cantidad : int
+    - precioUnitario : BigDecimal
+    - subtotal : BigDecimal
+  }
+
+  class Venta {
+    - id : long
+    - fecha : LocalDateTime
+    - formaPago : FormaPago
+    - subtotal : BigDecimal
+    - iva : BigDecimal
+    - total : BigDecimal
+    + totalizar() : BigDecimal
+  }
+
+  class VentaItem {
+    - id : long
+    - cantidad : int
+    - precioUnitario : BigDecimal
+    - subtotal : BigDecimal
+  }
+
+  class FacturaElectronica {
+    - id : long
+    - cufe : String
+    - estado : EstadoFactura
+    - fechaEnvio : LocalDateTime
+    - fechaValidacion : LocalDateTime
+    - respuesta : String
+  }
+
+  class Movimiento {
+    - id : long
+    - tipo : TipoMovimiento
+    - cantidad : int
+    - existenciaAnterior : int
+    - existenciaPosterior : int
+    - fecha : LocalDateTime
+    - observacion : String
+  }
+
+  class AuditoriaAcceso {
+    - id : long
+    - correo : String
+    - exitoso : boolean
+    - origen : String
+    - fecha : LocalDateTime
+  }
+
+  enum Rol {
+    ADMINISTRADOR
+    VENDEDOR
+    CLIENTE
+  }
+
+  enum EstadoCotizacion {
+    BORRADOR
+    VIGENTE
+    VENCIDA
+    CONVERTIDA
+    ANULADA
+  }
+
+  enum EstadoFactura {
+    GENERADA
+    ENVIADA
+    VALIDADA
+    RECHAZADA
+  }
+
+  enum TipoMovimiento {
+    INGRESO
+    EGRESO
+    DEVOLUCION
+    AJUSTE
+  }
+}
+
+Cliente "1" -- "0..*" Cotizacion
+Usuario "1" -- "0..*" Cotizacion : emite
+Cotizacion "1" *-- "1..*" CotizacionItem
+Cotizacion "0..1" -- "0..1" Venta : origina
+Cliente "1" -- "0..*" Venta
+Usuario "1" -- "0..*" Venta : registra
+Venta "1" *-- "1..*" VentaItem
+Venta "1" -- "0..1" FacturaElectronica
+Usuario "1" -- "0..*" Movimiento : responsable
+
+Usuario ..> Rol
+Cotizacion ..> EstadoCotizacion
+FacturaElectronica ..> EstadoFactura
+Movimiento ..> TipoMovimiento
+
+@enduml

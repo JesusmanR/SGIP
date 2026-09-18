@@ -1,0 +1,44 @@
+@startuml
+!include comun.iuml
+
+package "logica — servicios comerciales" {
+
+  class ServicioCotizacion {
+    + crear(cli : Cliente, u : Usuario) : Cotizacion
+    + agregarItem(c : Cotizacion, p : Producto, n : int) : void
+    + emitir(c : Cotizacion) : Cotizacion
+    + exportarPdf(c : Cotizacion) : byte[]
+    + convertirEnVenta(c : Cotizacion) : Venta
+  }
+
+  class GestorVentas {
+    + registrar(v : Venta) : Venta
+    + ingresos(desde : LocalDate, hasta : LocalDate) : BigDecimal
+    + egresos(desde : LocalDate, hasta : LocalDate) : BigDecimal
+    + rotacion(desde : LocalDate, hasta : LocalDate) : List<Rotacion>
+  }
+
+  class ServicioFacturacion {
+    + emitir(v : Venta) : FacturaElectronica
+    + consultarEstado(f : FacturaElectronica) : EstadoFactura
+    - transmitir(f : FacturaElectronica) : Respuesta
+  }
+}
+
+package "logica — núcleo" <<Frame>> {
+  class Inventario
+  class MotorPrecios
+}
+
+ServicioCotizacion --> MotorPrecios : precio vigente
+ServicioCotizacion --> Inventario : disponibilidad
+ServicioCotizacion ..> GestorVentas : conversión a venta
+GestorVentas --> Inventario : descuento transaccional
+GestorVentas --> ServicioFacturacion : emisión
+
+note bottom of GestorVentas
+  El registro de la venta y el descuento de
+  existencias ocurren dentro de una única
+  transacción de base de datos.
+end note
+@enduml

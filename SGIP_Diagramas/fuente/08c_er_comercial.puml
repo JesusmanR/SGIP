@@ -1,0 +1,100 @@
+@startuml
+!include comun.iuml
+hide circle
+skinparam linetype ortho
+
+entity "clientes" as clientes {
+  * cliente_id : INT <<PK>>
+  --
+  * razon_social : VARCHAR(160)
+  * nit : VARCHAR(20) <<UQ>>
+  correo : VARCHAR(120)
+  telefono : VARCHAR(20)
+  autorizacion_datos : DATETIME
+}
+
+entity "usuarios" as usuarios {
+  * usuario_id : INT <<PK>>
+  --
+  * correo : VARCHAR(120) <<UQ>>
+  * nombre : VARCHAR(120)
+}
+
+entity "productos" as productos {
+  * producto_id : INT <<PK>>
+  --
+  * codigo : VARCHAR(60) <<UQ>>
+  * nombre : VARCHAR(160)
+  * costo : DECIMAL(14,2)
+  precio_contado : DECIMAL(14,2) <<GEN>>
+  precio_credito : DECIMAL(14,2) <<GEN>>
+  * existencia : INT
+}
+
+entity "cotizaciones" as cotiz {
+  * cotizacion_id : BIGINT <<PK>>
+  --
+  * cliente_id : INT <<FK>>
+  * usuario_id : INT <<FK>>
+  * fecha_emision : DATE
+  * fecha_vencimiento : DATE
+  * estado : ENUM
+  subtotal : DECIMAL(14,2)
+  iva : DECIMAL(14,2)
+  total : DECIMAL(14,2) <<GEN>>
+}
+
+entity "cotizacion_items" as cotitems {
+  * item_id : BIGINT <<PK>>
+  --
+  * cotizacion_id : BIGINT <<FK>>
+  * producto_id : INT <<FK>>
+  * cantidad : INT
+  * precio_unitario : DECIMAL(14,2)
+  subtotal : DECIMAL(14,2) <<GEN>>
+}
+
+entity "ventas" as ventas {
+  * venta_id : BIGINT <<PK>>
+  --
+  * cliente_id : INT <<FK>>
+  * usuario_id : INT <<FK>>
+  cotizacion_id : BIGINT <<FK>>
+  * fecha : DATETIME
+  * forma_pago : ENUM
+  subtotal : DECIMAL(14,2)
+  iva : DECIMAL(14,2)
+  total : DECIMAL(14,2) <<GEN>>
+}
+
+entity "venta_items" as venitems {
+  * item_id : BIGINT <<PK>>
+  --
+  * venta_id : BIGINT <<FK>>
+  * producto_id : INT <<FK>>
+  * cantidad : INT
+  * precio_unitario : DECIMAL(14,2)
+  subtotal : DECIMAL(14,2) <<GEN>>
+}
+
+entity "facturas_electronicas" as facturas {
+  * factura_id : BIGINT <<PK>>
+  --
+  * venta_id : BIGINT <<FK, UQ>>
+  cufe : VARCHAR(96)
+  * estado : ENUM
+  fecha_envio : DATETIME
+  fecha_validacion : DATETIME
+  respuesta : TEXT
+}
+usuarios ||--o{ cotiz
+usuarios ||--o{ ventas
+clientes ||--o{ cotiz
+clientes ||--o{ ventas
+cotiz ||--|{ cotitems
+cotiz |o--o| ventas
+ventas ||--|{ venitems
+ventas ||--o| facturas
+productos ||--o{ cotitems
+productos ||--o{ venitems
+@enduml
