@@ -4,7 +4,13 @@ MySQL 8.0.16 o superior. La versión mínima la imponen las restricciones
 `CHECK`, que MySQL ignoraba silenciosamente en versiones anteriores.
 
 Probado contra MySQL 8.0.46: los ocho scripts se ejecutan sin errores y
-producen 24 tablas, 6 vistas y 3 funciones.
+producen 24 tablas, 6 vistas y 3 funciones, con el registro binario
+activado y sin privilegios especiales.
+
+MySQL 8.0 llegó a fin de vida en abril de 2026. Para una instalación
+nueva conviene 8.4 LTS, que mantiene la colación, las restricciones
+`CHECK`, las columnas generadas y las funciones de ventana que usa este
+esquema. Esa versión no ha sido verificada directamente.
 
 ## Orden de ejecución
 
@@ -22,12 +28,9 @@ mysql -u root -p sgip < V8__datos_demo.sql   # opcional, solo para probar
 
 El orden importa: hay claves foráneas entre migraciones.
 
-Si el servidor tiene activado el registro binario, V5 falla al crear las
-funciones hasta que se ejecute, con privilegio SUPER:
-
-```sql
-SET GLOBAL log_bin_trust_function_creators = 1;
-```
+Las funciones de V5 declaran `READS SQL DATA`, de modo que se crean sin
+problema con el registro binario activado. No hace falta tocar
+`log_bin_trust_function_creators`.
 
 V5 usa la directiva `DELIMITER`, que interpreta el cliente `mysql` pero
 no todos los conectores. Si lo ejecutas desde una herramienta gráfica y
@@ -81,6 +84,11 @@ ofreció, aunque el costo haya cambiado hoy.
 claves foráneas usan `RESTRICT` donde borrar rompería la trazabilidad y
 `CASCADE` solo en las líneas de detalle, que no tienen sentido sin su
 encabezado.
+
+**Las columnas booleanas se declaran `BOOL`, no `TINYINT(1)`.** MySQL las
+almacena igual, pero escribir el ancho de visualización produce el aviso
+1681: los anchos en tipos enteros están obsoletos y se van a retirar.
+Declararlas como `BOOL` deja los ocho scripts sin un solo aviso.
 
 **`sesiones.token_hash` guarda el hash del token, no el token.** Si la
 base se filtra, las sesiones vigentes no quedan expuestas.

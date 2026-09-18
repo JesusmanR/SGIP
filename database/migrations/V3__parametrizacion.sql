@@ -128,7 +128,7 @@ CREATE TABLE reglas_envio (
   umbral_valor     DECIMAL(14,2) NOT NULL,
   base_calculo     ENUM('SUBTOTAL','TOTAL_CON_IVA') NOT NULL DEFAULT 'SUBTOTAL',
   costo_envio      DECIMAL(14,2) NOT NULL DEFAULT 0,
-  permite_obsequio TINYINT(1)    NOT NULL DEFAULT 1,
+  permite_obsequio BOOL                             NOT NULL DEFAULT 1,
   vigente_desde    DATE          NOT NULL,
   vigente_hasta    DATE          NULL,
   CONSTRAINT pk_reglas_envio PRIMARY KEY (regla_envio_id),

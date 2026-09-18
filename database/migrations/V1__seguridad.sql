@@ -16,7 +16,7 @@ CREATE TABLE roles (
   rol_id       INT           NOT NULL AUTO_INCREMENT,
   nombre       VARCHAR(30)   NOT NULL,
   descripcion  VARCHAR(120)  NULL,
-  activo       TINYINT(1)    NOT NULL DEFAULT 1,
+  activo       BOOL          NOT NULL DEFAULT 1,
   CONSTRAINT pk_roles PRIMARY KEY (rol_id),
   CONSTRAINT uq_roles_nombre UNIQUE (nombre)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci;
@@ -32,10 +32,10 @@ CREATE TABLE usuarios (
   nombre             VARCHAR(120)  NOT NULL,
   correo             VARCHAR(120)  NOT NULL,
   clave_hash         VARCHAR(255)  NOT NULL,
-  activo             TINYINT(1)    NOT NULL DEFAULT 1,
-  bloqueado          TINYINT(1)    NOT NULL DEFAULT 0,
+  activo             BOOL             NOT NULL DEFAULT 1,
+  bloqueado          BOOL             NOT NULL DEFAULT 0,
   intentos_fallidos  TINYINT UNSIGNED NOT NULL DEFAULT 0,
-  cambio_clave_req   TINYINT(1)    NOT NULL DEFAULT 1,
+  cambio_clave_req   BOOL             NOT NULL DEFAULT 1,
   creado_en          DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
   actualizado_en     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP
                                    ON UPDATE CURRENT_TIMESTAMP,
@@ -63,7 +63,7 @@ CREATE TABLE sesiones (
   expira            DATETIME      NOT NULL,
   dispositivo       VARCHAR(120)  NULL,
   origen            VARCHAR(60)   NULL,
-  cerrada           TINYINT(1)    NOT NULL DEFAULT 0,
+  cerrada           BOOL          NOT NULL DEFAULT 0,
   CONSTRAINT pk_sesiones PRIMARY KEY (sesion_id),
   CONSTRAINT uq_sesiones_token UNIQUE (token_hash),
   CONSTRAINT fk_sesiones_usuario FOREIGN KEY (usuario_id)
@@ -82,7 +82,7 @@ CREATE TABLE auditoria_accesos (
   acceso_id   BIGINT        NOT NULL AUTO_INCREMENT,
   usuario_id  INT           NULL,
   correo      VARCHAR(120)  NOT NULL,
-  exitoso     TINYINT(1)    NOT NULL,
+  exitoso     BOOL          NOT NULL,
   motivo      VARCHAR(60)   NULL,
   origen      VARCHAR(60)   NULL,
   fecha       DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,

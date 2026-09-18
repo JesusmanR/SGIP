@@ -13,7 +13,7 @@ CREATE TABLE categorias (
   categoria_id  INT           NOT NULL AUTO_INCREMENT,
   nombre        VARCHAR(80)   NOT NULL,
   descripcion   VARCHAR(200)  NULL,
-  activa        TINYINT(1)    NOT NULL DEFAULT 1,
+  activa        BOOL          NOT NULL DEFAULT 1,
   CONSTRAINT pk_categorias PRIMARY KEY (categoria_id),
   CONSTRAINT uq_categorias_nombre UNIQUE (nombre)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci;
@@ -35,7 +35,7 @@ CREATE TABLE proveedores (
                                      NOT NULL DEFAULT 'NINGUNO',
   url_servicio         VARCHAR(255)  NULL,
   credencial_servicio  VARBINARY(512) NULL,
-  activo               TINYINT(1)    NOT NULL DEFAULT 1,
+  activo               BOOL           NOT NULL DEFAULT 1,
   creado_en            DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT pk_proveedores PRIMARY KEY (proveedor_id),
   CONSTRAINT uq_proveedores_nit UNIQUE (nit),
@@ -71,7 +71,7 @@ CREATE TABLE productos (
                          ELSE 'ACTIVO'
                        END
                      ) STORED,
-  activo             TINYINT(1)    NOT NULL DEFAULT 1,
+  activo             BOOL          NOT NULL DEFAULT 1,
   creado_en          DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
   actualizado_en     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP
                                    ON UPDATE CURRENT_TIMESTAMP,
@@ -101,7 +101,7 @@ CREATE TABLE mapeos_proveedor (
   proveedor_id     INT           NOT NULL,
   campo_sistema    VARCHAR(60)   NOT NULL,
   columna_origen   VARCHAR(60)   NOT NULL,
-  obligatorio      TINYINT(1)    NOT NULL DEFAULT 0,
+  obligatorio      BOOL          NOT NULL DEFAULT 0,
   fila_encabezado  INT           NOT NULL DEFAULT 1,
   hoja             VARCHAR(60)   NULL,
   CONSTRAINT pk_mapeos_proveedor PRIMARY KEY (mapeo_id),
@@ -154,7 +154,7 @@ CREATE TABLE detalle_carga_precios (
   descripcion_origen  VARCHAR(200)  NULL,
   costo               DECIMAL(14,2) NULL,
   costo_anterior      DECIMAL(14,2) NULL,
-  aceptado            TINYINT(1)    NOT NULL DEFAULT 0,
+  aceptado            BOOL          NOT NULL DEFAULT 0,
   motivo_rechazo      VARCHAR(200)  NULL,
   CONSTRAINT pk_detalle_carga PRIMARY KEY (detalle_id),
   CONSTRAINT fk_detalle_carga FOREIGN KEY (carga_id)

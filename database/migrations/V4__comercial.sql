@@ -23,7 +23,7 @@ CREATE TABLE clientes (
   ciudad              VARCHAR(80)   NULL,
   autorizacion_datos  DATETIME      NULL,
   medio_autorizacion  VARCHAR(60)   NULL,
-  activo              TINYINT(1)    NOT NULL DEFAULT 1,
+  activo              BOOL                              NOT NULL DEFAULT 1,
   creado_en           DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT pk_clientes PRIMARY KEY (cliente_id),
   CONSTRAINT uq_clientes_documento UNIQUE (tipo_documento, nit),

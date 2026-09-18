@@ -2,9 +2,11 @@
 -- SGIP · Migración V5 · Funciones almacenadas
 --
 -- Ejecutar con el cliente mysql, que interpreta la directiva DELIMITER.
--- Si el servidor tiene activado el registro binario sin
--- log_bin_trust_function_creators, ejecutar antes:
---   SET GLOBAL log_bin_trust_function_creators = 1;
+--
+-- Las tres funciones declaran READS SQL DATA. Esa característica es la
+-- que permite crearlas con el registro binario activado sin necesidad de
+-- log_bin_trust_function_creators. Verificado con log_bin = 1 y la
+-- variable en cero.
 -- =====================================================================
 
 DROP FUNCTION IF EXISTS fn_valor_uvt;
@@ -33,7 +35,7 @@ END$$
 -- en el calendario de días no laborables.
 -- ---------------------------------------------------------------------
 CREATE FUNCTION fn_es_habil(p_fecha DATE)
-RETURNS TINYINT(1)
+RETURNS BOOL
 READS SQL DATA
 BEGIN
   DECLARE v_festivo INT DEFAULT 0;
