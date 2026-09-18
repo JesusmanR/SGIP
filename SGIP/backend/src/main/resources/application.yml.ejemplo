@@ -1,0 +1,25 @@
+# Copiar como application.yml y completar con valores locales.
+# application.yml está en .gitignore: nunca se versiona.
+
+spring:
+  datasource:
+    url: jdbc:mysql://${SGIP_BD_HOST:localhost}:${SGIP_BD_PUERTO:3306}/sgip?useSSL=true&serverTimezone=America/Bogota
+    username: ${SGIP_BD_USUARIO}
+    password: ${SGIP_BD_CLAVE}
+  jpa:
+    hibernate:
+      ddl-auto: validate      # El esquema lo gobiernan las migraciones, no Hibernate.
+    open-in-view: false
+
+sgip:
+  seguridad:
+    jwt-secreto: ${SGIP_JWT_SECRETO}
+    sesion-minutos: 30
+  facturacion:
+    proveedor-url: ${SGIP_FE_URL:}
+    proveedor-token: ${SGIP_FE_TOKEN:}
+
+logging:
+  level:
+    root: INFO
+    co.com.bspstore.sgip: DEBUG

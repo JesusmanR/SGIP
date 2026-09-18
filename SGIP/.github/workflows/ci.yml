@@ -1,0 +1,56 @@
+name: Integración continua
+
+on:
+  push:
+    branches: [main, develop, 'feature/**']
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  esquema:
+    name: Migraciones de base de datos
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: sgip_ci
+          MYSQL_DATABASE: sgip
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -psgip_ci"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Aplicar migraciones en orden
+        run: |
+          for f in database/migrations/V*.sql; do
+            echo "→ $f"
+            mysql -h 127.0.0.1 -u root -psgip_ci sgip < "$f"
+          done
+
+      - name: Verificar el conteo de objetos
+        run: |
+          tablas=$(mysql -h 127.0.0.1 -u root -psgip_ci -N -B -e \
+            "SELECT COUNT(*) FROM information_schema.tables
+             WHERE table_schema='sgip' AND table_type='BASE TABLE';")
+          vistas=$(mysql -h 127.0.0.1 -u root -psgip_ci -N -B -e \
+            "SELECT COUNT(*) FROM information_schema.views WHERE table_schema='sgip';")
+          echo "tablas=$tablas vistas=$vistas"
+          test "$tablas" -eq 24
+          test "$vistas" -eq 6
+
+  backend:
+    name: Compilación y pruebas del backend
+    runs-on: ubuntu-latest
+    # Se activa cuando exista backend/pom.xml con código real.
+    if: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: temurin
+          cache: maven
+      - run: mvn -B -f backend/pom.xml verify

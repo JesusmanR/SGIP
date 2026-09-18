@@ -1,0 +1,120 @@
+@startuml
+!include comun.iuml
+hide circle
+skinparam linetype ortho
+
+entity "categorias" as categorias {
+  * categoria_id : INT <<PK>>
+  --
+  * nombre : VARCHAR(80) <<UQ>>
+  descripcion : VARCHAR(200)
+}
+
+entity "proveedores" as proveedores {
+  * proveedor_id : INT <<PK>>
+  --
+  * razon_social : VARCHAR(160)
+  * nit : VARCHAR(20) <<UQ>>
+  contacto : VARCHAR(120)
+  plazo_dias : INT
+  activo : TINYINT(1)
+}
+
+entity "productos" as productos {
+  * producto_id : INT <<PK>>
+  --
+  * categoria_id : INT <<FK>>
+  * proveedor_id : INT <<FK>>
+  * codigo : VARCHAR(60) <<UQ>>
+  * nombre : VARCHAR(160)
+  * costo : DECIMAL(14,2)
+  precio_contado : DECIMAL(14,2) <<GEN>>
+  precio_credito : DECIMAL(14,2) <<GEN>>
+  * existencia : INT
+  existencia_minima : INT
+  activo : TINYINT(1)
+}
+
+entity "historico_costos" as historico {
+  * historico_id : BIGINT <<PK>>
+  --
+  * producto_id : INT <<FK>>
+  * costo : DECIMAL(14,2)
+  * vigente_desde : DATE
+  vigente_hasta : DATE
+}
+
+entity "reglas_margen" as reglas {
+  * regla_id : INT <<PK>>
+  --
+  categoria_id : INT <<FK>>
+  proveedor_id : INT <<FK>>
+  * forma_pago : ENUM
+  * factor : DECIMAL(6,4)
+  * vigente_desde : DATE
+}
+
+entity "mapeos_proveedor" as mapeos {
+  * mapeo_id : INT <<PK>>
+  --
+  * proveedor_id : INT <<FK>>
+  * campo_sistema : VARCHAR(60)
+  * columna_origen : VARCHAR(60)
+  obligatorio : TINYINT(1)
+}
+
+entity "cargas_precios" as cargas {
+  * carga_id : BIGINT <<PK>>
+  --
+  * proveedor_id : INT <<FK>>
+  * usuario_id : INT <<FK>>
+  * origen : ENUM
+  * estado : ENUM
+  * fecha : DATETIME
+  registros_leidos : INT
+  registros_aplicados : INT
+  registros_rechazados : INT
+}
+
+entity "detalle_carga_precios" as detcarga {
+  * detalle_id : BIGINT <<PK>>
+  --
+  * carga_id : BIGINT <<FK>>
+  producto_id : INT <<FK>>
+  * referencia_origen : VARCHAR(80)
+  costo : DECIMAL(14,2)
+  aceptado : TINYINT(1)
+  motivo_rechazo : VARCHAR(200)
+}
+
+entity "movimientos_inventario" as movim {
+  * movimiento_id : BIGINT <<PK>>
+  --
+  * producto_id : INT <<FK>>
+  * usuario_id : INT <<FK>>
+  * tipo : ENUM
+  * cantidad : INT
+  * existencia_anterior : INT
+  * existencia_posterior : INT
+  * fecha : DATETIME
+  observacion : VARCHAR(200)
+}
+
+entity "usuarios" as usuarios {
+  * usuario_id : INT <<PK>>
+  --
+  * correo : VARCHAR(120) <<UQ>>
+}
+categorias ||--o{ productos
+proveedores ||--o{ productos
+proveedores ||--o{ cargas
+proveedores ||--o{ mapeos
+categorias ||--o{ reglas
+proveedores ||--o{ reglas
+productos ||--o{ historico
+productos ||--o{ movim
+productos ||--o{ detcarga
+cargas ||--|{ detcarga
+usuarios ||--o{ cargas
+usuarios ||--o{ movim
+@enduml

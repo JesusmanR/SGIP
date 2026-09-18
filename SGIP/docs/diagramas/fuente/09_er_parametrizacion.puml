@@ -1,0 +1,86 @@
+@startuml
+!include comun.iuml
+hide circle
+skinparam linetype ortho
+
+entity "parametros" as par {
+  * parametro_id : INT <<PK>>
+  --
+  * clave : VARCHAR(80) <<UQ>>
+  * valor : VARCHAR(200)
+  * tipo_dato : ENUM
+  descripcion : VARCHAR(200)
+  * vigente_desde : DATE
+}
+
+entity "uvt_anual" as uvt {
+  * anio : SMALLINT <<PK>>
+  --
+  * valor : DECIMAL(12,2)
+  resolucion : VARCHAR(60)
+}
+
+entity "reglas_iva" as riva {
+  * regla_iva_id : INT <<PK>>
+  --
+  categoria_id : INT <<FK>>
+  * tratamiento : ENUM
+  umbral_uvt : DECIMAL(8,2)
+  * tarifa : DECIMAL(5,4)
+  * vigente_desde : DATE
+  vigente_hasta : DATE
+  fundamento : VARCHAR(160)
+}
+
+entity "reglas_margen" as rmar {
+  * regla_id : INT <<PK>>
+  --
+  categoria_id : INT <<FK>>
+  proveedor_id : INT <<FK>>
+  * forma_pago : ENUM
+  * factor : DECIMAL(6,4)
+  * vigente_desde : DATE
+  vigente_hasta : DATE
+}
+
+entity "reglas_envio" as renv {
+  * regla_envio_id : INT <<PK>>
+  --
+  * umbral_valor : DECIMAL(14,2)
+  * base_calculo : ENUM
+  * costo_envio : DECIMAL(14,2)
+  * permite_obsequio : TINYINT(1)
+  * vigente_desde : DATE
+  vigente_hasta : DATE
+}
+
+note bottom of renv
+  El umbral se mide sobre el subtotal, antes
+  del impuesto, y la comparación es estricta.
+  permite_obsequio habilita que el vendedor
+  regale el envío por debajo del umbral.
+end note
+
+entity "categorias" as cat {
+  * categoria_id : INT <<PK>>
+  --
+  * nombre : VARCHAR(80) <<UQ>>
+}
+
+entity "proveedores" as prov {
+  * proveedor_id : INT <<PK>>
+  --
+  * razon_social : VARCHAR(160)
+}
+
+cat ||--o{ riva
+cat ||--o{ rmar
+prov ||--o{ rmar
+uvt ||--o{ riva : convierte umbral
+
+note bottom of riva
+  El umbral se almacena en UVT, no en pesos.
+  Al cambiar el valor anual de la UVT el tope
+  se actualiza sin tocar la regla.
+end note
+@enduml

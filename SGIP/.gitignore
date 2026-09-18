@@ -1,0 +1,63 @@
+# ── Secretos ─────────────────────────────────────────────────────────
+# Nunca versionar credenciales. La configuración real se resuelve con
+# variables de entorno; en el repositorio solo va el archivo de ejemplo.
+.env
+.env.*
+!.env.ejemplo
+**/application.yml
+**/application-*.yml
+!**/application.yml.ejemplo
+*.pem
+*.p12
+*.jks
+*.keystore
+credenciales*.json
+
+# ── Java y Maven ─────────────────────────────────────────────────────
+target/
+*.class
+*.jar
+*.war
+!.mvn/wrapper/maven-wrapper.jar
+dependency-reduced-pom.xml
+
+# ── Android ──────────────────────────────────────────────────────────
+*.apk
+*.aab
+*.dex
+local.properties
+.gradle/
+build/
+captures/
+.cxx/
+
+# ── Entornos de desarrollo ───────────────────────────────────────────
+.idea/
+*.iml
+.vscode/
+.settings/
+.project
+.classpath
+
+# ── Sistema operativo ────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Bitácoras y temporales ───────────────────────────────────────────
+*.log
+logs/
+tmp/
+*.tmp
+*~
+
+# ── Archivos de ofimática abiertos ───────────────────────────────────
+~$*.docx
+~$*.xlsx
+
+# ── Listas de precios de proveedores ─────────────────────────────────
+# Traen condiciones comerciales confidenciales. Las muestras anonimizadas
+# van en database/muestras/ y esas sí se versionan.
+listas-proveedores/
+*.xlsx
+!database/muestras/*.xlsx

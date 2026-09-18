@@ -1,0 +1,61 @@
+@startuml
+!include comun.iuml
+autonumber
+
+actor "Vendedor" as V
+participant "VentasController" as C
+participant "GestorVentas" as GV
+participant "Inventario" as INV
+participant "ServicioFacturacion" as SF
+database "MySQL" as BD
+participant "Proveedor\ntecnológico" as PT
+
+V -> C : POST /api/v1/ventas
+activate C
+C -> GV : registrar(venta)
+activate GV
+
+GV -> BD : BEGIN
+loop por cada línea de la venta
+  GV -> INV : descontar(productoId, cantidad)
+  activate INV
+  alt existencia insuficiente
+    INV --> GV : StockInsuficienteException
+    GV -> BD : ROLLBACK
+    GV --> C : error SGIP-STOCK
+    C --> V : 409 existencia insuficiente
+  else existencia disponible
+    INV -> BD : UPDATE productos SET existencia\nINSERT movimientos_inventario
+    INV --> GV : Movimiento
+  end
+  deactivate INV
+end
+GV -> BD : INSERT ventas, venta_items
+GV -> BD : COMMIT
+GV --> C : Venta registrada
+deactivate GV
+
+C -> SF : emitir(venta)
+activate SF
+SF -> SF : construir documento electrónico
+SF -> PT : transmitir(documento)
+activate PT
+PT --> SF : CUFE y estado de validación
+deactivate PT
+SF -> BD : INSERT facturas_electronicas
+alt validada
+  SF --> C : FacturaElectronica(VALIDADA)
+else rechazada
+  SF --> C : FacturaElectronica(RECHAZADA, motivo)
+end
+deactivate SF
+C --> V : 201 venta y factura
+deactivate C
+
+note over GV, BD
+  El descuento de existencias y el registro de la
+  venta ocurren en una sola transacción. La emisión
+  de la factura se ejecuta fuera de ella para que un
+  fallo del servicio externo no revierta la venta.
+end note
+@enduml

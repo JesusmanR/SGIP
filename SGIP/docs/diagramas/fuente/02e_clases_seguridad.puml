@@ -1,0 +1,47 @@
+@startuml
+!include comun.iuml
+
+package "logica y util — seguridad" {
+
+  class ServicioAutenticacion {
+    - intentosMaximos : int
+    + autenticar(correo : String, clave : String) : Sesion
+    + cerrar(token : String) : void
+    + bloquear(correo : String) : void
+    - registrarIntento(correo : String, ok : boolean) : void
+  }
+
+  class Sesion {
+    - token : String
+    - usuario : Usuario
+    - inicio : LocalDateTime
+    - ultimaActividad : LocalDateTime
+    + vigente() : boolean
+    + refrescar() : void
+  }
+
+  class Seguridad <<utilidad>> {
+    + {static} derivar(clave : String) : String
+    + {static} verificar(clave : String, hash : String) : boolean
+    - {static} salAleatoria() : byte[]
+  }
+
+  class Validador <<utilidad>> {
+    + {static} correo(valor : String) : boolean
+    + {static} telefono(valor : String) : boolean
+    + {static} positivo(valor : BigDecimal) : boolean
+    + {static} enRango(valor : int, min : int, max : int) : boolean
+  }
+}
+
+ServicioAutenticacion --> Sesion : emite
+ServicioAutenticacion ..> Seguridad : verifica credencial
+ServicioAutenticacion ..> Validador : valida formato
+
+note bottom of Seguridad
+  Derivación PBKDF2 sobre SHA-256 con
+  120.000 iteraciones y sal aleatoria de
+  16 bytes por usuario. Formato almacenado:
+  pbkdf2$iteraciones$sal$hash
+end note
+@enduml

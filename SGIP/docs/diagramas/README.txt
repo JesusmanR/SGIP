@@ -1,0 +1,39 @@
+SGIP - Diagramas UML
+====================
+
+png/     Imagenes listas para insertar en documentos o diapositivas (130 dpi).
+fuente/  Codigo fuente PlantUML, editable en texto plano.
+
+Correspondencia con las figuras del informe
+-------------------------------------------
+Figura  1  01a_cu_seguridad_catalogo        Casos de uso: seguridad y catalogo
+Figura  2  01b_cu_abastecimiento            Casos de uso: abastecimiento y precios
+Figura  3  01c_cu_comercial                 Casos de uso: comercial, inventario y reportes
+Figura  4  02a_clases_catalogo              Clases: modelo, catalogo y abastecimiento
+Figura  5  02b_clases_comercial             Clases: modelo, comercial y facturacion
+Figura  6  02c_clases_logica                Clases: logica, inventario y precios
+Figura  7  02d_clases_logica_comercial      Clases: logica, servicios comerciales
+Figura  8  02e_clases_seguridad             Clases: subsistema de seguridad
+Figura  9  03a_sec_autenticacion            Secuencia: autenticacion
+Figura 10  03b_sec_importacion_lectura      Secuencia: lectura y validacion de lista
+Figura 11  03c_sec_importacion_aplicacion   Secuencia: aplicacion y recalculo
+Figura 12  03d_sec_venta_factura            Secuencia: venta y factura electronica
+Figura 13  04_actividad_importacion         Actividades: importacion de precios
+Figura 14  05a_estados_producto             Estados: producto
+Figura 15  05b_estados_cotizacion           Estados: cotizacion
+Figura 16  05c_estados_factura              Estados: factura electronica
+Figura 17  06_componentes                   Componentes
+Figura 18  07_despliegue                    Despliegue
+Figura 19  08a_er_seguridad                 Entidad-relacion: seguridad
+Figura 20  08b_er_catalogo                  Entidad-relacion: catalogo y precios
+Figura 21  08c_er_comercial                 Entidad-relacion: comercial
+Figura 22  09_er_parametrizacion            Entidad-relacion: parametrizacion
+Figura 24  08_entidad_relacion              Entidad-relacion completo (24 tablas)
+
+Como editar y regenerar
+-----------------------
+    java -jar plantuml.jar -tpng nombre.puml
+
+PlantUML: https://plantuml.com/es/download  (requiere Java 8+ y Graphviz)
+comun.iuml contiene la paleta y tipografia compartidas: editarlo
+reestiliza todos los diagramas a la vez.

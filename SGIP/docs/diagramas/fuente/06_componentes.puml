@@ -1,0 +1,47 @@
+@startuml
+!include comun.iuml
+
+package "Clientes" {
+  component "Aplicación móvil\nAndroid (Kotlin)" as APP
+  component "Módulo administrativo\nJava Swing" as ESC
+}
+
+package "Servicio backend (Java 17 · Spring Boot)" {
+  component "Controladores REST" as API
+  component "Servicios de negocio" as LOG
+  component "Módulo de importación\nde precios" as IMP
+  component "Modelo de dominio" as MOD
+  component "Capa de acceso a datos\n(DAO)" as DAT
+  component "Seguridad y auditoría" as SEC
+}
+
+database "MySQL 8.0" as BD
+cloud "Servicios de proveedores\n(archivo o servicio web)" as PROV
+cloud "Proveedor tecnológico\nde facturación electrónica" as PTF
+
+interface "HTTPS / JSON" as IREST
+interface "JDBC" as IJDBC
+
+APP -down-> IREST
+ESC -down-> IREST
+IREST -down- API
+
+API --> LOG
+API --> SEC
+LOG --> MOD
+LOG --> IMP
+LOG --> DAT
+IMP --> DAT
+SEC --> DAT
+DAT -down- IJDBC
+IJDBC -down- BD
+
+IMP -right-> PROV : lectura de listas
+LOG -right-> PTF : emisión de documentos
+
+note bottom of MOD
+  El modelo de dominio no depende de
+  ninguna otra capa. Las dependencias
+  apuntan siempre hacia él.
+end note
+@enduml

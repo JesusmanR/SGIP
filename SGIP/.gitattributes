@@ -1,0 +1,15 @@
+* text=auto eol=lf
+
+*.sql    text eol=lf
+*.java   text eol=lf
+*.kt     text eol=lf
+*.md     text eol=lf
+*.yml    text eol=lf
+*.puml   text eol=lf
+*.iuml   text eol=lf
+
+*.docx   binary
+*.pdf    binary
+*.png    binary
+*.zip    binary
+*.xlsx   binary
