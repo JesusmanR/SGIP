@@ -1,16 +1,21 @@
 # SGIP — Esquema de base de datos
 
-MySQL 8.0.16 o superior. La versión mínima la imponen las restricciones
-`CHECK`, que MySQL ignoraba silenciosamente en versiones anteriores.
+MySQL 9.7 LTS. La versión mínima absoluta es 8.0.16, porque las
+anteriores ignoran en silencio las restricciones `CHECK`, pero MySQL 8.0
+llegó a fin de vida en abril de 2026 y no conviene empezar ahí.
 
-Probado contra MySQL 8.0.46: los ocho scripts se ejecutan sin errores y
-producen 24 tablas, 6 vistas y 3 funciones, con el registro binario
-activado y sin privilegios especiales.
+No sirve XAMPP ni WAMP: traen MariaDB, que no tiene la colación
+`utf8mb4_0900_ai_ci` y falla en la primera tabla.
 
-MySQL 8.0 llegó a fin de vida en abril de 2026. Para una instalación
-nueva conviene 8.4 LTS, que mantiene la colación, las restricciones
-`CHECK`, las columnas generadas y las funciones de ventana que usa este
-esquema. Esa versión no ha sido verificada directamente.
+Verificado en dos entornos:
+
+| Entorno | Resultado |
+|---|---|
+| MySQL 8.0.46 sobre Linux | 24 tablas, 6 vistas, 3 funciones, sin avisos |
+| MySQL 9.7.2 sobre Windows | 24 tablas, 6 vistas, sin avisos |
+
+Las funciones se crean con el registro binario activado y sin
+privilegios especiales, porque declaran `READS SQL DATA`.
 
 ## Orden de ejecución
 

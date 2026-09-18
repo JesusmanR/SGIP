@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       mysql:
-        image: mysql:8.0
+        image: mysql:9.7
         env:
           MYSQL_ROOT_PASSWORD: sgip_ci
           MYSQL_DATABASE: sgip

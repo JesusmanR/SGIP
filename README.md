@@ -29,7 +29,7 @@ Tres componentes sobre una sola fuente de lógica de negocio:
 | `backend/` | Java 17 · Spring Boot 3 · API REST | En construcción |
 | `movil/` | Android nativo · Kotlin | Pendiente |
 | `escritorio/` | Java Swing · módulo administrativo | Heredado de la fase previa |
-| `database/` | MySQL 8.0 · 24 tablas en tercera forma normal | Esquema completo |
+| `database/` | MySQL 9.7 LTS · 24 tablas en tercera forma normal | Esquema verificado |
 
 Las dependencias internas del backend apuntan siempre hacia el modelo de
 dominio. La lógica de negocio se prueba sin levantar un servidor ni
@@ -40,14 +40,21 @@ justificación, en `docs/decisiones/`.
 
 ## Puesta en marcha de la base de datos
 
-Requiere MySQL 8.0.16 o superior: las versiones anteriores ignoran las
-restricciones `CHECK` en silencio.
+Requiere MySQL 9.7 LTS. El mínimo absoluto es 8.0.16, porque las
+versiones anteriores ignoran las restricciones `CHECK` en silencio, pero
+esa serie ya está fuera de soporte.
 
 ```bash
 cd database
-./aplicar.sh                 # usa root sin contraseña, entorno local
-./aplicar.sh -u sgip -p      # o indica usuario y pide la contraseña
+bash aplicar.sh -u root -p              # pide la contraseña una sola vez
+bash aplicar.sh -u root -p --recrear    # borra la base y la reconstruye
+bash aplicar.sh -u root -p --demo       # carga además datos de prueba
 ```
+
+Las migraciones no son idempotentes: se aplican sobre una base vacía. Si
+ya tiene tablas, el script avisa y se detiene en vez de fallar a medias.
+Usa `--recrear` para rehacerla desde cero, que es lo normal en
+desarrollo.
 
 O manualmente, respetando el orden, porque hay claves foráneas entre
 migraciones:
