@@ -46,4 +46,37 @@ class SeguridadTest {
     void laClaveNuncaApareceEnElHash() {
         assertFalse(Seguridad.derivar("SgipDev2026").contains("SgipDev2026"));
     }
+
+    @Test
+    void cadaTokenEsDistinto() {
+        assertNotEquals(Seguridad.nuevoToken(), Seguridad.nuevoToken());
+    }
+
+    @Test
+    void elTokenViajaSeguroEnUnaUrl() {
+        String token = Seguridad.nuevoToken();
+        assertFalse(token.contains("+"));
+        assertFalse(token.contains("/"));
+        assertFalse(token.contains("="));
+        assertTrue(token.length() >= 40);
+    }
+
+    @Test
+    void laHuellaEsEstableYDeLargoFijo() {
+        String token = Seguridad.nuevoToken();
+        assertEquals(Seguridad.huella(token), Seguridad.huella(token));
+        assertEquals(64, Seguridad.huella(token).length());
+    }
+
+    @Test
+    void tokensDistintosProducenHuellasDistintas() {
+        assertNotEquals(Seguridad.huella(Seguridad.nuevoToken()),
+                Seguridad.huella(Seguridad.nuevoToken()));
+    }
+
+    @Test
+    void laHuellaNoPermiteRecuperarElToken() {
+        String token = Seguridad.nuevoToken();
+        assertFalse(Seguridad.huella(token).contains(token));
+    }
 }

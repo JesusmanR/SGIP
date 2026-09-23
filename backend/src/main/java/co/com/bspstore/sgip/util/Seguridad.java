@@ -6,6 +6,8 @@ import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.util.Base64;
+import java.nio.charset.StandardCharsets;
+import java.util.HexFormat;
 
 public final class Seguridad {
 
@@ -15,6 +17,7 @@ public final class Seguridad {
     private static final int BITS_HASH = 256;
     private static final String PREFIJO = "pbkdf2";
     private static final SecureRandom ALEATORIO = new SecureRandom();
+    private static final int BYTES_TOKEN = 32;
 
     private Seguridad() {
         // Clase de utilidad: no se instancia
@@ -45,6 +48,22 @@ public final class Seguridad {
             return MessageDigest.isEqual(esperado, calculado);
         } catch (IllegalArgumentException e) {
             return false;
+        }
+    }
+
+    public static String nuevoToken() {
+        byte[] bytes = new byte[BYTES_TOKEN];
+        ALEATORIO.nextBytes(bytes);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+    }
+
+    public static String huella(String token) {
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                    .digest(token.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(digest);
+        } catch (GeneralSecurityException e) {
+            throw new IllegalStateException("SHA-256 no disponible en esta JVM", e);
         }
     }
 

@@ -3,7 +3,7 @@ package co.com.bspstore.sgip.api;
 import co.com.bspstore.sgip.api.dto.RespuestaLogin;
 import co.com.bspstore.sgip.api.dto.SolicitudLogin;
 import co.com.bspstore.sgip.logica.ServicioAutenticacion;
-import co.com.bspstore.sgip.modelo.Usuario;
+import co.com.bspstore.sgip.logica.SesionEmitida;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -24,8 +24,9 @@ public class AutenticacionControlador {
     @PostMapping("/login")
     public RespuestaLogin ingresar(@Valid @RequestBody SolicitudLogin solicitud,
                                    HttpServletRequest peticion) {
-        Usuario usuario = servicio.autenticar(
-                solicitud.correo(), solicitud.clave(), peticion.getRemoteAddr());
-        return RespuestaLogin.de(usuario);
+        SesionEmitida sesion = servicio.autenticar(
+                solicitud.correo(), solicitud.clave(),
+                peticion.getHeader("User-Agent"), peticion.getRemoteAddr());
+        return RespuestaLogin.de(sesion);
     }
 }

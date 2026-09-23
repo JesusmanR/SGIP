@@ -2,6 +2,7 @@ package co.com.bspstore.sgip.logica;
 
 import co.com.bspstore.sgip.datos.AuditoriaAccesoRepositorio;
 import co.com.bspstore.sgip.datos.UsuarioRepositorio;
+import co.com.bspstore.sgip.datos.SesionRepositorio;
 import co.com.bspstore.sgip.modelo.Rol;
 import co.com.bspstore.sgip.modelo.Usuario;
 import co.com.bspstore.sgip.util.Seguridad;
@@ -27,13 +28,14 @@ class ServicioAutenticacionTest {
 
     @Mock UsuarioRepositorio usuarios;
     @Mock AuditoriaAccesoRepositorio auditoria;
+    @Mock SesionRepositorio sesiones;
 
     ServicioAutenticacion servicio;
     Usuario usuario;
 
     @BeforeEach
     void preparar() {
-        servicio = new ServicioAutenticacion(usuarios, auditoria, 5);
+        servicio = new ServicioAutenticacion(usuarios, auditoria, sesiones, 5, 30);
         Rol admin = new Rol("ADMINISTRADOR", "Administrador");
         usuario = new Usuario(admin, "Jesús Durán", CORREO, Seguridad.derivar(CLAVE));
     }
@@ -42,15 +44,19 @@ class ServicioAutenticacionTest {
     void autenticaConCredencialesCorrectasYLoAudita() {
         when(usuarios.findByCorreo(CORREO)).thenReturn(Optional.of(usuario));
 
-        assertSame(usuario, servicio.autenticar(CORREO, CLAVE, "prueba"));
+        var emitida = servicio.autenticar(CORREO, CLAVE, "curl", "prueba");
+
+        assertSame(usuario, emitida.usuario());
+        assertNotNull(emitida.token());
         verify(auditoria).save(argThat(a -> a.isExitoso()));
+        verify(sesiones).save(any());
     }
 
     @Test
     void normalizaElCorreoAntesDeBuscar() {
         when(usuarios.findByCorreo(CORREO)).thenReturn(Optional.of(usuario));
 
-        servicio.autenticar("  ADMIN@BSPstore.com.co ", CLAVE, "prueba");
+        servicio.autenticar("  ADMIN@BSPstore.com.co ", CLAVE, "curl", "prueba");
         verify(usuarios).findByCorreo(CORREO);
     }
 
@@ -59,7 +65,7 @@ class ServicioAutenticacionTest {
         when(usuarios.findByCorreo(any())).thenReturn(Optional.empty());
 
         assertThrows(CredencialesInvalidasException.class,
-                () -> servicio.autenticar("nadie@bspstore.com.co", CLAVE, "prueba"));
+                () -> servicio.autenticar("nadie@bspstore.com.co", CLAVE, "curl", "prueba"));
         verify(auditoria).save(argThat(a ->
                 !a.isExitoso() && "USUARIO_INEXISTENTE".equals(a.getMotivo())));
     }
@@ -69,7 +75,7 @@ class ServicioAutenticacionTest {
         when(usuarios.findByCorreo(CORREO)).thenReturn(Optional.of(usuario));
 
         assertThrows(CredencialesInvalidasException.class,
-                () -> servicio.autenticar(CORREO, "incorrecta", "prueba"));
+                () -> servicio.autenticar(CORREO, "incorrecta", "curl", "prueba"));
         assertEquals(1, usuario.getIntentosFallidos());
         assertFalse(usuario.isBloqueado());
     }
@@ -80,7 +86,7 @@ class ServicioAutenticacionTest {
 
         for (int i = 0; i < 5; i++) {
             assertThrows(CredencialesInvalidasException.class,
-                    () -> servicio.autenticar(CORREO, "incorrecta", "prueba"));
+                    () -> servicio.autenticar(CORREO, "incorrecta", "curl", "prueba"));
         }
         assertTrue(usuario.isBloqueado());
     }
@@ -90,11 +96,11 @@ class ServicioAutenticacionTest {
         when(usuarios.findByCorreo(CORREO)).thenReturn(Optional.of(usuario));
         for (int i = 0; i < 5; i++) {
             assertThrows(CredencialesInvalidasException.class,
-                    () -> servicio.autenticar(CORREO, "incorrecta", "prueba"));
+                    () -> servicio.autenticar(CORREO, "incorrecta", "curl", "prueba"));
         }
 
         assertThrows(CredencialesInvalidasException.class,
-                () -> servicio.autenticar(CORREO, CLAVE, "prueba"));
+                () -> servicio.autenticar(CORREO, CLAVE, "curl", "prueba"));
         verify(auditoria).save(argThat(a -> "CUENTA_BLOQUEADA".equals(a.getMotivo())));
     }
 
@@ -103,10 +109,10 @@ class ServicioAutenticacionTest {
         when(usuarios.findByCorreo(CORREO)).thenReturn(Optional.of(usuario));
         for (int i = 0; i < 2; i++) {
             assertThrows(CredencialesInvalidasException.class,
-                    () -> servicio.autenticar(CORREO, "incorrecta", "prueba"));
+                    () -> servicio.autenticar(CORREO, "incorrecta", "curl", "prueba"));
         }
 
-        servicio.autenticar(CORREO, CLAVE, "prueba");
+        servicio.autenticar(CORREO, CLAVE, "curl", "prueba");
         assertEquals(0, usuario.getIntentosFallidos());
     }
 
@@ -116,10 +122,20 @@ class ServicioAutenticacionTest {
         when(usuarios.findByCorreo("nadie@bspstore.com.co")).thenReturn(Optional.empty());
 
         var porCorreo = assertThrows(CredencialesInvalidasException.class,
-                () -> servicio.autenticar("nadie@bspstore.com.co", CLAVE, "prueba"));
+                () -> servicio.autenticar("nadie@bspstore.com.co", CLAVE, "curl", "prueba"));
         var porClave = assertThrows(CredencialesInvalidasException.class,
-                () -> servicio.autenticar(CORREO, "incorrecta", "prueba"));
+                () -> servicio.autenticar(CORREO, "incorrecta", "curl", "prueba"));
 
         assertEquals(porCorreo.getMessage(), porClave.getMessage());
+    }
+
+    @Test
+    void laSesionGuardaLaHuellaYNoElToken() {
+        when(usuarios.findByCorreo(CORREO)).thenReturn(Optional.of(usuario));
+
+        var emitida = servicio.autenticar(CORREO, CLAVE, "curl", "prueba");
+
+        verify(sesiones).save(argThat(s -> s.vigente()));
+        assertEquals(64, Seguridad.huella(emitida.token()).length());
     }
 }
