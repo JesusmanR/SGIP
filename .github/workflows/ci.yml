@@ -23,23 +23,74 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # El orden va escrito a mano. Con un comodín, el orden alfabético
+      # pone V10 antes de V2 y la cadena falla en la primera clave
+      # foránea. V8 va antes de V9 y V10 porque esas dos migran las filas
+      # que V8 carga.
       - name: Aplicar migraciones en orden
         run: |
-          for f in database/migrations/V*.sql; do
+          set -e
+          for f in V1__seguridad V2__catalogo V3__parametrizacion V4__comercial \
+                   V5__funciones V6__vistas V7__datos_iniciales V8__datos_demo \
+                   V9__rol_super_admin_y_venta_sin_existencia \
+                   V10__plataforma_multiempresa \
+                   V11__claves_compuestas_por_empresa \
+                   V12__configuracion_tributaria_por_empresa; do
             echo "→ $f"
-            mysql -h 127.0.0.1 -u root -psgip_ci sgip < "$f"
+            mysql -h 127.0.0.1 -u root -psgip_ci sgip < "database/migrations/$f.sql"
           done
 
       - name: Verificar el conteo de objetos
         run: |
-          tablas=$(mysql -h 127.0.0.1 -u root -psgip_ci -N -B -e \
-            "SELECT COUNT(*) FROM information_schema.tables
-             WHERE table_schema='sgip' AND table_type='BASE TABLE';")
-          vistas=$(mysql -h 127.0.0.1 -u root -psgip_ci -N -B -e \
-            "SELECT COUNT(*) FROM information_schema.views WHERE table_schema='sgip';")
-          echo "tablas=$tablas vistas=$vistas"
-          test "$tablas" -eq 24
+          consulta () { mysql -h 127.0.0.1 -u root -psgip_ci -N -B -e "$1"; }
+          tablas=$(consulta "SELECT COUNT(*) FROM information_schema.tables
+                             WHERE table_schema='sgip' AND table_type='BASE TABLE';")
+          vistas=$(consulta "SELECT COUNT(*) FROM information_schema.views
+                             WHERE table_schema='sgip';")
+          funciones=$(consulta "SELECT COUNT(*) FROM information_schema.routines
+                                WHERE routine_schema='sgip' AND routine_type='FUNCTION';")
+          echo "tablas=$tablas vistas=$vistas funciones=$funciones"
+          test "$tablas" -eq 39
           test "$vistas" -eq 6
+          test "$funciones" -eq 4
+
+      # El conteo de tablas puede cuadrar con la V9 aplicada a medias,
+      # porque la V9 no crea tablas: solo agrega columnas. Esta columna es
+      # lo último que crea, así que su ausencia delata que se detuvo.
+      - name: Verificar que la V9 se aplicó completa
+        run: |
+          n=$(mysql -h 127.0.0.1 -u root -psgip_ci -N -B -e \
+            "SELECT COUNT(*) FROM information_schema.columns
+             WHERE table_schema='sgip' AND table_name='ventas'
+               AND column_name='sin_existencia';")
+          test "$n" -eq 1
+
+      # Veinte de la V11 y cuatro de la V12.
+      - name: Verificar las claves foráneas por empresa
+        run: |
+          n=$(mysql -h 127.0.0.1 -u root -psgip_ci -N -B -e \
+            "SELECT COUNT(*) FROM information_schema.referential_constraints
+             WHERE constraint_schema='sgip' AND constraint_name LIKE '%\\_emp';")
+          echo "claves foráneas por empresa: $n"
+          test "$n" -eq 24
+
+      - name: Verificar el aislamiento entre empresas
+        run: bash database/verificar_aislamiento.sh -h 127.0.0.1 -u root -psgip_ci
+
+      - name: Verificar la configuración tributaria por empresa
+        run: bash database/verificar_tributacion.sh -h 127.0.0.1 -u root -psgip_ci
+
+      # Esta restricción queda fuera de la cadena porque no se pudo
+      # verificar; el archivo explica por qué. Aquí se intenta y se
+      # informa el resultado sin hacer fallar el trabajo: si MySQL la
+      # acepta, el registro de CI lo deja por escrito.
+      - name: Intentar la restricción opcional de ámbito de regla de IVA
+        continue-on-error: true
+        run: |
+          mysql -h 127.0.0.1 -u root -psgip_ci sgip \
+            < database/extras/restriccion_ambito_regla_iva.sql \
+            && echo "MySQL la aceptó" \
+            || echo "MySQL la rechazó: la invariante queda a cargo de la aplicación"
 
   backend:
     name: Compilación y pruebas del backend
@@ -54,3 +105,20 @@ jobs:
           distribution: temurin
           cache: maven
       - run: mvn -B -f backend/pom.xml verify
+
+  web:
+    name: Compilación del front web
+    runs-on: ubuntu-latest
+    # Se activa cuando exista web/package.json con código real.
+    if: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci --prefix web
+      - run: npm run lint --prefix web
+      - run: npm test --prefix web
+      - run: npm run build --prefix web

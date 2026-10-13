@@ -3,29 +3,52 @@
 hide circle
 skinparam linetype ortho
 
+entity "empresas" as emp {
+  * empresa_id : INT <<PK>>
+  --
+  * nit : VARCHAR(20) <<UQ>>
+  * razon_social : VARCHAR(160)
+  * estado : ENUM(PRUEBA, ACTIVA, DESACTIVADA)
+  correo_contacto : VARCHAR(120)
+  * creada_en : DATETIME
+}
+
+entity "suscripciones" as sus {
+  * suscripcion_id : INT <<PK>>
+  --
+  * empresa_id : INT <<FK>>
+  * plan : VARCHAR(40)
+  * inicio_prueba : DATE
+  * fin_prueba : DATE
+  vigente_hasta : DATE
+  * estado : ENUM(PRUEBA, AL_DIA, VENCIDA)
+}
+
 entity "roles" as roles {
   * rol_id : INT <<PK>>
   --
-  * nombre : VARCHAR(30)
+  * nombre : VARCHAR(30) <<UQ>>
+  * ambito : ENUM(PLATAFORMA, EMPRESA)
   descripcion : VARCHAR(120)
 }
 
 entity "usuarios" as usuarios {
   * usuario_id : INT <<PK>>
   --
+  empresa_id : INT <<FK>>
   * rol_id : INT <<FK>>
   * correo : VARCHAR(120) <<UQ>>
-  * clave_hash : VARCHAR(200)
+  * clave_hash : VARCHAR(255)
   * nombre : VARCHAR(120)
-  activo : TINYINT(1)
-  bloqueado : TINYINT(1)
+  activo : BOOL
+  bloqueado : BOOL
 }
 
 entity "sesiones" as sesiones {
   * sesion_id : BIGINT <<PK>>
   --
   * usuario_id : INT <<FK>>
-  * token : VARCHAR(200) <<UQ>>
+  * token_hash : CHAR(64) <<UQ>>
   * inicio : DATETIME
   * expira : DATETIME
   dispositivo : VARCHAR(120)
@@ -35,12 +58,24 @@ entity "auditoria_accesos" as audit {
   * acceso_id : BIGINT <<PK>>
   --
   usuario_id : INT <<FK>>
+  empresa_id : INT <<FK>>
   * correo : VARCHAR(120)
-  * exitoso : TINYINT(1)
-  origen : VARCHAR(60)
+  * exitoso : BOOL
+  motivo : VARCHAR(40)
   * fecha : DATETIME
 }
+
+emp ||--|| sus
+emp ||--o{ usuarios
 roles ||--o{ usuarios
 usuarios ||--o{ sesiones
 usuarios ||--o{ audit
+emp ||--o{ audit
+
+note bottom of usuarios
+  empresa_id admite nulo: el super
+  administrador de plataforma no
+  pertenece a ninguna empresa. Todo
+  rol de ámbito EMPRESA sí la exige.
+end note
 @enduml

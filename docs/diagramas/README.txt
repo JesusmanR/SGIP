@@ -1,11 +1,14 @@
 SGIP - Diagramas UML
 ====================
 
-png/     Imagenes listas para insertar en documentos o diapositivas (130 dpi).
+png/     Imagenes listas para insertar en documentos o diapositivas.
 fuente/  Codigo fuente PlantUML, editable en texto plano.
 
-Correspondencia con las figuras del informe
--------------------------------------------
+comun.iuml contiene la paleta y tipografia compartidas: editarlo
+reestiliza todos los diagramas a la vez.
+
+Correspondencia con las figuras del informe (version 4)
+-------------------------------------------------------
 Figura  1  01a_cu_seguridad_catalogo        Casos de uso: seguridad y catalogo
 Figura  2  01b_cu_abastecimiento            Casos de uso: abastecimiento y precios
 Figura  3  01c_cu_comercial                 Casos de uso: comercial, inventario y reportes
@@ -28,12 +31,42 @@ Figura 19  08a_er_seguridad                 Entidad-relacion: seguridad
 Figura 20  08b_er_catalogo                  Entidad-relacion: catalogo y precios
 Figura 21  08c_er_comercial                 Entidad-relacion: comercial
 Figura 22  09_er_parametrizacion            Entidad-relacion: parametrizacion
-Figura 24  08_entidad_relacion              Entidad-relacion completo (24 tablas)
+Figura 37  08_entidad_relacion              Entidad-relacion completo (34 tablas)
+
+Las figuras 23 a 36 son las pantallas, y estan en ../mockups/
+
+Que cambio en la version 4
+--------------------------
+01a  Entra el super administrador de plataforma (BSP) como cuarto actor.
+06   Entran el filtro de empresa, el servicio de sincronizacion y el
+     almacen local de los clientes sin conexion.
+07   El despliegue refleja el front web y los clientes React Native, no
+     el modulo Swing.
+08   El modelo completo pasa de 24 a 34 entidades.
+08a  usuarios gana empresa_id; roles gana ambito.
+08b  Entra producto_proveedor: el RF-21 pide varios proveedores por
+     producto y faltaba la tabla intermedia.
+08c  Entran medios_pago, cierres_caja y las columnas de venta sin
+     existencia.
+09   Las reglas de margen ganan forma_calculo.
+
+El modelo completo (08) es ancho a proposito. Se acepto asi en lugar de
+partirlo: su funcion es verse entero. La tipografia se subio a 20 para
+que al imprimirlo en una pagina siga siendo legible.
 
 Como editar y regenerar
 -----------------------
     java -jar plantuml.jar -tpng nombre.puml
 
 PlantUML: https://plantuml.com/es/download  (requiere Java 8+ y Graphviz)
-comun.iuml contiene la paleta y tipografia compartidas: editarlo
-reestiliza todos los diagramas a la vez.
+
+Si el .jar no se descarga desde Maven Central, las publicaciones de
+GitHub funcionan. Graphviz hace falta aparte: sin el, los diagramas de
+clases y de entidad-relacion fallan sin mensaje claro.
+
+    sudo apt-get install graphviz        # Linux
+    choco install graphviz               # Windows
+
+Para diagramas que no necesitan Graphviz se puede usar la directiva
+!pragma layout smetana, que trae su propio motor de disposicion, con
+resultados mas pobres en diagramas grandes.

@@ -1,0 +1,56 @@
+-- =====================================================================
+-- Opcional · La regla de IVA apunta a un producto o a una categoría,
+--            nunca a los dos
+-- =====================================================================
+--
+-- Esto NO forma parte de la cadena de migraciones, y conviene entender
+-- por qué antes de ejecutarlo.
+--
+-- La invariante es real. Una regla de IVA apunta a un producto, o a una
+-- categoría, o a ninguno de los dos —la regla general de la empresa—.
+-- Nunca a los dos a la vez: si apuntara a ambos, la precedencia que
+-- resuelve v_regla_iva (producto, luego categoría, luego general) sería
+-- ambigua.
+--
+-- El problema es que no pude verificarla. En el entorno de verificación,
+-- que es MariaDB 10.11, esta sentencia se rechaza con error 1901:
+--
+--   Function or expression 'producto_id' cannot be used in the CHECK
+--   clause of `ck_reglas_iva_ambito`
+--
+-- MariaDB rechaza cualquier CHECK agregado por ALTER a esa tabla sobre
+-- una columna entera, aunque la misma expresión sí la admite en un
+-- CREATE TABLE nuevo. No encontré la causa, y no es la clave foránea:
+-- lo comprobé quitándola.
+--
+-- MySQL 8.0.16 y posteriores admiten restricciones CHECK sobre cualquier
+-- columna de la propia tabla, de modo que es razonable esperar que en
+-- MySQL 9.7 se cree sin problema. Pero «razonable esperar» no es
+-- «verificado», y una sentencia no verificada dentro de la cadena la
+-- habría hecho abortar: el cliente mysql se detiene en el primer error,
+-- que es exactamente lo que le pasó a la primera V9 y dejó el esquema a
+-- medias.
+--
+-- Por eso está aquí y no allá. Ejecútalo después de la V12, en tu MySQL:
+--
+--   mysql -u root -p sgip < extras/restriccion_ambito_regla_iva.sql
+--
+-- Si entra, la base hace cumplir la invariante. Si no entra, no pasa
+-- nada: la aplicación debe validarla de todos modos antes de guardar,
+-- porque una restricción es la red de seguridad y no el único control.
+-- =====================================================================
+
+ALTER TABLE reglas_iva
+  ADD CONSTRAINT ck_reglas_iva_ambito CHECK (
+    producto_id IS NULL OR categoria_id IS NULL);
+
+-- Comprobación: lo siguiente debe fallar con error 3819, «Check
+-- constraint 'ck_reglas_iva_ambito' is violated».
+--
+--   INSERT INTO reglas_iva (empresa_id, categoria_id, producto_id,
+--                           tipo_impuesto_id, vigente_desde)
+--   SELECT 1,
+--          (SELECT categoria_id FROM categorias WHERE empresa_id=1 LIMIT 1),
+--          (SELECT producto_id  FROM productos  WHERE empresa_id=1 LIMIT 1),
+--          (SELECT tipo_impuesto_id FROM tipos_impuesto WHERE codigo='IVA_19'),
+--          '2026-01-01';

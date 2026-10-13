@@ -44,3 +44,10 @@ visualización en tipos enteros están obsoletos y se van a retirar. Lo
 disparaba `TINYINT(1)`, que el esquema usaba catorce veces. Se
 reemplazaron por `BOOL`, que MySQL almacena de forma idéntica pero sin
 declarar el ancho. Los ocho scripts corren ahora sin un solo aviso.
+
+## Nota posterior
+
+El conteo que cierra las consecuencias —veinticuatro tablas y seis
+vistas— era correcto cuando se escribió. Tras las migraciones V9 a V11,
+el esquema son 34 tablas, 6 vistas y 4 funciones. La decisión sobre la
+versión del motor no cambia.

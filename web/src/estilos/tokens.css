@@ -1,0 +1,118 @@
+/* =====================================================================
+   SGIP · Sistema de diseño Aurora Mist
+   =====================================================================
+
+   Esta es la ÚNICA fuente de color del front. Ningún componente escribe
+   un valor hexadecimal suelto. Si hace falta un color que no está aquí,
+   se agrega aquí y se discute: los colores de estado están calculados
+   para cumplir la relación de contraste de 4,5 a 1 que exige el RNF-13,
+   y elegir uno a ojo rompe ese cálculo sin que se note en pantalla.
+
+   Decisiones en ../../../docs/decisiones/ADR-0009-sistema-de-diseno.md
+   ===================================================================== */
+
+:root {
+  /* ── Superficie ─────────────────────────────────────────────────── */
+  --lienzo:          #F4F7F6;
+  --tarjeta:         #FFFFFF;
+  --chrome:          #203959;   /* barra lateral y cabecera */
+  --chrome-activo:   #2C4A66;
+
+  /* ── Acento ─────────────────────────────────────────────────────── */
+  --acento:          #15707F;
+  --acento-claro:    #5EB6C6;
+  --acento-sutil:    #E3EFF1;   /* halo de foco */
+
+  /* ── Texto ──────────────────────────────────────────────────────── */
+  --tinta:           #16283E;   /* texto principal */
+  --tinta-2:         #416772;   /* etiquetas */
+  --tinta-3:         #5C6866;   /* auxiliar, solo lectura */
+
+  /* ── Línea ──────────────────────────────────────────────────────── */
+  --borde:           #D5DEDB;   /* separación entre superficies */
+  --borde-control:   #839492;   /* perímetro de un control: exige 3:1 */
+
+  /* ── Neutros de marca ───────────────────────────────────────────── */
+  --salvia:          #96ADA5;
+  --bruma:           #ABB7B3;   /* control deshabilitado */
+
+  /* ── Estado ─────────────────────────────────────────────────────────
+     Cada estado es un par: el color del texto y el de su fondo. Usarlos
+     cruzados —texto de éxito sobre fondo de aviso— rompe el contraste.
+
+     ATENCIÓN: en escala de grises estos cuatro colores son
+     prácticamente el mismo gris. Medido con 0,299R + 0,587G + 0,114B:
+
+         exito    72,2        peligro  78,8
+         info     79,7        aviso    91,7
+
+     Los cuatro caben en el 7,6 % del rango, y peligro e info se
+     diferencian en 0,9 puntos sobre 255: indistinguibles. Una insignia
+     que solo use color no comunica nada a quien no distingue colores,
+     ni en una impresión en blanco y negro, ni en el recibo de una
+     impresora térmica.
+
+     LA INSIGNIA SIEMPRE LLEVA TEXTO. No existe variante que sea solo un
+     punto de color.                                                    */
+  --exito:           #15624A;
+  --exito-fondo:     #E6F0EB;
+  --aviso:           #8A5214;
+  --aviso-fondo:     #F7EEE0;
+  --peligro:         #9C2F28;
+  --peligro-fondo:   #F6E8E7;
+  --info:            #2C5A78;
+  --info-fondo:      #E7EEF3;
+
+  /* ── Radio ──────────────────────────────────────────────────────────
+     La diferencia entre 10 y 6 comunica jerarquía sin recurrir a la
+     sombra: la tarjeta contiene, el control actúa.                     */
+  --radio-tarjeta:   10px;
+  --radio-control:   6px;
+  --radio-insignia:  999px;
+
+  /* ── Espacio ────────────────────────────────────────────────────────
+     Malla de ocho. El 4 existe para separar una etiqueta de su campo,
+     no para componer una retícula.                                     */
+  --espacio-1:       4px;
+  --espacio-2:       8px;
+  --espacio-3:       12px;
+  --espacio-4:       16px;
+  --espacio-5:       24px;
+
+  /* ── Tipografía ─────────────────────────────────────────────────────
+     Una sola familia en cuatro pesos. El carácter lo da la escala y la
+     jerarquía, no la mezcla de fuentes. Inter es de licencia abierta y
+     se distribuye con la aplicación, de modo que no depende de lo que
+     el usuario tenga instalado.                                        */
+  --familia: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  --t-titulo-pantalla: 20px;  /* 700 · interlineado 28 */
+  --t-titulo-tarjeta:  14px;  /* 600 · interlineado 20 */
+  --t-cifra:           26px;  /* 700 · interlineado 32 */
+  --t-cuerpo:          13px;  /* 400 o 600 · interlineado 20 */
+  --t-etiqueta:        11px;  /* 500 campos · 600 cabeceras de tabla */
+  --t-insignia:        10px;  /* 600 */
+
+  /* ── Control ────────────────────────────────────────────────────── */
+  --alto-control:    32px;
+  --alto-insignia:   20px;
+  /* Área de toque mínima en móvil, por accesibilidad táctil. En
+     escritorio el control puede medir 32; en el teléfono, no. */
+  --toque-minimo:    44px;
+}
+
+/* Las cifras de dinero y de cantidad llevan numeración tabular, o las
+   columnas no alinean y una tabla de precios se vuelve ilegible. */
+.cifra,
+td.cifra,
+input[type="number"] {
+  font-variant-numeric: tabular-nums;
+}
+
+/* El foco se ve siempre. Quitarlo deja la aplicación inoperable con
+   teclado, que es como la usa un cajero con las manos ocupadas. */
+:where(a, button, input, select, textarea):focus-visible {
+  outline: 2px solid var(--acento);
+  outline-offset: 1px;
+  box-shadow: 0 0 0 4px var(--acento-sutil);
+}

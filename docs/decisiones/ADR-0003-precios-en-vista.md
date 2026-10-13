@@ -34,3 +34,19 @@ pagan el costo de resolver la vista. Si el rendimiento se vuelve un
 problema con diez mil referencias, la salida es una tabla de
 materialización refrescada al aplicar cada lista de precios, no volver a
 la columna generada.
+
+## Nota posterior
+
+La decisión se mantiene: los precios se resuelven en `v_precios_producto`
+y no como columnas generadas.
+
+La vista cambió dos veces desde entonces. Ahora expone `empresa_id`
+—sin él la aplicación no podía filtrarla por empresa, que es lo que
+exige la RN-16— y resuelve los interruptores tributarios de la empresa,
+de modo que ninguna consulta posterior tenga que acordarse de ellos. Ver
+ADR-0016.
+
+También expone `tributacion_sin_configurar`: una empresa sin
+configuración tributaria no tiene regla aplicable y su precio al cliente
+no se puede calcular. Antes la vista habría devuelto nulo sin explicar
+por qué.

@@ -1,47 +1,61 @@
 @startuml
+!pragma layout smetana
 !include comun.iuml
 
 package "Clientes" {
-  component "Aplicación móvil\nAndroid (Kotlin)" as APP
-  component "Módulo administrativo\nJava Swing" as ESC
+  component "Front web\nReact (HTML, CSS, JS)\nlos cuatro roles" as WEB
+  component "Aplicación de escritorio\nReact empaquetado" as ESC
+  component "Aplicación móvil\nReact Native\nvendedor y cliente" as APP
+  database "Almacén local\ny cola de operaciones" as LOCAL
 }
 
 package "Servicio backend (Java 17 · Spring Boot)" {
   component "Controladores REST" as API
+  component "Filtro de empresa\ny autorización" as TEN
   component "Servicios de negocio" as LOG
   component "Módulo de importación\nde precios" as IMP
+  component "Servicio de\nsincronización" as SYNC
   component "Modelo de dominio" as MOD
-  component "Capa de acceso a datos\n(DAO)" as DAT
-  component "Seguridad y auditoría" as SEC
+  component "Capa de acceso a datos" as DAT
 }
 
-database "MySQL 8.0" as BD
-cloud "Servicios de proveedores\n(archivo o servicio web)" as PROV
+database "MySQL 9.7 LTS\nesquema multiempresa" as BD
+cloud "Servicios de proveedores" as PROV
 cloud "Proveedor tecnológico\nde facturación electrónica" as PTF
 
 interface "HTTPS / JSON" as IREST
-interface "JDBC" as IJDBC
 
-APP -down-> IREST
+WEB -down-> IREST
 ESC -down-> IREST
+APP -down-> IREST
+ESC -right-> LOCAL
+APP -left-> LOCAL
 IREST -down- API
 
-API --> LOG
-API --> SEC
+API --> TEN
+TEN --> LOG
+TEN --> SYNC
 LOG --> MOD
 LOG --> IMP
 LOG --> DAT
 IMP --> DAT
-SEC --> DAT
-DAT -down- IJDBC
-IJDBC -down- BD
+SYNC --> DAT
+DAT -down-> BD
 
 IMP -right-> PROV : lectura de listas
 LOG -right-> PTF : emisión de documentos
 
-note bottom of MOD
-  El modelo de dominio no depende de
-  ninguna otra capa. Las dependencias
-  apuntan siempre hacia él.
+note top of TEN
+  Toda consulta y toda escritura pasan por
+  aquí: el filtro acota la operación a la
+  empresa del token antes de llegar a la
+  lógica de negocio.
+end note
+
+note bottom of SYNC
+  Recibe la cola de operaciones del
+  dispositivo. Acepta la venta aunque deje
+  la existencia en negativo y registra el
+  descuadre para reposición.
 end note
 @enduml
