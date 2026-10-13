@@ -32,3 +32,16 @@ La alternativa descartada era replicar la lógica en cada cliente. Dos
 implementaciones de la misma regla divergen con el tiempo, y la
 divergencia se manifiesta como comportamientos distintos según el canal
 por el que entra el usuario.
+
+## Nota posterior
+
+Esta decisión sigue vigente: el backend concentra la lógica y los
+clientes la consumen sin implementar reglas propias.
+
+Lo que cambió fueron las tecnologías de los clientes. El módulo de
+escritorio en Java Swing dejó de ser parte de la solución, y los tres
+frentes —web, escritorio y móvil— se construyen en React y React Native.
+Ver ADR-0010.
+
+Los «eventuales clientes adicionales» que menciona el contexto se
+concretaron: son el front web, que pasó a ser el canal principal.

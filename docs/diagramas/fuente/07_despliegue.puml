@@ -1,39 +1,49 @@
 @startuml
+!pragma layout smetana
 !include comun.iuml
 
-node "Dispositivo Android\ndel vendedor" as DISP {
-  artifact "sgip-movil.apk" as APK
+node "Dispositivo móvil\nde vendedor o cliente" as DISP {
+  artifact "sgip-movil.apk\n(React Native)" as APK
+  database "Almacén local" as DBM
 }
 
-node "Estación de trabajo\nadministrativa" as PC {
-  artifact "sgip-escritorio.jar" as JAR
+node "Equipo del punto de venta" as PC {
+  artifact "sgip-escritorio\n(React empaquetado)" as EXE
+  database "Almacén local" as DBE
 }
 
-node "Servidor de aplicaciones" as SRV {
-  artifact "sgip-backend.jar" as BACK
-  artifact "openapi.yaml" as SPEC
-}
-
-node "Servidor de base de datos" as DBS {
-  database "MySQL 8.0\nesquema sgip" as BD
+node "Navegador\n(los cuatro roles)" as NAV {
+  artifact "sgip-web\n(paquete React)" as BUNDLE
 }
 
 cloud "Internet" as NET
 
-node "Plataforma del proveedor\ntecnológico de facturación" as PTF {
-  artifact "API de facturación" as APIFE
+node "Servidor de aplicaciones" as SRV {
+  artifact "sgip-backend.jar" as BACK
+  artifact "estáticos del front web" as STATIC
+  artifact "openapi.yaml" as SPEC
 }
 
-node "Portales y servicios\nde proveedores" as PROV {
-  artifact "Listas de precios" as LP
+node "Servidor de base de datos" as DBS {
+  database "MySQL 9.7 LTS\nesquema sgip multiempresa" as BD
 }
 
-DISP -down- NET : HTTPS
+node "Plataforma del proveedor\nde facturación" as PTF
+node "Portales de proveedores" as PROV
+
+DISP -down- NET : HTTPS cuando hay conexión
+PC -down- NET : HTTPS cuando hay conexión
+NAV -down- NET : HTTPS
 NET -down- SRV : HTTPS / TLS 1.2+
-PC -right- SRV : HTTPS red interna
 SRV -down- DBS : JDBC sobre TLS
 SRV -right- PTF : HTTPS
 SRV -right- PROV : HTTPS
+
+note bottom of PC
+  El escritorio y el móvil siguen operando
+  sin conexión contra su almacén local.
+  Al recuperar red envían la cola pendiente.
+end note
 
 note bottom of DBS
   Respaldo diario automatizado

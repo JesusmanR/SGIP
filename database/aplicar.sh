@@ -120,21 +120,78 @@ fi
 echo "→ creando la base de datos"
 "${MYSQL[@]}" < "$DIR/00__crear_base.sql"
 
-for f in "$DIR"/V[1-7]__*.sql; do
-  echo "→ $(basename "$f")"
-  "${MYSQL[@]}" sgip < "$f"
+# El orden va escrito a mano, no con comodín. Un glob los ordena
+# alfabéticamente y 'V10' queda antes de 'V2', lo que rompe la cadena en
+# la primera clave foránea. Al agregar una migración, añádela aquí.
+ANTES_DEL_DEMO=(
+  V1__seguridad.sql
+  V2__catalogo.sql
+  V3__parametrizacion.sql
+  V4__comercial.sql
+  V5__funciones.sql
+  V6__vistas.sql
+  V7__datos_iniciales.sql
+)
+DESPUES_DEL_DEMO=(
+  V9__rol_super_admin_y_venta_sin_existencia.sql
+  V10__plataforma_multiempresa.sql
+  V11__claves_compuestas_por_empresa.sql
+  V12__configuracion_tributaria_por_empresa.sql
+)
+
+for f in "${ANTES_DEL_DEMO[@]}"; do
+  echo "→ $f"
+  "${MYSQL[@]}" sgip < "$DIR/$f"
 done
 
+# V8 va en medio: carga datos de demostración que V9 y V10 después
+# migran, de modo que aplicarlo al final dejaría esas filas sin empresa.
 if [[ $DEMO -eq 1 ]]; then
-  echo "→ datos de demostración"
+  echo "→ V8__datos_demo.sql"
   "${MYSQL[@]}" sgip < "$DIR/V8__datos_demo.sql"
 fi
+
+for f in "${DESPUES_DEL_DEMO[@]}"; do
+  echo "→ $f"
+  "${MYSQL[@]}" sgip < "$DIR/$f"
+done
 
 tablas=$("${MYSQL[@]}" -N -B -e \
   "SELECT COUNT(*) FROM information_schema.tables
    WHERE table_schema='sgip' AND table_type='BASE TABLE';")
 vistas=$("${MYSQL[@]}" -N -B -e \
   "SELECT COUNT(*) FROM information_schema.views WHERE table_schema='sgip';")
+funciones=$("${MYSQL[@]}" -N -B -e \
+  "SELECT COUNT(*) FROM information_schema.routines
+   WHERE routine_schema='sgip' AND routine_type='FUNCTION';")
 
-echo "listo: $tablas tablas, $vistas vistas"
-[[ "$tablas" -eq 24 ]] || { echo "ATENCIÓN: se esperaban 24 tablas"; exit 1; }
+echo "listo: $tablas tablas, $vistas vistas, $funciones funciones"
+
+fallo=0
+[[ "$tablas"    -eq 39 ]] || { echo "ATENCIÓN: se esperaban 39 tablas";   fallo=1; }
+[[ "$vistas"    -eq  6 ]] || { echo "ATENCIÓN: se esperaban 6 vistas";    fallo=1; }
+[[ "$funciones" -eq  4 ]] || { echo "ATENCIÓN: se esperaban 4 funciones"; fallo=1; }
+
+# Centinela de la V9: si esta columna no existe, la migración se detuvo a
+# medias y el esquema quedó incompleto aunque el conteo de tablas cuadre.
+sin_existencia=$("${MYSQL[@]}" -N -B -e \
+  "SELECT COUNT(*) FROM information_schema.columns
+   WHERE table_schema='sgip' AND table_name='ventas'
+     AND column_name='sin_existencia';")
+[[ "$sin_existencia" -eq 1 ]] || {
+  echo "ATENCIÓN: falta ventas.sin_existencia — la V9 no se aplicó completa"
+  fallo=1
+}
+
+# Centinela de las claves compuestas por empresa: veinte de la V11 y
+# cuatro de la V12 (reglas_iva hacia categorías y hacia productos,
+# producto_imagenes y venta_retenciones).
+compuestas=$("${MYSQL[@]}" -N -B -e \
+  "SELECT COUNT(*) FROM information_schema.referential_constraints
+   WHERE constraint_schema='sgip' AND constraint_name LIKE '%\\_emp';")
+[[ "$compuestas" -eq 24 ]] || {
+  echo "ATENCIÓN: se esperaban 24 claves por empresa y hay $compuestas"
+  fallo=1
+}
+
+exit $fallo

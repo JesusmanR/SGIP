@@ -7,35 +7,73 @@ llegó a fin de vida en abril de 2026 y no conviene empezar ahí.
 No sirve XAMPP ni WAMP: traen MariaDB, que no tiene la colación
 `utf8mb4_0900_ai_ci` y falla en la primera tabla.
 
-Verificado en dos entornos:
+El esquema completo son **39 tablas, 6 vistas y 4 funciones**.
 
-| Entorno | Resultado |
-|---|---|
-| MySQL 8.0.46 sobre Linux | 24 tablas, 6 vistas, 3 funciones, sin avisos |
-| MySQL 9.7.2 sobre Windows | 24 tablas, 6 vistas, sin avisos |
+## Aviso: la V9 anterior al 12 de octubre de 2026 se detenía a medias
 
-Las funciones se crean con el registro binario activado y sin
-privilegios especiales, porque declaran `READS SQL DATA`.
+La primera versión de `V9__rol_super_admin_y_venta_sin_existencia.sql`
+borraba la columna generada `estado_stock` y después creaba el índice
+`ix_productos_estado`. El `CREATE INDEX` fallaba con error 1061, nombre
+de clave duplicado.
+
+La causa: `ix_productos_estado` es un índice de dos columnas,
+`(estado_stock, activo)`. Al borrar la columna generada, MySQL **no
+elimina el índice**: lo conserva sobre la columna que queda. El nombre
+sigue ocupado.
+
+El cliente `mysql` se detiene en el primer error, de modo que todo lo
+posterior —las columnas de venta sin existencia en `ventas` y sus
+parámetros— nunca se creaba. Sin mensaje visible al final del todo.
+
+Para saber si te pasó:
+
+```sql
+SELECT COUNT(*) FROM information_schema.columns
+ WHERE table_schema='sgip' AND table_name='ventas'
+   AND column_name='sin_existencia';
+```
+
+Si devuelve `0`, el esquema quedó incompleto. La solución es recrear la
+base desde cero con la V9 corregida, que retira el índice antes de borrar
+la columna.
+
+## Antes de aplicar V9 o V10 sobre datos que te importan
+
+**Haz una copia.** MySQL confirma cada sentencia de definición de datos
+por su cuenta: una migración no se deshace con `ROLLBACK`. Si falla a la
+mitad, el esquema queda a medio camino.
+
+```bash
+mysqldump -u root -p sgip > respaldo_antes_de_la_migracion.sql
+```
 
 ## Orden de ejecución
 
 ```bash
-mysql -u root -p < 00__crear_base.sql
-mysql -u root -p sgip < V1__seguridad.sql
-mysql -u root -p sgip < V2__catalogo.sql
-mysql -u root -p sgip < V3__parametrizacion.sql
-mysql -u root -p sgip < V4__comercial.sql
-mysql -u root -p sgip < V5__funciones.sql
-mysql -u root -p sgip < V6__vistas.sql
-mysql -u root -p sgip < V7__datos_iniciales.sql
-mysql -u root -p sgip < V8__datos_demo.sql   # opcional, solo para probar
+bash aplicar.sh -u root -p --recrear
 ```
 
-El orden importa: hay claves foráneas entre migraciones.
+O manualmente, respetando el orden, porque hay claves foráneas entre
+migraciones:
 
-Las funciones de V5 declaran `READS SQL DATA`, de modo que se crean sin
-problema con el registro binario activado. No hace falta tocar
-`log_bin_trust_function_creators`.
+```bash
+mysql -u root -p < migrations/00__crear_base.sql
+mysql -u root -p sgip < migrations/V1__seguridad.sql
+mysql -u root -p sgip < migrations/V2__catalogo.sql
+mysql -u root -p sgip < migrations/V3__parametrizacion.sql
+mysql -u root -p sgip < migrations/V4__comercial.sql
+mysql -u root -p sgip < migrations/V5__funciones.sql
+mysql -u root -p sgip < migrations/V6__vistas.sql
+mysql -u root -p sgip < migrations/V7__datos_iniciales.sql
+mysql -u root -p sgip < migrations/V8__datos_demo.sql   # opcional
+mysql -u root -p sgip < migrations/V9__rol_super_admin_y_venta_sin_existencia.sql
+mysql -u root -p sgip < migrations/V10__plataforma_multiempresa.sql
+mysql -u root -p sgip < migrations/V11__claves_compuestas_por_empresa.sql
+```
+
+No uses `for f in migrations/V*.sql` con comodín: el orden alfabético
+pone `V10` antes de `V2` y la cadena falla por claves foráneas. `aplicar.sh`
+lleva la lista explícita por eso mismo.
 
 V5 usa la directiva `DELIMITER`, que interpreta el cliente `mysql` pero
 no todos los conectores. Si lo ejecutas desde una herramienta gráfica y
@@ -50,19 +88,112 @@ falla, verifica que soporte esa directiva.
 | `V2__catalogo.sql` | categorias, proveedores, productos, mapeos_proveedor, cargas_precios, detalle_carga_precios, historico_costos, movimientos_inventario |
 | `V3__parametrizacion.sql` | parametros, uvt_anual, reglas_iva, reglas_margen, reglas_envio, calendario_habil |
 | `V4__comercial.sql` | clientes, cotizaciones, cotizacion_items, ventas, venta_items, facturas_electronicas |
-| `V5__funciones.sql` | fn_valor_uvt, fn_es_habil, fn_sumar_dias_habiles |
+| `V5__funciones.sql` | fn_valor_uvt, fn_es_habil, fn_sumar_dias_habiles, fn_envio_sugerido |
 | `V6__vistas.sql` | v_regla_margen, v_regla_iva, v_precios_producto, v_existencias_criticas, v_inventario_valorizado, v_rotacion_inventario |
 | `V7__datos_iniciales.sql` | Roles, categorías, UVT, reglas vigentes, parámetros, festivos 2026 y 2027 |
 | `V8__datos_demo.sql` | Datos de prueba y consultas de verificación |
+| `V9__rol_super_admin_y_venta_sin_existencia.sql` | Rol SUPER_ADMIN; existencia negativa permitida; columnas de autorización en ventas |
+| `V10__plataforma_multiempresa.sql` | empresas, suscripciones, producto_proveedor, ordenes_compra, orden_compra_items, recepciones, medios_pago, cierres_caja, cola_sincronizacion, descuadres_existencia; `empresa_id` en doce tablas |
+| `V11__claves_compuestas_por_empresa.sql` | Las veinte claves foráneas que podían cruzar empresas pasan a incluir `empresa_id` |
+| `V12__configuracion_tributaria_por_empresa.sql` | tipos_impuesto, tipos_retencion, empresa_config, producto_imagenes, venta_retenciones; `reglas_iva` gana `empresa_id`; las seis vistas exponen `empresa_id` |
+
+`extras/restriccion_ambito_regla_iva.sql` queda **fuera** de la cadena a
+propósito. Es una restricción correcta que no se pudo verificar, y el
+propio archivo explica por qué está aparte en lugar de dentro de la V12.
+
+V9 no crea tablas: cambia restricciones y agrega columnas. Las diez
+tablas nuevas de V10 llevan el esquema de 24 a 34, y las cinco de V12 lo
+llevan a 39. V11 no crea tablas: solo cambia claves foráneas e índices.
+
+### Lo que la V12 corrige, y que la V10 dejó pasar
+
+Cuatro defectos de aislamiento. Los cuatro se reprodujeron en una base
+real antes de escribir la migración: no son revisión de código, son
+comportamiento medido.
+
+**`reglas_iva` nunca recibió `empresa_id`.** La V10 se lo agregó a
+`reglas_margen` y a `reglas_envio`, pero no a esta. Su regla general —la
+fila con `categoria_id` nulo— era **una sola para toda la plataforma**.
+Al cambiar la empresa 1 su regla general a `EXCLUIDO`, el producto
+«Arroz Diana 500 g» de la empresa 2 pasó de gravado al 19 % a excluido.
+Un comercio le cambió el impuesto a otro, y en la pantalla no se nota:
+la cifra simplemente aparece distinta.
+
+**`v_regla_margen` no filtraba por empresa.** `reglas_margen` sí tiene
+`empresa_id`, pero el join de la vista no lo usaba. El arroz de la
+empresa 2 se valoraba con el factor 1,2000 de la empresa 1, que es el
+margen de un distribuidor de tecnología aplicado a una tienda de barrio.
+
+**Ninguna de las seis vistas exponía `empresa_id`.** La aplicación no
+podía filtrarlas por empresa, que es justo lo que exige la RN-16, y
+tenía que volver a las tablas: exactamente lo que las vistas existían
+para evitar.
+
+**Los consecutivos eran únicos globales.** `uq_ventas_consecutivo` y
+`uq_cotizaciones_consecutivo` estaban sobre la columna sola, de modo que
+la segunda empresa que numerara su primera venta como `V-0001` chocaba
+con la primera. Cada comercio numera desde uno; que los consecutivos de
+comercios distintos no se repitan entre sí no es ninguna regla de
+negocio.
+
+### Por qué hizo falta la V11
+
+La V10 agregó `empresa_id`, pero dejó las claves foráneas sobre una sola
+columna. Una clave de una columna comprueba que la fila referida
+**exista**, no que pertenezca a la misma empresa. El esquema admitía
+esto sin error:
+
+```sql
+INSERT INTO productos (empresa_id, categoria_id, ...)
+VALUES (2, <categoría de la empresa 1>, ...);
+```
+
+Un producto de una tienda colgado de la categoría de otra. Y como la
+lectura filtra por la empresa del producto, la categoría ajena aparece
+como si fuera propia: el defecto no se manifiesta mirando la pantalla.
+
+Eran veintiuna claves en esa situación. V11 convierte veinte en claves
+compuestas sobre `(empresa_id, columna)`. La que queda fuera es
+`auditoria_accesos.usuario_id`, y a propósito: su `empresa_id` admite
+nulo porque tiene que registrar los accesos del super administrador de
+la plataforma, que no pertenece a ninguna empresa.
+
+Las claves hacia `usuarios` ganan un efecto extra. Como
+`usuarios.empresa_id` es nulo para el super administrador, y la
+`empresa_id` de ventas, cotizaciones, movimientos y cierres es
+obligatoria, la clave compuesta **impide que un usuario de plataforma
+figure como autor de una operación de una empresa**. BSP crea, activa y
+desactiva comercios, pero no opera dentro de ellos. Eso era una
+convención y ahora está en el esquema.
 
 ## Decisiones que conviene conocer antes de tocar el esquema
+
+**El aislamiento entre empresas vive en `empresa_id`, no en el código.**
+Doce tablas lo llevan como columna obligatoria y con clave foránea. Las
+restricciones de unicidad que antes eran globales ahora son por empresa:
+dos comercios distintos pueden tener ambos un producto con código
+`PC-001`. Los usuarios de plataforma —el super administrador de BSP— son
+la excepción: su `empresa_id` es nulo, porque no pertenecen a ninguna.
+
+**La existencia negativa es un estado válido.** `ck_productos_existencia`
+admite hasta −9999. La columna generada `estado_stock` clasifica
+cualquier existencia menor o igual a cero como `AGOTADO`, nunca como
+`CRITICO`. Una venta autorizada sin existencia registra quién la
+autorizó y por qué.
+
+**Las cantidades son enteras.** No hay `DECIMAL` en cantidades de
+producto. Un comercio que vende arroz por peso lo modela por
+presentación: «Arroz Diana 500 g», diez unidades. Introducir fracciones
+obligaría a revisar todos los cálculos de subtotal y no resuelve ningún
+caso real del alcance.
 
 **Los precios de venta no son columnas generadas.** Dependen de
 `reglas_margen` y `reglas_iva`, que son tablas distintas, y MySQL solo
 admite columnas generadas que dependan de columnas de la misma fila. Se
 resuelven en la vista `v_precios_producto`. Sí son generadas
-`productos.estado_stock`, los subtotales de las líneas y los totales de
-cotización y venta, porque cada una depende únicamente de su propia fila.
+`productos.estado_stock`, `cierres_caja.diferencia`, los subtotales de
+las líneas y los totales de cotización y venta, porque cada una depende
+únicamente de su propia fila.
 
 **Los umbrales tributarios se guardan en UVT, no en pesos.** La unidad se
 actualiza cada año por resolución. Guardar el tope en pesos obligaría a
@@ -85,39 +216,115 @@ causa el impuesto y no otorga ese derecho.
 dato histórico, no derivado. Un documento emitido ayer conserva lo que se
 ofreció, aunque el costo haya cambiado hoy.
 
-**Nada se elimina.** Productos, proveedores y usuarios se desactivan. Las
-claves foráneas usan `RESTRICT` donde borrar rompería la trazabilidad y
-`CASCADE` solo en las líneas de detalle, que no tienen sentido sin su
-encabezado.
+**`cola_sincronizacion.clave_idempotencia` es única.** Es lo que impide
+que una operación registrada sin conexión se aplique dos veces cuando el
+cliente reintenta el envío. El segundo intento falla con error 1062 y el
+cliente lo trata como éxito, no como error.
+
+**Nada se elimina.** Productos, proveedores, usuarios y empresas se
+desactivan. Las claves foráneas usan `RESTRICT` donde borrar rompería la
+trazabilidad y `CASCADE` solo en las líneas de detalle, que no tienen
+sentido sin su encabezado.
 
 **Las columnas booleanas se declaran `BOOL`, no `TINYINT(1)`.** MySQL las
 almacena igual, pero escribir el ancho de visualización produce el aviso
 1681: los anchos en tipos enteros están obsoletos y se van a retirar.
-Declararlas como `BOOL` deja los ocho scripts sin un solo aviso.
 
 **`sesiones.token_hash` guarda el hash del token, no el token.** Si la
 base se filtra, las sesiones vigentes no quedan expuestas.
 
 ## Lo que el esquema no resuelve y la aplicación sí
 
-El descuento de existencias y el registro de la venta deben ocurrir en
-una sola transacción. El esquema impide que la existencia quede negativa
-mediante `ck_productos_existencia`, pero la atomicidad entre tablas es
-responsabilidad de la capa de lógica.
+**El filtro de lectura por empresa.** Desde la V11 el esquema impide
+*escribir* filas que cruzan empresas, y desde la V12 las vistas exponen
+`empresa_id` para que se pueda filtrar. Pero nada obliga a filtrar: una
+consulta que olvide `WHERE empresa_id = ?` devuelve datos de otros
+comercios sin fallar. En desarrollo, con una sola empresa cargada, el
+defecto es invisible. Debe resolverse en un único punto de la capa de
+datos, no consulta por consulta.
 
-`calendario_habil` trae 2026 y 2027. Hay que cargar cada año nuevo antes
-de que empiece, o `fn_sumar_dias_habiles` contará los festivos como
-hábiles. La Ley 51 de 1983 traslada varias festividades al lunes
-siguiente, de modo que las fechas no se derivan con una fórmula fija.
+**Que la configuración esté completa antes de vender.** `empresa_config`
+guarda el interruptor `configuracion_completa`, pero no impide que se
+registre una venta con él en falso. Eso es la RN-25 y se resuelve en la
+autorización, igual que el estado desactivado de la empresa. Lo que el
+esquema sí hace es dejarlo visible: un producto de una empresa sin
+configurar sale de `v_precios_producto` con
+`tributacion_sin_configurar = 1` y sin precio, en lugar de con un total
+vacío sin explicación.
+
+**La atomicidad entre tablas.** El descuento de existencias y el registro
+de la venta deben ocurrir en una sola transacción.
+
+**El calendario.** `calendario_habil` trae 2026 y 2027. Hay que cargar
+cada año nuevo antes de que empiece, o `fn_sumar_dias_habiles` contará
+los festivos como hábiles. La Ley 51 de 1983 traslada varias festividades
+al lunes siguiente, de modo que las fechas no se derivan con una fórmula
+fija.
+
+**El valor de la UVT.** `uvt_anual` trae 2025 y 2026. Sin el año cargado,
+`fn_valor_uvt` devuelve nulo y la vista trata el producto como gravado,
+que es el comportamiento conservador: cobra el impuesto en lugar de
+omitirlo.
 
 `reglas_envio.costo_envio` viene en cero, lo que equivale a no cobrar
 envío en ningún caso: la regla queda inerte hasta que se fije una tarifa
 real. El umbral se mide sobre el subtotal, antes del impuesto, y la
 comparación es estricta, de modo que una compra de exactamente un millón
-no alcanza el beneficio. Por debajo del umbral el vendedor puede regalar
-el envío marcando `origen_envio = 'MANUAL'`, lo que obliga a registrar
-motivo y responsable: es un descuento y debe poder auditarse.
+no alcanza el beneficio.
 
-`uvt_anual` trae 2025 y 2026. Sin el año cargado, `fn_valor_uvt` devuelve
-nulo y la vista trata el producto como gravado, que es el comportamiento
-conservador: cobra el impuesto en lugar de omitirlo.
+## Verificación
+
+La cadena V1 a V12 se aplicó desde cero, con y sin datos de
+demostración, y produjo **39 tablas, 6 vistas, 4 funciones y 24 claves
+foráneas por empresa**.
+
+Las comprobaciones están en dos scripts que puedes correr tú mismo sobre
+una base de desarrollo. Los argumentos se pasan tal cual al cliente
+`mysql`:
+
+```bash
+cd database
+bash verificar_aislamiento.sh -u root -p
+bash verificar_tributacion.sh -u root -p
+```
+
+El segundo cubre lo que introduce la V12 y los cuatro defectos que
+corrige: dieciocho comprobaciones, entre ellas que la regla de IVA de
+una empresa no alcance a otra, que el margen de una no fije el precio de
+la otra, que quien no es responsable de IVA no cause impuesto, y que el
+neto a recibir sea el total menos la retención.
+
+Comprueba ocho cosas, y en los casos de rechazo verifica además **por
+qué** restricción se rechaza: una prueba que pasa porque la sentencia
+falló por otro motivo no está probando nada.
+
+| Comprobación | Resultado esperado |
+|---|---|
+| Producto con categoría y proveedor propios | Admitido |
+| El mismo código de producto en dos empresas | Admitido |
+| `existencia = -3` | `estado_stock = 'AGOTADO'` |
+| Producto con categoría de otra empresa | Error 1452, `fk_productos_categoria_emp` |
+| Venta cuyo vendedor es de otra empresa | Error 1452, `fk_ventas_usuario_emp` |
+| Venta cuyo cliente es de otra empresa | Error 1452, `fk_ventas_cliente_emp` |
+| Primera operación en la cola de sincronización | Admitida |
+| La misma `clave_idempotencia` repetida | Error 1062, `uq_cola_idempotencia` |
+
+El script deja en la base una empresa de prueba con NIT `900000000-1`.
+Es idempotente: limpia sus propias filas antes de empezar, de modo que
+puede ejecutarse varias veces seguidas.
+
+Fuera del script se comprobó también que `cantidad_recibida` mayor que
+`cantidad` falla con error 4025 por `ck_oci_recibida`, y que un usuario
+de plataforma admite `empresa_id` nulo mientras un usuario de empresa lo
+exige.
+
+Estas pruebas corrieron sobre **MariaDB 10.11**, que fue el motor
+disponible en el entorno de verificación, no sobre MySQL 9.7. Dos cosas
+se adaptaron solo para esa prueba y en el repositorio están escritas para
+MySQL:
+
+- La colación `utf8mb4_0900_ai_ci`, que MariaDB no tiene.
+- `DROP CHECK`, que en MariaDB se escribe `DROP CONSTRAINT`.
+
+El resto del lenguaje de definición de datos es común a los dos motores.
+Aun así, aplícala en tu entorno antes de darla por buena.

@@ -3,106 +3,106 @@
 hide circle
 skinparam linetype ortho
 
-entity "clientes" as clientes {
+entity "clientes" as cli {
   * cliente_id : INT <<PK>>
   --
+  * empresa_id : INT <<FK>>
+  usuario_id : INT <<FK>>
+  * tipo_documento : ENUM
+  * nit : VARCHAR(20)
   * razon_social : VARCHAR(160)
-  * nit : VARCHAR(20) <<UQ>>
-  correo : VARCHAR(120)
-  telefono : VARCHAR(20)
   autorizacion_datos : DATETIME
 }
 
-entity "usuarios" as usuarios {
-  * usuario_id : INT <<PK>>
+entity "medios_pago" as mp {
+  * medio_id : INT <<PK>>
   --
-  * correo : VARCHAR(120) <<UQ>>
-  * nombre : VARCHAR(120)
+  * empresa_id : INT <<FK>>
+  * nombre : VARCHAR(60)
+  * tipo : ENUM(EFECTIVO, TARJETA, TRANSFERENCIA, CREDITO)
+  activo : BOOL
 }
 
-entity "productos" as productos {
-  * producto_id : INT <<PK>>
-  --
-  * codigo : VARCHAR(60) <<UQ>>
-  * nombre : VARCHAR(160)
-  * costo : DECIMAL(14,2)
-  precio_contado : DECIMAL(14,2) <<GEN>>
-  precio_credito : DECIMAL(14,2) <<GEN>>
-  * existencia : INT
-}
-
-entity "cotizaciones" as cotiz {
+entity "cotizaciones" as cot {
   * cotizacion_id : BIGINT <<PK>>
   --
+  * empresa_id : INT <<FK>>
   * cliente_id : INT <<FK>>
   * usuario_id : INT <<FK>>
-  * fecha_emision : DATE
-  * fecha_vencimiento : DATE
-  * estado : ENUM
-  subtotal : DECIMAL(14,2)
-  iva : DECIMAL(14,2)
-  envio : DECIMAL(14,2)
-  * origen_envio : ENUM
-  motivo_envio : VARCHAR(200)
-  envio_autorizado_por : INT <<FK>>
-  total : DECIMAL(14,2) <<GEN>>
+  * consecutivo : VARCHAR(20)
+  * fecha : DATETIME
+  * vence : DATE
+  * estado : ENUM(VIGENTE, VENCIDA, CONVERTIDA)
 }
 
-entity "cotizacion_items" as cotitems {
+entity "cotizacion_items" as coti {
   * item_id : BIGINT <<PK>>
   --
   * cotizacion_id : BIGINT <<FK>>
   * producto_id : INT <<FK>>
   * cantidad : INT
   * precio_unitario : DECIMAL(14,2)
-  subtotal : DECIMAL(14,2) <<GEN>>
 }
 
-entity "ventas" as ventas {
+entity "ventas" as ven {
   * venta_id : BIGINT <<PK>>
   --
+  * empresa_id : INT <<FK>>
   * cliente_id : INT <<FK>>
   * usuario_id : INT <<FK>>
+  * medio_id : INT <<FK>>
   cotizacion_id : BIGINT <<FK>>
+  cierre_id : BIGINT <<FK>>
+  * consecutivo : VARCHAR(20)
   * fecha : DATETIME
-  * forma_pago : ENUM
-  subtotal : DECIMAL(14,2)
-  iva : DECIMAL(14,2)
-  envio : DECIMAL(14,2)
-  * origen_envio : ENUM
-  motivo_envio : VARCHAR(200)
-  envio_autorizado_por : INT <<FK>>
-  total : DECIMAL(14,2) <<GEN>>
+  * estado_pago : ENUM(PENDIENTE, PAGADA, ANULADA)
+  sin_existencia : BOOL
+  * total : DECIMAL(14,2) <<generada>>
 }
 
-entity "venta_items" as venitems {
+entity "venta_items" as veni {
   * item_id : BIGINT <<PK>>
   --
   * venta_id : BIGINT <<FK>>
   * producto_id : INT <<FK>>
   * cantidad : INT
   * precio_unitario : DECIMAL(14,2)
-  subtotal : DECIMAL(14,2) <<GEN>>
+  descuento : DECIMAL(14,2)
 }
 
-entity "facturas_electronicas" as facturas {
+entity "cierres_caja" as cc {
+  * cierre_id : BIGINT <<PK>>
+  --
+  * empresa_id : INT <<FK>>
+  * usuario_id : INT <<FK>>
+  * apertura : DATETIME
+  cierre : DATETIME
+  * esperado : DECIMAL(14,2)
+  contado : DECIMAL(14,2)
+  diferencia : DECIMAL(14,2) <<generada>>
+}
+
+entity "facturas_electronicas" as fe {
   * factura_id : BIGINT <<PK>>
   --
-  * venta_id : BIGINT <<FK, UQ>>
-  cufe : VARCHAR(96)
-  * estado : ENUM
-  fecha_envio : DATETIME
-  fecha_validacion : DATETIME
-  respuesta : TEXT
+  * venta_id : BIGINT <<FK>>
+  cufe : VARCHAR(96) <<UQ>>
+  * estado : ENUM(ENVIADA, VALIDADA, RECHAZADA)
+  motivo_rechazo : VARCHAR(200)
 }
-usuarios ||--o{ cotiz
-usuarios ||--o{ ventas
-clientes ||--o{ cotiz
-clientes ||--o{ ventas
-cotiz ||--|{ cotitems
-cotiz |o--o| ventas
-ventas ||--|{ venitems
-ventas ||--o| facturas
-productos ||--o{ cotitems
-productos ||--o{ venitems
+
+cli ||--o{ cot
+cli ||--o{ ven
+cot ||--o{ coti
+cot |o--o| ven
+ven ||--o{ veni
+mp ||--o{ ven
+cc ||--o{ ven
+ven ||--o| fe
+
+note bottom of cc
+  El cierre agrupa las ventas del turno.
+  La diferencia entre lo esperado y lo
+  contado se calcula, no se digita.
+end note
 @enduml

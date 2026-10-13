@@ -2,85 +2,104 @@
 !include comun.iuml
 hide circle
 skinparam linetype ortho
+skinparam nodesep 16
+skinparam ranksep 40
 
-entity "parametros" as par {
-  * parametro_id : INT <<PK>>
-  --
-  * clave : VARCHAR(80) <<UQ>>
-  * valor : VARCHAR(200)
-  * tipo_dato : ENUM
-  descripcion : VARCHAR(200)
-  * vigente_desde : DATE
+package "Parámetros nacionales · los mantiene la plataforma" {
+  entity "uvt_anual" as uvt {
+    * anio : INT <<PK>>
+    --
+    * valor : DECIMAL(12,2)
+    resolucion : VARCHAR(80)
+  }
+  entity "reglas_iva" as iva {
+    * regla_iva_id : INT <<PK>>
+    --
+    categoria_id : INT <<FK>>
+    * tratamiento : ENUM
+    umbral_uvt : DECIMAL(8,2)
+    * tarifa : DECIMAL(5,4)
+    * vigente_desde : DATE
+  }
+  entity "calendario_habil" as cal {
+    * fecha : DATE <<PK>>
+    --
+    * tipo : ENUM(FESTIVO, HABIL)
+    descripcion : VARCHAR(80)
+  }
 }
 
-entity "uvt_anual" as uvt {
-  * anio : SMALLINT <<PK>>
-  --
-  * valor : DECIMAL(12,2)
-  resolucion : VARCHAR(60)
+package "Parámetros de cada empresa" {
+  entity "parametros" as par {
+    * parametro_id : INT <<PK>>
+    --
+    * empresa_id : INT <<FK>>
+    * clave : VARCHAR(80)
+    * valor : VARCHAR(200)
+    * tipo_dato : ENUM
+    * vigente_desde : DATE
+  }
+  entity "reglas_margen" as rm {
+    * regla_id : INT <<PK>>
+    --
+    * empresa_id : INT <<FK>>
+    categoria_id : INT <<FK>>
+    proveedor_id : INT <<FK>>
+    * forma_calculo : ENUM(SOBRE_COSTO, SOBRE_PRECIO)
+    * factor : DECIMAL(6,4)
+    * vigente_desde : DATE
+  }
+  entity "reglas_envio" as re {
+    * regla_envio_id : INT <<PK>>
+    --
+    * empresa_id : INT <<FK>>
+    * umbral : DECIMAL(14,2)
+    * base : ENUM(SUBTOTAL, TOTAL)
+    * costo_envio : DECIMAL(14,2)
+  }
 }
 
-entity "reglas_iva" as riva {
-  * regla_iva_id : INT <<PK>>
-  --
-  categoria_id : INT <<FK>>
-  * tratamiento : ENUM
-  umbral_uvt : DECIMAL(8,2)
-  * tarifa : DECIMAL(5,4)
-  * vigente_desde : DATE
-  vigente_hasta : DATE
-  fundamento : VARCHAR(160)
+package "Sincronización" {
+  entity "cola_sincronizacion" as cs {
+    * operacion_id : BIGINT <<PK>>
+    --
+    * empresa_id : INT <<FK>>
+    * usuario_id : INT <<FK>>
+    * clave_idempotencia : CHAR(36) <<UQ>>
+    * tipo : ENUM(VENTA, CIERRE, AJUSTE)
+    * carga : JSON
+    * registrada_dispositivo : DATETIME
+    * recibida_servidor : DATETIME
+    * estado : ENUM(PENDIENTE, APLICADA, RECHAZADA)
+  }
+  entity "descuadres_existencia" as de {
+    * descuadre_id : BIGINT <<PK>>
+    --
+    * operacion_id : BIGINT <<FK>>
+    * producto_id : INT <<FK>>
+    * solicitada : INT
+    * disponible : INT
+    * resultante : INT
+    resuelto : BOOL
+  }
 }
 
-entity "reglas_margen" as rmar {
-  * regla_id : INT <<PK>>
-  --
-  categoria_id : INT <<FK>>
-  proveedor_id : INT <<FK>>
-  * forma_pago : ENUM
-  * factor : DECIMAL(6,4)
-  * vigente_desde : DATE
-  vigente_hasta : DATE
-}
+uvt -[hidden]down- par
+par -[hidden]down- cs
 
-entity "reglas_envio" as renv {
-  * regla_envio_id : INT <<PK>>
-  --
-  * umbral_valor : DECIMAL(14,2)
-  * base_calculo : ENUM
-  * costo_envio : DECIMAL(14,2)
-  * permite_obsequio : TINYINT(1)
-  * vigente_desde : DATE
-  vigente_hasta : DATE
-}
+uvt ||..o{ iva
+cs ||--o{ de
 
-note bottom of renv
-  El umbral se mide sobre el subtotal, antes
-  del impuesto, y la comparación es estricta.
-  permite_obsequio habilita que el vendedor
-  regale el envío por debajo del umbral.
+note bottom of cs
+  La clave de idempotencia la genera el
+  dispositivo. Un reenvío de la misma
+  operación no duplica la venta.
 end note
 
-entity "categorias" as cat {
-  * categoria_id : INT <<PK>>
-  --
-  * nombre : VARCHAR(80) <<UQ>>
-}
-
-entity "proveedores" as prov {
-  * proveedor_id : INT <<PK>>
-  --
-  * razon_social : VARCHAR(160)
-}
-
-cat ||--o{ riva
-cat ||--o{ rmar
-prov ||--o{ rmar
-uvt ||--o{ riva : convierte umbral
-
-note bottom of riva
-  El umbral se almacena en UVT, no en pesos.
-  Al cambiar el valor anual de la UVT el tope
-  se actualiza sin tocar la regla.
+note bottom of rm
+  forma_calculo distingue el recargo
+  sobre el costo del margen sobre el
+  precio de venta: un mismo porcentaje
+  da resultados distintos.
 end note
 @enduml

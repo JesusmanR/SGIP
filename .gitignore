@@ -21,7 +21,21 @@ target/
 !.mvn/wrapper/maven-wrapper.jar
 dependency-reduced-pom.xml
 
-# ── Android ──────────────────────────────────────────────────────────
+# ── Node, React y React Native ───────────────────────────────────────
+node_modules/
+dist/
+.vite/
+coverage/
+*.tsbuildinfo
+npm-debug.log*
+yarn-error.log*
+.expo/
+.expo-shared/
+# El bloqueo de versiones SÍ se versiona: es lo que hace reproducible
+# una instalación. No lo agregues a este archivo.
+!package-lock.json
+
+# ── Android (empaquetado del cliente móvil) ──────────────────────────
 *.apk
 *.aab
 *.dex
@@ -30,6 +44,11 @@ local.properties
 build/
 captures/
 .cxx/
+
+# ── iOS ──────────────────────────────────────────────────────────────
+Pods/
+*.xcworkspace
+*.xcuserdatad/
 
 # ── Entornos de desarrollo ───────────────────────────────────────────
 .idea/

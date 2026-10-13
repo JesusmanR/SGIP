@@ -32,3 +32,16 @@ cobrarlo de más es un error que el cliente reclama y se corrige.
 Cargar `uvt_anual` antes de que empiece cada año es una tarea operativa
 que nadie va a recordar sola. Conviene una alerta al sistema cuando falte
 el año en curso.
+
+## Nota posterior
+
+Los umbrales siguen almacenándose en UVT, y por las mismas razones.
+
+Lo que cambió es su alcance: dejaron de aplicarse a toda empresa. Los
+topes del artículo 424 solo le sirven a quien vende computadores o
+dispositivos móviles, de modo que cada empresa declara si aplica la
+exclusión por umbral. Para quien no la aplica, ese tratamiento se
+comporta como gravado a su tarifa. Ver ADR-0016.
+
+Los umbrales ya no viven en `reglas_iva` sino en `tipos_impuesto`, el
+catálogo que mantiene la plataforma.
