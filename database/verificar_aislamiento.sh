@@ -14,7 +14,16 @@
 set -uo pipefail
 
 CONEXION=("$@")
-ejecutar () { mysql "${CONEXION[@]}" sgip -e "$1" 2>&1; }
+
+# El cliente de MySQL escribe este aviso en la salida de error cuando la
+# contraseña viaja en la línea de comandos, que es como lo invoca el flujo
+# de integración continua. Sin filtrarlo, ensucia toda captura: una
+# comprobación que espera salida vacía lo lee como error y falla aunque la
+# sentencia haya funcionado. MariaDB no emite el aviso, de modo que esto
+# solo se manifiesta contra MySQL.
+sin_aviso () { grep -v "Using a password on the command line interface" || true; }
+
+ejecutar () { mysql "${CONEXION[@]}" sgip -e "$1" 2>&1 | sin_aviso; }
 consulta () { mysql "${CONEXION[@]}" -N -B sgip -e "$1" 2>/dev/null; }
 
 fallos=0

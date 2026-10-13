@@ -14,7 +14,16 @@
 set -uo pipefail
 
 CONEXION=("$@")
-ejecutar () { mysql "${CONEXION[@]}" sgip -e "$1" 2>&1; }
+
+# El cliente de MySQL escribe este aviso en la salida de error cuando la
+# contraseña viaja en la línea de comandos, que es como lo invoca el flujo
+# de integración continua. Sin filtrarlo, ensucia toda captura: una
+# comprobación que espera salida vacía lo lee como error y falla aunque la
+# sentencia haya funcionado. MariaDB no emite el aviso, de modo que esto
+# solo se manifiesta contra MySQL.
+sin_aviso () { grep -v "Using a password on the command line interface" || true; }
+
+ejecutar () { mysql "${CONEXION[@]}" sgip -e "$1" 2>&1 | sin_aviso; }
 consulta () { mysql "${CONEXION[@]}" -N -B sgip -e "$1" 2>/dev/null; }
 
 fallos=0
@@ -25,7 +34,15 @@ igual () { # $1 descripción, $2 esperado, $3 obtenido
 }
 
 echo "── preparando una empresa sin configurar ──"
-ejecutar "DELETE FROM reglas_iva    WHERE empresa_id > 1;"          >/dev/null
+# La limpieza se acota a la empresa de prueba por su NIT, y borra también
+# sus reglas de margen: sin eso, una segunda corrida encuentra el precio ya
+# calculado y la comprobación 3 falla aunque el esquema esté bien.
+borrar_de_la_prueba () {  # $1 = tabla
+  ejecutar "DELETE t FROM $1 t JOIN empresas e ON e.empresa_id = t.empresa_id
+             WHERE e.nit = '900000000-2';" >/dev/null
+}
+borrar_de_la_prueba reglas_iva
+borrar_de_la_prueba reglas_margen
 ejecutar "DELETE FROM productos     WHERE sku = 'SKU-TRIB';"        >/dev/null
 ejecutar "DELETE FROM categorias    WHERE nombre = 'Panaderia';"    >/dev/null
 ejecutar "DELETE FROM proveedores   WHERE nit = '800000000-3';"     >/dev/null
