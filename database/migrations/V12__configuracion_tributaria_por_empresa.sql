@@ -217,13 +217,12 @@ ALTER TABLE reglas_iva
       REFERENCES productos (empresa_id, producto_id)
       ON DELETE CASCADE ON UPDATE CASCADE;
 
--- La clave hacia el catálogo es de una columna porque el catálogo es de
--- plataforma: no tiene empresa a la que pertenecer.
-ALTER TABLE reglas_iva
-  ADD CONSTRAINT fk_reglas_iva_tipo
-      FOREIGN KEY (tipo_impuesto_id)
-      REFERENCES tipos_impuesto (tipo_impuesto_id)
-      ON DELETE RESTRICT ON UPDATE CASCADE;
+-- La clave hacia el catálogo NO se crea aquí: se crea en el bloque 8.4,
+-- después de rellenar la columna y de exigirla. El orden importa y MySQL
+-- lo hace cumplir, aunque MariaDB no: con la clave ya puesta, el
+-- MODIFY posterior falla con error 1832, «Cannot change column
+-- 'tipo_impuesto_id': used in a foreign key constraint». Es el mismo
+-- orden que ya usaba la V10 para empresa_id.
 
 ALTER TABLE reglas_iva
   ADD INDEX ix_reglas_iva_producto (producto_id, vigente_desde);
@@ -419,11 +418,14 @@ VALUES (1, TRUE, TRUE, FALSE, TRUE, 5, TRUE);
 
 -- Cualquier otra empresa que ya exista arranca sin configurar, que es
 -- lo correcto: nadie eligió por ella.
+--
+-- Sin subconsulta sobre empresa_config: leer la misma tabla en la que se
+-- inserta es terreno donde MySQL y MariaDB no se comportan igual, y aquí
+-- no hace falta. La tabla acaba de crearse y solo tiene la fila de la
+-- empresa 1, que la condición ya excluye.
 INSERT INTO empresa_config (empresa_id)
 SELECT e.empresa_id FROM empresas e
- WHERE e.empresa_id <> 1
-   AND NOT EXISTS (SELECT 1 FROM empresa_config ec
-                    WHERE ec.empresa_id = e.empresa_id);
+ WHERE e.empresa_id <> 1;
 
 -- ── 8.4 Las reglas sembradas apuntan ahora a un tipo ─────────────────
 UPDATE reglas_iva ri
@@ -450,6 +452,14 @@ UPDATE reglas_iva ri
 
 ALTER TABLE reglas_iva
   MODIFY tipo_impuesto_id INT NOT NULL;
+
+-- Ahora sí la clave foránea. Es de una sola columna porque el catálogo
+-- es de plataforma: no tiene empresa a la que pertenecer.
+ALTER TABLE reglas_iva
+  ADD CONSTRAINT fk_reglas_iva_tipo
+      FOREIGN KEY (tipo_impuesto_id)
+      REFERENCES tipos_impuesto (tipo_impuesto_id)
+      ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- Las columnas viejas salen una vez traducidas: dejarlas sería tener
 -- dos fuentes del mismo dato, que es como empiezan a divergir.
