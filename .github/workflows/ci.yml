@@ -112,7 +112,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           java-version: '25'
           distribution: temurin
@@ -135,8 +135,9 @@ jobs:
       # application.yml no se versiona. Se arma desde el ejemplo, que es
       # justamente la comprobación de que el ejemplo sigue estando al día.
       - name: Preparar la configuración
-        run: cp backend/src/main/resources/application.yml.ejemplo \
-                backend/src/main/resources/application.yml
+        run: |
+          cd backend/src/main/resources
+          cp application.yml.ejemplo application.yml
 
       - name: Compilar y probar
         env:
