@@ -46,4 +46,38 @@ class SeguridadTest {
     void laClaveNuncaApareceEnElHash() {
         assertFalse(Seguridad.derivar("SgipDev2026").contains("SgipDev2026"));
     }
+
+    @Test
+    void cadaTokenEsDistinto() {
+        assertNotEquals(Seguridad.nuevoToken(), Seguridad.nuevoToken());
+    }
+
+    @Test
+    void elTokenNoLlevaCaracteresQueHayaQueEscapar() {
+        // Viaja en una cabecera HTTP: nada de +, / ni =
+        assertTrue(Seguridad.nuevoToken().matches("[A-Za-z0-9_-]+"));
+    }
+
+    @Test
+    void elHashDelTokenCabeEnLaColumna() {
+        // token_hash está declarada CHAR(64): si esto crece, la fila no entra
+        assertEquals(64, Seguridad.hashToken(Seguridad.nuevoToken()).length());
+    }
+
+    @Test
+    void elHashDelTokenEsEstable() {
+        String token = Seguridad.nuevoToken();
+        assertEquals(Seguridad.hashToken(token), Seguridad.hashToken(token));
+    }
+
+    @Test
+    void tokensDistintosDanHashesDistintos() {
+        assertNotEquals(Seguridad.hashToken("uno"), Seguridad.hashToken("otro"));
+    }
+
+    @Test
+    void elTokenNuncaApareceEnSuHash() {
+        String token = Seguridad.nuevoToken();
+        assertFalse(Seguridad.hashToken(token).contains(token));
+    }
 }

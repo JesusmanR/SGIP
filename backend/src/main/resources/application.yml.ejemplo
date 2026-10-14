@@ -13,8 +13,11 @@ spring:
 
 sgip:
   seguridad:
-    jwt-secreto: ${SGIP_JWT_SECRETO}
+    # La sesión vive en la tabla sesiones y su token es azar puro, no un
+    # JWT firmado: no hay ningún secreto que configurar. El valor es la
+    # expiración por inactividad, que cada petición renueva.
     sesion-minutos: 30
+    intentos-maximos: 5
   facturacion:
     proveedor-url: ${SGIP_FE_URL:}
     proveedor-token: ${SGIP_FE_TOKEN:}

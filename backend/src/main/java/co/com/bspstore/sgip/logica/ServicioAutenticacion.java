@@ -51,6 +51,21 @@ public class ServicioAutenticacion {
         return usuario;
     }
 
+    /**
+     * Levanta el bloqueo por intentos fallidos. Devuelve false si el
+     * usuario no existe, para que la capa web conteste 404 sin que esta
+     * clase tenga que saber de códigos HTTP.
+     */
+    @Transactional
+    public boolean desbloquear(Integer usuarioId) {
+        return usuarios.findById(usuarioId)
+                .map(u -> {
+                    u.desbloquear();
+                    return true;
+                })
+                .orElse(false);
+    }
+
     private void rechazar(Usuario usuario, String correo, MotivoRechazo motivo, String origen) {
         auditoria.save(AuditoriaAcceso.fallido(usuario, correo, motivo, origen));
         throw new CredencialesInvalidasException();
