@@ -7,6 +7,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
@@ -25,6 +27,28 @@ public class ConfiguracionSeguridad {
     @Bean
     Clock reloj() {
         return Clock.systemDefaultZone();
+    }
+
+    /**
+     * Un directorio de usuarios que no conoce a nadie.
+     *
+     * Parece inútil y no lo es: si no existe ningún UserDetailsService,
+     * Spring Boot da por hecho que la aplicación todavía no configuró su
+     * seguridad y crea un usuario en memoria con contraseña aleatoria,
+     * que anuncia en el log en cada arranque. Aquí la autenticación la
+     * resuelve FiltroSesion contra la tabla sesiones, de modo que ese
+     * usuario sobra. Declararlo vacío es lo que hace que Boot se aparte.
+     *
+     * Hoy nadie podría usarlo porque httpBasic y formLogin están
+     * deshabilitados. El problema es el día que alguien habilite
+     * httpBasic para depurar y aparezca una credencial válida que no
+     * está en la base de datos.
+     */
+    @Bean
+    UserDetailsService directorioVacio() {
+        return correo -> {
+            throw new UsernameNotFoundException(correo);
+        };
     }
 
     @Bean
