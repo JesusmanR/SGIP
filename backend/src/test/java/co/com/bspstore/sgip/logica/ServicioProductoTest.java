@@ -6,8 +6,10 @@ import co.com.bspstore.sgip.config.UsuarioAutenticado;
 import co.com.bspstore.sgip.datos.CategoriaRepositorio;
 import co.com.bspstore.sgip.datos.ConsultaCatalogo;
 import co.com.bspstore.sgip.datos.ProductoRepositorio;
+import co.com.bspstore.sgip.datos.ProveedorRepositorio;
 import co.com.bspstore.sgip.modelo.Categoria;
 import co.com.bspstore.sgip.modelo.Producto;
+import co.com.bspstore.sgip.modelo.Proveedor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -38,6 +40,7 @@ class ServicioProductoTest {
 
     @Mock ProductoRepositorio productos;
     @Mock CategoriaRepositorio categorias;
+    @Mock ProveedorRepositorio proveedores;
     @Mock ConsultaCatalogo catalogo;
     @InjectMocks ServicioProducto servicio;
 
@@ -58,9 +61,12 @@ class ServicioProductoTest {
                 "Arroz Diana", "500 g", null, new BigDecimal("3100.00"), 120, 20);
     }
 
-    private void categoriaPropia() {
+    /** Categoría y proveedor que sí pertenecen a la empresa 3. */
+    private void referenciasPropias() {
         when(categorias.findByEmpresaIdAndId(3, 4))
                 .thenReturn(Optional.of(new Categoria(3, "Granos", null)));
+        when(proveedores.findByEmpresaIdAndId(3, 9))
+                .thenReturn(Optional.of(new Proveedor(3, "Distribuidora La Esperanza", "9001234567")));
     }
 
     // ── Lectura ──────────────────────────────────────────────────────
@@ -99,7 +105,7 @@ class ServicioProductoTest {
     @Test
     void guardaConLaEmpresaDelContexto() {
         comoEmpresa(3);
-        categoriaPropia();
+        referenciasPropias();
         when(productos.save(any())).thenAnswer(i -> i.getArgument(0));
 
         servicio.crear(solicitud("ARZ-500", "ARZ-500"));
@@ -112,7 +118,7 @@ class ServicioProductoTest {
     @Test
     void normalizaElCodigoYElSku() {
         comoEmpresa(3);
-        categoriaPropia();
+        referenciasPropias();
         when(productos.save(any())).thenAnswer(i -> i.getArgument(0));
 
         servicio.crear(solicitud("  arz-500  ", "  arz-a  "));
@@ -126,7 +132,7 @@ class ServicioProductoTest {
     @Test
     void sinSkuSeUsaElCodigo() {
         comoEmpresa(3);
-        categoriaPropia();
+        referenciasPropias();
         when(productos.save(any())).thenAnswer(i -> i.getArgument(0));
 
         servicio.crear(solicitud("ARZ-500", "   "));
@@ -148,9 +154,22 @@ class ServicioProductoTest {
     }
 
     @Test
+    void rechazaUnProveedorDeOtraEmpresa() {
+        comoEmpresa(3);
+        when(categorias.findByEmpresaIdAndId(3, 4))
+                .thenReturn(Optional.of(new Categoria(3, "Granos", null)));
+        // El proveedor existe, pero es de otro comercio.
+        when(proveedores.findByEmpresaIdAndId(3, 9)).thenReturn(Optional.empty());
+
+        assertThrows(ReferenciaAjenaException.class,
+                () -> servicio.crear(solicitud("ARZ-500", "ARZ-500")));
+        verify(productos, never()).save(any());
+    }
+
+    @Test
     void rechazaUnCodigoRepetidoEnLaMismaEmpresa() {
         comoEmpresa(3);
-        categoriaPropia();
+        referenciasPropias();
         when(productos.existsByEmpresaIdAndCodigo(3, "ARZ-500")).thenReturn(true);
 
         assertThrows(NombreRepetidoException.class,
@@ -161,7 +180,7 @@ class ServicioProductoTest {
     @Test
     void rechazaUnSkuRepetidoAunqueElCodigoSeaNuevo() {
         comoEmpresa(3);
-        categoriaPropia();
+        referenciasPropias();
         when(productos.existsByEmpresaIdAndCodigo(3, "ARZ-600")).thenReturn(false);
         when(productos.existsByEmpresaIdAndSku(3, "ARZ-A")).thenReturn(true);
 
