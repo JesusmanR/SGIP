@@ -1,0 +1,67 @@
+/* Estilos de aplicación. El color sale siempre de tokens.css: aquí no
+   se escribe ni un solo valor hexadecimal. */
+@import './tokens.css';
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: Inter, 'Helvetica Neue', Arial, sans-serif;
+  background: var(--lienzo);
+  color: var(--tinta);
+}
+
+button { font-family: inherit; cursor: pointer; }
+input  { font-family: inherit; }
+
+/* ── Controles ─────────────────────────────────────────────────────── */
+.campo { display: block; margin-bottom: 1rem; }
+.campo span { display: block; font-size: .8rem; color: var(--tinta-2); font-weight: 500; margin-bottom: .35rem; }
+.campo input {
+  width: 100%; padding: .6rem .75rem; font-size: .95rem;
+  border: 1px solid var(--borde-control); border-radius: 6px;
+  background: var(--tarjeta); color: var(--tinta);
+}
+.campo input:focus-visible { outline: 3px solid var(--acento-sutil); border-color: var(--acento); }
+
+.boton {
+  padding: .65rem 1.1rem; font-size: .95rem; font-weight: 600;
+  border: 0; border-radius: 6px; background: var(--acento); color: #fff;
+}
+.boton:disabled { background: var(--bruma); cursor: not-allowed; }
+.boton.secundario { background: var(--tarjeta); color: var(--tinta); border: 1px solid var(--borde-control); }
+
+.tarjeta {
+  background: var(--tarjeta); border: 1px solid var(--borde);
+  border-radius: 10px; padding: 1.25rem;
+}
+
+/* El aviso lleva texto además de color: los colores de estado de Aurora
+   Mist son casi el mismo gris en escala de grises (ADR-0009). */
+.aviso { border-radius: 8px; padding: .7rem .9rem; font-size: .9rem; margin-bottom: 1rem; }
+.aviso.error { background: var(--peligro-fondo); color: var(--peligro); }
+
+/* ── Estructura ────────────────────────────────────────────────────── */
+.acceso { min-height: 100vh; display: grid; place-items: center; padding: 1rem; }
+.acceso .tarjeta { width: 100%; max-width: 380px; }
+.acceso h1 { margin: 0 0 .25rem; font-size: 1.4rem; }
+.acceso p.sub { margin: 0 0 1.5rem; color: var(--tinta-3); font-size: .9rem; }
+
+.barra {
+  display: flex; align-items: center; gap: 1rem;
+  background: var(--chrome); color: #fff; padding: .75rem 1.25rem;
+}
+.barra .marca { font-weight: 700; }
+.barra .empuje { margin-left: auto; }
+
+.contenido { padding: 1.5rem; max-width: 1100px; margin: 0 auto; }
+
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: .6rem .5rem; border-bottom: 1px solid var(--borde); font-size: .9rem; }
+th { color: var(--tinta-2); font-weight: 600; font-size: .8rem; }
+td.numero, th.numero { text-align: right; font-variant-numeric: tabular-nums; }
+
+.insignia { display: inline-block; padding: .15rem .5rem; border-radius: 10px; font-size: .75rem; font-weight: 600; }
+.insignia.activo  { background: var(--exito-fondo);   color: var(--exito); }
+.insignia.critico { background: var(--aviso-fondo);   color: var(--aviso); }
+.insignia.agotado { background: var(--peligro-fondo); color: var(--peligro); }
