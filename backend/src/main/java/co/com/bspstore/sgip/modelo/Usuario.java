@@ -28,6 +28,16 @@ public class Usuario {
     @JoinColumn(name = "rol_id", nullable = false)
     private Rol rol;
 
+    /**
+     * Empresa a la que pertenece. Admite nulo a propósito: el usuario de
+     * plataforma no pertenece a ninguna (RN-17), y la V10 lo deja así de
+     * forma explícita. Se mapea como el identificador y no como una
+     * relación porque nada de lo que hay hasta ahora necesita la fila de
+     * empresas, y traerla en cada petición costaría una consulta más.
+     */
+    @Column(name = "empresa_id")
+    private Integer empresaId;
+
     @Column(name = "nombre", nullable = false, length = 120)
     private String nombre;
 
@@ -98,6 +108,7 @@ public class Usuario {
 
     public Integer getId() { return id; }
     public Rol getRol() { return rol; }
+    public Integer getEmpresaId() { return empresaId; }
     public String getNombre() { return nombre; }
     public String getCorreo() { return correo; }
     public String getClaveHash() { return claveHash; }
