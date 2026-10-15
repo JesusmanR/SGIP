@@ -3,6 +3,7 @@ package co.com.bspstore.sgip.api;
 import co.com.bspstore.sgip.config.SinEmpresaException;
 import co.com.bspstore.sgip.logica.CredencialesInvalidasException;
 import co.com.bspstore.sgip.logica.NombreRepetidoException;
+import co.com.bspstore.sgip.logica.ReferenciaAjenaException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -35,6 +36,16 @@ public class ManejadorErrores {
     public ProblemDetail nombreRepetido(NombreRepetidoException e) {
         ProblemDetail p = ProblemDetail.forStatus(HttpStatus.CONFLICT);
         p.setTitle("Nombre repetido");
+        p.setDetail(e.getMessage());
+        return p;
+    }
+
+    @ExceptionHandler(ReferenciaAjenaException.class)
+    public ProblemDetail referenciaAjena(ReferenciaAjenaException e) {
+        // 422 y no 404: la petición está bien formada y el recurso puede
+        // existir; lo que no es válido es usarlo desde esta empresa.
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.UNPROCESSABLE_ENTITY);
+        p.setTitle("Referencia de otra empresa");
         p.setDetail(e.getMessage());
         return p;
     }
