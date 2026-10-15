@@ -70,8 +70,10 @@ public class FiltroSesion extends OncePerRequestFilter {
         // antepone por su cuenta, de modo que sin él la comprobación
         // nunca encontraría la autoridad.
         var autoridad = new SimpleGrantedAuthority("ROLE_" + usuario.getRol().getNombre());
+        // El principal es el usuario y no su correo: lleva la empresa, que
+        // es lo que acota cada consulta del catálogo y de las ventas.
         var autenticacion = new UsernamePasswordAuthenticationToken(
-                usuario.getCorreo(), null, List.of(autoridad));
+                UsuarioAutenticado.de(usuario), null, List.of(autoridad));
 
         SecurityContext contexto = SecurityContextHolder.createEmptyContext();
         contexto.setAuthentication(autenticacion);

@@ -1,6 +1,8 @@
 package co.com.bspstore.sgip.api;
 
+import co.com.bspstore.sgip.config.SinEmpresaException;
 import co.com.bspstore.sgip.logica.CredencialesInvalidasException;
+import co.com.bspstore.sgip.logica.NombreRepetidoException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -17,6 +19,23 @@ public class ManejadorErrores {
         ProblemDetail p = ProblemDetail.forStatus(HttpStatus.UNAUTHORIZED);
         p.setTitle("Credenciales inválidas");
         p.setDetail("El correo o la contraseña no son correctos.");
+        return p;
+    }
+
+    @ExceptionHandler(SinEmpresaException.class)
+    public ProblemDetail sinEmpresa(SinEmpresaException e) {
+        // 403 y no 401: sabemos quién es y aun así no puede.
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.FORBIDDEN);
+        p.setTitle("Operación propia de una empresa");
+        p.setDetail(e.getMessage());
+        return p;
+    }
+
+    @ExceptionHandler(NombreRepetidoException.class)
+    public ProblemDetail nombreRepetido(NombreRepetidoException e) {
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.CONFLICT);
+        p.setTitle("Nombre repetido");
+        p.setDetail(e.getMessage());
         return p;
     }
 
