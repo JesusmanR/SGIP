@@ -6,6 +6,7 @@ import co.com.bspstore.sgip.config.ContextoEmpresa;
 import co.com.bspstore.sgip.datos.CategoriaRepositorio;
 import co.com.bspstore.sgip.datos.ConsultaCatalogo;
 import co.com.bspstore.sgip.datos.ProductoRepositorio;
+import co.com.bspstore.sgip.datos.ProveedorRepositorio;
 import co.com.bspstore.sgip.modelo.Producto;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,13 +23,16 @@ public class ServicioProducto {
 
     private final ProductoRepositorio productos;
     private final CategoriaRepositorio categorias;
+    private final ProveedorRepositorio proveedores;
     private final ConsultaCatalogo catalogo;
 
     public ServicioProducto(ProductoRepositorio productos,
                             CategoriaRepositorio categorias,
+                            ProveedorRepositorio proveedores,
                             ConsultaCatalogo catalogo) {
         this.productos = productos;
         this.categorias = categorias;
+        this.proveedores = proveedores;
         this.catalogo = catalogo;
     }
 
@@ -63,6 +67,15 @@ public class ServicioProducto {
         categorias.findByEmpresaIdAndId(empresa, s.categoriaId())
                 .orElseThrow(() -> new ReferenciaAjenaException(
                         "La categoría indicada no existe en esta empresa."));
+
+        // El proveedor se comprueba igual que la categoría. Quedó fuera en
+        // la primera versión de este servicio, de modo que un producto
+        // podía nacer apuntando al proveedor de otro comercio y el único
+        // que lo frenaba era fk_productos_proveedor_emp, con un error de
+        // motor en lugar de un mensaje.
+        proveedores.findByEmpresaIdAndId(empresa, s.proveedorId())
+                .orElseThrow(() -> new ReferenciaAjenaException(
+                        "El proveedor indicado no existe en esta empresa."));
 
         String codigo = normalizar(s.codigo());
         // Si no dan SKU, se usa el código. Es lo mismo que hizo la V10 con
