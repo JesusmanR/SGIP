@@ -95,16 +95,59 @@ jobs:
   backend:
     name: Compilación y pruebas del backend
     runs-on: ubuntu-latest
-    # Se activa cuando exista backend/pom.xml con código real.
-    if: false
+    # El esquema tiene que estar aplicado antes de arrancar el contexto:
+    # la aplicación corre con ddl-auto en validate y se niega a levantar
+    # contra una base vacía.
+    needs: esquema
+    services:
+      mysql:
+        image: mysql:9.7
+        env:
+          MYSQL_ROOT_PASSWORD: sgip_ci
+          MYSQL_DATABASE: sgip
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -psgip_ci"
+          --health-interval=10s --health-timeout=5s --health-retries=10
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+
+      - uses: actions/setup-java@v5
         with:
-          java-version: '17'
+          java-version: '25'
           distribution: temurin
           cache: maven
-      - run: mvn -B -f backend/pom.xml verify
+
+      # Mismo orden escrito a mano que en el trabajo del esquema, y por el
+      # mismo motivo: con un comodín, V10 va antes que V2.
+      - name: Aplicar migraciones en orden
+        run: |
+          set -e
+          for f in V1__seguridad V2__catalogo V3__parametrizacion V4__comercial \
+                   V5__funciones V6__vistas V7__datos_iniciales V8__datos_demo \
+                   V9__rol_super_admin_y_venta_sin_existencia \
+                   V10__plataforma_multiempresa \
+                   V11__claves_compuestas_por_empresa \
+                   V12__configuracion_tributaria_por_empresa; do
+            mysql -h 127.0.0.1 -u root -psgip_ci sgip < "database/migrations/$f.sql"
+          done
+
+      # application.yml no se versiona. Se arma desde el ejemplo, que es
+      # justamente la comprobación de que el ejemplo sigue estando al día.
+      - name: Preparar la configuración
+        run: |
+          cd backend/src/main/resources
+          cp application.yml.ejemplo application.yml
+
+      - name: Compilar y probar
+        env:
+          SGIP_BD_USUARIO: root
+          SGIP_BD_CLAVE: sgip_ci
+          # El MySQL del servicio levanta con certificado autofirmado. No
+          # hay nada que proteger entre dos contenedores de la misma
+          # máquina efímera, y verificarlo solo añade un modo de fallo.
+          SPRING_DATASOURCE_URL: "jdbc:mysql://127.0.0.1:3306/sgip?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=America/Bogota"
+        run: mvn -B -f backend/pom.xml verify
 
   web:
     name: Compilación del front web
