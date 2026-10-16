@@ -65,6 +65,10 @@ export async function imagenAutenticada(ruta) {
 
   const respuesta = await fetch(ruta, { headers: cabeceras })
   if (!respuesta.ok) {
+    // A diferencia del resto, un 401 aquí NO cierra la sesión. Una imagen
+    // que no carga no demuestra que la sesión caducó, y echar al usuario
+    // por una miniatura rota es peor que mostrar la miniatura rota. Si la
+    // sesión de verdad expiró, la próxima llamada de datos lo detecta.
     throw new ErrorApi(respuesta.status, 'No se pudo cargar la imagen.')
   }
   return URL.createObjectURL(await respuesta.blob())

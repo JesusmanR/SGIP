@@ -79,7 +79,13 @@ export default function Catalogo() {
                       onSubir={async (archivo) => {
                         setError(null)
                         try {
-                          await api.subirImagen(p.productoId, archivo)
+                          const creada = await api.subirImagen(p.productoId, archivo)
+                          // La recién subida pasa a ser la principal: el
+                          // recuadro que tocaste es el que cambia. Para
+                          // tener varias y elegir, está la galería.
+                          if (creada?.id && !creada.principal) {
+                            await api.hacerPrincipal(creada.id)
+                          }
                           // Recargar la fila entera sería más código; basta
                           // con marcar que ya tiene imagen.
                           setProductos((filas) => filas.map((f) =>
@@ -105,7 +111,8 @@ export default function Catalogo() {
                         P-03. El SKU solo aparece cuando difiere: por omisión
                         se copia del código y repetirlo sería ruido. */}
                     <span className="sub-linea">
-                      {p.codigo}{p.sku && p.sku !== p.codigo ? ` · SKU ${p.sku}` : ''}
+                      Cód. {p.codigo}
+                      {p.sku && p.sku !== p.codigo ? ` · SKU ${p.sku}` : ''}
                       {p.tieneImagen === 1 && (
                         <>
                           {' · '}

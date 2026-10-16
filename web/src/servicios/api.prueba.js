@@ -123,6 +123,16 @@ describe('imágenes protegidas', () => {
     expect(url).toBe('blob:falsa')
   })
 
+  it('un 401 al cargar una imagen NO cierra la sesion', async () => {
+    // Echar al usuario por una miniatura rota es peor que la miniatura
+    // rota. La sesion la gobiernan las llamadas de datos, no las imagenes.
+    guardarSesion({ token: 'abc123', nombre: 'Ana' })
+    global.fetch.mockResolvedValue({ ok: false, status: 401 })
+
+    await expect(imagenAutenticada('/api/v1/empresa/logo')).rejects.toBeInstanceOf(ErrorApi)
+    expect(haySesion()).toBe(true)
+  })
+
   it('una imagen que el servidor niega lanza error en vez de devolver una URL rota', async () => {
     global.fetch.mockResolvedValue({ ok: false, status: 401 })
 
