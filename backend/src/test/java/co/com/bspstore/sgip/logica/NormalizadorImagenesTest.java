@@ -147,6 +147,39 @@ class NormalizadorImagenesTest {
         assertEquals(6, NormalizadorImagenes.orientacionExif(b));
     }
 
+    /** Un APP1 con el desplazamiento del bloque TIFF que se quiera. */
+    private static byte[] jpegConDesplazamiento(int d, String orden) {
+        return new byte[]{
+            (byte) 0xFF, (byte) 0xD8, (byte) 0xFF, (byte) 0xE1, 0, 30,
+            'E', 'x', 'i', 'f', 0, 0,
+            (byte) orden.charAt(0), (byte) orden.charAt(1), 0, 42,
+            (byte) (d >>> 24), (byte) (d >>> 16), (byte) (d >>> 8), (byte) d,
+            0, 1, 1, 0x12, 0, 3, 0, 0, 0, 1, 0, 6, 0, 0,
+        };
+    }
+
+    @Test
+    void unDesplazamientoAbsurdoNoRompeLaSubida() {
+        // Este era el defecto: con un desplazamiento grande o negativo, el
+        // indice se iba fuera del arreglo y la peticion moria sin
+        // respuesta. Los bytes vienen de fuera: no pueden tumbar nada.
+        for (int d : new int[]{-1, 0, 4, 100_000, Integer.MAX_VALUE, Integer.MIN_VALUE}) {
+            for (String orden : new String[]{"MM", "II", "XX"}) {
+                assertEquals(1, NormalizadorImagenes.orientacionExif(
+                        jpegConDesplazamiento(d, orden)),
+                        "desplazamiento " + d + " con orden " + orden);
+            }
+        }
+    }
+
+    @Test
+    void soloSeLeenLosDosOrdenesDeBytesQueExisten() {
+        // «II» poco extremo y «MM» gran extremo. Cualquier otra cosa no es
+        // un bloque TIFF, y tratarla como tal producia basura.
+        assertEquals(6, NormalizadorImagenes.orientacionExif(jpegConDesplazamiento(8, "MM")));
+        assertEquals(1, NormalizadorImagenes.orientacionExif(jpegConDesplazamiento(8, "XX")));
+    }
+
     @Test
     void unExifIlegibleNoRompeNiGira() {
         byte[] b = {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, (byte) 0xE1, 0, 8, 'E', 'x', 'i', 'f'};

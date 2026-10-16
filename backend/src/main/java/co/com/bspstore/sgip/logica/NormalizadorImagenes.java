@@ -146,6 +146,17 @@ public class NormalizadorImagenes {
      * tocar la imagen.
      */
     static int orientacionExif(byte[] b) {
+        // Todo lo que sigue recorre bytes que mandó el cliente. Un EXIF
+        // mal formado no puede tumbar una subida: ante cualquier duda,
+        // ante cualquier indice raro, se devuelve 1 y no se gira nada.
+        try {
+            return buscarOrientacion(b);
+        } catch (RuntimeException e) {
+            return 1;
+        }
+    }
+
+    private static int buscarOrientacion(byte[] b) {
         // Recorre los segmentos del JPEG hasta encontrar APP1 con «Exif».
         int i = 2;
         while (i + 4 < b.length && (b[i] & 0xFF) == 0xFF) {
@@ -155,8 +166,8 @@ public class NormalizadorImagenes {
                     && b[i + 4] == 'E' && b[i + 5] == 'x' && b[i + 6] == 'i' && b[i + 7] == 'f') {
                 return enBloqueTiff(b, i + 10, largo - 8);
             }
-            if (marca == 0xDA) {
-                break;   // empiezan los datos de imagen
+            if (marca == 0xDA || largo < 2) {
+                break;   // datos de imagen, o longitud imposible
             }
             i += 2 + largo;
         }
@@ -167,16 +178,28 @@ public class NormalizadorImagenes {
         if (inicio + 8 > b.length) {
             return 1;
         }
-        boolean granExtremo = b[inicio] == 'M';
+        // El bloque TIFF declara su orden de bytes: «II» poco extremo,
+        // «MM» gran extremo. Cualquier otra cosa no es un bloque TIFF.
+        boolean granExtremo = b[inicio] == 'M' && b[inicio + 1] == 'M';
+        if (!granExtremo && !(b[inicio] == 'I' && b[inicio + 1] == 'I')) {
+            return 1;
+        }
+
         int desplazamiento = leer32(b, inicio + 4, granExtremo);
+        // El desplazamiento lo escribe el archivo. Uno negativo o enorme
+        // mandaria la lectura fuera del arreglo, que es justo lo que no
+        // puede pasar con datos que vienen de fuera.
+        if (desplazamiento < 8 || desplazamiento > largo) {
+            return 1;
+        }
         int ifd = inicio + desplazamiento;
-        if (ifd + 2 > b.length) {
+        if (ifd < inicio || ifd + 2 > b.length) {
             return 1;
         }
         int campos = leer16(b, ifd, granExtremo);
         for (int k = 0; k < campos; k++) {
             int campo = ifd + 2 + k * 12;
-            if (campo + 12 > b.length || campo + 12 > inicio + largo) {
+            if (campo < 0 || campo + 12 > b.length || campo + 12 > inicio + largo) {
                 return 1;
             }
             if (leer16(b, campo, granExtremo) == 0x0112) {
