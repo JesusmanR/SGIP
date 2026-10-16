@@ -106,6 +106,14 @@ public class Usuario {
         this.activo = false;
     }
 
+    /**
+     * Asigna la empresa a la que pertenece. Nulo es válido y significa
+     * usuario de plataforma, que no opera dentro de ninguna (RN-17).
+     */
+    public void asignarEmpresa(Integer empresaId) {
+        this.empresaId = empresaId;
+    }
+
     public Integer getId() { return id; }
     public Rol getRol() { return rol; }
     public Integer getEmpresaId() { return empresaId; }
