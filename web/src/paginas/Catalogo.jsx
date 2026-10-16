@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import Barra from '../componentes/Barra.jsx'
+import Galeria from '../componentes/Galeria.jsx'
 import SubirImagen from '../componentes/SubirImagen.jsx'
 import { api } from '../servicios/api.js'
 import { leerSesion } from '../servicios/sesion.js'
@@ -15,6 +16,7 @@ export default function Catalogo() {
   const [error, setError] = useState(null)
   const [cargando, setCargando] = useState(true)
   const esAdministrador = leerSesion()?.rol === 'ADMINISTRADOR'
+  const [galeria, setGaleria] = useState(null)
 
   useEffect(() => {
     let vigente = true
@@ -34,6 +36,14 @@ export default function Catalogo() {
   return (
     <>
       <Barra />
+      {galeria && (
+        <Galeria
+          productoId={galeria.id}
+          nombre={galeria.nombre}
+          puedeEditar={esAdministrador}
+          onCerrar={() => setGaleria(null)}
+        />
+      )}
       <main className="contenido">
         <h2>Catálogo</h2>
 
@@ -67,11 +77,19 @@ export default function Catalogo() {
                       alt={`Imagen de ${p.nombre}`}
                       puedeEditar={esAdministrador}
                       onSubir={async (archivo) => {
-                        await api.subirImagen(p.productoId, archivo)
-                        // Recargar la fila entera sería más código; basta
-                        // con marcar que ya tiene imagen.
-                        setProductos((filas) => filas.map((f) =>
-                          f.productoId === p.productoId ? { ...f, tieneImagen: 1 } : f))
+                        setError(null)
+                        try {
+                          await api.subirImagen(p.productoId, archivo)
+                          // Recargar la fila entera sería más código; basta
+                          // con marcar que ya tiene imagen.
+                          setProductos((filas) => filas.map((f) =>
+                            f.productoId === p.productoId ? { ...f, tieneImagen: 1 } : f))
+                        } catch (e) {
+                          // Sin esto el rechazo del servidor no se veía y
+                          // parecía que el archivo se había aceptado.
+                          setError(e.message)
+                          throw e
+                        }
                       }}
                     />
                   </td>
@@ -88,6 +106,18 @@ export default function Catalogo() {
                         se copia del código y repetirlo sería ruido. */}
                     <span className="sub-linea">
                       {p.codigo}{p.sku && p.sku !== p.codigo ? ` · SKU ${p.sku}` : ''}
+                      {p.tieneImagen === 1 && (
+                        <>
+                          {' · '}
+                          <button
+                            type="button"
+                            className="enlace"
+                            onClick={() => setGaleria({ id: p.productoId, nombre: p.nombre })}
+                          >
+                            ver imágenes
+                          </button>
+                        </>
+                      )}
                     </span>
                   </td>
                   <td>{p.categoria}</td>

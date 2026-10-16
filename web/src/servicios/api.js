@@ -114,4 +114,7 @@ export const api = {
   empresa: () => pedir('/empresa'),
   subirLogo: (archivo) => subir('/empresa/logo', archivo),
   subirImagen: (productoId, archivo) => subir(`/productos/${productoId}/imagenes`, archivo),
+  imagenesDe: (productoId) => pedir(`/productos/${productoId}/imagenes`),
+  borrarImagen: (imagenId) => pedir(`/imagenes/${imagenId}`, { method: 'DELETE' }),
+  hacerPrincipal: (imagenId) => pedir(`/imagenes/${imagenId}/principal`, { method: 'POST' }),
 }

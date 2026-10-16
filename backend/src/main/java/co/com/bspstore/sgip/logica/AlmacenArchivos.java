@@ -1,5 +1,7 @@
 package co.com.bspstore.sgip.logica;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -33,6 +35,8 @@ import java.util.UUID;
  */
 @Service
 public class AlmacenArchivos {
+
+    private static final Logger LOG = LoggerFactory.getLogger(AlmacenArchivos.class);
 
     /** Firmas de los únicos formatos admitidos. */
     private static final byte[] JPEG = {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF};
@@ -100,6 +104,25 @@ public class AlmacenArchivos {
             throw new IOException("No existe el archivo " + rutaRelativa);
         }
         return Files.newInputStream(archivo);
+    }
+
+    /**
+     * Borra un archivo ya guardado. No falla si no existe: lo que importa
+     * es que después de llamar no esté, y que la fila de la base se pueda
+     * borrar igual aunque el archivo se hubiera perdido antes.
+     */
+    public void borrar(String rutaRelativa) {
+        Path archivo = raiz.resolve(rutaRelativa).normalize();
+        if (!archivo.startsWith(raiz)) {
+            return;
+        }
+        try {
+            Files.deleteIfExists(archivo);
+        } catch (IOException e) {
+            // Un archivo que no se pudo borrar es basura en disco, no un
+            // motivo para dejar la fila huérfana en la base.
+            LOG.warn("No se pudo borrar {}: {}", rutaRelativa, e.getMessage());
+        }
     }
 
     public String tipoDe(String rutaRelativa) {

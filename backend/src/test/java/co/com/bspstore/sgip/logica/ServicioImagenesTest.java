@@ -70,6 +70,7 @@ class ServicioImagenesTest {
         comoEmpresa(3);
         productoPropio();
         when(imagenes.countByEmpresaIdAndProductoId(3, 11)).thenReturn(0);
+        when(imagenes.mayorOrden(3, 11)).thenReturn((short) 0);
         when(almacen.guardar(any(), eq(3), eq("productos"))).thenReturn("empresa-3/productos/a.jpg");
         when(imagenes.save(any())).thenAnswer(i -> i.getArgument(0));
 
@@ -86,6 +87,7 @@ class ServicioImagenesTest {
         comoEmpresa(3);
         productoPropio();
         when(imagenes.countByEmpresaIdAndProductoId(3, 11)).thenReturn(1);
+        when(imagenes.mayorOrden(3, 11)).thenReturn((short) 1);
         when(almacen.guardar(any(), anyInt(), any())).thenReturn("empresa-3/productos/b.jpg");
         when(imagenes.save(any())).thenAnswer(i -> i.getArgument(0));
 
@@ -124,12 +126,68 @@ class ServicioImagenesTest {
         comoEmpresa(3);
         productoPropio();
         when(imagenes.countByEmpresaIdAndProductoId(3, 11)).thenReturn(0);
+        when(imagenes.mayorOrden(3, 11)).thenReturn((short) 0);
         when(almacen.guardar(any(), eq(3), eq("productos"))).thenReturn("empresa-3/productos/a.jpg");
         when(imagenes.save(any())).thenAnswer(i -> i.getArgument(0));
 
         servicio.subirDeProducto(11, imagen());
 
         verify(almacen).guardar(any(), eq(3), eq("productos"));
+    }
+
+    @Test
+    void elOrdenSaleDelMaximoYNoDelConteo() {
+        // Con cuatro imagenes de las que se borro una intermedia, el
+        // conteo dice 3 y el maximo 4. Numerar por el conteo chocaria
+        // contra uq_producto_imagenes_orden.
+        comoEmpresa(3);
+        productoPropio();
+        when(imagenes.countByEmpresaIdAndProductoId(3, 11)).thenReturn(3);
+        when(imagenes.mayorOrden(3, 11)).thenReturn((short) 4);
+        when(almacen.guardar(any(), anyInt(), any())).thenReturn("empresa-3/productos/e.jpg");
+        when(imagenes.save(any())).thenAnswer(i -> i.getArgument(0));
+
+        servicio.subirDeProducto(11, imagen());
+
+        ArgumentCaptor<ProductoImagen> captor = ArgumentCaptor.forClass(ProductoImagen.class);
+        verify(imagenes).save(captor.capture());
+        assertEquals(5, captor.getValue().getOrden());
+    }
+
+    @Test
+    void borrarQuitaLaFilaYElArchivo() {
+        comoEmpresa(3);
+        var imagen = new ProductoImagen(3, 11, "empresa-3/productos/a.jpg", (short) 1, false, 100);
+        when(imagenes.findByEmpresaIdAndId(3, 55)).thenReturn(Optional.of(imagen));
+
+        servicio.eliminar(55);
+
+        verify(imagenes).delete(imagen);
+        verify(almacen).borrar("empresa-3/productos/a.jpg");
+    }
+
+    @Test
+    void alBorrarLaPrincipalOtraOcupaSuLugar() {
+        // Un producto con imagenes pero sin principal no aparece en el
+        // catalogo exportable.
+        comoEmpresa(3);
+        var principal = new ProductoImagen(3, 11, "a.jpg", (short) 1, true, 100);
+        var otra = new ProductoImagen(3, 11, "b.jpg", (short) 2, false, 100);
+        when(imagenes.findByEmpresaIdAndId(3, 55)).thenReturn(Optional.of(principal));
+        when(imagenes.findByEmpresaIdAndProductoIdOrderByOrden(3, 11)).thenReturn(List.of(otra));
+
+        servicio.eliminar(55);
+
+        assertTrue(otra.isPrincipal());
+    }
+
+    @Test
+    void noSePuedeBorrarLaImagenDeOtraEmpresa() {
+        comoEmpresa(3);
+        when(imagenes.findByEmpresaIdAndId(3, 55)).thenReturn(Optional.empty());
+
+        assertThrows(ReferenciaAjenaException.class, () -> servicio.eliminar(55));
+        verify(almacen, never()).borrar(any());
     }
 
     @Test

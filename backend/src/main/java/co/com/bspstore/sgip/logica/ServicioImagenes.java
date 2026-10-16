@@ -63,8 +63,9 @@ public class ServicioImagenes {
         String ruta = almacen.guardar(archivo, empresa, "productos");
 
         boolean esLaPrimera = cuantas == 0;
+        short siguiente = (short) (imagenes.mayorOrden(empresa, productoId) + 1);
         return imagenes.save(new ProductoImagen(empresa, productoId, ruta,
-                (short) (cuantas + 1), esLaPrimera, (int) archivo.getSize()));
+                siguiente, esLaPrimera, (int) archivo.getSize()));
     }
 
     /**
@@ -86,6 +87,42 @@ public class ServicioImagenes {
         imagenes.flush();   // apaga la anterior antes de encender esta
         nueva.hacerPrincipal();
         return nueva;
+    }
+
+    /**
+     * Borra una imagen: la fila y el archivo.
+     *
+     * Las imágenes sí se eliminan, a diferencia del resto del esquema,
+     * donde nada se borra. Una foto equivocada no es un registro
+     * contable: no hay nada que auditar en ella y dejarla desactivada
+     * solo ocuparía sitio en la galería del producto.
+     *
+     * Si era la principal, otra ocupa su lugar. Un producto con imágenes
+     * pero sin principal no aparecería en el catálogo exportable.
+     */
+    @Transactional
+    public void eliminar(Integer imagenId) {
+        Integer empresa = ContextoEmpresa.empresaActual();
+        ProductoImagen imagen = imagenes.findByEmpresaIdAndId(empresa, imagenId)
+                .orElseThrow(() -> new ReferenciaAjenaException(
+                        "La imagen indicada no existe en esta empresa."));
+
+        boolean eraLaPrincipal = imagen.isPrincipal();
+        Integer productoId = imagen.getProductoId();
+        String ruta = imagen.getRuta();
+
+        imagenes.delete(imagen);
+        imagenes.flush();   // libera el orden y la marca de principal
+
+        if (eraLaPrincipal) {
+            imagenes.findByEmpresaIdAndProductoIdOrderByOrden(empresa, productoId)
+                    .stream().findFirst()
+                    .ifPresent(ProductoImagen::hacerPrincipal);
+        }
+
+        // El archivo se borra al final: si algo falla antes, la fila
+        // sigue apuntando a un archivo que existe.
+        almacen.borrar(ruta);
     }
 
     @Transactional
