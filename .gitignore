@@ -80,3 +80,7 @@ tmp/
 listas-proveedores/
 *.xlsx
 !database/muestras/*.xlsx
+
+# Imágenes subidas por los comercios. Son datos, no código.
+backend/archivos/
+archivos/
