@@ -62,6 +62,15 @@ public class AlmacenArchivos {
      *                cliente.
      */
     public String guardar(MultipartFile archivo, Integer empresaId, String carpeta) {
+        return guardar(leerValidado(archivo), empresaId, carpeta);
+    }
+
+    /**
+     * Comprueba lo que llegó y devuelve sus bytes. Separado de guardar
+     * para que la normalización pueda ocurrir en medio: se valida lo que
+     * sube el cliente, se transforma, y se guarda el resultado.
+     */
+    public byte[] leerValidado(MultipartFile archivo) {
         if (archivo == null || archivo.isEmpty()) {
             throw new ArchivoInvalidoException("No llegó ningún archivo.");
         }
@@ -69,14 +78,16 @@ public class AlmacenArchivos {
             throw new ArchivoInvalidoException(
                     "La imagen pesa más de " + (bytesMaximos / 1024 / 1024) + " MB.");
         }
-
-        byte[] contenido;
         try {
-            contenido = archivo.getBytes();
+            byte[] contenido = archivo.getBytes();
+            extensionSegunContenido(contenido);   // rechaza lo que no sea imagen
+            return contenido;
         } catch (IOException e) {
             throw new ArchivoInvalidoException("No se pudo leer el archivo recibido.");
         }
+    }
 
+    public String guardar(byte[] contenido, Integer empresaId, String carpeta) {
         String extension = extensionSegunContenido(contenido);
         String relativa = "empresa-%d/%s/%s.%s"
                 .formatted(empresaId, carpeta, UUID.randomUUID(), extension);

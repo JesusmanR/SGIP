@@ -42,6 +42,7 @@ class ServicioImagenesTest {
     @Mock ProductoRepositorio productos;
     @Mock EmpresaRepositorio empresas;
     @Mock AlmacenArchivos almacen;
+    @Mock NormalizadorImagenes normalizador;
     @InjectMocks ServicioImagenes servicio;
 
     @AfterEach
@@ -71,7 +72,10 @@ class ServicioImagenesTest {
         productoPropio();
         when(imagenes.countByEmpresaIdAndProductoId(3, 11)).thenReturn(0);
         when(imagenes.mayorOrden(3, 11)).thenReturn((short) 0);
-        when(almacen.guardar(any(), eq(3), eq("productos"))).thenReturn("empresa-3/productos/a.jpg");
+        when(almacen.leerValidado(any())).thenReturn(new byte[]{1, 2, 3});
+        when(normalizador.cuadrada(any(), anyInt())).thenReturn(new byte[]{9, 9});
+        when(almacen.guardar(any(byte[].class), eq(3), eq("productos")))
+                .thenReturn("empresa-3/productos/a.jpg");
         when(imagenes.save(any())).thenAnswer(i -> i.getArgument(0));
 
         servicio.subirDeProducto(11, imagen());
@@ -88,7 +92,10 @@ class ServicioImagenesTest {
         productoPropio();
         when(imagenes.countByEmpresaIdAndProductoId(3, 11)).thenReturn(1);
         when(imagenes.mayorOrden(3, 11)).thenReturn((short) 1);
-        when(almacen.guardar(any(), anyInt(), any())).thenReturn("empresa-3/productos/b.jpg");
+        when(almacen.leerValidado(any())).thenReturn(new byte[]{1, 2, 3});
+        when(normalizador.cuadrada(any(), anyInt())).thenReturn(new byte[]{9, 9});
+        when(almacen.guardar(any(byte[].class), anyInt(), any()))
+                .thenReturn("empresa-3/productos/b.jpg");
         when(imagenes.save(any())).thenAnswer(i -> i.getArgument(0));
 
         servicio.subirDeProducto(11, imagen());
@@ -108,7 +115,7 @@ class ServicioImagenesTest {
         when(imagenes.countByEmpresaIdAndProductoId(3, 11)).thenReturn(5);
 
         assertThrows(ArchivoInvalidoException.class, () -> servicio.subirDeProducto(11, imagen()));
-        verify(almacen, never()).guardar(any(), anyInt(), any());
+        verify(almacen, never()).leerValidado(any());
         verify(imagenes, never()).save(any());
     }
 
@@ -118,7 +125,7 @@ class ServicioImagenesTest {
         when(productos.findByEmpresaIdAndId(3, 11)).thenReturn(Optional.empty());
 
         assertThrows(ReferenciaAjenaException.class, () -> servicio.subirDeProducto(11, imagen()));
-        verify(almacen, never()).guardar(any(), anyInt(), any());
+        verify(almacen, never()).leerValidado(any());
     }
 
     @Test
@@ -127,12 +134,15 @@ class ServicioImagenesTest {
         productoPropio();
         when(imagenes.countByEmpresaIdAndProductoId(3, 11)).thenReturn(0);
         when(imagenes.mayorOrden(3, 11)).thenReturn((short) 0);
-        when(almacen.guardar(any(), eq(3), eq("productos"))).thenReturn("empresa-3/productos/a.jpg");
+        when(almacen.leerValidado(any())).thenReturn(new byte[]{1, 2, 3});
+        when(normalizador.cuadrada(any(), anyInt())).thenReturn(new byte[]{9, 9});
+        when(almacen.guardar(any(byte[].class), eq(3), eq("productos")))
+                .thenReturn("empresa-3/productos/a.jpg");
         when(imagenes.save(any())).thenAnswer(i -> i.getArgument(0));
 
         servicio.subirDeProducto(11, imagen());
 
-        verify(almacen).guardar(any(), eq(3), eq("productos"));
+        verify(almacen).guardar(any(byte[].class), eq(3), eq("productos"));
     }
 
     @Test
@@ -144,7 +154,10 @@ class ServicioImagenesTest {
         productoPropio();
         when(imagenes.countByEmpresaIdAndProductoId(3, 11)).thenReturn(3);
         when(imagenes.mayorOrden(3, 11)).thenReturn((short) 4);
-        when(almacen.guardar(any(), anyInt(), any())).thenReturn("empresa-3/productos/e.jpg");
+        when(almacen.leerValidado(any())).thenReturn(new byte[]{1, 2, 3});
+        when(normalizador.cuadrada(any(), anyInt())).thenReturn(new byte[]{9, 9});
+        when(almacen.guardar(any(byte[].class), anyInt(), any()))
+                .thenReturn("empresa-3/productos/e.jpg");
         when(imagenes.save(any())).thenAnswer(i -> i.getArgument(0));
 
         servicio.subirDeProducto(11, imagen());
@@ -195,10 +208,12 @@ class ServicioImagenesTest {
         comoEmpresa(3);
         when(empresas.findById(3)).thenReturn(
                 Optional.of(mock(co.com.bspstore.sgip.modelo.Empresa.class)));
-        when(almacen.guardar(any(), eq(3), eq("logo"))).thenReturn("empresa-3/logo/a.png");
+        when(almacen.leerValidado(any())).thenReturn(new byte[]{1, 2, 3});
+        when(normalizador.ajustada(any(), anyInt())).thenReturn(new byte[]{9, 9});
+        when(almacen.guardar(any(byte[].class), eq(3), eq("logo"))).thenReturn("empresa-3/logo/a.png");
 
         servicio.subirLogo(imagen());
 
-        verify(almacen).guardar(any(), eq(3), eq("logo"));
+        verify(almacen).guardar(any(byte[].class), eq(3), eq("logo"));
     }
 }
