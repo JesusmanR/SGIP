@@ -1,0 +1,33 @@
+
+digraph direcciones {
+  graph [rankdir=LR, bgcolor="white", fontname="Liberation Serif",
+         fontsize=10, nodesep=0.28, ranksep=0.55, splines=ortho];
+  node  [fontname="Liberation Serif", fontsize=10, shape=box,
+         style="rounded,filled", color="#c9c9c4", fillcolor="#f7f7f5",
+         fontcolor="#0b0b0b", margin="0.16,0.09", height=0.42];
+  edge  [fontname="Liberation Serif", fontsize=9, color="#52514e",
+         fontcolor="#52514e", arrowsize=0.7, penwidth=0.9];
+
+  cliente [label="Navegador", fillcolor="#ffffff"];
+
+  subgraph cluster_vigente {
+    label="Dirección vigente — nombra un papel";
+    fontsize=9; fontcolor="#52514e"; color="#c9c9c4"; style="rounded";
+    margin=10;
+    v1 [label="/productos/6/imagen"];
+    v2 [label="Resuelve cuál es\nla principal ahora"];
+    v1 -> v2 [label="no-store"];
+  }
+
+  subgraph cluster_inmutable {
+    label="Dirección inmutable — nombra un archivo";
+    fontsize=9; fontcolor="#52514e"; color="#c9c9c4"; style="rounded";
+    margin=10;
+    i1 [label="/imagenes/14/miniatura", fillcolor="#dce8f5", color="#1f5fa8"];
+    i2 [label="Esos bytes no\ncambian nunca", fillcolor="#dce8f5", color="#1f5fa8"];
+    i1 -> i2 [label="max-age=7 días, privada"];
+  }
+
+  cliente -> v1 [label="cuando no se sabe\ncuál es la imagen"];
+  cliente -> i1 [label="el catálogo, con\nimagenPrincipalId", color="#1f5fa8", fontcolor="#1f5fa8"];
+}

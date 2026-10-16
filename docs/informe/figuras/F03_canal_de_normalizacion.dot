@@ -1,0 +1,27 @@
+
+digraph canal {
+  graph [rankdir=TB, bgcolor="white", fontname="Liberation Serif",
+         fontsize=10, nodesep=0.30, ranksep=0.30];
+  node  [fontname="Liberation Serif", fontsize=9.5, shape=box,
+         style="rounded,filled", color="#c9c9c4", fillcolor="#f7f7f5",
+         fontcolor="#0b0b0b", margin="0.14,0.08", height=0.40];
+  edge  [color="#52514e", arrowsize=0.7, penwidth=0.9];
+
+  a [label="Archivo que\nelige el usuario", fillcolor="#ffffff"];
+  b [label="Navegador:\nconvierte y reduce\na 1600 px"];
+  c [label="Tipo por los\nprimeros bytes"];
+  d [label="¿Esta instalación\nsabe decodificarlo?", shape=diamond,
+     style="filled", fillcolor="#ffffff", height=0.7, width=1.5];
+  e [label="Orientación EXIF\naplicada"];
+  f [label="Redimensionado\nsegún el uso"];
+  g [label="Imagen 800×800\n+ miniatura 240", fillcolor="#dce8f5", color="#1f5fa8"];
+  x [label="400: esta instalación\nno lee ese formato", fillcolor="#ffffff",
+     color="#52514e"];
+
+  a -> b -> c -> d;
+  d -> e [label="  sí", fontsize=9, fontcolor="#52514e", fontname="Liberation Serif"];
+  d -> x [label="  no", fontsize=9, fontcolor="#52514e", fontname="Liberation Serif",
+          constraint=false];
+  e -> f -> g;
+  { rank=same; d; x; }
+}
