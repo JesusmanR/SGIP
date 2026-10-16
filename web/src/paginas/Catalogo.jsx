@@ -3,6 +3,7 @@ import Barra from '../componentes/Barra.jsx'
 import Galeria from '../componentes/Galeria.jsx'
 import SubirImagen from '../componentes/SubirImagen.jsx'
 import { api } from '../servicios/api.js'
+import { subirImagenes } from '../servicios/subidas.js'
 import { leerSesion } from '../servicios/sesion.js'
 
 const PESOS = new Intl.NumberFormat('es-CO', {
@@ -94,29 +95,30 @@ export default function Catalogo() {
                       alt={`Imagen de ${p.nombre}`}
                       puedeEditar={esAdministrador}
                       onFallo={setError}
-                      onSubir={async (archivo) => {
+                      multiple
+                      ayuda="Subir imágenes. Puedes elegir varias; la primera será la principal."
+                      onSubir={async (archivos) => {
                         setError(null)
-                        try {
-                          const creada = await api.subirImagen(p.productoId, archivo)
-                          // La recién subida pasa a ser la principal: el
-                          // recuadro que tocaste es el que cambia. Para
-                          // tener varias y elegir, está la galería.
-                          if (creada?.id && !creada.principal) {
-                            await api.hacerPrincipal(creada.id)
-                          }
-                          // Recargar la fila entera sería más código; basta
-                          // con apuntar a la imagen recién subida, que
-                          // acaba de quedar como principal.
+                        const { creadas, problemas } = await subirImagenes(p.productoId, archivos)
+
+                        // La primera de la tanda pasa a ser la principal:
+                        // el recuadro que tocaste muestra la primera que
+                        // elegiste, que es lo que cabe esperar. Para
+                        // cambiarla después está la galería.
+                        const primera = creadas[0]
+                        if (primera && !primera.principal) {
+                          await api.hacerPrincipal(primera.id)
+                        }
+                        if (primera) {
                           setProductos((filas) => filas.map((f) =>
                             f.productoId === p.productoId
-                              ? { ...f, tieneImagen: 1, imagenPrincipalId: creada.id }
+                              ? { ...f, tieneImagen: 1, imagenPrincipalId: primera.id }
                               : f))
-                        } catch (e) {
-                          // Sin esto el rechazo del servidor no se veía y
-                          // parecía que el archivo se había aceptado.
-                          setError(e.message)
-                          throw e
                         }
+                        // Lo que no entró se dice archivo por archivo. Sin
+                        // esto el rechazo del servidor no se veía y parecía
+                        // que todo se había aceptado.
+                        if (problemas.length > 0) setError(problemas.join(' · '))
                       }}
                     />
                   </td>

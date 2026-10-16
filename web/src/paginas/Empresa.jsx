@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import Barra from '../componentes/Barra.jsx'
 import SubirImagen from '../componentes/SubirImagen.jsx'
 import { api } from '../servicios/api.js'
+import { prepararImagen } from '../servicios/imagenes.js'
 import { leerSesion } from '../servicios/sesion.js'
 
 export default function Empresa() {
@@ -14,13 +15,16 @@ export default function Empresa() {
   }, [])
 
   /**
+   * Un logo y no varios: SubirImagen entrega siempre un arreglo, pero
+   * aquí la casilla no admite selección múltiple y por tanto trae uno.
+   *
    * No atrapa el error a propósito: lo recoge SubirImagen y lo anuncia
    * por onFallo. Atraparlo aquí hacía que el componente creyera que la
    * subida había ido bien y volviera a pedir la imagen sin motivo.
    */
-  async function subirLogo(archivo) {
+  async function subirLogo(archivos) {
     setError(null)
-    setEmpresa(await api.subirLogo(archivo))
+    setEmpresa(await api.subirLogo(await prepararImagen(archivos[0])))
   }
 
   return (

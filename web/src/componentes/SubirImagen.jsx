@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { imagenAutenticada } from '../servicios/api.js'
-import { FORMATOS_ACEPTADOS, prepararImagen } from '../servicios/imagenes.js'
+import { FORMATOS_ACEPTADOS } from '../servicios/imagenes.js'
 
 /**
  * Casilla de imagen que además sirve para reemplazarla.
@@ -13,6 +13,11 @@ import { FORMATOS_ACEPTADOS, prepararImagen } from '../servicios/imagenes.js'
  * su contenido por cuenta del navegador, sin cabecera de autorización, y
  * el backend la rechaza por anónima. Se trae con fetch autenticado y se
  * muestra como URL de objeto, que hay que liberar al dejar de usarla.
+ *
+ * onSubir recibe SIEMPRE un arreglo, incluso cuando multiple es falso.
+ * Este componente recoge archivos y nada más: no los prepara ni decide
+ * qué hacer con ellos, porque eso depende de si son fotos de producto o
+ * un logo, y quien llama es el único que lo sabe.
  */
 export default function SubirImagen({
   src,
@@ -21,6 +26,8 @@ export default function SubirImagen({
   onFallo,
   puedeEditar,
   redondo = false,
+  multiple = false,
+  ayuda,
 }) {
   const entrada = useRef(null)
   const [subiendo, setSubiendo] = useState(false)
@@ -66,17 +73,16 @@ export default function SubirImagen({
   }, [src, version])
 
   async function elegido(evento) {
-    const archivo = evento.target.files?.[0]
-    // Limpiar el valor permite volver a elegir el MISMO archivo después
-    // de un error; sin esto el navegador no dispara el evento otra vez.
+    const archivos = Array.from(evento.target.files ?? [])
+    // Limpiar el valor permite volver a elegir los MISMOS archivos
+    // después de un error; sin esto el navegador no dispara el evento
+    // otra vez.
     evento.target.value = ''
-    if (!archivo) return
+    if (archivos.length === 0) return
 
     setSubiendo(true)
     try {
-      // Se prepara antes de enviar: convierte lo que el servidor no sabe
-      // leer y reduce lo que no hace falta mandar entero.
-      await onSubir(await prepararImagen(archivo))
+      await onSubir(archivos)
       setVersion((v) => v + 1)
     } catch (e) {
       // Atraparlo aquí no es cosmética: sin esto el rechazo quedaba como
@@ -94,7 +100,11 @@ export default function SubirImagen({
         className={`casilla-imagen${redondo ? ' redondo' : ''}`}
         onClick={() => entrada.current?.click()}
         disabled={!puedeEditar || subiendo}
-        title={puedeEditar ? 'Subir o reemplazar la imagen' : alt}
+        title={puedeEditar
+          ? (ayuda ?? (multiple
+            ? 'Subir imágenes. Puedes elegir varias a la vez.'
+            : 'Subir o reemplazar la imagen'))
+          : alt}
       >
         {subiendo ? (
           <span className="pista">…</span>
@@ -108,6 +118,7 @@ export default function SubirImagen({
         ref={entrada}
         type="file"
         accept={FORMATOS_ACEPTADOS}
+        multiple={multiple}
         hidden
         onChange={elegido}
       />

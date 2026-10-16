@@ -1,9 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, imagenAutenticada } from '../servicios/api.js'
-import { FORMATOS_ACEPTADOS, prepararImagen } from '../servicios/imagenes.js'
-
-/** El RF-63 admite cinco por producto, y el esquema lo hace cumplir. */
-const MAXIMO = 5
+import { FORMATOS_ACEPTADOS } from '../servicios/imagenes.js'
+import { MAXIMO_POR_PRODUCTO as MAXIMO, subirImagenes } from '../servicios/subidas.js'
 
 /** Una miniatura de la galería, con su propia descarga autenticada. */
 function Miniatura({ imagen }) {
@@ -78,18 +76,12 @@ export default function Galeria({ productoId, nombre, puedeEditar, onCerrar, onC
   }
 
   /**
-   * Varias imágenes de una vez, pero de una en una.
+   * Varias imágenes de una vez. El bucle vive en servicios/subidas.js
+   * porque el recuadro de la tabla hace exactamente lo mismo, y dos
+   * copias del mismo bucle acaban discrepando.
    *
-   * La subida es secuencial a propósito, y no por prudencia: en paralelo
-   * se pisarían. Dos peticiones simultáneas sobre un producto sin fotos
-   * leen las dos que no hay ninguna, las dos se declaran principal y el
-   * índice único rechaza a la segunda; y las dos piden el mayor orden en
-   * uso, obtienen el mismo número y chocan contra
-   * uq_producto_imagenes_orden. El servidor hace bien en impedirlo: el
-   * que no debe provocarlo es el cliente.
-   *
-   * Un archivo que falle no detiene a los demás. Subir cinco y perderlas
-   * todas porque la tercera era un HEIC sería peor que decir cuál falló.
+   * Aquí sí se sabe cuántas hay ya, de modo que se avisa de las que no
+   * caben sin gastar un viaje al servidor.
    */
   async function subirVarias(evento) {
     const elegidas = Array.from(evento.target.files ?? [])
@@ -102,23 +94,12 @@ export default function Galeria({ productoId, nombre, puedeEditar, onCerrar, onC
     setError(null)
     setRechazadas([])
 
-    const problemas = []
-    let subidas = 0
+    let problemas = []
     try {
-      for (const archivo of elegidas) {
-        if (imagenes.length + subidas >= MAXIMO) {
-          problemas.push(`${archivo.name}: ya hay ${MAXIMO} imágenes, que es el máximo.`)
-          continue
-        }
-        try {
-          await api.subirImagen(productoId, await prepararImagen(archivo))
-          subidas += 1
-        } catch (e) {
-          problemas.push(`${archivo.name}: ${e.message}`)
-        }
-      }
+      const resultado = await subirImagenes(productoId, elegidas, imagenes.length)
+      problemas = resultado.problemas
       const frescas = await recargar()
-      if (subidas > 0) onCambio?.(frescas ?? [])
+      if (resultado.creadas.length > 0) onCambio?.(frescas ?? [])
     } finally {
       setOcupado(false)
       setRechazadas(problemas)
