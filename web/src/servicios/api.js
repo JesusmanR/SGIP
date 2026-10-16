@@ -46,6 +46,30 @@ async function subir(ruta, archivo) {
   return respuesta.json()
 }
 
+/**
+ * Trae una imagen protegida y devuelve una URL que <img> puede usar.
+ *
+ * Hace falta porque una etiqueta <img src> no manda cabeceras: el
+ * navegador la pide por su cuenta, sin Authorization, y el backend la
+ * rechaza por anónima. Con fetch sí se puede autenticar, y el resultado
+ * se envuelve en una URL de objeto.
+ *
+ * Quien la pide es responsable de liberarla con URL.revokeObjectURL
+ * cuando deje de usarla: mientras no se haga, el navegador conserva esos
+ * bytes en memoria.
+ */
+export async function imagenAutenticada(ruta) {
+  const sesion = leerSesion()
+  const cabeceras = {}
+  if (sesion?.token) cabeceras.Authorization = `Bearer ${sesion.token}`
+
+  const respuesta = await fetch(ruta, { headers: cabeceras })
+  if (!respuesta.ok) {
+    throw new ErrorApi(respuesta.status, 'No se pudo cargar la imagen.')
+  }
+  return URL.createObjectURL(await respuesta.blob())
+}
+
 async function pedir(ruta, opciones = {}) {
   const sesion = leerSesion()
   const cabeceras = { ...opciones.headers }

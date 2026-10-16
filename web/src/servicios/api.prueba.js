@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { api, ErrorApi } from './api.js'
+import { api, ErrorApi, imagenAutenticada } from './api.js'
 import { guardarSesion, haySesion } from './sesion.js'
 
 describe('cliente del API', () => {
@@ -99,5 +99,34 @@ describe('cliente del API', () => {
     guardarSesion({ token: 'abc', nombre: 'Ana' })
     global.fetch.mockResolvedValue({ ok: true, status: 204 })
     await expect(api.salir()).resolves.toBeNull()
+  })
+})
+
+describe('imágenes protegidas', () => {
+  beforeEach(() => {
+    sessionStorage.clear()
+    global.fetch = vi.fn()
+    global.URL.createObjectURL = vi.fn(() => 'blob:falsa')
+  })
+  afterEach(() => { vi.restoreAllMocks() })
+
+  it('pide la imagen con la cabecera de autorización', async () => {
+    // Una etiqueta <img> no la manda, y por eso el backend la rechazaba.
+    guardarSesion({ token: 'abc123', nombre: 'Ana' })
+    global.fetch.mockResolvedValue({ ok: true, status: 200, blob: async () => new Blob(['x']) })
+
+    const url = await imagenAutenticada('/api/v1/productos/6/imagen')
+
+    const [ruta, opciones] = global.fetch.mock.calls[0]
+    expect(ruta).toBe('/api/v1/productos/6/imagen')
+    expect(opciones.headers.Authorization).toBe('Bearer abc123')
+    expect(url).toBe('blob:falsa')
+  })
+
+  it('una imagen que el servidor niega lanza error en vez de devolver una URL rota', async () => {
+    global.fetch.mockResolvedValue({ ok: false, status: 401 })
+
+    await expect(imagenAutenticada('/api/v1/productos/6/imagen')).rejects.toBeInstanceOf(ErrorApi)
+    expect(global.URL.createObjectURL).not.toHaveBeenCalled()
   })
 })
