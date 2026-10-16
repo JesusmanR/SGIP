@@ -149,7 +149,18 @@ jobs:
           # hay nada que proteger entre dos contenedores de la misma
           # máquina efímera, y verificarlo solo añade un modo de fallo.
           SPRING_DATASOURCE_URL: "jdbc:mysql://127.0.0.1:3306/sgip?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=America/Bogota"
-        run: mvn -B -f backend/pom.xml verify
+        run: |
+          set -o pipefail
+          if ! mvn -B -f backend/pom.xml verify 2>&1 | tee /tmp/maven.log; then
+            # El registro completo vive en un almacenamiento aparte que no
+            # todo cliente alcanza. Las anotaciones sí viajan con el
+            # resultado, de modo que el motivo del fallo se publica ahí.
+            grep -E "^\[ERROR\].*\.java|Tests run:.*(Failures: [1-9]|Errors: [1-9])|^Caused by:|SchemaManagementException|missing column|wrong column type" \
+                 /tmp/maven.log | head -25 | while IFS= read -r linea; do
+              echo "::error::${linea}"
+            done
+            exit 1
+          fi
 
   web:
     name: Compilación del front web

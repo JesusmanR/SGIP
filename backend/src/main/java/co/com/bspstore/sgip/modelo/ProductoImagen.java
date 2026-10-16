@@ -6,6 +6,8 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
 
@@ -34,6 +36,9 @@ public class ProductoImagen {
     @Column(name = "ruta", nullable = false, length = 255)
     private String ruta;
 
+    // La columna es TINYINT y un short de Java se mapea a SMALLINT: sin
+    // esto, la validación de esquema al arrancar se queja del tipo.
+    @JdbcTypeCode(SqlTypes.TINYINT)
     @Column(name = "orden", nullable = false)
     private short orden;
 
