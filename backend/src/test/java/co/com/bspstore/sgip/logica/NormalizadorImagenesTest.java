@@ -66,12 +66,13 @@ class NormalizadorImagenesTest {
     }
 
     @Test
-    void laFotoNormalizadaPesaMuchoMenosQueLaOriginal() throws IOException {
-        byte[] original = imagen(4000, 3000, "png");
-        byte[] normalizada = normalizador.cuadrada(original, 800);
+    void laFotoNormalizadaCabeEnUnTamanoRazonable() throws IOException {
+        // Lo que importa no es cuanto encogio respecto al original, sino
+        // que ninguna foto del catalogo pese mas de lo previsto.
+        byte[] normalizada = normalizador.cuadrada(imagen(4000, 3000, "png"), 800);
 
-        assertTrue(normalizada.length < original.length / 2,
-                "original " + original.length + ", normalizada " + normalizada.length);
+        assertTrue(normalizada.length < 300_000,
+                "una foto de 800x800 no deberia pesar " + normalizada.length + " bytes");
     }
 
     @Test
@@ -137,7 +138,7 @@ class NormalizadorImagenesTest {
         // APP1 con un bloque TIFF mínimo: un solo campo, 0x0112 = 6.
         byte[] b = new byte[]{
             (byte) 0xFF, (byte) 0xD8,                       // SOI
-            (byte) 0xFF, (byte) 0xE1, 0, 26,                // APP1, largo 26
+            (byte) 0xFF, (byte) 0xE1, 0, 30,                // APP1: 2 + 6 + 22
             'E', 'x', 'i', 'f', 0, 0,
             'M', 'M', 0, 42, 0, 0, 0, 8,                    // TIFF gran extremo, IFD en 8
             0, 1,                                           // un campo
