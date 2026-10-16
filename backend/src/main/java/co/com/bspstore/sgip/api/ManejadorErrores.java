@@ -8,6 +8,7 @@ import co.com.bspstore.sgip.logica.ReferenciaAjenaException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -56,6 +57,16 @@ public class ManejadorErrores {
         ProblemDetail p = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
         p.setTitle("Archivo no admitido");
         p.setDetail(e.getMessage());
+        return p;
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ProblemDetail archivoDemasiadoGrande(MaxUploadSizeExceededException e) {
+        // Este tope lo aplica el contenedor antes de que el controlador
+        // vea nada, de modo que no puede comprobarlo AlmacenArchivos.
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.PAYLOAD_TOO_LARGE);
+        p.setTitle("Archivo demasiado grande");
+        p.setDetail("La imagen supera el tamaño permitido. Usa una de hasta 2 MB.");
         return p;
     }
 
