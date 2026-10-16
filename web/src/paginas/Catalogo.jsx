@@ -17,6 +17,10 @@ export default function Catalogo() {
   const [cargando, setCargando] = useState(true)
   const esAdministrador = leerSesion()?.rol === 'ADMINISTRADOR'
   const [galeria, setGaleria] = useState(null)
+  // Un contador por producto. Cambiar la principal desde la galería no
+  // cambia la dirección de la miniatura, así que la fila necesita una
+  // señal para volver a pedirla.
+  const [recargas, setRecargas] = useState({})
 
   useEffect(() => {
     let vigente = true
@@ -42,6 +46,11 @@ export default function Catalogo() {
           nombre={galeria.nombre}
           puedeEditar={esAdministrador}
           onCerrar={() => setGaleria(null)}
+          onCambio={(cuantas) => {
+            setProductos((filas) => filas.map((f) =>
+              f.productoId === galeria.id ? { ...f, tieneImagen: cuantas > 0 ? 1 : 0 } : f))
+            setRecargas((r) => ({ ...r, [galeria.id]: (r[galeria.id] ?? 0) + 1 }))
+          }}
         />
       )}
       <main className="contenido">
@@ -76,6 +85,8 @@ export default function Catalogo() {
                       src={p.tieneImagen === 1 ? `/api/v1/productos/${p.productoId}/imagen` : null}
                       alt={`Imagen de ${p.nombre}`}
                       puedeEditar={esAdministrador}
+                      onFallo={setError}
+                      recargar={recargas[p.productoId] ?? 0}
                       onSubir={async (archivo) => {
                         setError(null)
                         try {
@@ -113,18 +124,19 @@ export default function Catalogo() {
                     <span className="sub-linea">
                       Cód. {p.codigo}
                       {p.sku && p.sku !== p.codigo ? ` · SKU ${p.sku}` : ''}
-                      {p.tieneImagen === 1 && (
-                        <>
-                          {' · '}
-                          <button
-                            type="button"
-                            className="enlace"
-                            onClick={() => setGaleria({ id: p.productoId, nombre: p.nombre })}
-                          >
-                            ver imágenes
-                          </button>
-                        </>
-                      )}
+                      {/* Antes este enlace solo aparecía si el producto ya
+                          tenía una imagen, y eso dejaba sin salida al caso
+                          más común: un producto sin ninguna, al que se le
+                          quieren subir varias de golpe. El recuadro de la
+                          izquierda admite una sola. */}
+                      {' · '}
+                      <button
+                        type="button"
+                        className="enlace"
+                        onClick={() => setGaleria({ id: p.productoId, nombre: p.nombre })}
+                      >
+                        {p.tieneImagen === 1 ? 'ver imágenes' : 'añadir imágenes'}
+                      </button>
                     </span>
                   </td>
                   <td>{p.categoria}</td>

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { imagenAutenticada } from '../servicios/api.js'
+import { FORMATOS_ACEPTADOS, prepararImagen } from '../servicios/imagenes.js'
 
 /**
  * Casilla de imagen que además sirve para reemplazarla.
@@ -13,7 +14,15 @@ import { imagenAutenticada } from '../servicios/api.js'
  * el backend la rechaza por anónima. Se trae con fetch autenticado y se
  * muestra como URL de objeto, que hay que liberar al dejar de usarla.
  */
-export default function SubirImagen({ src, alt, onSubir, puedeEditar, redondo = false }) {
+export default function SubirImagen({
+  src,
+  alt,
+  onSubir,
+  onFallo,
+  puedeEditar,
+  redondo = false,
+  recargar = 0,
+}) {
   const entrada = useRef(null)
   const [subiendo, setSubiendo] = useState(false)
   const [version, setVersion] = useState(0)
@@ -50,9 +59,14 @@ export default function SubirImagen({ src, alt, onSubir, puedeEditar, redondo = 
       vigente = false
       if (creada) URL.revokeObjectURL(creada)
     }
-    // version fuerza a traerla de nuevo tras reemplazarla: la dirección
-    // no cambia y sin esto se quedaría la anterior.
-  }, [src, version])
+    // version la vuelve a pedir tras reemplazarla y recargar tras un
+    // cambio hecho en otra parte —la galería—: la dirección no cambia.
+    //
+    // Que esto baste depende del servidor: mientras la principal de un
+    // producto se servía con una semana de caché, pedirla otra vez
+    // devolvía los bytes viejos sin salir del navegador. Ahora va con
+    // no-store justamente para que este efecto sirva de algo.
+  }, [src, version, recargar])
 
   async function elegido(evento) {
     const archivo = evento.target.files?.[0]
@@ -63,8 +77,14 @@ export default function SubirImagen({ src, alt, onSubir, puedeEditar, redondo = 
 
     setSubiendo(true)
     try {
-      await onSubir(archivo)
+      // Se prepara antes de enviar: convierte lo que el servidor no sabe
+      // leer y reduce lo que no hace falta mandar entero.
+      await onSubir(await prepararImagen(archivo))
       setVersion((v) => v + 1)
+    } catch (e) {
+      // Atraparlo aquí no es cosmética: sin esto el rechazo quedaba como
+      // una promesa rechazada sin dueño, visible solo en la consola.
+      onFallo?.(e.message)
     } finally {
       setSubiendo(false)
     }
@@ -90,7 +110,7 @@ export default function SubirImagen({ src, alt, onSubir, puedeEditar, redondo = 
       <input
         ref={entrada}
         type="file"
-        accept="image/jpeg,image/png,image/webp"
+        accept={FORMATOS_ACEPTADOS}
         hidden
         onChange={elegido}
       />

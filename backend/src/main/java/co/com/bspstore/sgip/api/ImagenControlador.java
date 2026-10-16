@@ -84,7 +84,8 @@ public class ImagenControlador {
             return ResponseEntity.notFound().build();
         }
         try {
-            return archivo(principal.get().getRuta());
+            // Vigente y no inmutable: cuál es la principal cambia.
+            return archivoVigente(principal.get().getRuta());
         } catch (IOException e) {
             // La fila existe pero el archivo no: el disco y la base se
             // desincronizaron. Para el cliente es un 404; para quien
@@ -103,7 +104,7 @@ public class ImagenControlador {
         ProductoImagen i = imagenes.findByEmpresaIdAndId(ContextoEmpresa.empresaActual(), imagenId)
                 .orElseThrow(() -> new ReferenciaAjenaException(
                         "La imagen indicada no existe en esta empresa."));
-        return archivo(i.getRuta());
+        return archivoInmutable(i.getRuta());
     }
 
     // ── Logo de la empresa ───────────────────────────────────────────
@@ -124,15 +125,49 @@ public class ImagenControlador {
         if (e.getLogoRuta() == null) {
             return ResponseEntity.notFound().build();
         }
-        return archivo(e.getLogoRuta());
+        // El logo se reemplaza sin que cambie esta dirección.
+        return archivoVigente(e.getLogoRuta());
     }
 
-    private ResponseEntity<InputStreamResource> archivo(String ruta) throws IOException {
+    /**
+     * Un identificador de imagen apunta siempre al mismo archivo: esos
+     * bytes no van a cambiar nunca, y si la imagen se borra, la dirección
+     * deja de existir. Guardarla una semana es correcto y ahorra la
+     * descarga de toda la galería cada vez que se abre.
+     *
+     * Privada: la respuesta depende de quién la pide, de modo que una
+     * caché compartida no debe guardarla.
+     */
+    private ResponseEntity<InputStreamResource> archivoInmutable(String ruta) throws IOException {
+        return archivo(ruta, CacheControl.maxAge(Duration.ofDays(7)).cachePrivate());
+    }
+
+    /**
+     * Estas dos direcciones —la imagen principal de un producto y el
+     * logo de la empresa— no nombran un archivo: nombran un papel. Al
+     * subir otra foto o cambiar cuál es la principal, la dirección sigue
+     * siendo la misma y el contenido es otro.
+     *
+     * Aquí estaba el defecto de la miniatura que no cambiaba. Se servían
+     * con la caché de siete días de arriba, así que el navegador tenía
+     * permiso explícito para no volver a preguntar: el front pedía la
+     * imagen de nuevo tras subirla, la caché le devolvía los bytes
+     * anteriores, y el resultado era una miniatura que no se actualizaba
+     * —o que mostraba otra imagen— sin que nada fallara en el servidor.
+     *
+     * Una dirección cuyo contenido depende del estado no se puede cachear
+     * por tiempo. La alternativa habría sido un ETag y revalidación, que
+     * para una miniatura de 100 KB no compensa la complicación.
+     */
+    private ResponseEntity<InputStreamResource> archivoVigente(String ruta) throws IOException {
+        return archivo(ruta, CacheControl.noStore());
+    }
+
+    private ResponseEntity<InputStreamResource> archivo(String ruta, CacheControl politica)
+            throws IOException {
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(almacen.tipoDe(ruta)))
-                // Privado: la respuesta depende de quién la pide, de modo
-                // que una caché compartida no debe guardarla.
-                .cacheControl(CacheControl.maxAge(Duration.ofDays(7)).cachePrivate())
+                .cacheControl(politica)
                 .body(new InputStreamResource(almacen.abrir(ruta)));
     }
 }

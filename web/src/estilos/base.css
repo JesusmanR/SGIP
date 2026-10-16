@@ -105,6 +105,10 @@ td.numero, th.numero { text-align: right; font-variant-numeric: tabular-nums; }
 .panel-cabecera { display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem; }
 .panel-cabecera h3 { margin: 0; font-size: 1.1rem; flex: 1; }
 
+.panel-acciones {
+  display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; margin-bottom: 1rem;
+}
+
 .galeria { list-style: none; margin: 0 0 1rem; padding: 0; display: flex; flex-wrap: wrap; gap: 1rem; }
 .galeria li {
   display: flex; flex-direction: column; gap: .4rem; align-items: center;

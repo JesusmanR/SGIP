@@ -38,19 +38,26 @@ public class AlmacenArchivos {
 
     private static final Logger LOG = LoggerFactory.getLogger(AlmacenArchivos.class);
 
-    /** Firmas de los únicos formatos admitidos. */
-    private static final byte[] JPEG = {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF};
-    private static final byte[] PNG = {(byte) 0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A};
-    private static final byte[] RIFF = {'R', 'I', 'F', 'F'};
-    private static final byte[] WEBP = {'W', 'E', 'B', 'P'};
+    /**
+     * Tope de lo que se admite recibir. Es generoso a propósito: lo que
+     * se guarda no mide esto, porque la imagen se normaliza antes de
+     * tocar el disco —800×800 en JPEG ronda los 100 KB—. El tope solo
+     * limita lo que viaja por la red, y una foto de teléfono pesa entre
+     * tres y ocho megas.
+     *
+     * Estaba en el application.yml con 2 MB, que es menos que cualquier
+     * foto recién tomada, y además había que mantenerlo de acuerdo con
+     * los dos límites de multipart. Tres números que debían coincidir a
+     * mano, y el síntoma de que no coincidieran era el peor posible: la
+     * petición moría antes de llegar al controlador. Ahora es uno solo y
+     * vive en el código, que es lo que sí viaja con un «git pull».
+     */
+    public static final long BYTES_MAXIMOS = 10L * 1024 * 1024;
 
     private final Path raiz;
-    private final long bytesMaximos;
 
-    public AlmacenArchivos(@Value("${sgip.archivos.raiz:archivos}") String raiz,
-                           @Value("${sgip.archivos.bytes-maximos:2097152}") long bytesMaximos) {
+    public AlmacenArchivos(@Value("${sgip.archivos.raiz:archivos}") String raiz) {
         this.raiz = Path.of(raiz).toAbsolutePath().normalize();
-        this.bytesMaximos = bytesMaximos;
     }
 
     /**
@@ -74,9 +81,9 @@ public class AlmacenArchivos {
         if (archivo == null || archivo.isEmpty()) {
             throw new ArchivoInvalidoException("No llegó ningún archivo.");
         }
-        if (archivo.getSize() > bytesMaximos) {
+        if (archivo.getSize() > BYTES_MAXIMOS) {
             throw new ArchivoInvalidoException(
-                    "La imagen pesa más de " + (bytesMaximos / 1024 / 1024) + " MB.");
+                    "La imagen pesa más de " + (BYTES_MAXIMOS / 1024 / 1024) + " MB.");
         }
         try {
             byte[] contenido = archivo.getBytes();
@@ -137,36 +144,33 @@ public class AlmacenArchivos {
     }
 
     public String tipoDe(String rutaRelativa) {
-        String r = rutaRelativa.toLowerCase();
-        if (r.endsWith(".png")) return "image/png";
-        if (r.endsWith(".webp")) return "image/webp";
-        return "image/jpeg";
+        return FormatoImagen.deRuta(rutaRelativa).tipoMime();
     }
 
     /**
-     * Decide el formato por los primeros bytes. Ni la extensión ni el
-     * Content-Type: las dos las escribe quien sube.
+     * Decide el formato por los primeros bytes y comprueba que además se
+     * pueda procesar.
+     *
+     * Las dos preguntas son distintas y antes solo se hacía la primera:
+     * un WebP pasaba el reconocimiento y moría más adelante, en el
+     * normalizador, con un mensaje que culpaba al archivo de estar
+     * dañado. Que esta instalación no tenga lector de WebP es una
+     * limitación nuestra, y así hay que decirlo.
      */
     private static String extensionSegunContenido(byte[] b) {
-        if (empiezaPor(b, JPEG, 0)) return "jpg";
-        if (empiezaPor(b, PNG, 0)) return "png";
-        if (empiezaPor(b, RIFF, 0) && empiezaPor(b, WEBP, 8)) return "webp";
-        throw new ArchivoInvalidoException(
-                "Solo se admiten imágenes JPEG, PNG o WebP. "
-                        + "El archivo recibido no es ninguna de las tres, "
-                        + "aunque su nombre lo diga.");
-    }
-
-    private static boolean empiezaPor(byte[] contenido, byte[] firma, int desde) {
-        if (contenido.length < desde + firma.length) {
-            return false;
+        FormatoImagen formato = FormatoImagen.deContenido(b);
+        if (formato == null) {
+            throw new ArchivoInvalidoException(
+                    "El archivo recibido no es una imagen " + FormatoImagen.legiblesEnTexto()
+                            + ", aunque su nombre lo diga.");
         }
-        for (int i = 0; i < firma.length; i++) {
-            if (contenido[desde + i] != firma[i]) {
-                return false;
-            }
+        if (!formato.sePuedeLeer()) {
+            throw new ArchivoInvalidoException(
+                    "El archivo es " + formato.nombreVisible() + " y esta instalación no sabe "
+                            + "leer ese formato. Guárdalo como " + FormatoImagen.legiblesEnTexto()
+                            + " y vuelve a subirlo.");
         }
-        return true;
+        return formato.extension();
     }
 
     /** Solo para diagnóstico en pruebas y registros. */

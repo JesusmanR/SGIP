@@ -19,7 +19,7 @@ class AlmacenArchivosTest {
     @TempDir Path raiz;
 
     private AlmacenArchivos almacen() {
-        return new AlmacenArchivos(raiz.toString(), 2 * 1024 * 1024);
+        return new AlmacenArchivos(raiz.toString());
     }
 
     private static byte[] jpegDe(int bytes) {
@@ -79,20 +79,52 @@ class AlmacenArchivosTest {
     }
 
     @Test
-    void admiteLosTresFormatos() {
+    void admiteLosFormatosQueEstaMaquinaSabeLeer() {
         AlmacenArchivos a = almacen();
         assertTrue(a.guardar(new MockMultipartFile("archivo", "a", null, jpegDe(16)), 1, "x").endsWith(".jpg"));
         assertTrue(a.guardar(new MockMultipartFile("archivo", "b", null, png()), 1, "x").endsWith(".png"));
-        assertTrue(a.guardar(new MockMultipartFile("archivo", "c", null, webp()), 1, "x").endsWith(".webp"));
+    }
+
+    @Test
+    void unFormatoReconocidoQueNoSePuedeLeerSeRechazaSinCulparAlArchivo() {
+        // El JDK no trae lector de WebP. Antes el almacén lo admitía por
+        // su firma y el normalizador lo mataba más adelante con «la
+        // imagen está dañada o incompleta», que es falso: el archivo está
+        // perfecto y la limitación es nuestra. Si algún día se añade la
+        // biblioteca que aporta el lector, esta prueba deja de aplicar y
+        // hay que invertirla.
+        org.junit.jupiter.api.Assumptions.assumeFalse(FormatoImagen.WEBP.sePuedeLeer(),
+                "esta JVM ya sabe leer WebP");
+
+        var e = assertThrows(ArchivoInvalidoException.class,
+                () -> almacen().guardar(new MockMultipartFile("archivo", "c.webp", null, webp()), 1, "x"));
+
+        assertTrue(e.getMessage().contains("WebP"), e.getMessage());
+        assertTrue(e.getMessage().contains("instalación"), e.getMessage());
+        assertFalse(e.getMessage().contains("dañada"), e.getMessage());
     }
 
     @Test
     void rechazaUnArchivoDemasiadoGrande() {
-        AlmacenArchivos pequeno = new AlmacenArchivos(raiz.toString(), 100);
+        // El tope ya no se configura: es una constante de la clase, de la
+        // que se derivan los límites de multipart. Tres números que había
+        // que mantener de acuerdo a mano eran tres ocasiones de que no lo
+        // estuvieran, y el síntoma era una conexión cortada.
+        byte[] pasado = jpegDe((int) AlmacenArchivos.BYTES_MAXIMOS + 1);
 
-        assertThrows(ArchivoInvalidoException.class,
-                () -> pequeno.guardar(
-                        new MockMultipartFile("archivo", "a.jpg", "image/jpeg", jpegDe(200)), 1, "x"));
+        var e = assertThrows(ArchivoInvalidoException.class,
+                () -> almacen().guardar(
+                        new MockMultipartFile("archivo", "a.jpg", "image/jpeg", pasado), 1, "x"));
+
+        assertTrue(e.getMessage().contains("10 MB"), e.getMessage());
+    }
+
+    @Test
+    void elTopeDaMargenAUnaFotoDeTelefono() {
+        // Era el defecto del logo: con 2 MB, cualquier foto recién tomada
+        // se rechazaba antes de que la normalización pudiera encogerla.
+        assertTrue(AlmacenArchivos.BYTES_MAXIMOS >= 8L * 1024 * 1024,
+                "una foto de teléfono pesa entre tres y ocho megas");
     }
 
     @Test

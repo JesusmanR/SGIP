@@ -13,13 +13,14 @@ export default function Empresa() {
     api.empresa().then(setEmpresa).catch((e) => setError(e.message))
   }, [])
 
+  /**
+   * No atrapa el error a propósito: lo recoge SubirImagen y lo anuncia
+   * por onFallo. Atraparlo aquí hacía que el componente creyera que la
+   * subida había ido bien y volviera a pedir la imagen sin motivo.
+   */
   async function subirLogo(archivo) {
     setError(null)
-    try {
-      setEmpresa(await api.subirLogo(archivo))
-    } catch (e) {
-      setError(e.message)
-    }
+    setEmpresa(await api.subirLogo(archivo))
   }
 
   return (
@@ -35,6 +36,7 @@ export default function Empresa() {
               src={empresa?.logoUrl}
               alt={`Logo de ${empresa?.razonSocial ?? 'la empresa'}`}
               onSubir={subirLogo}
+              onFallo={setError}
               puedeEditar={esAdministrador}
               redondo
             />
@@ -43,7 +45,8 @@ export default function Empresa() {
               <p className="sub-linea">NIT {empresa?.nit ?? '—'}</p>
               <p className="sub-linea">
                 {esAdministrador
-                  ? 'Toca el recuadro para subir o reemplazar el logo. JPEG, PNG o WebP, hasta 2 MB.'
+                  ? 'Toca el recuadro para subir o reemplazar el logo. JPEG, PNG o WebP. '
+                    + 'Se ajusta solo: cabe entero, sin recortarlo ni deformarlo.'
                   : 'Solo el administrador puede cambiar el logo.'}
               </p>
             </div>

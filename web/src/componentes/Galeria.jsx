@@ -1,5 +1,9 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, imagenAutenticada } from '../servicios/api.js'
+import { FORMATOS_ACEPTADOS, prepararImagen } from '../servicios/imagenes.js'
+
+/** El RF-63 admite cinco por producto, y el esquema lo hace cumplir. */
+const MAXIMO = 5
 
 /** Una miniatura de la galería, con su propia descarga autenticada. */
 function Miniatura({ imagen }) {
@@ -35,13 +39,19 @@ export default function Galeria({ productoId, nombre, puedeEditar, onCerrar, onC
   const [imagenes, setImagenes] = useState([])
   const [error, setError] = useState(null)
   const [ocupado, setOcupado] = useState(false)
+  const [rechazadas, setRechazadas] = useState([])
+  const entrada = useRef(null)
 
+  /** Devuelve la lista fresca: quien llama necesita cuántas quedaron. */
   const recargar = useCallback(async () => {
     try {
-      setImagenes(await api.imagenesDe(productoId))
+      const frescas = await api.imagenesDe(productoId)
+      setImagenes(frescas)
       setError(null)
+      return frescas
     } catch (e) {
       setError(e.message)
+      return null
     }
   }, [productoId])
 
@@ -52,12 +62,62 @@ export default function Galeria({ productoId, nombre, puedeEditar, onCerrar, onC
     setError(null)
     try {
       await hacer()
-      await recargar()
-      onCambio?.()
+      const frescas = await recargar()
+      // Cuántas quedaron: borrar la última tiene que quitar la miniatura
+      // del catálogo, no solo refrescarla.
+      onCambio?.(frescas?.length ?? 0)
     } catch (e) {
       setError(e.message)
     } finally {
       setOcupado(false)
+    }
+  }
+
+  /**
+   * Varias imágenes de una vez, pero de una en una.
+   *
+   * La subida es secuencial a propósito, y no por prudencia: en paralelo
+   * se pisarían. Dos peticiones simultáneas sobre un producto sin fotos
+   * leen las dos que no hay ninguna, las dos se declaran principal y el
+   * índice único rechaza a la segunda; y las dos piden el mayor orden en
+   * uso, obtienen el mismo número y chocan contra
+   * uq_producto_imagenes_orden. El servidor hace bien en impedirlo: el
+   * que no debe provocarlo es el cliente.
+   *
+   * Un archivo que falle no detiene a los demás. Subir cinco y perderlas
+   * todas porque la tercera era un HEIC sería peor que decir cuál falló.
+   */
+  async function subirVarias(evento) {
+    const elegidas = Array.from(evento.target.files ?? [])
+    // Limpiar el valor permite volver a elegir los MISMOS archivos tras
+    // un error; sin esto el navegador no dispara el evento otra vez.
+    evento.target.value = ''
+    if (elegidas.length === 0) return
+
+    setOcupado(true)
+    setError(null)
+    setRechazadas([])
+
+    const problemas = []
+    let subidas = 0
+    try {
+      for (const archivo of elegidas) {
+        if (imagenes.length + subidas >= MAXIMO) {
+          problemas.push(`${archivo.name}: ya hay ${MAXIMO} imágenes, que es el máximo.`)
+          continue
+        }
+        try {
+          await api.subirImagen(productoId, await prepararImagen(archivo))
+          subidas += 1
+        } catch (e) {
+          problemas.push(`${archivo.name}: ${e.message}`)
+        }
+      }
+      const frescas = await recargar()
+      if (subidas > 0) onCambio?.(frescas?.length ?? subidas)
+    } finally {
+      setOcupado(false)
+      setRechazadas(problemas)
     }
   }
 
@@ -71,7 +131,41 @@ export default function Galeria({ productoId, nombre, puedeEditar, onCerrar, onC
 
         {error && <div className="aviso error" role="alert">{error}</div>}
 
-        {imagenes.length === 0 && !error && (
+        {rechazadas.length > 0 && (
+          <div className="aviso error" role="alert">
+            <p>No se pudieron subir:</p>
+            <ul>
+              {rechazadas.map((r) => <li key={r}>{r}</li>)}
+            </ul>
+          </div>
+        )}
+
+        {puedeEditar && (
+          <div className="panel-acciones">
+            <button
+              className="boton"
+              disabled={ocupado || imagenes.length >= MAXIMO}
+              onClick={() => entrada.current?.click()}
+            >
+              {ocupado ? 'Subiendo…' : 'Añadir imágenes'}
+            </button>
+            <span className="sub-linea">
+              {imagenes.length >= MAXIMO
+                ? `Ya hay ${MAXIMO}. Elimina alguna para subir otra.`
+                : `Puedes elegir varias a la vez; caben ${MAXIMO - imagenes.length} más.`}
+            </span>
+            <input
+              ref={entrada}
+              type="file"
+              accept={FORMATOS_ACEPTADOS}
+              multiple
+              hidden
+              onChange={subirVarias}
+            />
+          </div>
+        )}
+
+        {imagenes.length === 0 && !error && !ocupado && (
           <p className="sub-linea">Este producto todavía no tiene imágenes.</p>
         )}
 
