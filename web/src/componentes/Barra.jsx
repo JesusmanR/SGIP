@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../servicios/api.js'
 import { borrarSesion, leerSesion } from '../servicios/sesion.js'
@@ -21,7 +22,8 @@ export default function Barra() {
   return (
     <header className="barra">
       <span className="marca">SGIP</span>
-      <span>Catálogo</span>
+      <Link to="/catalogo">Catálogo</Link>
+      <Link to="/empresa">Mi empresa</Link>
       <span className="empuje">{sesion?.nombre}</span>
       <button className="boton secundario" onClick={salir}>Salir</button>
     </header>

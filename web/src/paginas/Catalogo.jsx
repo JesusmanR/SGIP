@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import Barra from '../componentes/Barra.jsx'
+import SubirImagen from '../componentes/SubirImagen.jsx'
 import { api } from '../servicios/api.js'
+import { leerSesion } from '../servicios/sesion.js'
 
 const PESOS = new Intl.NumberFormat('es-CO', {
   style: 'currency', currency: 'COP', maximumFractionDigits: 0,
@@ -12,6 +14,7 @@ export default function Catalogo() {
   const [busqueda, setBusqueda] = useState('')
   const [error, setError] = useState(null)
   const [cargando, setCargando] = useState(true)
+  const esAdministrador = leerSesion()?.rol === 'ADMINISTRADOR'
 
   useEffect(() => {
     let vigente = true
@@ -45,6 +48,7 @@ export default function Catalogo() {
           <table>
             <thead>
               <tr>
+                <th className="col-imagen"><span className="oculto">Imagen</span></th>
                 <th>Producto</th>
                 <th>Categoría</th>
                 <th className="numero">Costo</th>
@@ -57,6 +61,20 @@ export default function Catalogo() {
             <tbody>
               {productos.map((p) => (
                 <tr key={p.productoId}>
+                  <td className="col-imagen">
+                    <SubirImagen
+                      src={p.tieneImagen === 1 ? `/api/v1/productos/${p.productoId}/imagen` : null}
+                      alt={`Imagen de ${p.nombre}`}
+                      puedeEditar={esAdministrador}
+                      onSubir={async (archivo) => {
+                        await api.subirImagen(p.productoId, archivo)
+                        // Recargar la fila entera sería más código; basta
+                        // con marcar que ya tiene imagen.
+                        setProductos((filas) => filas.map((f) =>
+                          f.productoId === p.productoId ? { ...f, tieneImagen: 1 } : f))
+                      }}
+                    />
+                  </td>
                   <td>
                     {p.nombre}{p.presentacion ? ` · ${p.presentacion}` : ''}
                     {/* El aviso va en la fila del producto: enterarse de que

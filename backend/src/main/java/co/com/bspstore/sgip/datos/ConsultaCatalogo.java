@@ -28,7 +28,8 @@ public class ConsultaCatalogo {
             producto_id, codigo, sku, nombre, presentacion, categoria, proveedor,
             costo, existencia, existencia_minima, estado_stock,
             precio_contado, precio_credito, tratamiento_iva, tarifa_contado,
-            total_contado, tributacion_sin_configurar, cerca_umbral, imagen_principal
+            total_contado, tributacion_sin_configurar, cerca_umbral,
+            imagen_principal IS NOT NULL AS tiene_imagen
             """;
 
     private final JdbcClient jdbc;

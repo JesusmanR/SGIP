@@ -21,6 +21,10 @@ import java.math.BigDecimal;
  * estadoStock · lo clasifica el motor de base de datos como columna
  * generada, no la aplicación, de modo que no puede desincronizarse de la
  * existencia real.
+ *
+ * tieneImagen · si hay imagen principal, no cuál. La ruta de
+ * almacenamiento no sale al exterior: el cliente pide la imagen por el
+ * endpoint del producto y el servidor resuelve el archivo.
  */
 public record ProductoEnCatalogo(
         Integer productoId,
@@ -41,5 +45,5 @@ public record ProductoEnCatalogo(
         BigDecimal totalContado,
         Integer tributacionSinConfigurar,
         Integer cercaUmbral,
-        String imagenPrincipal
+        Integer tieneImagen
 ) {}

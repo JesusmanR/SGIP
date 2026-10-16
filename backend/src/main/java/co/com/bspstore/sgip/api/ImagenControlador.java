@@ -63,6 +63,30 @@ public class ImagenControlador {
     }
 
     /**
+     * Sirve la imagen principal de un producto. Existe porque el listado
+     * del catálogo dice si hay imagen pero no cuál: la ruta no sale al
+     * exterior, de modo que el cliente pide «la del producto 11» y el
+     * servidor resuelve el archivo.
+     */
+    @GetMapping("/productos/{productoId}/imagen")
+    public ResponseEntity<InputStreamResource> verDeProducto(@PathVariable Integer productoId)
+            throws IOException {
+        return imagenes.findByEmpresaIdAndProductoIdAndPrincipalTrue(
+                        ContextoEmpresa.empresaActual(), productoId)
+                .map(i -> {
+                    try {
+                        return archivo(i.getRuta());
+                    } catch (IOException e) {
+                        // La fila existe pero el archivo no: el disco y la
+                        // base se desincronizaron. Es un 404 para el cliente
+                        // y un problema de operación para quien administra.
+                        return ResponseEntity.<InputStreamResource>notFound().build();
+                    }
+                })
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    /**
      * Sirve el archivo. La ruta en disco sale de la fila, que lleva su
      * empresa; el cliente solo manda un identificador. No hay ninguna
      * cadena suya que llegue al sistema de archivos.
