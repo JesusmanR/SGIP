@@ -65,3 +65,6 @@ td.numero, th.numero { text-align: right; font-variant-numeric: tabular-nums; }
 .insignia.activo  { background: var(--exito-fondo);   color: var(--exito); }
 .insignia.critico { background: var(--aviso-fondo);   color: var(--aviso); }
 .insignia.agotado { background: var(--peligro-fondo); color: var(--peligro); }
+
+/* Segunda línea bajo el nombre del producto: código y, si difiere, SKU. */
+.sub-linea { display: block; font-size: .78rem; color: var(--tinta-3); margin-top: .15rem; }

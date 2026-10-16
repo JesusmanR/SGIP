@@ -47,9 +47,10 @@ export default function Catalogo() {
               <tr>
                 <th>Producto</th>
                 <th>Categoría</th>
-                <th className="numero">Existencia</th>
                 <th className="numero">Costo</th>
-                <th className="numero">Precio</th>
+                <th className="numero">Contado</th>
+                <th className="numero">Crédito</th>
+                <th className="numero">Exist.</th>
                 <th>Estado</th>
               </tr>
             </thead>
@@ -64,13 +65,22 @@ export default function Catalogo() {
                     {p.tributacionSinConfigurar === 1 && (
                       <> <span className="insignia critico">Sin impuesto configurado</span></>
                     )}
+                    {/* El código va bajo el nombre, como en el diseño de la
+                        P-03. El SKU solo aparece cuando difiere: por omisión
+                        se copia del código y repetirlo sería ruido. */}
+                    <span className="sub-linea">
+                      {p.codigo}{p.sku && p.sku !== p.codigo ? ` · SKU ${p.sku}` : ''}
+                    </span>
                   </td>
                   <td>{p.categoria}</td>
-                  <td className="numero">{p.existencia}</td>
                   <td className="numero">{PESOS.format(p.costo)}</td>
                   <td className="numero">
                     {p.precioContado == null ? '—' : PESOS.format(p.precioContado)}
                   </td>
+                  <td className="numero">
+                    {p.precioCredito == null ? '—' : PESOS.format(p.precioCredito)}
+                  </td>
+                  <td className="numero">{p.existencia}</td>
                   <td>
                     <span className={`insignia ${(p.estadoStock || '').toLowerCase()}`}>
                       {p.estadoStock}
