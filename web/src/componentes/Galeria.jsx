@@ -12,7 +12,10 @@ function Miniatura({ imagen }) {
   useEffect(() => {
     let vigente = true
     let creada = null
-    imagenAutenticada(imagen.url)
+    // La miniatura, no la imagen entera: se pinta a 120 puntos y la
+    // completa son 800×800. Abrir una galería de cinco descargaba medio
+    // mega para nada.
+    imagenAutenticada(imagen.urlMiniatura)
       .then((url) => {
         if (!vigente) return URL.revokeObjectURL(url)
         creada = url
@@ -20,7 +23,7 @@ function Miniatura({ imagen }) {
       })
       .catch(() => {})
     return () => { vigente = false; if (creada) URL.revokeObjectURL(creada) }
-  }, [imagen.url])
+  }, [imagen.urlMiniatura])
 
   return objeto
     ? <img src={objeto} alt={`Imagen ${imagen.orden}`} />
@@ -63,9 +66,10 @@ export default function Galeria({ productoId, nombre, puedeEditar, onCerrar, onC
     try {
       await hacer()
       const frescas = await recargar()
-      // Cuántas quedaron: borrar la última tiene que quitar la miniatura
-      // del catálogo, no solo refrescarla.
-      onCambio?.(frescas?.length ?? 0)
+      // Se devuelve la lista, no un aviso: quien escucha necesita saber
+      // cuál quedó como principal, porque su identificador es el que
+      // forma la dirección de la miniatura en el catálogo.
+      onCambio?.(frescas ?? [])
     } catch (e) {
       setError(e.message)
     } finally {
@@ -114,7 +118,7 @@ export default function Galeria({ productoId, nombre, puedeEditar, onCerrar, onC
         }
       }
       const frescas = await recargar()
-      if (subidas > 0) onCambio?.(frescas?.length ?? subidas)
+      if (subidas > 0) onCambio?.(frescas ?? [])
     } finally {
       setOcupado(false)
       setRechazadas(problemas)

@@ -21,7 +21,6 @@ export default function SubirImagen({
   onFallo,
   puedeEditar,
   redondo = false,
-  recargar = 0,
 }) {
   const entrada = useRef(null)
   const [subiendo, setSubiendo] = useState(false)
@@ -59,14 +58,12 @@ export default function SubirImagen({
       vigente = false
       if (creada) URL.revokeObjectURL(creada)
     }
-    // version la vuelve a pedir tras reemplazarla y recargar tras un
-    // cambio hecho en otra parte —la galería—: la dirección no cambia.
-    //
-    // Que esto baste depende del servidor: mientras la principal de un
-    // producto se servía con una semana de caché, pedirla otra vez
-    // devolvía los bytes viejos sin salir del navegador. Ahora va con
-    // no-store justamente para que este efecto sirva de algo.
-  }, [src, version, recargar])
+    // version la vuelve a pedir tras reemplazarla, y hace falta solo
+    // donde la dirección no cambia aunque el contenido sí: el logo de la
+    // empresa, que es siempre /api/v1/empresa/logo. En el catálogo la
+    // dirección lleva el identificador de la imagen, de modo que
+    // cambiarla cambia el src y esto ni se usa.
+  }, [src, version])
 
   async function elegido(evento) {
     const archivo = evento.target.files?.[0]

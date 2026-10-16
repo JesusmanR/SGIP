@@ -117,11 +117,20 @@ public class AlmacenArchivos {
 
     /** Abre un archivo ya guardado. La ruta sale de la base, no del cliente. */
     public InputStream abrir(String rutaRelativa) throws IOException {
+        return Files.newInputStream(ubicar(rutaRelativa));
+    }
+
+    /** Lee un archivo entero. Para lo que haya que transformar en memoria. */
+    public byte[] leer(String rutaRelativa) throws IOException {
+        return Files.readAllBytes(ubicar(rutaRelativa));
+    }
+
+    private Path ubicar(String rutaRelativa) throws IOException {
         Path archivo = raiz.resolve(rutaRelativa).normalize();
         if (!archivo.startsWith(raiz) || !Files.isRegularFile(archivo)) {
             throw new IOException("No existe el archivo " + rutaRelativa);
         }
-        return Files.newInputStream(archivo);
+        return archivo;
     }
 
     /**

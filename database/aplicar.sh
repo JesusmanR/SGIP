@@ -138,6 +138,7 @@ DESPUES_DEL_DEMO=(
   V11__claves_compuestas_por_empresa.sql
   V12__configuracion_tributaria_por_empresa.sql
   V13__logo_de_empresa.sql
+  V14__miniatura_de_imagen.sql
 )
 
 for f in "${ANTES_DEL_DEMO[@]}"; do

@@ -107,6 +107,26 @@ public class ImagenControlador {
         return archivoInmutable(i.getRuta());
     }
 
+    /**
+     * La versión pequeña de una imagen, para el recuadro del catálogo y
+     * la galería.
+     *
+     * Tiene dirección propia, la de SU imagen, y no la del producto. Esa
+     * diferencia es la que arregla de raíz la miniatura equivocada: al
+     * cambiar cuál es la principal, el catálogo recibe otro
+     * identificador y pide otra dirección, de modo que la caché no
+     * tiene forma de servir la anterior. Y como estos bytes no cambian
+     * nunca, cachearlos una semana es correcto y además ahorra descargar
+     * la imagen entera para pintarla en cuarenta píxeles.
+     */
+    @GetMapping("/imagenes/{imagenId}/miniatura")
+    public ResponseEntity<byte[]> miniatura(@PathVariable Integer imagenId) {
+        return ResponseEntity.ok()
+                .contentType(MediaType.IMAGE_JPEG)
+                .cacheControl(CacheControl.maxAge(Duration.ofDays(7)).cachePrivate())
+                .body(servicio.miniaturaDe(imagenId));
+    }
+
     // ── Logo de la empresa ───────────────────────────────────────────
     @GetMapping("/empresa")
     public EmpresaResumen empresa() {

@@ -22,9 +22,14 @@ import java.math.BigDecimal;
  * generada, no la aplicación, de modo que no puede desincronizarse de la
  * existencia real.
  *
- * tieneImagen · si hay imagen principal, no cuál. La ruta de
- * almacenamiento no sale al exterior: el cliente pide la imagen por el
- * endpoint del producto y el servidor resuelve el archivo.
+ * imagenPrincipalId · cuál es la imagen principal, para que el cliente
+ * pida su miniatura por una dirección que no cambia de contenido a
+ * espaldas de nadie. Es el identificador, nunca la ruta: la organización
+ * interna de las carpetas no sale al exterior y no hay ninguna cadena
+ * del cliente que llegue al sistema de archivos.
+ *
+ * tieneImagen · lo mismo en forma de sí o no, que es lo que la tabla
+ * necesita para decidir si ofrece «ver» o «añadir» imágenes.
  */
 public record ProductoEnCatalogo(
         Integer productoId,
@@ -45,5 +50,6 @@ public record ProductoEnCatalogo(
         BigDecimal totalContado,
         Integer tributacionSinConfigurar,
         Integer cercaUmbral,
+        Integer imagenPrincipalId,
         Integer tieneImagen
 ) {}

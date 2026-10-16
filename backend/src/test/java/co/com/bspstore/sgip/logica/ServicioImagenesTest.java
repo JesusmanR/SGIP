@@ -32,6 +32,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -142,7 +143,8 @@ class ServicioImagenesTest {
 
         servicio.subirDeProducto(11, imagen());
 
-        verify(almacen).guardar(any(byte[].class), eq(3), eq("productos"));
+        // Dos: la imagen y su miniatura, las dos bajo la misma empresa.
+        verify(almacen, times(2)).guardar(any(byte[].class), eq(3), eq("productos"));
     }
 
     @Test
@@ -170,13 +172,89 @@ class ServicioImagenesTest {
     @Test
     void borrarQuitaLaFilaYElArchivo() {
         comoEmpresa(3);
-        var imagen = new ProductoImagen(3, 11, "empresa-3/productos/a.jpg", (short) 1, false, 100);
+        var imagen = new ProductoImagen(3, 11, "empresa-3/productos/a.jpg",
+                "empresa-3/productos/a-mini.jpg", (short) 1, false, 100);
         when(imagenes.findByEmpresaIdAndId(3, 55)).thenReturn(Optional.of(imagen));
 
         servicio.eliminar(55);
 
         verify(imagenes).delete(imagen);
         verify(almacen).borrar("empresa-3/productos/a.jpg");
+        // La miniatura también: dejarla sería basura en disco que nadie
+        // va a volver a nombrar.
+        verify(almacen).borrar("empresa-3/productos/a-mini.jpg");
+    }
+
+    @Test
+    void seGuardaUnaMiniaturaJuntoACadaImagen() {
+        // La miniatura existe para que el catálogo no descargue 800×800
+        // para pintar cuarenta puntos, y sobre todo para que tenga
+        // dirección propia: la de «la principal del producto» cambiaba de
+        // contenido sin cambiar de nombre, y la caché servía la anterior.
+        comoEmpresa(3);
+        productoPropio();
+        byte[] original = {1, 2, 3};
+        when(imagenes.countByEmpresaIdAndProductoId(3, 11)).thenReturn(0);
+        when(imagenes.mayorOrden(3, 11)).thenReturn((short) 0);
+        when(almacen.leerValidado(any())).thenReturn(original);
+        when(normalizador.cuadrada(any(), eq(800))).thenReturn(new byte[]{9, 9, 9, 9});
+        when(normalizador.cuadrada(any(), eq(240))).thenReturn(new byte[]{7});
+        when(almacen.guardar(any(byte[].class), anyInt(), any()))
+                .thenReturn("empresa-3/productos/a.jpg", "empresa-3/productos/a-mini.jpg");
+        when(imagenes.save(any())).thenAnswer(i -> i.getArgument(0));
+
+        servicio.subirDeProducto(11, imagen());
+
+        ArgumentCaptor<ProductoImagen> captor = ArgumentCaptor.forClass(ProductoImagen.class);
+        verify(imagenes).save(captor.capture());
+        assertEquals("empresa-3/productos/a.jpg", captor.getValue().getRuta());
+        assertEquals("empresa-3/productos/a-mini.jpg", captor.getValue().getMiniaturaRuta());
+        // El peso que se registra es el de la imagen, no el de la miniatura.
+        assertEquals(4, captor.getValue().getBytes().intValue());
+    }
+
+    @Test
+    void laMiniaturaSaleDelOriginalYNoDeLaYaReducida() {
+        // Encoger dos veces acumula el desenfoque de cada interpolación.
+        comoEmpresa(3);
+        productoPropio();
+        byte[] original = {1, 2, 3};
+        when(imagenes.countByEmpresaIdAndProductoId(3, 11)).thenReturn(0);
+        when(imagenes.mayorOrden(3, 11)).thenReturn((short) 0);
+        when(almacen.leerValidado(any())).thenReturn(original);
+        when(normalizador.cuadrada(any(), anyInt())).thenReturn(new byte[]{9});
+        when(almacen.guardar(any(byte[].class), anyInt(), any())).thenReturn("x.jpg");
+        when(imagenes.save(any())).thenAnswer(i -> i.getArgument(0));
+
+        servicio.subirDeProducto(11, imagen());
+
+        verify(normalizador).cuadrada(original, 800);
+        verify(normalizador).cuadrada(original, 240);
+    }
+
+    @Test
+    void unaImagenAnteriorALaV14ConstruyeSuMiniaturaAlVuelo() throws java.io.IOException {
+        // Las filas de antes no tienen miniatura_ruta. Se genera al
+        // mostrarla en vez de rellenarlas con un proceso aparte, y no se
+        // guarda: una petición de lectura que escribe trae más problemas
+        // de los que ahorra, y son unas pocas imágenes.
+        comoEmpresa(3);
+        var vieja = new ProductoImagen(3, 11, "empresa-3/productos/vieja.jpg",
+                null, (short) 1, true, 100);
+        when(imagenes.findByEmpresaIdAndId(3, 55)).thenReturn(Optional.of(vieja));
+        when(almacen.leer("empresa-3/productos/vieja.jpg")).thenReturn(new byte[]{1, 2, 3});
+        when(normalizador.cuadrada(any(), eq(240))).thenReturn(new byte[]{7, 7});
+
+        assertEquals(2, servicio.miniaturaDe(55).length);
+        verify(almacen, never()).guardar(any(byte[].class), anyInt(), any());
+    }
+
+    @Test
+    void laMiniaturaDeOtraEmpresaNoSeSirve() {
+        comoEmpresa(3);
+        when(imagenes.findByEmpresaIdAndId(3, 55)).thenReturn(Optional.empty());
+
+        assertThrows(ReferenciaAjenaException.class, () -> servicio.miniaturaDe(55));
     }
 
     @Test
@@ -184,8 +262,8 @@ class ServicioImagenesTest {
         // Un producto con imagenes pero sin principal no aparece en el
         // catalogo exportable.
         comoEmpresa(3);
-        var principal = new ProductoImagen(3, 11, "a.jpg", (short) 1, true, 100);
-        var otra = new ProductoImagen(3, 11, "b.jpg", (short) 2, false, 100);
+        var principal = new ProductoImagen(3, 11, "a.jpg", "a-mini.jpg", (short) 1, true, 100);
+        var otra = new ProductoImagen(3, 11, "b.jpg", "b-mini.jpg", (short) 2, false, 100);
         when(imagenes.findByEmpresaIdAndId(3, 55)).thenReturn(Optional.of(principal));
         when(imagenes.findByEmpresaIdAndProductoIdOrderByOrden(3, 11)).thenReturn(List.of(otra));
 

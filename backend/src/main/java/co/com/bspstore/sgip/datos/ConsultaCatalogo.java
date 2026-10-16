@@ -24,13 +24,38 @@ import java.util.Optional;
 @Repository
 public class ConsultaCatalogo {
 
+    /**
+     * El identificador de la imagen principal, no su ruta.
+     *
+     * Va aquí y no en la vista porque es lo único que el catálogo
+     * necesita para armar una dirección que no mienta: antes pedía «la
+     * imagen principal del producto 6», que nombra un papel y no un
+     * archivo, y una dirección así devuelve cosas distintas en momentos
+     * distintos. Con el identificador la dirección cambia cuando cambia
+     * la principal.
+     *
+     * La subconsulta repite el filtro de empresa a propósito, como la de
+     * código de barras más abajo: así ninguna de las dos mitades depende
+     * de que la otra acote bien. La vista trae una subconsulta parecida
+     * para imagen_principal que NO lo repite; hoy no puede devolver la
+     * imagen de otra empresa porque producto_id es único en toda la
+     * tabla, pero conviene corregirla la próxima vez que se toque.
+     */
+    private static final String IMAGEN_PRINCIPAL = """
+            (SELECT i.imagen_id FROM producto_imagenes i
+              WHERE i.empresa_id = v.empresa_id
+                AND i.producto_id = v.producto_id
+                AND i.principal = TRUE)
+            """;
+
     private static final String COLUMNAS = """
             producto_id, codigo, sku, nombre, presentacion, categoria, proveedor,
             costo, existencia, existencia_minima, estado_stock,
             precio_contado, precio_credito, tratamiento_iva, tarifa_contado,
             total_contado, tributacion_sin_configurar, cerca_umbral,
-            imagen_principal IS NOT NULL AS tiene_imagen
-            """;
+            %1$s AS imagen_principal_id,
+            %1$s IS NOT NULL AS tiene_imagen
+            """.formatted(IMAGEN_PRINCIPAL);
 
     private final JdbcClient jdbc;
 
@@ -43,7 +68,7 @@ public class ConsultaCatalogo {
         // dentro de la sentencia: el texto lo escribe quien usa la pantalla.
         String patron = (busqueda == null || busqueda.isBlank()) ? null : "%" + busqueda.trim() + "%";
         return jdbc.sql("""
-                        SELECT %s FROM v_precios_producto
+                        SELECT %s FROM v_precios_producto v
                          WHERE empresa_id = :empresa
                            AND (:patron IS NULL
                                 OR nombre LIKE :patron
@@ -61,7 +86,7 @@ public class ConsultaCatalogo {
 
     public Optional<ProductoEnCatalogo> buscar(Integer empresaId, Integer productoId) {
         return jdbc.sql("""
-                        SELECT %s FROM v_precios_producto
+                        SELECT %s FROM v_precios_producto v
                          WHERE empresa_id = :empresa AND producto_id = :producto
                         """.formatted(COLUMNAS))
                 .param("empresa", empresaId)
@@ -77,7 +102,7 @@ public class ConsultaCatalogo {
         // el filtro de empresa a propósito: así ninguna de las dos mitades
         // depende de que la otra acote bien.
         return jdbc.sql("""
-                        SELECT %s FROM v_precios_producto
+                        SELECT %s FROM v_precios_producto v
                          WHERE empresa_id = :empresa
                            AND producto_id = (SELECT p.producto_id FROM productos p
                                                WHERE p.empresa_id = :empresa

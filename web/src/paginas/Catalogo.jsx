@@ -17,10 +17,6 @@ export default function Catalogo() {
   const [cargando, setCargando] = useState(true)
   const esAdministrador = leerSesion()?.rol === 'ADMINISTRADOR'
   const [galeria, setGaleria] = useState(null)
-  // Un contador por producto. Cambiar la principal desde la galería no
-  // cambia la dirección de la miniatura, así que la fila necesita una
-  // señal para volver a pedirla.
-  const [recargas, setRecargas] = useState({})
 
   useEffect(() => {
     let vigente = true
@@ -46,10 +42,16 @@ export default function Catalogo() {
           nombre={galeria.nombre}
           puedeEditar={esAdministrador}
           onCerrar={() => setGaleria(null)}
-          onCambio={(cuantas) => {
+          onCambio={(frescas) => {
+            // La fila se entera de cuál es ahora la principal, no solo de
+            // que algo cambió: es el identificador el que forma la
+            // dirección de la miniatura.
+            const principal = frescas.find((i) => i.principal)
             setProductos((filas) => filas.map((f) =>
-              f.productoId === galeria.id ? { ...f, tieneImagen: cuantas > 0 ? 1 : 0 } : f))
-            setRecargas((r) => ({ ...r, [galeria.id]: (r[galeria.id] ?? 0) + 1 }))
+              f.productoId === galeria.id
+                ? { ...f, tieneImagen: frescas.length > 0 ? 1 : 0,
+                  imagenPrincipalId: principal?.id ?? null }
+                : f))
           }}
         />
       )}
@@ -82,11 +84,16 @@ export default function Catalogo() {
                 <tr key={p.productoId}>
                   <td className="col-imagen">
                     <SubirImagen
-                      src={p.tieneImagen === 1 ? `/api/v1/productos/${p.productoId}/imagen` : null}
+                      // La dirección lleva el identificador de la imagen,
+                      // no el del producto. Así cambiar de principal
+                      // cambia la dirección, y la caché no puede servir
+                      // la anterior aunque quiera.
+                      src={p.imagenPrincipalId
+                        ? `/api/v1/imagenes/${p.imagenPrincipalId}/miniatura`
+                        : null}
                       alt={`Imagen de ${p.nombre}`}
                       puedeEditar={esAdministrador}
                       onFallo={setError}
-                      recargar={recargas[p.productoId] ?? 0}
                       onSubir={async (archivo) => {
                         setError(null)
                         try {
@@ -98,9 +105,12 @@ export default function Catalogo() {
                             await api.hacerPrincipal(creada.id)
                           }
                           // Recargar la fila entera sería más código; basta
-                          // con marcar que ya tiene imagen.
+                          // con apuntar a la imagen recién subida, que
+                          // acaba de quedar como principal.
                           setProductos((filas) => filas.map((f) =>
-                            f.productoId === p.productoId ? { ...f, tieneImagen: 1 } : f))
+                            f.productoId === p.productoId
+                              ? { ...f, tieneImagen: 1, imagenPrincipalId: creada.id }
+                              : f))
                         } catch (e) {
                           // Sin esto el rechazo del servidor no se veía y
                           // parecía que el archivo se había aceptado.
