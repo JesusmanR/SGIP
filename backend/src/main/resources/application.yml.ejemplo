@@ -6,6 +6,12 @@ spring:
     url: jdbc:mysql://${SGIP_BD_HOST:localhost}:${SGIP_BD_PUERTO:3306}/sgip?useSSL=true&serverTimezone=America/Bogota
     username: ${SGIP_BD_USUARIO}
     password: ${SGIP_BD_CLAVE}
+  servlet:
+    multipart:
+      # Sin esto Spring admite 1 MB por archivo y rechazaría imágenes que
+      # el propio sgip.archivos.bytes-maximos sí admite.
+      max-file-size: 2MB
+      max-request-size: 4MB
   jpa:
     hibernate:
       ddl-auto: validate      # El esquema lo gobiernan las migraciones, no Hibernate.
@@ -18,6 +24,11 @@ sgip:
     # expiración por inactividad, que cada petición renueva.
     sesion-minutos: 30
     intentos-maximos: 5
+  archivos:
+    # Carpeta donde se guardan las imágenes. Relativa a donde se arranca
+    # la aplicación, o absoluta si se prefiere fuera del proyecto.
+    raiz: ${SGIP_ARCHIVOS_RAIZ:archivos}
+    bytes-maximos: 2097152      # 2 MB por imagen
   facturacion:
     proveedor-url: ${SGIP_FE_URL:}
     proveedor-token: ${SGIP_FE_TOKEN:}

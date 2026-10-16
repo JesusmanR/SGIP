@@ -2,6 +2,7 @@ package co.com.bspstore.sgip.api;
 
 import co.com.bspstore.sgip.config.SinEmpresaException;
 import co.com.bspstore.sgip.logica.CredencialesInvalidasException;
+import co.com.bspstore.sgip.logica.ArchivoInvalidoException;
 import co.com.bspstore.sgip.logica.NombreRepetidoException;
 import co.com.bspstore.sgip.logica.ReferenciaAjenaException;
 import org.springframework.http.HttpStatus;
@@ -46,6 +47,14 @@ public class ManejadorErrores {
         // existir; lo que no es válido es usarlo desde esta empresa.
         ProblemDetail p = ProblemDetail.forStatus(HttpStatus.UNPROCESSABLE_ENTITY);
         p.setTitle("Referencia de otra empresa");
+        p.setDetail(e.getMessage());
+        return p;
+    }
+
+    @ExceptionHandler(ArchivoInvalidoException.class)
+    public ProblemDetail archivoInvalido(ArchivoInvalidoException e) {
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
+        p.setTitle("Archivo no admitido");
         p.setDetail(e.getMessage());
         return p;
     }
