@@ -69,21 +69,20 @@ public class ImagenControlador {
      * servidor resuelve el archivo.
      */
     @GetMapping("/productos/{productoId}/imagen")
-    public ResponseEntity<InputStreamResource> verDeProducto(@PathVariable Integer productoId)
-            throws IOException {
-        return imagenes.findByEmpresaIdAndProductoIdAndPrincipalTrue(
-                        ContextoEmpresa.empresaActual(), productoId)
-                .map(i -> {
-                    try {
-                        return archivo(i.getRuta());
-                    } catch (IOException e) {
-                        // La fila existe pero el archivo no: el disco y la
-                        // base se desincronizaron. Es un 404 para el cliente
-                        // y un problema de operación para quien administra.
-                        return ResponseEntity.<InputStreamResource>notFound().build();
-                    }
-                })
-                .orElseGet(() -> ResponseEntity.notFound().build());
+    public ResponseEntity<InputStreamResource> verDeProducto(@PathVariable Integer productoId) {
+        var principal = imagenes.findByEmpresaIdAndProductoIdAndPrincipalTrue(
+                ContextoEmpresa.empresaActual(), productoId);
+        if (principal.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+        try {
+            return archivo(principal.get().getRuta());
+        } catch (IOException e) {
+            // La fila existe pero el archivo no: el disco y la base se
+            // desincronizaron. Para el cliente es un 404; para quien
+            // administra, un problema que merece mirarse.
+            return ResponseEntity.notFound().build();
+        }
     }
 
     /**
