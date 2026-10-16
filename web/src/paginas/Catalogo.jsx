@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react'
 import Barra from '../componentes/Barra.jsx'
+import Galeria from '../componentes/Galeria.jsx'
+import SubirImagen from '../componentes/SubirImagen.jsx'
 import { api } from '../servicios/api.js'
+import { subirImagenes } from '../servicios/subidas.js'
+import { leerSesion } from '../servicios/sesion.js'
 
 const PESOS = new Intl.NumberFormat('es-CO', {
   style: 'currency', currency: 'COP', maximumFractionDigits: 0,
@@ -12,6 +16,8 @@ export default function Catalogo() {
   const [busqueda, setBusqueda] = useState('')
   const [error, setError] = useState(null)
   const [cargando, setCargando] = useState(true)
+  const esAdministrador = leerSesion()?.rol === 'ADMINISTRADOR'
+  const [galeria, setGaleria] = useState(null)
 
   useEffect(() => {
     let vigente = true
@@ -31,6 +37,25 @@ export default function Catalogo() {
   return (
     <>
       <Barra />
+      {galeria && (
+        <Galeria
+          productoId={galeria.id}
+          nombre={galeria.nombre}
+          puedeEditar={esAdministrador}
+          onCerrar={() => setGaleria(null)}
+          onCambio={(frescas) => {
+            // La fila se entera de cuál es ahora la principal, no solo de
+            // que algo cambió: es el identificador el que forma la
+            // dirección de la miniatura.
+            const principal = frescas.find((i) => i.principal)
+            setProductos((filas) => filas.map((f) =>
+              f.productoId === galeria.id
+                ? { ...f, tieneImagen: frescas.length > 0 ? 1 : 0,
+                  imagenPrincipalId: principal?.id ?? null }
+                : f))
+          }}
+        />
+      )}
       <main className="contenido">
         <h2>Catálogo</h2>
 
@@ -45,6 +70,7 @@ export default function Catalogo() {
           <table>
             <thead>
               <tr>
+                <th className="col-imagen"><span className="oculto">Imagen</span></th>
                 <th>Producto</th>
                 <th>Categoría</th>
                 <th className="numero">Costo</th>
@@ -57,6 +83,45 @@ export default function Catalogo() {
             <tbody>
               {productos.map((p) => (
                 <tr key={p.productoId}>
+                  <td className="col-imagen">
+                    <SubirImagen
+                      // La dirección lleva el identificador de la imagen,
+                      // no el del producto. Así cambiar de principal
+                      // cambia la dirección, y la caché no puede servir
+                      // la anterior aunque quiera.
+                      src={p.imagenPrincipalId
+                        ? `/api/v1/imagenes/${p.imagenPrincipalId}/miniatura`
+                        : null}
+                      alt={`Imagen de ${p.nombre}`}
+                      puedeEditar={esAdministrador}
+                      onFallo={setError}
+                      multiple
+                      ayuda="Subir imágenes. Puedes elegir varias; la primera será la principal."
+                      onSubir={async (archivos) => {
+                        setError(null)
+                        const { creadas, problemas } = await subirImagenes(p.productoId, archivos)
+
+                        // La primera de la tanda pasa a ser la principal:
+                        // el recuadro que tocaste muestra la primera que
+                        // elegiste, que es lo que cabe esperar. Para
+                        // cambiarla después está la galería.
+                        const primera = creadas[0]
+                        if (primera && !primera.principal) {
+                          await api.hacerPrincipal(primera.id)
+                        }
+                        if (primera) {
+                          setProductos((filas) => filas.map((f) =>
+                            f.productoId === p.productoId
+                              ? { ...f, tieneImagen: 1, imagenPrincipalId: primera.id }
+                              : f))
+                        }
+                        // Lo que no entró se dice archivo por archivo. Sin
+                        // esto el rechazo del servidor no se veía y parecía
+                        // que todo se había aceptado.
+                        if (problemas.length > 0) setError(problemas.join(' · '))
+                      }}
+                    />
+                  </td>
                   <td>
                     {p.nombre}{p.presentacion ? ` · ${p.presentacion}` : ''}
                     {/* El aviso va en la fila del producto: enterarse de que
@@ -69,7 +134,21 @@ export default function Catalogo() {
                         P-03. El SKU solo aparece cuando difiere: por omisión
                         se copia del código y repetirlo sería ruido. */}
                     <span className="sub-linea">
-                      {p.codigo}{p.sku && p.sku !== p.codigo ? ` · SKU ${p.sku}` : ''}
+                      Cód. {p.codigo}
+                      {p.sku && p.sku !== p.codigo ? ` · SKU ${p.sku}` : ''}
+                      {/* Antes este enlace solo aparecía si el producto ya
+                          tenía una imagen, y eso dejaba sin salida al caso
+                          más común: un producto sin ninguna, al que se le
+                          quieren subir varias de golpe. El recuadro de la
+                          izquierda admite una sola. */}
+                      {' · '}
+                      <button
+                        type="button"
+                        className="enlace"
+                        onClick={() => setGaleria({ id: p.productoId, nombre: p.nombre })}
+                      >
+                        {p.tieneImagen === 1 ? 'ver imágenes' : 'añadir imágenes'}
+                      </button>
                     </span>
                   </td>
                   <td>{p.categoria}</td>

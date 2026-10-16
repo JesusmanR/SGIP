@@ -14,6 +14,66 @@ export class ErrorApi extends Error {
   }
 }
 
+/**
+ * Subida de archivos. No pone Content-Type a propósito: con FormData lo
+ * fija el navegador, y tiene que incluir el «boundary» que separa las
+ * partes. Escribirlo a mano rompe la petición de una forma que el
+ * servidor reporta como «no llegó ningún archivo».
+ */
+async function subir(ruta, archivo) {
+  const sesion = leerSesion()
+  const cuerpo = new FormData()
+  cuerpo.append('archivo', archivo)
+
+  const cabeceras = {}
+  if (sesion?.token) cabeceras.Authorization = `Bearer ${sesion.token}`
+
+  const respuesta = await fetch(`/api/v1${ruta}`, { method: 'POST', headers: cabeceras, body: cuerpo })
+  if (respuesta.status === 401) {
+    borrarSesion()
+    throw new ErrorApi(401, 'La sesión expiró. Vuelve a entrar.')
+  }
+  if (!respuesta.ok) {
+    let detalle = 'No se pudo subir el archivo.'
+    try {
+      const json = await respuesta.json()
+      if (json?.detail) detalle = json.detail
+    } catch {
+      // Sin cuerpo JSON queda el mensaje genérico.
+    }
+    throw new ErrorApi(respuesta.status, detalle)
+  }
+  return respuesta.json()
+}
+
+/**
+ * Trae una imagen protegida y devuelve una URL que <img> puede usar.
+ *
+ * Hace falta porque una etiqueta <img src> no manda cabeceras: el
+ * navegador la pide por su cuenta, sin Authorization, y el backend la
+ * rechaza por anónima. Con fetch sí se puede autenticar, y el resultado
+ * se envuelve en una URL de objeto.
+ *
+ * Quien la pide es responsable de liberarla con URL.revokeObjectURL
+ * cuando deje de usarla: mientras no se haga, el navegador conserva esos
+ * bytes en memoria.
+ */
+export async function imagenAutenticada(ruta) {
+  const sesion = leerSesion()
+  const cabeceras = {}
+  if (sesion?.token) cabeceras.Authorization = `Bearer ${sesion.token}`
+
+  const respuesta = await fetch(ruta, { headers: cabeceras })
+  if (!respuesta.ok) {
+    // A diferencia del resto, un 401 aquí NO cierra la sesión. Una imagen
+    // que no carga no demuestra que la sesión caducó, y echar al usuario
+    // por una miniatura rota es peor que mostrar la miniatura rota. Si la
+    // sesión de verdad expiró, la próxima llamada de datos lo detecta.
+    throw new ErrorApi(respuesta.status, 'No se pudo cargar la imagen.')
+  }
+  return URL.createObjectURL(await respuesta.blob())
+}
+
 async function pedir(ruta, opciones = {}) {
   const sesion = leerSesion()
   const cabeceras = { ...opciones.headers }
@@ -55,4 +115,10 @@ export const api = {
     pedir(`/productos${busqueda ? `?busqueda=${encodeURIComponent(busqueda)}` : ''}`),
   categorias: () => pedir('/categorias'),
   proveedores: () => pedir('/proveedores'),
+  empresa: () => pedir('/empresa'),
+  subirLogo: (archivo) => subir('/empresa/logo', archivo),
+  subirImagen: (productoId, archivo) => subir(`/productos/${productoId}/imagenes`, archivo),
+  imagenesDe: (productoId) => pedir(`/productos/${productoId}/imagenes`),
+  borrarImagen: (imagenId) => pedir(`/imagenes/${imagenId}`, { method: 'DELETE' }),
+  hacerPrincipal: (imagenId) => pedir(`/imagenes/${imagenId}/principal`, { method: 'POST' }),
 }

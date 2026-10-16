@@ -56,6 +56,24 @@ public class FiltroSesion extends OncePerRequestFilter {
         cadena.doFilter(peticion, respuesta);
     }
 
+    /**
+     * Ejecutarse también cuando la petición acaba en error.
+     *
+     * OncePerRequestFilter se salta el despacho de error por omisión, y
+     * eso convierte cualquier fallo en un 401 engañoso: al fallar algo,
+     * Spring reenvía la petición a /error; como este filtro no corre, el
+     * contexto de seguridad queda vacío —la aplicación es sin estado y no
+     * hay sesión HTTP donde recordarlo— y la cadena responde «no estás
+     * autenticado» en vez del error que de verdad ocurrió.
+     *
+     * El cliente entonces cree que su sesión caducó y echa al usuario, por
+     * un archivo demasiado grande o por una imagen corrupta.
+     */
+    @Override
+    protected boolean shouldNotFilterErrorDispatch() {
+        return false;
+    }
+
     private String extraerToken(HttpServletRequest peticion) {
         String cabecera = peticion.getHeader(HttpHeaders.AUTHORIZATION);
         if (cabecera == null || !cabecera.startsWith(PREFIJO)) {

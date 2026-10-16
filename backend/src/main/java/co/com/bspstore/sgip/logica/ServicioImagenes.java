@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.util.List;
 
 @Service
@@ -22,15 +23,29 @@ public class ServicioImagenes {
     private final ProductoRepositorio productos;
     private final EmpresaRepositorio empresas;
     private final AlmacenArchivos almacen;
+    private final NormalizadorImagenes normalizador;
+
+    /** Lado de la foto de producto, ya recortada a cuadrado. */
+    private static final int LADO_PRODUCTO = 800;
+    /** Cuadro máximo del logo. No se recorta: cabe entero dentro. */
+    private static final int LADO_LOGO = 400;
+    /**
+     * Lado de la miniatura. El catálogo la pinta a unos 44 puntos y la
+     * galería a 120; 240 deja ambas nítidas en una pantalla de densidad
+     * doble y pesa unos 15 KB, frente a los 100 KB de la imagen entera.
+     */
+    private static final int LADO_MINIATURA = 240;
 
     public ServicioImagenes(ProductoImagenRepositorio imagenes,
                             ProductoRepositorio productos,
                             EmpresaRepositorio empresas,
-                            AlmacenArchivos almacen) {
+                            AlmacenArchivos almacen,
+                            NormalizadorImagenes normalizador) {
         this.imagenes = imagenes;
         this.productos = productos;
         this.empresas = empresas;
         this.almacen = almacen;
+        this.normalizador = normalizador;
     }
 
     @Transactional(readOnly = true)
@@ -57,14 +72,26 @@ public class ServicioImagenes {
                             + cuantas + ". Elimina alguna antes de subir otra.");
         }
 
-        // El archivo se guarda antes de insertar la fila: si la escritura
-        // falla, no queda una fila apuntando a un archivo inexistente. Al
-        // revés sí puede quedar un archivo huérfano, que es inofensivo.
-        String ruta = almacen.guardar(archivo, empresa, "productos");
+        // Se normaliza antes de guardar: lo que llega al disco ya mide
+        // igual que todo lo demás. Hacerlo al mostrar arreglaría una sola
+        // pantalla y dejaría al documento exportable con el problema.
+        byte[] original = almacen.leerValidado(archivo);
+        byte[] normalizada = normalizador.cuadrada(original, LADO_PRODUCTO);
+        // La miniatura sale del original y no de la ya reducida: encoger
+        // dos veces acumula el desenfoque de cada interpolación.
+        byte[] miniatura = normalizador.cuadrada(original, LADO_MINIATURA);
+
+        // Los archivos se guardan antes de insertar la fila: si la
+        // escritura falla, no queda una fila apuntando a un archivo
+        // inexistente. Al revés sí puede quedar un archivo huérfano, que
+        // es inofensivo.
+        String ruta = almacen.guardar(normalizada, empresa, "productos");
+        String rutaMiniatura = almacen.guardar(miniatura, empresa, "productos");
 
         boolean esLaPrimera = cuantas == 0;
-        return imagenes.save(new ProductoImagen(empresa, productoId, ruta,
-                (short) (cuantas + 1), esLaPrimera, (int) archivo.getSize()));
+        short siguiente = (short) (imagenes.mayorOrden(empresa, productoId) + 1);
+        return imagenes.save(new ProductoImagen(empresa, productoId, ruta, rutaMiniatura,
+                siguiente, esLaPrimera, normalizada.length));
     }
 
     /**
@@ -88,6 +115,74 @@ public class ServicioImagenes {
         return nueva;
     }
 
+    /**
+     * Borra una imagen: la fila y el archivo.
+     *
+     * Las imágenes sí se eliminan, a diferencia del resto del esquema,
+     * donde nada se borra. Una foto equivocada no es un registro
+     * contable: no hay nada que auditar en ella y dejarla desactivada
+     * solo ocuparía sitio en la galería del producto.
+     *
+     * Si era la principal, otra ocupa su lugar. Un producto con imágenes
+     * pero sin principal no aparecería en el catálogo exportable.
+     */
+    @Transactional
+    public void eliminar(Integer imagenId) {
+        Integer empresa = ContextoEmpresa.empresaActual();
+        ProductoImagen imagen = imagenes.findByEmpresaIdAndId(empresa, imagenId)
+                .orElseThrow(() -> new ReferenciaAjenaException(
+                        "La imagen indicada no existe en esta empresa."));
+
+        boolean eraLaPrincipal = imagen.isPrincipal();
+        Integer productoId = imagen.getProductoId();
+        String ruta = imagen.getRuta();
+        String rutaMiniatura = imagen.getMiniaturaRuta();
+
+        imagenes.delete(imagen);
+        imagenes.flush();   // libera el orden y la marca de principal
+
+        if (eraLaPrincipal) {
+            imagenes.findByEmpresaIdAndProductoIdOrderByOrden(empresa, productoId)
+                    .stream().findFirst()
+                    .ifPresent(ProductoImagen::hacerPrincipal);
+        }
+
+        // Los archivos se borran al final: si algo falla antes, la fila
+        // sigue apuntando a archivos que existen.
+        almacen.borrar(ruta);
+        if (rutaMiniatura != null) {
+            almacen.borrar(rutaMiniatura);
+        }
+    }
+
+    /**
+     * Los bytes de la miniatura de una imagen.
+     *
+     * Las subidas anteriores a la V14 no tienen miniatura guardada, así
+     * que se genera al vuelo desde la imagen completa. No se guarda en
+     * ese momento a propósito: una petición de lectura que escribe en la
+     * base y en el disco es una fuente de sorpresas —dos lectores
+     * simultáneos escribiendo la misma fila, un GET que falla por disco
+     * lleno— y son unas pocas imágenes de antes del cambio. Las nuevas
+     * entran por la rama de arriba, que es la que importa.
+     */
+    @Transactional(readOnly = true)
+    public byte[] miniaturaDe(Integer imagenId) {
+        Integer empresa = ContextoEmpresa.empresaActual();
+        ProductoImagen imagen = imagenes.findByEmpresaIdAndId(empresa, imagenId)
+                .orElseThrow(() -> new ReferenciaAjenaException(
+                        "La imagen indicada no existe en esta empresa."));
+        try {
+            if (imagen.getMiniaturaRuta() != null) {
+                return almacen.leer(imagen.getMiniaturaRuta());
+            }
+            return normalizador.cuadrada(almacen.leer(imagen.getRuta()), LADO_MINIATURA);
+        } catch (IOException e) {
+            throw new ArchivoInvalidoException(
+                    "El archivo de esta imagen no está disponible.");
+        }
+    }
+
     @Transactional
     public Empresa subirLogo(MultipartFile archivo) {
         Integer empresaId = ContextoEmpresa.empresaActual();
@@ -95,7 +190,11 @@ public class ServicioImagenes {
                 .orElseThrow(() -> new IllegalStateException(
                         "La sesión apunta a una empresa que no existe: " + empresaId));
 
-        empresa.cambiarLogo(almacen.guardar(archivo, empresaId, "logo"));
+        // El logo se ajusta, no se recorta: cortarlo le quitaría el nombre
+        // a media empresa, y muchos son alargados.
+        byte[] normalizado = normalizador.ajustada(
+                almacen.leerValidado(archivo), LADO_LOGO);
+        empresa.cambiarLogo(almacen.guardar(normalizado, empresaId, "logo"));
         return empresa;
     }
 

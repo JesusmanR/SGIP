@@ -68,3 +68,58 @@ td.numero, th.numero { text-align: right; font-variant-numeric: tabular-nums; }
 
 /* Segunda línea bajo el nombre del producto: código y, si difiere, SKU. */
 .sub-linea { display: block; font-size: .78rem; color: var(--tinta-3); margin-top: .15rem; }
+
+/* ── Imágenes ──────────────────────────────────────────────────────── */
+.col-imagen { width: 56px; }
+.oculto {
+  /* Visible para un lector de pantalla, no en la página: la columna no
+     necesita rótulo a la vista pero sí tiene que tener nombre. */
+  position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip-path: inset(50%); white-space: nowrap;
+}
+
+.casilla-imagen {
+  width: 44px; height: 44px; padding: 0; overflow: hidden;
+  border: 1px dashed var(--borde-control); border-radius: 6px;
+  background: var(--lienzo); display: grid; place-items: center;
+}
+.casilla-imagen.redondo { width: 72px; height: 72px; border-radius: 50%; }
+.casilla-imagen img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.casilla-imagen .pista { color: var(--tinta-3); font-size: 1.1rem; }
+.casilla-imagen:disabled { cursor: default; border-style: solid; }
+.casilla-imagen:focus-visible { outline: 3px solid var(--acento-sutil); border-color: var(--acento); }
+
+.barra a { color: #fff; text-decoration: none; opacity: .85; }
+.barra a:hover, .barra a:focus-visible { opacity: 1; text-decoration: underline; }
+
+.fila-logo { display: flex; gap: 1.25rem; align-items: center; }
+.titulo-empresa { margin: 0 0 .25rem; font-size: 1.1rem; font-weight: 600; }
+
+/* ── Galería de imágenes ───────────────────────────────────────────── */
+.velo {
+  position: fixed; inset: 0; z-index: 10; padding: 1rem;
+  background: rgba(22, 40, 62, .45);
+  display: grid; place-items: center;
+}
+.panel { max-width: 640px; width: 100%; max-height: 90vh; overflow: auto; }
+.panel-cabecera { display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem; }
+.panel-cabecera h3 { margin: 0; font-size: 1.1rem; flex: 1; }
+
+.panel-acciones {
+  display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; margin-bottom: 1rem;
+}
+
+.galeria { list-style: none; margin: 0 0 1rem; padding: 0; display: flex; flex-wrap: wrap; gap: 1rem; }
+.galeria li {
+  display: flex; flex-direction: column; gap: .4rem; align-items: center;
+  width: 136px; padding: .6rem; border: 1px solid var(--borde); border-radius: 8px;
+}
+.galeria li.principal { border-color: var(--acento); }
+.casilla-imagen.grande { width: 120px; height: 120px; }
+
+.boton.menudo { padding: .3rem .6rem; font-size: .78rem; width: 100%; }
+
+.enlace {
+  background: none; border: 0; padding: 0; font: inherit;
+  color: var(--acento); text-decoration: underline; cursor: pointer;
+}

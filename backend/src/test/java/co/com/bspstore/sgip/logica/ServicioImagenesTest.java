@@ -32,6 +32,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -42,6 +43,7 @@ class ServicioImagenesTest {
     @Mock ProductoRepositorio productos;
     @Mock EmpresaRepositorio empresas;
     @Mock AlmacenArchivos almacen;
+    @Mock NormalizadorImagenes normalizador;
     @InjectMocks ServicioImagenes servicio;
 
     @AfterEach
@@ -70,7 +72,11 @@ class ServicioImagenesTest {
         comoEmpresa(3);
         productoPropio();
         when(imagenes.countByEmpresaIdAndProductoId(3, 11)).thenReturn(0);
-        when(almacen.guardar(any(), eq(3), eq("productos"))).thenReturn("empresa-3/productos/a.jpg");
+        when(imagenes.mayorOrden(3, 11)).thenReturn((short) 0);
+        when(almacen.leerValidado(any())).thenReturn(new byte[]{1, 2, 3});
+        when(normalizador.cuadrada(any(), anyInt())).thenReturn(new byte[]{9, 9});
+        when(almacen.guardar(any(byte[].class), eq(3), eq("productos")))
+                .thenReturn("empresa-3/productos/a.jpg");
         when(imagenes.save(any())).thenAnswer(i -> i.getArgument(0));
 
         servicio.subirDeProducto(11, imagen());
@@ -86,7 +92,11 @@ class ServicioImagenesTest {
         comoEmpresa(3);
         productoPropio();
         when(imagenes.countByEmpresaIdAndProductoId(3, 11)).thenReturn(1);
-        when(almacen.guardar(any(), anyInt(), any())).thenReturn("empresa-3/productos/b.jpg");
+        when(imagenes.mayorOrden(3, 11)).thenReturn((short) 1);
+        when(almacen.leerValidado(any())).thenReturn(new byte[]{1, 2, 3});
+        when(normalizador.cuadrada(any(), anyInt())).thenReturn(new byte[]{9, 9});
+        when(almacen.guardar(any(byte[].class), anyInt(), any()))
+                .thenReturn("empresa-3/productos/b.jpg");
         when(imagenes.save(any())).thenAnswer(i -> i.getArgument(0));
 
         servicio.subirDeProducto(11, imagen());
@@ -106,7 +116,7 @@ class ServicioImagenesTest {
         when(imagenes.countByEmpresaIdAndProductoId(3, 11)).thenReturn(5);
 
         assertThrows(ArchivoInvalidoException.class, () -> servicio.subirDeProducto(11, imagen()));
-        verify(almacen, never()).guardar(any(), anyInt(), any());
+        verify(almacen, never()).leerValidado(any());
         verify(imagenes, never()).save(any());
     }
 
@@ -116,7 +126,7 @@ class ServicioImagenesTest {
         when(productos.findByEmpresaIdAndId(3, 11)).thenReturn(Optional.empty());
 
         assertThrows(ReferenciaAjenaException.class, () -> servicio.subirDeProducto(11, imagen()));
-        verify(almacen, never()).guardar(any(), anyInt(), any());
+        verify(almacen, never()).leerValidado(any());
     }
 
     @Test
@@ -124,12 +134,151 @@ class ServicioImagenesTest {
         comoEmpresa(3);
         productoPropio();
         when(imagenes.countByEmpresaIdAndProductoId(3, 11)).thenReturn(0);
-        when(almacen.guardar(any(), eq(3), eq("productos"))).thenReturn("empresa-3/productos/a.jpg");
+        when(imagenes.mayorOrden(3, 11)).thenReturn((short) 0);
+        when(almacen.leerValidado(any())).thenReturn(new byte[]{1, 2, 3});
+        when(normalizador.cuadrada(any(), anyInt())).thenReturn(new byte[]{9, 9});
+        when(almacen.guardar(any(byte[].class), eq(3), eq("productos")))
+                .thenReturn("empresa-3/productos/a.jpg");
         when(imagenes.save(any())).thenAnswer(i -> i.getArgument(0));
 
         servicio.subirDeProducto(11, imagen());
 
-        verify(almacen).guardar(any(), eq(3), eq("productos"));
+        // Dos: la imagen y su miniatura, las dos bajo la misma empresa.
+        verify(almacen, times(2)).guardar(any(byte[].class), eq(3), eq("productos"));
+    }
+
+    @Test
+    void elOrdenSaleDelMaximoYNoDelConteo() {
+        // Con cuatro imagenes de las que se borro una intermedia, el
+        // conteo dice 3 y el maximo 4. Numerar por el conteo chocaria
+        // contra uq_producto_imagenes_orden.
+        comoEmpresa(3);
+        productoPropio();
+        when(imagenes.countByEmpresaIdAndProductoId(3, 11)).thenReturn(3);
+        when(imagenes.mayorOrden(3, 11)).thenReturn((short) 4);
+        when(almacen.leerValidado(any())).thenReturn(new byte[]{1, 2, 3});
+        when(normalizador.cuadrada(any(), anyInt())).thenReturn(new byte[]{9, 9});
+        when(almacen.guardar(any(byte[].class), anyInt(), any()))
+                .thenReturn("empresa-3/productos/e.jpg");
+        when(imagenes.save(any())).thenAnswer(i -> i.getArgument(0));
+
+        servicio.subirDeProducto(11, imagen());
+
+        ArgumentCaptor<ProductoImagen> captor = ArgumentCaptor.forClass(ProductoImagen.class);
+        verify(imagenes).save(captor.capture());
+        assertEquals(5, captor.getValue().getOrden());
+    }
+
+    @Test
+    void borrarQuitaLaFilaYElArchivo() {
+        comoEmpresa(3);
+        var imagen = new ProductoImagen(3, 11, "empresa-3/productos/a.jpg",
+                "empresa-3/productos/a-mini.jpg", (short) 1, false, 100);
+        when(imagenes.findByEmpresaIdAndId(3, 55)).thenReturn(Optional.of(imagen));
+
+        servicio.eliminar(55);
+
+        verify(imagenes).delete(imagen);
+        verify(almacen).borrar("empresa-3/productos/a.jpg");
+        // La miniatura también: dejarla sería basura en disco que nadie
+        // va a volver a nombrar.
+        verify(almacen).borrar("empresa-3/productos/a-mini.jpg");
+    }
+
+    @Test
+    void seGuardaUnaMiniaturaJuntoACadaImagen() {
+        // La miniatura existe para que el catálogo no descargue 800×800
+        // para pintar cuarenta puntos, y sobre todo para que tenga
+        // dirección propia: la de «la principal del producto» cambiaba de
+        // contenido sin cambiar de nombre, y la caché servía la anterior.
+        comoEmpresa(3);
+        productoPropio();
+        byte[] original = {1, 2, 3};
+        when(imagenes.countByEmpresaIdAndProductoId(3, 11)).thenReturn(0);
+        when(imagenes.mayorOrden(3, 11)).thenReturn((short) 0);
+        when(almacen.leerValidado(any())).thenReturn(original);
+        when(normalizador.cuadrada(any(), eq(800))).thenReturn(new byte[]{9, 9, 9, 9});
+        when(normalizador.cuadrada(any(), eq(240))).thenReturn(new byte[]{7});
+        when(almacen.guardar(any(byte[].class), anyInt(), any()))
+                .thenReturn("empresa-3/productos/a.jpg", "empresa-3/productos/a-mini.jpg");
+        when(imagenes.save(any())).thenAnswer(i -> i.getArgument(0));
+
+        servicio.subirDeProducto(11, imagen());
+
+        ArgumentCaptor<ProductoImagen> captor = ArgumentCaptor.forClass(ProductoImagen.class);
+        verify(imagenes).save(captor.capture());
+        assertEquals("empresa-3/productos/a.jpg", captor.getValue().getRuta());
+        assertEquals("empresa-3/productos/a-mini.jpg", captor.getValue().getMiniaturaRuta());
+        // El peso que se registra es el de la imagen, no el de la miniatura.
+        assertEquals(4, captor.getValue().getBytes().intValue());
+    }
+
+    @Test
+    void laMiniaturaSaleDelOriginalYNoDeLaYaReducida() {
+        // Encoger dos veces acumula el desenfoque de cada interpolación.
+        comoEmpresa(3);
+        productoPropio();
+        byte[] original = {1, 2, 3};
+        when(imagenes.countByEmpresaIdAndProductoId(3, 11)).thenReturn(0);
+        when(imagenes.mayorOrden(3, 11)).thenReturn((short) 0);
+        when(almacen.leerValidado(any())).thenReturn(original);
+        when(normalizador.cuadrada(any(), anyInt())).thenReturn(new byte[]{9});
+        when(almacen.guardar(any(byte[].class), anyInt(), any())).thenReturn("x.jpg");
+        when(imagenes.save(any())).thenAnswer(i -> i.getArgument(0));
+
+        servicio.subirDeProducto(11, imagen());
+
+        verify(normalizador).cuadrada(original, 800);
+        verify(normalizador).cuadrada(original, 240);
+    }
+
+    @Test
+    void unaImagenAnteriorALaV14ConstruyeSuMiniaturaAlVuelo() throws java.io.IOException {
+        // Las filas de antes no tienen miniatura_ruta. Se genera al
+        // mostrarla en vez de rellenarlas con un proceso aparte, y no se
+        // guarda: una petición de lectura que escribe trae más problemas
+        // de los que ahorra, y son unas pocas imágenes.
+        comoEmpresa(3);
+        var vieja = new ProductoImagen(3, 11, "empresa-3/productos/vieja.jpg",
+                null, (short) 1, true, 100);
+        when(imagenes.findByEmpresaIdAndId(3, 55)).thenReturn(Optional.of(vieja));
+        when(almacen.leer("empresa-3/productos/vieja.jpg")).thenReturn(new byte[]{1, 2, 3});
+        when(normalizador.cuadrada(any(), eq(240))).thenReturn(new byte[]{7, 7});
+
+        assertEquals(2, servicio.miniaturaDe(55).length);
+        verify(almacen, never()).guardar(any(byte[].class), anyInt(), any());
+    }
+
+    @Test
+    void laMiniaturaDeOtraEmpresaNoSeSirve() {
+        comoEmpresa(3);
+        when(imagenes.findByEmpresaIdAndId(3, 55)).thenReturn(Optional.empty());
+
+        assertThrows(ReferenciaAjenaException.class, () -> servicio.miniaturaDe(55));
+    }
+
+    @Test
+    void alBorrarLaPrincipalOtraOcupaSuLugar() {
+        // Un producto con imagenes pero sin principal no aparece en el
+        // catalogo exportable.
+        comoEmpresa(3);
+        var principal = new ProductoImagen(3, 11, "a.jpg", "a-mini.jpg", (short) 1, true, 100);
+        var otra = new ProductoImagen(3, 11, "b.jpg", "b-mini.jpg", (short) 2, false, 100);
+        when(imagenes.findByEmpresaIdAndId(3, 55)).thenReturn(Optional.of(principal));
+        when(imagenes.findByEmpresaIdAndProductoIdOrderByOrden(3, 11)).thenReturn(List.of(otra));
+
+        servicio.eliminar(55);
+
+        assertTrue(otra.isPrincipal());
+    }
+
+    @Test
+    void noSePuedeBorrarLaImagenDeOtraEmpresa() {
+        comoEmpresa(3);
+        when(imagenes.findByEmpresaIdAndId(3, 55)).thenReturn(Optional.empty());
+
+        assertThrows(ReferenciaAjenaException.class, () -> servicio.eliminar(55));
+        verify(almacen, never()).borrar(any());
     }
 
     @Test
@@ -137,10 +286,12 @@ class ServicioImagenesTest {
         comoEmpresa(3);
         when(empresas.findById(3)).thenReturn(
                 Optional.of(mock(co.com.bspstore.sgip.modelo.Empresa.class)));
-        when(almacen.guardar(any(), eq(3), eq("logo"))).thenReturn("empresa-3/logo/a.png");
+        when(almacen.leerValidado(any())).thenReturn(new byte[]{1, 2, 3});
+        when(normalizador.ajustada(any(), anyInt())).thenReturn(new byte[]{9, 9});
+        when(almacen.guardar(any(byte[].class), eq(3), eq("logo"))).thenReturn("empresa-3/logo/a.png");
 
         servicio.subirLogo(imagen());
 
-        verify(almacen).guardar(any(), eq(3), eq("logo"));
+        verify(almacen).guardar(any(byte[].class), eq(3), eq("logo"));
     }
 }

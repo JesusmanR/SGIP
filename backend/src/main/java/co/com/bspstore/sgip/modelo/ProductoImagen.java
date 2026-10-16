@@ -36,6 +36,14 @@ public class ProductoImagen {
     @Column(name = "ruta", nullable = false, length = 255)
     private String ruta;
 
+    /**
+     * La versión pequeña, para el recuadro del catálogo. Admite nulo
+     * porque las imágenes anteriores a la V14 no la tienen; en ese caso
+     * la aplicación la genera al vuelo desde {@link #ruta}.
+     */
+    @Column(name = "miniatura_ruta", length = 255)
+    private String miniaturaRuta;
+
     // La columna es TINYINT y un short de Java se mapea a SMALLINT: sin
     // esto, la validación de esquema al arrancar se queja del tipo.
     @JdbcTypeCode(SqlTypes.TINYINT)
@@ -56,10 +64,12 @@ public class ProductoImagen {
     }
 
     public ProductoImagen(Integer empresaId, Integer productoId, String ruta,
-                          short orden, boolean principal, Integer bytes) {
+                          String miniaturaRuta, short orden, boolean principal,
+                          Integer bytes) {
         this.empresaId = empresaId;
         this.productoId = productoId;
         this.ruta = ruta;
+        this.miniaturaRuta = miniaturaRuta;
         this.orden = orden;
         this.principal = principal;
         this.bytes = bytes;
@@ -77,6 +87,7 @@ public class ProductoImagen {
     public Integer getEmpresaId() { return empresaId; }
     public Integer getProductoId() { return productoId; }
     public String getRuta() { return ruta; }
+    public String getMiniaturaRuta() { return miniaturaRuta; }
     public short getOrden() { return orden; }
     public boolean isPrincipal() { return principal; }
     public Integer getBytes() { return bytes; }

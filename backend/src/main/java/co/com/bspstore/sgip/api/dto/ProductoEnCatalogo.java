@@ -21,6 +21,15 @@ import java.math.BigDecimal;
  * estadoStock · lo clasifica el motor de base de datos como columna
  * generada, no la aplicación, de modo que no puede desincronizarse de la
  * existencia real.
+ *
+ * imagenPrincipalId · cuál es la imagen principal, para que el cliente
+ * pida su miniatura por una dirección que no cambia de contenido a
+ * espaldas de nadie. Es el identificador, nunca la ruta: la organización
+ * interna de las carpetas no sale al exterior y no hay ninguna cadena
+ * del cliente que llegue al sistema de archivos.
+ *
+ * tieneImagen · lo mismo en forma de sí o no, que es lo que la tabla
+ * necesita para decidir si ofrece «ver» o «añadir» imágenes.
  */
 public record ProductoEnCatalogo(
         Integer productoId,
@@ -41,5 +50,6 @@ public record ProductoEnCatalogo(
         BigDecimal totalContado,
         Integer tributacionSinConfigurar,
         Integer cercaUmbral,
-        String imagenPrincipal
+        Integer imagenPrincipalId,
+        Integer tieneImagen
 ) {}

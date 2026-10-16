@@ -6,12 +6,13 @@ spring:
     url: jdbc:mysql://${SGIP_BD_HOST:localhost}:${SGIP_BD_PUERTO:3306}/sgip?useSSL=true&serverTimezone=America/Bogota
     username: ${SGIP_BD_USUARIO}
     password: ${SGIP_BD_CLAVE}
-  servlet:
-    multipart:
-      # Sin esto Spring admite 1 MB por archivo y rechazaría imágenes que
-      # el propio sgip.archivos.bytes-maximos sí admite.
-      max-file-size: 2MB
-      max-request-size: 4MB
+  # Los límites de subida NO están aquí: los fija ConfiguracionSubidas a
+  # partir del tope de AlmacenArchivos. Estaban en este archivo, que no
+  # se versiona, y eso tenía dos consecuencias malas: cambiarlos no
+  # llegaba a las demás máquinas con un «git pull», y eran tres números
+  # que había que mantener de acuerdo a mano. Cualquier
+  # spring.servlet.multipart.* que quede en un application.yml viejo ya
+  # no tiene efecto.
   jpa:
     hibernate:
       ddl-auto: validate      # El esquema lo gobiernan las migraciones, no Hibernate.
@@ -28,7 +29,10 @@ sgip:
     # Carpeta donde se guardan las imágenes. Relativa a donde se arranca
     # la aplicación, o absoluta si se prefiere fuera del proyecto.
     raiz: ${SGIP_ARCHIVOS_RAIZ:archivos}
-    bytes-maximos: 2097152      # 2 MB por imagen
+    # bytes-maximos ya no se configura: el tope está en
+    # AlmacenArchivos.BYTES_MAXIMOS, del que se derivan los de multipart.
+    # Lo que se guarda no mide eso de todos modos, porque la imagen se
+    # normaliza antes de tocar el disco.
   facturacion:
     proveedor-url: ${SGIP_FE_URL:}
     proveedor-token: ${SGIP_FE_TOKEN:}

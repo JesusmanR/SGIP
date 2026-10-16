@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { api, ErrorApi } from './api.js'
+import { api, ErrorApi, imagenAutenticada } from './api.js'
 import { guardarSesion, haySesion } from './sesion.js'
 
 describe('cliente del API', () => {
@@ -58,9 +58,85 @@ describe('cliente del API', () => {
     expect(ruta).toBe('/api/v1/productos?busqueda=arroz%20%26%20panela')
   })
 
+  it('la subida no fija Content-Type', async () => {
+    // Con FormData lo pone el navegador, y tiene que incluir el boundary
+    // que separa las partes. Escribirlo a mano rompe la peticion y el
+    // servidor responde que no llego ningun archivo.
+    guardarSesion({ token: 'abc', nombre: 'Ana' })
+    responder(200, { id: 1 })
+    await api.subirLogo(new File(['x'], 'logo.png', { type: 'image/png' }))
+
+    const [, opciones] = global.fetch.mock.calls[0]
+    expect(opciones.headers['Content-Type']).toBeUndefined()
+    expect(opciones.headers.Authorization).toBe('Bearer abc')
+    expect(opciones.body).toBeInstanceOf(FormData)
+  })
+
+  it('la subida manda el archivo bajo el nombre que espera el backend', async () => {
+    responder(200, {})
+    const archivo = new File(['x'], 'foto.jpg', { type: 'image/jpeg' })
+    await api.subirImagen(11, archivo)
+
+    const [ruta, opciones] = global.fetch.mock.calls[0]
+    expect(ruta).toBe('/api/v1/productos/11/imagenes')
+    expect(opciones.body.get('archivo')).toBe(archivo)
+  })
+
+  it('un error de subida muestra el detalle del backend', async () => {
+    responder(400, { detail: 'Solo se admiten imagenes JPEG, PNG o WebP.' })
+    await expect(api.subirLogo(new File(['x'], 'a.txt'))).rejects
+      .toThrow('Solo se admiten imagenes JPEG, PNG o WebP.')
+  })
+
+  it('un 401 en la subida tambien cierra la sesion', async () => {
+    guardarSesion({ token: 'caducado', nombre: 'Ana' })
+    responder(401, {})
+    await expect(api.subirLogo(new File(['x'], 'a.png'))).rejects.toBeInstanceOf(ErrorApi)
+    expect(haySesion()).toBe(false)
+  })
+
   it('un 204 no intenta leer cuerpo', async () => {
     guardarSesion({ token: 'abc', nombre: 'Ana' })
     global.fetch.mockResolvedValue({ ok: true, status: 204 })
     await expect(api.salir()).resolves.toBeNull()
+  })
+})
+
+describe('imágenes protegidas', () => {
+  beforeEach(() => {
+    sessionStorage.clear()
+    global.fetch = vi.fn()
+    global.URL.createObjectURL = vi.fn(() => 'blob:falsa')
+  })
+  afterEach(() => { vi.restoreAllMocks() })
+
+  it('pide la imagen con la cabecera de autorización', async () => {
+    // Una etiqueta <img> no la manda, y por eso el backend la rechazaba.
+    guardarSesion({ token: 'abc123', nombre: 'Ana' })
+    global.fetch.mockResolvedValue({ ok: true, status: 200, blob: async () => new Blob(['x']) })
+
+    const url = await imagenAutenticada('/api/v1/productos/6/imagen')
+
+    const [ruta, opciones] = global.fetch.mock.calls[0]
+    expect(ruta).toBe('/api/v1/productos/6/imagen')
+    expect(opciones.headers.Authorization).toBe('Bearer abc123')
+    expect(url).toBe('blob:falsa')
+  })
+
+  it('un 401 al cargar una imagen NO cierra la sesion', async () => {
+    // Echar al usuario por una miniatura rota es peor que la miniatura
+    // rota. La sesion la gobiernan las llamadas de datos, no las imagenes.
+    guardarSesion({ token: 'abc123', nombre: 'Ana' })
+    global.fetch.mockResolvedValue({ ok: false, status: 401 })
+
+    await expect(imagenAutenticada('/api/v1/empresa/logo')).rejects.toBeInstanceOf(ErrorApi)
+    expect(haySesion()).toBe(true)
+  })
+
+  it('una imagen que el servidor niega lanza error en vez de devolver una URL rota', async () => {
+    global.fetch.mockResolvedValue({ ok: false, status: 401 })
+
+    await expect(imagenAutenticada('/api/v1/productos/6/imagen')).rejects.toBeInstanceOf(ErrorApi)
+    expect(global.URL.createObjectURL).not.toHaveBeenCalled()
   })
 })
