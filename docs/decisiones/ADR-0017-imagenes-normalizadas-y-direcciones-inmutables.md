@@ -144,3 +144,15 @@ situación que hoy el esquema impide —una fila de imagen de otra empresa
 con el mismo `producto_id`, insertada con las claves foráneas
 desactivadas— y comprueba que la vista no la devuelve: con la definición
 anterior esa comprobación falla, que es lo que la hace valer.
+
+**Nota posterior (17 de octubre de 2026) · dónde vive cada tope.** La
+V12 había sembrado en `parametros` un tope de 5 MB por imagen y un
+máximo de cinco imágenes por producto. Ninguno de los dos se leía, y el
+primero contradecía al código desde que esta decisión fijó el tope en
+10 MB. La V16 los retira. El motivo no es que el código deba ganarle a
+la configuración, sino que `parametros` lleva `empresa_id` y ninguno de
+los dos topes puede ser por empresa: el de bytes lo aplica el
+contenedor con una configuración de multipart que se construye al
+arrancar y rige para toda petición, y el de imágenes lo hace cumplir
+una restricción del esquema. Un valor por empresa no puede gobernar
+algo que no distingue empresas.

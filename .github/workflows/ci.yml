@@ -58,7 +58,8 @@ jobs:
                    V12__configuracion_tributaria_por_empresa \
                    V13__logo_de_empresa \
                    V14__miniatura_de_imagen \
-                   V15__vista_de_precios_acotada_por_empresa; do
+                   V15__vista_de_precios_acotada_por_empresa \
+                   V16__retirar_parametros_de_imagen; do
             echo "→ $f"
             mysql -h 127.0.0.1 -u root -psgip_ci sgip < "database/migrations/$f.sql"
           done
@@ -154,7 +155,8 @@ jobs:
                    V12__configuracion_tributaria_por_empresa \
                    V13__logo_de_empresa \
                    V14__miniatura_de_imagen \
-                   V15__vista_de_precios_acotada_por_empresa; do
+                   V15__vista_de_precios_acotada_por_empresa \
+                   V16__retirar_parametros_de_imagen; do
             mysql -h 127.0.0.1 -u root -psgip_ci sgip < "database/migrations/$f.sql"
           done
 
