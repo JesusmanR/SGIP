@@ -9,6 +9,14 @@ on:
   pull_request:
     branches: [main, develop]
 
+# Una rama con solicitud de incorporación abierta dispara dos veces: una
+# por el envío y otra por la solicitud. Agrupar por nombre de rama deja
+# viva solo la ejecución más reciente, que es la única que informa sobre
+# el estado actual del código.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   esquema:
     name: Migraciones de base de datos
