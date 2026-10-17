@@ -363,3 +363,36 @@ MySQL:
 
 El resto del lenguaje de definición de datos es común a los dos motores.
 Aun así, aplícala en tu entorno antes de darla por buena.
+
+## Anotado para el módulo de ventas
+
+Una pregunta que el esquema deja abierta a propósito y que la lógica de
+Java tendrá que responder cuando se construyan las ventas.
+
+En `cotizaciones` y `ventas`, el total es una columna generada:
+`subtotal - descuento + iva + envio`. En `cotizacion_items` y
+`venta_items`, el `valor_iva` de cada línea se calcula sobre
+`cantidad * precio_unitario * tarifa_iva`, sin restar el descuento de
+cabecera.
+
+En Colombia eso puede estar bien o mal según qué sea ese descuento. Los
+descuentos condicionados no afectan la base del impuesto; los
+descuentos comerciales a pie de factura sí la reducen, y de forma
+proporcional. Con la aritmética actual, un descuento comercial deja el
+impuesto calculado sobre una base mayor que la que la factura declara.
+
+El esquema no decide cuál de los dos es, y no debería: son dos figuras
+distintas y el usuario que registra la venta es quien lo sabe. Lo que
+hay que resolver al construir el módulo es una de estas dos vías, y
+dejarla escrita:
+
+1. Distinguir las dos clases de descuento en la cabecera y, para el
+   comercial, recalcular el impuesto sobre la base ya rebajada.
+2. Documentar que el campo `descuento` es siempre condicionado —menor
+   valor a pagar, sin efecto sobre la base— y ofrecer el descuento
+   comercial únicamente en la línea, donde el `precio_unitario` ya lo
+   incorpora.
+
+La segunda es más simple y hay que decirla en la pantalla, o alguien
+registrará un descuento comercial en la cabecera y la factura saldrá con
+el impuesto de más.
