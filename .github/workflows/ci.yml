@@ -2,9 +2,29 @@ name: Integración continua
 
 on:
   push:
-    branches: [main, develop, 'feature/**']
+    # Las ramas de corrección y de mantenimiento se quedaban fuera: una
+    # rama fix/** no ejecutaba nada hasta que se abría la solicitud de
+    # incorporación, que es justo cuando ya es tarde para enterarse.
+    branches: [main, develop, 'feature/**', 'fix/**', 'chore/**']
   pull_request:
     branches: [main, develop]
+
+# Cancela las ejecuciones que un envío posterior ya dejó obsoletas: si se
+# empuja dos veces seguidas, la primera no informa de nada.
+#
+# El evento forma parte de la clave a propósito. Una rama con solicitud
+# de incorporación abierta se ejecuta dos veces, por el envío y por la
+# solicitud, y las dos comprueban cosas distintas: el envío comprueba la
+# rama, y la solicitud comprueba el resultado de fusionarla con su base,
+# que es donde aparece lo que la rama no puede ver. Dos ramas que tocan
+# el mismo archivo pasan cada una por su lado y chocan al fusionar.
+#
+# Sin el evento en la clave, una cancelaba a la otra, la cancelada
+# quedaba registrada como no satisfactoria y la solicitud aparecía en
+# estado «unstable» aunque todo estuviera en verde.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
 
 jobs:
   esquema:

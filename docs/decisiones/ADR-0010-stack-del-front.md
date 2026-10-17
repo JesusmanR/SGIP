@@ -72,3 +72,14 @@ es Electron o Tauri. Se elige por el lenguaje compartido con el móvil,
 pero conviene validarlo temprano con un prototipo que cobre una venta
 sin conexión. Si el soporte de escritorio resulta frágil, la decisión a
 revisar es esta y no la arquitectura.
+
+## Nota posterior
+
+La decisión sigue vigente: el front web se construye en React y los
+clientes de escritorio y móvil en React Native.
+
+Lo que quedó desactualizado es la frase «el backend no cambia: Java 17
+con Spring Boot 3». El esqueleto del backend se generó con Spring Boot
+4.1 y Java 25, que eran las versiones vigentes ese día, y el proyecto
+lleva desde su primer commit corriendo sobre ellas. El **ADR-0018**
+registra esas versiones como decisión y explica por qué no se revierten.
