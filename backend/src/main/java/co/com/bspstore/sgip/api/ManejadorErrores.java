@@ -10,6 +10,8 @@ import co.com.bspstore.sgip.logica.ArchivoInvalidoException;
 import co.com.bspstore.sgip.logica.NombreRepetidoException;
 import co.com.bspstore.sgip.logica.RegistroRepetidoException;
 import co.com.bspstore.sgip.logica.ReferenciaAjenaException;
+import co.com.bspstore.sgip.logica.RolNoAsignableException;
+import co.com.bspstore.sgip.logica.UltimoAdministradorException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -54,6 +56,27 @@ public class ManejadorErrores {
         // puede corregirla con lo que el detalle le dice.
         ProblemDetail p = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
         p.setTitle("Dato tributario inválido");
+        p.setDetail(e.getMessage());
+        return p;
+    }
+
+    @ExceptionHandler(RolNoAsignableException.class)
+    public ProblemDetail rolNoAsignable(RolNoAsignableException e) {
+        // 403 y no 400: el cuerpo está bien y el rol existe. Lo que no
+        // existe es el permiso para repartirlo.
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.FORBIDDEN);
+        p.setTitle("Rol fuera de tu alcance");
+        p.setDetail(e.getMessage());
+        return p;
+    }
+
+    @ExceptionHandler(UltimoAdministradorException.class)
+    public ProblemDetail ultimoAdministrador(UltimoAdministradorException e) {
+        // 409: la petición es válida y el estado actual es lo que impide
+        // atenderla. Con otro administrador activo, la misma petición
+        // funciona.
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.CONFLICT);
+        p.setTitle("La empresa quedaría sin administrador");
         p.setDetail(e.getMessage());
         return p;
     }

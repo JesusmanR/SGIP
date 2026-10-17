@@ -3,6 +3,7 @@ package co.com.bspstore.sgip.datos;
 import co.com.bspstore.sgip.modelo.Usuario;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface UsuarioRepositorio extends JpaRepository<Usuario, Integer> {
@@ -22,4 +23,18 @@ public interface UsuarioRepositorio extends JpaRepository<Usuario, Integer> {
      * a la tabla de usuarios.
      */
     Optional<Usuario> findByIdAndEmpresaId(Integer id, Integer empresaId);
+
+    /** Los usuarios del propio negocio, activos y desactivados (RF-12). */
+    List<Usuario> findByEmpresaIdOrderByNombre(Integer empresaId);
+
+    /**
+     * Cuántos administradores activos le quedan a una empresa.
+     *
+     * Existe para no dejarla sin ninguno. Una empresa cuyo último
+     * administrador se desactiva queda sin nadie que pueda crear
+     * usuarios, porque eso es cosa de su administrador y el super
+     * administrador no entra en los comercios (RN-17): haría falta
+     * intervenir la base a mano.
+     */
+    long countByEmpresaIdAndRol_NombreAndActivoTrue(Integer empresaId, String rol);
 }
