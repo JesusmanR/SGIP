@@ -123,3 +123,51 @@ td.numero, th.numero { text-align: right; font-variant-numeric: tabular-nums; }
   background: none; border: 0; padding: 0; font: inherit;
   color: var(--acento); text-decoration: underline; cursor: pointer;
 }
+
+/* ── Filtros del catálogo (RF-16) ───────────────────────────────────
+   Los cuatro controles en una fila que se parte sola en pantallas
+   estrechas. El buscador es el que más texto recibe, de modo que se
+   lleva el espacio sobrante. */
+.filtros {
+  display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-end;
+  margin-bottom: 1rem;
+}
+.filtros .campo { margin-bottom: 0; flex: 0 1 11rem; }
+.filtros .campo:first-child { flex: 1 1 16rem; }
+.filtros .enlace { padding-bottom: .6rem; }
+
+/* Un select tiene que verse igual que un input: si no, la fila de
+   filtros parece hecha de piezas de dos sistemas distintos. */
+.campo select {
+  width: 100%; padding: .6rem .75rem; font-size: .95rem;
+  border: 1px solid var(--borde-control); border-radius: 6px;
+  background: var(--tarjeta); color: var(--tinta);
+}
+.campo select:focus-visible { outline: 3px solid var(--acento-sutil); border-color: var(--acento); }
+
+/* El título y el botón de categorías comparten línea. */
+.titulo-fila { display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem; }
+.titulo-fila h2 { margin: 0; flex: 1; }
+
+/* Columna de acciones: no se estira y no parte sus botones. */
+td.acciones, th.acciones { white-space: nowrap; text-align: right; }
+td.acciones .boton { margin-left: .4rem; }
+
+/* Dos campos por fila dentro de un panel, uno solo si no caben. */
+.rejilla { display: flex; flex-wrap: wrap; gap: 0 1rem; }
+.rejilla .campo { flex: 1 1 14rem; }
+
+/* Un botón de enlace deshabilitado no debe parecer pulsable. */
+.enlace:disabled { color: var(--bruma); text-decoration: none; cursor: not-allowed; }
+
+/* Un input suelto dentro de una fila de acciones —el de «categoría
+   nueva»— no estaba dentro de un .campo y por eso salía sin el mismo
+   borde ni el mismo alto que el resto de los controles. */
+.panel-acciones input[type="text"], .panel-acciones input:not([type]) {
+  flex: 1 1 14rem; padding: .6rem .75rem; font-size: .95rem;
+  border: 1px solid var(--borde-control); border-radius: 6px;
+  background: var(--tarjeta); color: var(--tinta);
+}
+.panel-acciones input:focus-visible {
+  outline: 3px solid var(--acento-sutil); border-color: var(--acento);
+}

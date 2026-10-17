@@ -108,12 +108,34 @@ async function pedir(ruta, opciones = {}) {
   return respuesta.json()
 }
 
+/**
+ * Arma la cadena de consulta descartando lo que no se eligió.
+ *
+ * Mandar `categoria=` vacío no es lo mismo que no mandarla: el backend
+ * recibiría una cadena en lugar de nulo y el filtro dejaría de anularse
+ * a sí mismo. Se descartan nulo, indefinido y cadena vacía; el cero no,
+ * porque es un identificador válido en otras consultas.
+ */
+function consulta(parametros) {
+  const partes = Object.entries(parametros)
+    .filter(([, valor]) => valor !== null && valor !== undefined && valor !== '')
+    .map(([clave, valor]) => `${clave}=${encodeURIComponent(valor)}`)
+  return partes.length === 0 ? '' : `?${partes.join('&')}`
+}
+
 export const api = {
   entrar: (correo, clave) => pedir('/auth/login', { method: 'POST', body: { correo, clave } }),
   salir: () => pedir('/auth/logout', { method: 'POST' }),
-  catalogo: (busqueda) =>
-    pedir(`/productos${busqueda ? `?busqueda=${encodeURIComponent(busqueda)}` : ''}`),
+  catalogo: ({ busqueda, categoria, proveedor, estado } = {}) =>
+    pedir(`/productos${consulta({ busqueda, categoria, proveedor, estado })}`),
+  editarProducto: (productoId, datos) =>
+    pedir(`/productos/${productoId}`, { method: 'PUT', body: datos }),
   categorias: () => pedir('/categorias'),
+  crearCategoria: (datos) => pedir('/categorias', { method: 'POST', body: datos }),
+  editarCategoria: (categoriaId, datos) =>
+    pedir(`/categorias/${categoriaId}`, { method: 'PUT', body: datos }),
+  desactivarCategoria: (categoriaId) =>
+    pedir(`/categorias/${categoriaId}/desactivar`, { method: 'POST' }),
   proveedores: () => pedir('/proveedores'),
   empresa: () => pedir('/empresa'),
   subirLogo: (archivo) => subir('/empresa/logo', archivo),
