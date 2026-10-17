@@ -398,3 +398,34 @@ dejarla escrita:
 La segunda es más simple y hay que decirla en la pantalla, o alguien
 registrará un descuento comercial en la cabecera y la factura saldrá con
 el impuesto de más.
+
+## Anotado para el módulo de plataforma
+
+`tipos_impuesto` tiene `vigente_desde` y `vigente_hasta`, y no puede
+guardar historia. La clave `uq_tipos_impuesto_codigo` es única por
+código, de modo que una segunda vigencia del mismo tipo se rechaza con
+un 1062, y `v_regla_iva` filtra por vigencia la tabla `reglas_iva` pero
+no esta. Comprobado: el `INSERT` de una vigencia nueva para
+`EXCL_UMBRAL_PC` no entra.
+
+Eso significa que el RF-05 modifica la tarifa y el umbral **en el
+sitio**, y que la historia del cambio la guarda `auditoria_plataforma`
+con responsable, fecha y los valores anterior y nuevo. No es un apaño:
+las ventas congelan su propia `tarifa_iva` por línea, de modo que
+recalcular una factura vieja no necesita la tarifa histórica del
+catálogo —la tiene el documento—. Lo que el catálogo responde es «qué se
+cobra hoy», y para eso una fila por tipo es lo correcto.
+
+Queda dicho porque las dos columnas invitan a suponer lo contrario.
+Quien algún día necesite de verdad la vigencia en esta tabla tiene que
+cambiar la clave única a `(codigo, vigente_desde)` —como la tiene
+`parametros`— y hacer que `v_regla_iva` filtre también `ti`. Mientras
+las ventas congelen su tarifa, no hace falta.
+
+Lo que sí se comprobó, porque es la promesa del RF-05: un `UPDATE` de
+`uvt_anual` o de `tipos_impuesto` surte efecto en el cálculo de todas
+las empresas sin recompilar ni desplegar. Bajando la UVT de 2026 de
+52.374 a 48.000, los tres computadores de la demostración pasan a
+gravados de contado y `cruza_umbral_en_credito` cae a cero en los tres;
+cambiando la tarifa del 19 % al 5 %, se propaga a todas las tarifas y
+totales. Las vistas recalculan en cada lectura.
