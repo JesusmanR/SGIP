@@ -104,14 +104,16 @@ falla, verifica que soporte esa directiva.
 | `V18__movimientos_admiten_existencia_negativa.sql` | `movimientos_inventario` admite el saldo negativo que la V9 autorizó en `productos`; el kárdex ya puede explicar una venta sin existencia (RF-42) |
 | `V19__la_valorizacion_no_resta_lo_que_se_debe.sql` | `v_inventario_valorizado` y `v_rotacion_inventario` acotan la existencia a cero antes de multiplicar, y declaran aparte lo pendiente de reponer |
 | `V20__la_vista_de_precios_cierra_la_modalidad_a_credito.sql` | `v_precios_producto` expone `total_credito`, `cerca_umbral_credito` y `cruza_umbral_en_credito` |
+| `V21__auditoria_de_la_plataforma.sql` | `auditoria_plataforma`: bitácora inmutable de altas, activaciones, suspensiones y cambios tributarios nacionales, con responsable y fecha (RF-02, RF-05) |
+| `V22__parametros_de_la_plataforma.sql` | `parametros_plataforma`: los ajustes de alcance de plataforma salen de la tabla por empresa, donde el periodo de prueba era un parámetro de la empresa 1 (RN-14, RN-17) |
 
 `extras/restriccion_ambito_regla_iva.sql` queda **fuera** de la cadena a
 propósito. Es una restricción correcta que no se pudo verificar, y el
 propio archivo explica por qué está aparte en lugar de dentro de la V12.
 
 V9 no crea tablas: cambia restricciones y agrega columnas. Las diez
-tablas nuevas de V10 llevan el esquema de 24 a 34, y las cinco de V12 lo
-llevan a 39. V11 no crea tablas: solo cambia claves foráneas e índices.
+tablas nuevas de V10 llevan el esquema de 24 a 34, las cinco de V12 lo
+llevan a 39, la de la V21 a 40 y la de la V22 a 41. V11 no crea tablas: solo cambia claves foráneas e índices.
 
 ### Lo que la V18 cierra, y que la V9 dejó a medias
 

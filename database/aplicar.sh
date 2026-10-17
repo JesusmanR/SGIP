@@ -145,6 +145,8 @@ DESPUES_DEL_DEMO=(
   V18__movimientos_admiten_existencia_negativa.sql
   V19__la_valorizacion_no_resta_lo_que_se_debe.sql
   V20__la_vista_de_precios_cierra_la_modalidad_a_credito.sql
+  V21__auditoria_de_la_plataforma.sql
+  V22__parametros_de_la_plataforma.sql
 )
 
 for f in "${ANTES_DEL_DEMO[@]}"; do
@@ -176,7 +178,7 @@ funciones=$("${MYSQL[@]}" -N -B -e \
 echo "listo: $tablas tablas, $vistas vistas, $funciones funciones"
 
 fallo=0
-[[ "$tablas"    -eq 39 ]] || { echo "ATENCIÓN: se esperaban 39 tablas";   fallo=1; }
+[[ "$tablas"    -eq 41 ]] || { echo "ATENCIÓN: se esperaban 41 tablas";   fallo=1; }
 [[ "$vistas"    -eq  6 ]] || { echo "ATENCIÓN: se esperaban 6 vistas";    fallo=1; }
 [[ "$funciones" -eq  4 ]] || { echo "ATENCIÓN: se esperaban 4 funciones"; fallo=1; }
 
