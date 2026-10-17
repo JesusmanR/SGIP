@@ -25,7 +25,7 @@ nueva. La decisión original se deja tal como se escribió.
 | 0007 | La lectura de listas de precios se abstrae tras una interfaz | vigente |
 | 0008 | MySQL 9.7 LTS como motor | vigente · ver nota |
 | 0009 | Sistema de diseño de la interfaz | vigente · ver nota |
-| 0010 | React y React Native en lugar de Kotlin y Swing | vigente |
+| 0010 | React y React Native en lugar de Kotlin y Swing | vigente · ver nota |
 | 0011 | Aislamiento multiempresa por columna, en una sola base | vigente |
 | 0012 | Operación sin conexión con cola e idempotencia | vigente |
 | 0013 | Las cantidades son enteras: la presentación es la unidad | vigente |
@@ -33,6 +33,7 @@ nueva. La decisión original se deja tal como se escribió.
 | 0015 | Suscripción: un mes gratis y tres estados de empresa | vigente |
 | 0016 | La tributación se reparte en dos capas | vigente |
 | 0017 | Las imágenes se normalizan al subirlas y se sirven por direcciones inmutables | vigente |
+| 0018 | Java 25 y Spring Boot 4.1.1 en el backend | vigente |
 
 ## Las cuatro que conviene leer antes de escribir código
 

@@ -40,11 +40,11 @@ y al que cada comercio entra como inquilino.
 
 | Componente | Tecnología | Estado |
 |---|---|---|
-| `backend/` | Java 17 · Spring Boot 3 · API REST | En construcción |
-| `web/` | React sobre HTML, CSS y JavaScript | Pendiente |
-| `escritorio/` | React Native · cliente con respaldo sin conexión | Pendiente |
-| `movil/` | React Native · vendedor y cliente | Pendiente |
-| `database/` | MySQL 9.7 LTS · 39 tablas en tercera forma normal | Esquema verificado |
+| `backend/` | Java 25 · Spring Boot 4.1.1 · API REST | En construcción: seguridad, catálogo, proveedores e imágenes |
+| `web/` | React 18 sobre HTML, CSS y JavaScript · Vite · Node 22 | En construcción: acceso, catálogo y datos de empresa |
+| `escritorio/` | React Native · cliente con respaldo sin conexión | Sin iniciar |
+| `movil/` | React Native · vendedor y cliente | Sin iniciar |
+| `database/` | MySQL 9.7 LTS · 39 tablas en tercera forma normal | Esquema verificado en cada entrega |
 
 El backend concentra el dominio, las reglas y el acceso a datos.
 **Ningún cliente implementa lógica de negocio propia**: web, escritorio
@@ -129,14 +129,20 @@ docs/
 
 ## Flujo de trabajo
 
-Scrum con sprints de dos semanas. Nueve iteraciones previstas: una de
-preparación y ocho de desarrollo.
+Scrum adaptado a un equipo unipersonal. Trece iteraciones: una de
+preparación y doce de desarrollo, veinticinco semanas en total. El plan
+vigente y el avance están en `docs/informe/`.
 
 Ramas:
 
 - `main` — lo que está terminado y probado
 - `develop` — integración del sprint en curso
 - `feature/<sprint>-<descripcion>` — trabajo individual
+- `fix/<descripcion>` — corrección de un defecto detectado al usar el sistema
+- `chore/<descripcion>` — mantenimiento que no cambia comportamiento
+
+La integración continua corre sobre las cuatro, y sobre toda solicitud
+de incorporación hacia `main` o `develop`.
 
 Mensajes de commit en imperativo y en español, con el ámbito por delante:
 

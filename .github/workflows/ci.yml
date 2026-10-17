@@ -2,7 +2,10 @@ name: Integración continua
 
 on:
   push:
-    branches: [main, develop, 'feature/**']
+    # Las ramas de corrección y de mantenimiento se quedaban fuera: una
+    # rama fix/** no ejecutaba nada hasta que se abría la solicitud de
+    # incorporación, que es justo cuando ya es tarde para enterarse.
+    branches: [main, develop, 'feature/**', 'fix/**', 'chore/**']
   pull_request:
     branches: [main, develop]
 
