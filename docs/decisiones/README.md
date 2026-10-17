@@ -32,7 +32,7 @@ nueva. La decisión original se deja tal como se escribió.
 | 0014 | La existencia negativa es la deuda de reposición | vigente |
 | 0015 | Suscripción: un mes gratis y tres estados de empresa | vigente |
 | 0016 | La tributación se reparte en dos capas | vigente |
-| 0017 | Las imágenes se normalizan al subirlas y se sirven por direcciones inmutables | vigente |
+| 0017 | Las imágenes se normalizan al subirlas y se sirven por direcciones inmutables | vigente · ver nota |
 | 0018 | Java 25 y Spring Boot 4.1.1 en el backend | vigente |
 
 ## Las cuatro que conviene leer antes de escribir código

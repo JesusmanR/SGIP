@@ -96,6 +96,9 @@ falla, verifica que soporte esa directiva.
 | `V10__plataforma_multiempresa.sql` | empresas, suscripciones, producto_proveedor, ordenes_compra, orden_compra_items, recepciones, medios_pago, cierres_caja, cola_sincronizacion, descuadres_existencia; `empresa_id` en doce tablas |
 | `V11__claves_compuestas_por_empresa.sql` | Las veinte claves foráneas que podían cruzar empresas pasan a incluir `empresa_id` |
 | `V12__configuracion_tributaria_por_empresa.sql` | tipos_impuesto, tipos_retencion, empresa_config, producto_imagenes, venta_retenciones; `reglas_iva` gana `empresa_id`; las seis vistas exponen `empresa_id` |
+| `V13__logo_de_empresa.sql` | `empresas.logo_ruta` |
+| `V14__miniatura_de_imagen.sql` | `producto_imagenes.miniatura_ruta` |
+| `V15__vista_de_precios_acotada_por_empresa.sql` | `v_precios_producto` repite `empresa_id` en la subconsulta de imagen y en sus cuatro enlaces |
 
 `extras/restriccion_ambito_regla_iva.sql` queda **fuera** de la cadena a
 propósito. Es una restricción correcta que no se pudo verificar, y el
