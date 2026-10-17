@@ -134,3 +134,13 @@ imagen de otra porque `producto_id` es único en toda la tabla, de modo
 que es un defecto latente y no un agujero. `ConsultaCatalogo` no depende
 de esa columna y usa su propia subconsulta, con el filtro repetido.
 Conviene corregir la vista la próxima vez que se recree.
+
+**Nota posterior (17 de octubre de 2026).** Corregido en la migración
+V15, que repite el filtro de empresa en esa subconsulta y también en los
+cuatro enlaces de la vista, que dependían de la misma propiedad no
+enunciada. La vista devuelve exactamente lo mismo sobre datos
+consistentes. `verificar_aislamiento.sh` construye en cada entrega la
+situación que hoy el esquema impide —una fila de imagen de otra empresa
+con el mismo `producto_id`, insertada con las claves foráneas
+desactivadas— y comprueba que la vista no la devuelve: con la definición
+anterior esa comprobación falla, que es lo que la hace valer.
