@@ -7,6 +7,7 @@ import co.com.bspstore.sgip.logica.FiltroInvalidoException;
 import co.com.bspstore.sgip.logica.AlmacenArchivos;
 import co.com.bspstore.sgip.logica.ArchivoInvalidoException;
 import co.com.bspstore.sgip.logica.NombreRepetidoException;
+import co.com.bspstore.sgip.logica.RegistroRepetidoException;
 import co.com.bspstore.sgip.logica.ReferenciaAjenaException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
@@ -41,6 +42,17 @@ public class ManejadorErrores {
     public ProblemDetail nombreRepetido(NombreRepetidoException e) {
         ProblemDetail p = ProblemDetail.forStatus(HttpStatus.CONFLICT);
         p.setTitle("Nombre repetido");
+        p.setDetail(e.getMessage());
+        return p;
+    }
+
+    @ExceptionHandler(RegistroRepetidoException.class)
+    public ProblemDetail registroRepetido(RegistroRepetidoException e) {
+        // 409 igual que el nombre repetido, pero con otro título: aquí la
+        // unicidad es de toda la plataforma y no de dentro de una empresa,
+        // y el detalle dice cuál de los dos datos del alta choca.
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.CONFLICT);
+        p.setTitle("Dato ya registrado");
         p.setDetail(e.getMessage());
         return p;
     }
