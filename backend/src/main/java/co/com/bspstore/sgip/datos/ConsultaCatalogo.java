@@ -36,10 +36,10 @@ public class ConsultaCatalogo {
      *
      * La subconsulta repite el filtro de empresa a propósito, como la de
      * código de barras más abajo: así ninguna de las dos mitades depende
-     * de que la otra acote bien. La vista trae una subconsulta parecida
-     * para imagen_principal que NO lo repite; hoy no puede devolver la
-     * imagen de otra empresa porque producto_id es único en toda la
-     * tabla, pero conviene corregirla la próxima vez que se toque.
+     * de que la otra acote bien. La vista traía una subconsulta parecida
+     * para imagen_principal que no lo repetía; la migración V15 la
+     * corrigió, y verificar_aislamiento.sh comprueba en cada entrega que
+     * siga acotando.
      */
     private static final String IMAGEN_PRINCIPAL = """
             (SELECT i.imagen_id FROM producto_imagenes i

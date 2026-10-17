@@ -144,6 +144,48 @@ segunda=$(encolar)
 [[ "$segunda" == *"ERROR 1062"* ]] && ok "la repetición fue rechazada (1062)" \
                                   || falla "la repetición no fue rechazada: ${segunda:-(entró)}"
 
+
+# Las consultas que resuelven un dato por una clave ajena no deben
+# apoyarse en que esa clave sea única fuera de su empresa. Hoy lo es
+# —producto_id es único en toda la tabla— y por eso la vista de precios
+# acertaba aunque su subconsulta de imagen no filtrara por empresa. Esta
+# comprobación no verifica esa suerte: verifica que la vista filtre.
+#
+# Para ello construye la situación que hoy el esquema impide, que es la
+# única forma de distinguir una consulta correcta de una afortunada: una
+# fila de imagen de otra empresa que comparte producto_id. Se desactivan
+# las claves foráneas para insertarla y se vuelven a activar enseguida.
+# La fila se retira al terminar.
+echo
+echo "── la vista de precios no cruza empresas ──"
+PROD_AJENO=$(consulta "SELECT p.producto_id FROM productos p
+                        WHERE p.empresa_id = 1 AND p.activo = 1
+                          AND NOT EXISTS (SELECT 1 FROM producto_imagenes i
+                                           WHERE i.producto_id = p.producto_id
+                                             AND i.principal = TRUE)
+                        LIMIT 1;")
+if [[ -z "$PROD_AJENO" ]]; then
+  falla "no se encontró un producto de la empresa 1 sin imagen principal"
+else
+  ejecutar "DELETE FROM producto_imagenes WHERE ruta='empresas/zz/FUGA.jpg';" >/dev/null
+  ejecutar "SET FOREIGN_KEY_CHECKS = 0;
+            INSERT INTO producto_imagenes
+                   (empresa_id, producto_id, ruta, orden, principal)
+            VALUES ($ID, $PROD_AJENO, 'empresas/zz/FUGA.jpg', 1, TRUE);
+            SET FOREIGN_KEY_CHECKS = 1;" >/dev/null
+  fuga=$(consulta "SELECT IFNULL(imagen_principal, '')
+                     FROM v_precios_producto
+                    WHERE empresa_id = 1 AND producto_id = $PROD_AJENO;")
+  if [[ "$fuga" == "empresas/zz/FUGA.jpg" ]]; then
+    falla "la vista devolvió la imagen de otra empresa: $fuga"
+  elif [[ -n "$fuga" ]]; then
+    falla "la vista devolvió una imagen inesperada: $fuga"
+  else
+    ok "la imagen de otra empresa no aparece en la vista"
+  fi
+  ejecutar "DELETE FROM producto_imagenes WHERE ruta='empresas/zz/FUGA.jpg';" >/dev/null
+fi
+
 echo
 if [[ "$fallos" -eq 0 ]]; then
   echo "TODO EN VERDE"
