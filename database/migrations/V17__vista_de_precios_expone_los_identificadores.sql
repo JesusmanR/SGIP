@@ -20,7 +20,14 @@
 -- y dos categorías que se llamen parecido volverían ambigua esa
 -- búsqueda.
 --
--- La definición es la de la V15 con dos columnas más. Se conservan los
+-- Por el mismo motivo se exponen la descripción y el código de barras.
+-- El formulario de edición los tiene que poder mostrar, y hasta ahora
+-- la única forma de llegar a ellos era la tabla: una pantalla que lee
+-- de la vista y escribe en la tabla los habría guardado vacíos sin que
+-- nadie los tocara, que es la peor clase de pérdida de datos porque no
+-- se nota hasta que alguien busca lo que ya no está.
+--
+-- La definición es la de la V15 con cuatro columnas más. Se conservan los
 -- filtros de empresa que aquella añadió, en la subconsulta de imagen y
 -- en los cuatro enlaces.
 -- =====================================================================
@@ -35,6 +42,8 @@ SELECT
   p.sku,
   p.nombre,
   p.presentacion,
+  p.descripcion,
+  p.codigo_barras,
   c.categoria_id,
   c.nombre                               AS categoria,
   pr.proveedor_id,

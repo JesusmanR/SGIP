@@ -50,6 +50,7 @@ public class ConsultaCatalogo {
 
     private static final String COLUMNAS = """
             producto_id, codigo, sku, nombre, presentacion,
+            descripcion, codigo_barras,
             categoria_id, categoria, proveedor_id, proveedor,
             costo, existencia, existencia_minima, estado_stock,
             precio_contado, precio_credito, tratamiento_iva, tarifa_contado,

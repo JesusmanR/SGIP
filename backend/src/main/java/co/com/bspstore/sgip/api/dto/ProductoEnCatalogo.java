@@ -37,6 +37,8 @@ public record ProductoEnCatalogo(
         String sku,
         String nombre,
         String presentacion,
+        String descripcion,
+        String codigoBarras,
         Integer categoriaId,
         String categoria,
         Integer proveedorId,
