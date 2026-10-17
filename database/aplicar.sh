@@ -140,6 +140,7 @@ DESPUES_DEL_DEMO=(
   V13__logo_de_empresa.sql
   V14__miniatura_de_imagen.sql
   V15__vista_de_precios_acotada_por_empresa.sql
+  V16__retirar_parametros_de_imagen.sql
 )
 
 for f in "${ANTES_DEL_DEMO[@]}"; do
