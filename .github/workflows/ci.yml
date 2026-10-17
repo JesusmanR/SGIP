@@ -13,8 +13,13 @@ on:
 # por el envío y otra por la solicitud. Agrupar por nombre de rama deja
 # viva solo la ejecución más reciente, que es la única que informa sobre
 # el estado actual del código.
+#
+# La clave tiene que dar el MISMO valor en los dos eventos, y por eso es
+# «ref_name» y no «ref»: en el envío, «ref» vale refs/heads/la-rama
+# mientras que en la solicitud «head_ref» vale la-rama, de modo que con
+# «ref» los dos grupos quedaban distintos y no se cancelaba nada.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
