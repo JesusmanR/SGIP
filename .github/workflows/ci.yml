@@ -60,7 +60,10 @@ jobs:
                    V14__miniatura_de_imagen \
                    V15__vista_de_precios_acotada_por_empresa \
                    V16__retirar_parametros_de_imagen \
-                   V17__vista_de_precios_expone_los_identificadores; do
+                   V17__vista_de_precios_expone_los_identificadores \
+                   V18__movimientos_admiten_existencia_negativa \
+                   V19__la_valorizacion_no_resta_lo_que_se_debe \
+                   V20__la_vista_de_precios_cierra_la_modalidad_a_credito; do
             echo "→ $f"
             mysql -h 127.0.0.1 -u root -psgip_ci sgip < "database/migrations/$f.sql"
           done
@@ -98,6 +101,32 @@ jobs:
              WHERE constraint_schema='sgip' AND constraint_name LIKE '%\\_emp';")
           echo "claves foráneas por empresa: $n"
           test "$n" -eq 24
+
+      # El conteo de vistas no cambia con la V18, la V19 ni la V20: la
+      # primera solo toca restricciones y las otras dos recrean vistas que
+      # ya existían. Estos dos pasos miran lo que esas migraciones dejan.
+      - name: Verificar que el kárdex admite existencia negativa (V18)
+        run: |
+          n=$(mysql -h 127.0.0.1 -u root -psgip_ci -N -B -e \
+            "SELECT COUNT(*) FROM information_schema.check_constraints
+             WHERE constraint_schema='sgip'
+               AND constraint_name IN ('ck_movimientos_anterior','ck_movimientos_posterior')
+               AND check_clause LIKE '%9999%';")
+          test "$n" -eq 2
+
+      - name: Verificar las columnas nuevas de las vistas (V19 y V20)
+        run: |
+          n=$(mysql -h 127.0.0.1 -u root -psgip_ci -N -B -e \
+            "SELECT COUNT(*) FROM information_schema.columns
+             WHERE table_schema='sgip' AND (
+               (table_name='v_precios_producto'
+                AND column_name IN ('total_credito','cerca_umbral_credito','cruza_umbral_en_credito'))
+               OR (table_name='v_inventario_valorizado'
+                AND column_name IN ('unidades_pendientes','valor_pendiente_al_costo'))
+               OR (table_name='v_rotacion_inventario'
+                AND column_name IN ('unidades_pendientes','valor_pendiente_al_costo')));")
+          echo "columnas nuevas de la V19 y la V20: $n"
+          test "$n" -eq 7
 
       - name: Verificar el aislamiento entre empresas
         run: bash database/verificar_aislamiento.sh -h 127.0.0.1 -u root -psgip_ci
@@ -158,7 +187,10 @@ jobs:
                    V14__miniatura_de_imagen \
                    V15__vista_de_precios_acotada_por_empresa \
                    V16__retirar_parametros_de_imagen \
-                   V17__vista_de_precios_expone_los_identificadores; do
+                   V17__vista_de_precios_expone_los_identificadores \
+                   V18__movimientos_admiten_existencia_negativa \
+                   V19__la_valorizacion_no_resta_lo_que_se_debe \
+                   V20__la_vista_de_precios_cierra_la_modalidad_a_credito; do
             mysql -h 127.0.0.1 -u root -psgip_ci sgip < "database/migrations/$f.sql"
           done
 

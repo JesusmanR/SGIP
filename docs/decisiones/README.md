@@ -29,11 +29,12 @@ nueva. La decisión original se deja tal como se escribió.
 | 0011 | Aislamiento multiempresa por columna, en una sola base | vigente |
 | 0012 | Operación sin conexión con cola e idempotencia | vigente |
 | 0013 | Las cantidades son enteras: la presentación es la unidad | vigente |
-| 0014 | La existencia negativa es la deuda de reposición | vigente |
+| 0014 | La existencia negativa es la deuda de reposición | vigente · ver nota |
 | 0015 | Suscripción: un mes gratis y tres estados de empresa | vigente |
 | 0016 | La tributación se reparte en dos capas | vigente |
 | 0017 | Las imágenes se normalizan al subirlas y se sirven por direcciones inmutables | vigente · ver nota |
 | 0018 | Java 25 y Spring Boot 4.1.1 en el backend | vigente |
+| 0019 | La deuda de reposición se declara aparte, no se resta del inventario | vigente |
 
 ## Las cuatro que conviene leer antes de escribir código
 

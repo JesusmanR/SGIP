@@ -45,3 +45,30 @@ comporta como gravado a su tarifa. Ver ADR-0016.
 
 Los umbrales ya no viven en `reglas_iva` sino en `tipos_impuesto`, el
 catálogo que mantiene la plataforma.
+
+Hay un efecto del umbral que tardó en verse, porque solo aparece al
+mirar las dos formas de pago juntas. El tope se mide contra el **precio
+de venta**, no contra el costo, y el margen a crédito es mayor que el de
+contado. Existe entonces una franja de costos en la que el mismo
+producto queda excluido si se vende de contado y gravado si se vende a
+crédito. En la base de demostración, con la UVT de 2026 en 52.374 pesos
+(50 UVT = 2.618.700):
+
+| | contado | crédito |
+|---|---|---|
+| PC-001, costo 2.100.000 | 2.520.000 · tarifa 0 % | 2.625.000 · tarifa 19 % |
+| total a pagar | 2.520.000 | 3.123.750 |
+
+La diferencia entre las dos modalidades no es el 5 % del margen: son
+603.750 pesos. Un vendedor que ofrezca el crédito mirando el precio sin
+impuesto se queda corto en más de medio millón y lo descubre al
+facturar.
+
+La vista calculaba `total_contado` y no su equivalente a crédito, de
+modo que esa cifra no estaba en ningún sitio.
+`V20__la_vista_de_precios_cierra_la_modalidad_a_credito.sql` añade
+`total_credito`, el aviso `cerca_umbral_credito` y la bandera
+`cruza_umbral_en_credito`, que marca justamente el caso de la tabla: la
+única de las tres que no se puede deducir mirando una sola columna, y la
+que le permite a la pantalla explicar por qué el crédito cuesta más de
+lo que el porcentaje de interés sugiere.
