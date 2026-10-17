@@ -1,5 +1,6 @@
 package co.com.bspstore.sgip.logica;
 
+import co.com.bspstore.sgip.config.ContextoEmpresa;
 import co.com.bspstore.sgip.datos.AuditoriaAccesoRepositorio;
 import co.com.bspstore.sgip.datos.UsuarioRepositorio;
 import co.com.bspstore.sgip.modelo.AuditoriaAcceso;
@@ -57,8 +58,24 @@ public class ServicioAutenticacion {
      * clase tenga que saber de códigos HTTP.
      */
     @Transactional
+    /**
+     * Levanta el bloqueo de una cuenta de la propia empresa (RF-12).
+     *
+     * El identificador llega por la ruta, de modo que el usuario se busca
+     * acotado por la empresa de quien pide y no por {@code findById}. Con
+     * el buscador heredado, el administrador de un comercio podía
+     * desbloquear a un usuario de otro: el identificador es único en toda
+     * la plataforma y la anotación de rol del controlador solo comprueba
+     * que quien pide sea administrador, no de qué empresa. Es la RN-16
+     * aplicada a la tabla de usuarios.
+     *
+     * Devuelve falso tanto si el usuario no existe como si es de otra
+     * empresa, y el controlador responde 404 en los dos casos. No es
+     * descuido: un 403 para lo ajeno confirmaría que ese usuario existe,
+     * que es más de lo que quien pregunta tiene derecho a saber.
+     */
     public boolean desbloquear(Integer usuarioId) {
-        return usuarios.findById(usuarioId)
+        return usuarios.findByIdAndEmpresaId(usuarioId, ContextoEmpresa.empresaActual())
                 .map(u -> {
                     u.desbloquear();
                     return true;
