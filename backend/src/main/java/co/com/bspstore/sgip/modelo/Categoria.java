@@ -43,6 +43,11 @@ public class Categoria {
         this.descripcion = descripcion;
     }
 
+    public void renombrar(String nombre, String descripcion) {
+        this.nombre = nombre == null ? null : nombre.trim();
+        this.descripcion = descripcion;
+    }
+
     public void desactivar() {
         this.activa = false;
     }

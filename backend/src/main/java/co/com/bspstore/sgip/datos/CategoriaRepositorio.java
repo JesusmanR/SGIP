@@ -19,4 +19,11 @@ public interface CategoriaRepositorio extends JpaRepository<Categoria, Integer> 
     Optional<Categoria> findByEmpresaIdAndId(Integer empresaId, Integer id);
 
     boolean existsByEmpresaIdAndNombreIgnoreCase(Integer empresaId, String nombre);
+
+    /**
+     * Excluye a la propia categoria: al editar sin cambiar el nombre, el
+     * que ya tiene no puede contar como repetido consigo mismo.
+     */
+    boolean existsByEmpresaIdAndNombreIgnoreCaseAndIdNot(Integer empresaId, String nombre,
+                                                         Integer id);
 }

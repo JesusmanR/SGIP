@@ -19,4 +19,21 @@ public interface ProductoRepositorio extends JpaRepository<Producto, Integer> {
     boolean existsByEmpresaIdAndCodigo(Integer empresaId, String codigo);
 
     boolean existsByEmpresaIdAndSku(Integer empresaId, String sku);
+
+    /**
+     * Las dos de abajo excluyen al propio producto. Al editar, el codigo
+     * que ya tiene no puede contar como repetido consigo mismo: sin el
+     * «AndIdNot», guardar sin cambiar el codigo fallaria con que el
+     * codigo ya existe.
+     */
+    boolean existsByEmpresaIdAndCodigoAndIdNot(Integer empresaId, String codigo, Integer id);
+
+    boolean existsByEmpresaIdAndSkuAndIdNot(Integer empresaId, String sku, Integer id);
+
+    /**
+     * Para negarse a desactivar una categoria que todavia sostiene
+     * productos. Cuenta solo los activos: los ya desactivados no
+     * necesitan una categoria viva.
+     */
+    long countByEmpresaIdAndCategoriaIdAndActivoTrue(Integer empresaId, Integer categoriaId);
 }

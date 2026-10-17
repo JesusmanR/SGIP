@@ -125,6 +125,33 @@ public class Producto {
         this.costo = nuevo;
     }
 
+    /**
+     * Reemplaza los datos que la pantalla de edición deja cambiar.
+     *
+     * La existencia no está entre ellos, y no es un olvido. Toda
+     * variación de existencia tiene que quedar registrada con su valor
+     * anterior y posterior (RF-49), de modo que corregirla escribiendo
+     * un número en un formulario dejaría un salto sin explicación en la
+     * única tabla que permite reconstruir qué pasó con una referencia.
+     * Ese camino es el movimiento de inventario, no este.
+     */
+    public void reemplazarDatos(Integer categoriaId, Integer proveedorId,
+                                String codigo, String sku, String nombre,
+                                String presentacion, String descripcion,
+                                String codigoBarras, BigDecimal costo,
+                                int existenciaMinima) {
+        this.categoriaId = categoriaId;
+        this.proveedorId = proveedorId;
+        this.codigo = normalizar(codigo);
+        this.sku = normalizar(sku);
+        this.nombre = nombre == null ? null : nombre.trim();
+        this.presentacion = presentacion;
+        this.descripcion = descripcion;
+        this.codigoBarras = codigoBarras;
+        this.costo = costo;
+        this.existenciaMinima = existenciaMinima;
+    }
+
     public void desactivar() {
         this.activo = false;
     }
