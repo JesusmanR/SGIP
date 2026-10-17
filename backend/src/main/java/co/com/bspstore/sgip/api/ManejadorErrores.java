@@ -2,6 +2,7 @@ package co.com.bspstore.sgip.api;
 
 import co.com.bspstore.sgip.config.SinEmpresaException;
 import co.com.bspstore.sgip.logica.CategoriaEnUsoException;
+import co.com.bspstore.sgip.logica.DatoTributarioInvalidoException;
 import co.com.bspstore.sgip.logica.CredencialesInvalidasException;
 import co.com.bspstore.sgip.logica.FiltroInvalidoException;
 import co.com.bspstore.sgip.logica.AlmacenArchivos;
@@ -42,6 +43,17 @@ public class ManejadorErrores {
     public ProblemDetail nombreRepetido(NombreRepetidoException e) {
         ProblemDetail p = ProblemDetail.forStatus(HttpStatus.CONFLICT);
         p.setTitle("Nombre repetido");
+        p.setDetail(e.getMessage());
+        return p;
+    }
+
+    @ExceptionHandler(DatoTributarioInvalidoException.class)
+    public ProblemDetail datoTributarioInvalido(DatoTributarioInvalidoException e) {
+        // 400 y no 422: el cuerpo está bien formado, pero la regla que
+        // incumple depende del tipo que se está cambiando y el cliente
+        // puede corregirla con lo que el detalle le dice.
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
+        p.setTitle("Dato tributario inválido");
         p.setDetail(e.getMessage());
         return p;
     }
