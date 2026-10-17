@@ -90,7 +90,15 @@ class FiltroEmpresaActivaTest {
         assertEquals(403, respuesta.getStatus());
         assertTrue(respuesta.getContentAsString().contains("modo de consulta"),
                 "el cuerpo debe decir por qué, no solo que no");
-        assertEquals("application/problem+json", respuesta.getContentType());
+        // El tipo se comprueba por su prefijo porque la respuesta declara
+        // además el juego de caracteres —«application/problem+json;charset=UTF-8»—
+        // y eso es deliberado: el mensaje lleva acentos y sin la
+        // declaración el cliente los lee mal. Lo que el cliente negocia es
+        // el tipo; el parámetro va aparte.
+        assertTrue(respuesta.getContentType().startsWith("application/problem+json"),
+                "el error debe venir en el mismo formato que el resto de la API");
+        assertEquals("UTF-8", respuesta.getCharacterEncoding(),
+                "el mensaje lleva acentos y el cliente tiene que saber cómo leerlos");
     }
 
     @Test
