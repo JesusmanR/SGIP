@@ -63,7 +63,9 @@ jobs:
                    V17__vista_de_precios_expone_los_identificadores \
                    V18__movimientos_admiten_existencia_negativa \
                    V19__la_valorizacion_no_resta_lo_que_se_debe \
-                   V20__la_vista_de_precios_cierra_la_modalidad_a_credito; do
+                   V20__la_vista_de_precios_cierra_la_modalidad_a_credito \
+                   V21__auditoria_de_la_plataforma \
+                   V22__parametros_de_la_plataforma; do
             echo "→ $f"
             mysql -h 127.0.0.1 -u root -psgip_ci sgip < "database/migrations/$f.sql"
           done
@@ -78,7 +80,7 @@ jobs:
           funciones=$(consulta "SELECT COUNT(*) FROM information_schema.routines
                                 WHERE routine_schema='sgip' AND routine_type='FUNCTION';")
           echo "tablas=$tablas vistas=$vistas funciones=$funciones"
-          test "$tablas" -eq 39
+          test "$tablas" -eq 41
           test "$vistas" -eq 6
           test "$funciones" -eq 4
 
@@ -190,7 +192,9 @@ jobs:
                    V17__vista_de_precios_expone_los_identificadores \
                    V18__movimientos_admiten_existencia_negativa \
                    V19__la_valorizacion_no_resta_lo_que_se_debe \
-                   V20__la_vista_de_precios_cierra_la_modalidad_a_credito; do
+                   V20__la_vista_de_precios_cierra_la_modalidad_a_credito \
+                   V21__auditoria_de_la_plataforma \
+                   V22__parametros_de_la_plataforma; do
             mysql -h 127.0.0.1 -u root -psgip_ci sgip < "database/migrations/$f.sql"
           done
 

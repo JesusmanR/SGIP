@@ -1,21 +1,29 @@
 package co.com.bspstore.sgip.logica;
 
+import co.com.bspstore.sgip.config.UsuarioAutenticado;
 import co.com.bspstore.sgip.datos.AuditoriaAccesoRepositorio;
 import co.com.bspstore.sgip.datos.UsuarioRepositorio;
 import co.com.bspstore.sgip.modelo.Rol;
 import co.com.bspstore.sgip.modelo.Usuario;
 import co.com.bspstore.sgip.util.Seguridad;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.context.SecurityContextHolder;
+
+import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -121,5 +129,58 @@ class ServicioAutenticacionTest {
                 () -> servicio.autenticar(CORREO, "incorrecta", "prueba"));
 
         assertEquals(porCorreo.getMessage(), porClave.getMessage());
+    }
+
+    // ------------------------------------------------- desbloqueo (RF-12)
+
+    @AfterEach
+    void limpiarContexto() {
+        SecurityContextHolder.clearContext();
+    }
+
+    private void comoAdministradorDe(Integer empresaId) {
+        var u = new UsuarioAutenticado(7, CORREO, "ADMINISTRADOR", empresaId);
+        SecurityContext c = SecurityContextHolder.createEmptyContext();
+        c.setAuthentication(new UsernamePasswordAuthenticationToken(u, null, List.of()));
+        SecurityContextHolder.setContext(c);
+    }
+
+    @Test
+    void desbloqueaUnUsuarioDeSuPropiaEmpresa() {
+        comoAdministradorDe(3);
+        usuario.registrarIntentoFallido(1);
+        assertTrue(usuario.isBloqueado(), "la cuenta llega bloqueada");
+        when(usuarios.findByIdAndEmpresaId(20, 3)).thenReturn(Optional.of(usuario));
+
+        assertTrue(servicio.desbloquear(20));
+        assertFalse(usuario.isBloqueado());
+        assertEquals(0, usuario.getIntentosFallidos());
+    }
+
+    /**
+     * El identificador de usuario es único en toda la plataforma y la
+     * anotación de rol del controlador solo comprueba que quien pide sea
+     * administrador, no de qué empresa. Sin acotar la búsqueda, el
+     * administrador de un comercio desbloqueaba cuentas de otro.
+     */
+    @Test
+    void noDesbloqueaUnUsuarioDeOtraEmpresa() {
+        comoAdministradorDe(3);
+        when(usuarios.findByIdAndEmpresaId(20, 3)).thenReturn(Optional.empty());
+
+        assertFalse(servicio.desbloquear(20), "para lo ajeno responde como para lo inexistente");
+        verify(usuarios, never()).findById(any());
+    }
+
+    @Test
+    void elDesbloqueoNuncaResuelvePorIdentificadorSuelto() {
+        comoAdministradorDe(3);
+        when(usuarios.findByIdAndEmpresaId(any(), any())).thenReturn(Optional.empty());
+
+        servicio.desbloquear(20);
+
+        // La empresa sale del contexto, no de la llamada: es lo que impide
+        // que un número en la ruta alcance a otro comercio.
+        verify(usuarios).findByIdAndEmpresaId(20, 3);
     }
 }
