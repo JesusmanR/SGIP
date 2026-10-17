@@ -1,6 +1,7 @@
 package co.com.bspstore.sgip.api;
 
 import co.com.bspstore.sgip.api.dto.ProductoEnCatalogo;
+import co.com.bspstore.sgip.api.dto.SolicitudEdicionProducto;
 import co.com.bspstore.sgip.api.dto.SolicitudProducto;
 import co.com.bspstore.sgip.logica.ServicioProducto;
 import co.com.bspstore.sgip.modelo.Producto;
@@ -10,6 +11,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -28,11 +30,18 @@ public class ProductoControlador {
         this.servicio = servicio;
     }
 
-    /** Pantalla P-03. Devuelve precios, no solo datos del producto. */
+    /**
+     * Pantalla P-03. Devuelve precios, no solo datos del producto.
+     *
+     * Los cuatro filtros son opcionales y se combinan entre sí (RF-16).
+     */
     @GetMapping
     public List<ProductoEnCatalogo> listar(@RequestParam(required = false) String busqueda,
+                                           @RequestParam(required = false) Integer categoria,
+                                           @RequestParam(required = false) Integer proveedor,
+                                           @RequestParam(required = false) String estado,
                                            @RequestParam(required = false) Integer limite) {
-        return servicio.listar(busqueda, limite);
+        return servicio.listar(busqueda, categoria, proveedor, estado, limite);
     }
 
     /** Pantalla P-04. */
@@ -65,5 +74,23 @@ public class ProductoControlador {
                         .body(p))
                 .orElseGet(() -> ResponseEntity.created(
                         URI.create("/api/v1/productos/" + creado.getId())).build());
+    }
+
+    /**
+     * Pantalla P-05 en modo edición (RF-15).
+     *
+     * Devuelve el producto leído de la vista, igual que el alta, porque
+     * cambiar el costo cambia el precio de venta y la pantalla tiene que
+     * poder mostrarlo sin volver a preguntar.
+     */
+    @PreAuthorize("hasRole('ADMINISTRADOR')")
+    @PutMapping("/{productoId}")
+    public ResponseEntity<ProductoEnCatalogo> editar(
+            @PathVariable Integer productoId,
+            @Valid @RequestBody SolicitudEdicionProducto solicitud) {
+        return servicio.actualizar(productoId, solicitud)
+                .flatMap(p -> servicio.buscar(p.getId()))
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
     }
 }

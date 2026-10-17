@@ -1,7 +1,10 @@
 package co.com.bspstore.sgip.api;
 
 import co.com.bspstore.sgip.config.SinEmpresaException;
+import co.com.bspstore.sgip.logica.CategoriaEnUsoException;
 import co.com.bspstore.sgip.logica.CredencialesInvalidasException;
+import co.com.bspstore.sgip.logica.FiltroInvalidoException;
+import co.com.bspstore.sgip.logica.AlmacenArchivos;
 import co.com.bspstore.sgip.logica.ArchivoInvalidoException;
 import co.com.bspstore.sgip.logica.NombreRepetidoException;
 import co.com.bspstore.sgip.logica.ReferenciaAjenaException;
@@ -52,6 +55,26 @@ public class ManejadorErrores {
         return p;
     }
 
+    @ExceptionHandler(CategoriaEnUsoException.class)
+    public ProblemDetail categoriaEnUso(CategoriaEnUsoException e) {
+        // 409 y no 422: la referencia es propia y válida; lo que impide
+        // atender la petición es el estado actual del catálogo.
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.CONFLICT);
+        p.setTitle("Categoría en uso");
+        p.setDetail(e.getMessage());
+        return p;
+    }
+
+    @ExceptionHandler(FiltroInvalidoException.class)
+    public ProblemDetail filtroInvalido(FiltroInvalidoException e) {
+        // Llega por la dirección y no por el cuerpo, de modo que la
+        // validación declarativa no lo alcanza.
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
+        p.setTitle("Filtro no válido");
+        p.setDetail(e.getMessage());
+        return p;
+    }
+
     @ExceptionHandler(ArchivoInvalidoException.class)
     public ProblemDetail archivoInvalido(ArchivoInvalidoException e) {
         ProblemDetail p = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
@@ -66,7 +89,8 @@ public class ManejadorErrores {
         // vea nada, de modo que no puede comprobarlo AlmacenArchivos.
         ProblemDetail p = ProblemDetail.forStatus(HttpStatus.PAYLOAD_TOO_LARGE);
         p.setTitle("Archivo demasiado grande");
-        p.setDetail("La imagen supera el tamaño permitido. Usa una de hasta 2 MB.");
+        p.setDetail("La imagen supera el tamaño permitido. Usa una de hasta "
+                + (AlmacenArchivos.BYTES_MAXIMOS / 1024 / 1024) + " MB.");
         return p;
     }
 

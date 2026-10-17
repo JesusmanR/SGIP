@@ -49,7 +49,8 @@ public class ConsultaCatalogo {
             """;
 
     private static final String COLUMNAS = """
-            producto_id, codigo, sku, nombre, presentacion, categoria, proveedor,
+            producto_id, codigo, sku, nombre, presentacion,
+            categoria_id, categoria, proveedor_id, proveedor,
             costo, existencia, existencia_minima, estado_stock,
             precio_contado, precio_credito, tratamiento_iva, tarifa_contado,
             total_contado, tributacion_sin_configurar, cerca_umbral,
@@ -63,7 +64,22 @@ public class ConsultaCatalogo {
         this.jdbc = jdbc;
     }
 
-    public List<ProductoEnCatalogo> listar(Integer empresaId, String busqueda, int limite) {
+    /**
+     * El catálogo con sus filtros (RF-16).
+     *
+     * Los cuatro filtros son opcionales y se combinan: cada uno se anula
+     * a sí mismo cuando llega nulo, con el patrón «:x IS NULL OR …». Eso
+     * deja una sola sentencia en lugar de una por combinación, y una
+     * sentencia que el motor puede preparar una vez.
+     *
+     * Los identificadores se comparan contra las columnas que la V17
+     * añadió a la vista. Filtrar por el nombre de la categoría habría
+     * obligado a comparar cadenas, que se rompe con un acento o con un
+     * cambio de nombre.
+     */
+    public List<ProductoEnCatalogo> listar(Integer empresaId, String busqueda,
+                                           Integer categoriaId, Integer proveedorId,
+                                           String estadoStock, int limite) {
         // El comodín se arma aquí y se pasa como parámetro, no se concatena
         // dentro de la sentencia: el texto lo escribe quien usa la pantalla.
         String patron = (busqueda == null || busqueda.isBlank()) ? null : "%" + busqueda.trim() + "%";
@@ -74,11 +90,17 @@ public class ConsultaCatalogo {
                                 OR nombre LIKE :patron
                                 OR codigo LIKE :patron
                                 OR sku    LIKE :patron)
+                           AND (:categoria IS NULL OR categoria_id = :categoria)
+                           AND (:proveedor IS NULL OR proveedor_id = :proveedor)
+                           AND (:estado    IS NULL OR estado_stock = :estado)
                          ORDER BY nombre
                          LIMIT :limite
                         """.formatted(COLUMNAS))
                 .param("empresa", empresaId)
                 .param("patron", patron)
+                .param("categoria", categoriaId)
+                .param("proveedor", proveedorId)
+                .param("estado", estadoStock)
                 .param("limite", limite)
                 .query(ProductoEnCatalogo.class)
                 .list();

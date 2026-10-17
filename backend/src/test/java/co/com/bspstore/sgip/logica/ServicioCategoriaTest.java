@@ -3,6 +3,7 @@ package co.com.bspstore.sgip.logica;
 import co.com.bspstore.sgip.config.SinEmpresaException;
 import co.com.bspstore.sgip.config.UsuarioAutenticado;
 import co.com.bspstore.sgip.datos.CategoriaRepositorio;
+import co.com.bspstore.sgip.datos.ProductoRepositorio;
 import co.com.bspstore.sgip.modelo.Categoria;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -19,7 +20,9 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -29,6 +32,7 @@ import static org.mockito.Mockito.when;
 class ServicioCategoriaTest {
 
     @Mock CategoriaRepositorio categorias;
+    @Mock ProductoRepositorio productos;
     @InjectMocks ServicioCategoria servicio;
 
     @AfterEach
@@ -106,5 +110,77 @@ class ServicioCategoriaTest {
         assertThrows(SinEmpresaException.class, () -> servicio.listar());
         assertThrows(SinEmpresaException.class, () -> servicio.crear("Bebidas", null));
         verify(categorias, never()).save(any());
+    }
+
+    // ── Edición y desactivación (RF-19) ──────────────────────────────
+    @Test
+    void editarUnaCategoriaDeOtraEmpresaNoEncuentraNada() {
+        comoEmpresa(3);
+        when(categorias.findByEmpresaIdAndId(3, 8)).thenReturn(Optional.empty());
+
+        assertTrue(servicio.actualizar(8, "Granos", null).isEmpty());
+        verify(categorias, never()).save(any());
+    }
+
+    @Test
+    void guardarSinCambiarElNombreNoLoCuentaComoRepetido() {
+        comoEmpresa(3);
+        when(categorias.findByEmpresaIdAndId(3, 8))
+                .thenReturn(Optional.of(new Categoria(3, "Bebidas", null)));
+        // La comprobación excluye a la propia categoría.
+        when(categorias.existsByEmpresaIdAndNombreIgnoreCaseAndIdNot(3, "Bebidas", 8))
+                .thenReturn(false);
+        when(categorias.save(any())).thenAnswer(i -> i.getArgument(0));
+
+        assertTrue(servicio.actualizar(8, "  Bebidas  ", "Gaseosas y jugos").isPresent());
+    }
+
+    @Test
+    void elNombreDeOtraCategoriaSigueSiendoRepetido() {
+        comoEmpresa(3);
+        when(categorias.findByEmpresaIdAndId(3, 8))
+                .thenReturn(Optional.of(new Categoria(3, "Bebidas", null)));
+        when(categorias.existsByEmpresaIdAndNombreIgnoreCaseAndIdNot(3, "Granos", 8))
+                .thenReturn(true);
+
+        assertThrows(NombreRepetidoException.class,
+                () -> servicio.actualizar(8, "Granos", null));
+        verify(categorias, never()).save(any());
+    }
+
+    @Test
+    void desactivaUnaCategoriaQueNoSostieneProductos() {
+        comoEmpresa(3);
+        Categoria c = new Categoria(3, "Bebidas", null);
+        when(categorias.findByEmpresaIdAndId(3, 8)).thenReturn(Optional.of(c));
+        when(productos.countByEmpresaIdAndCategoriaIdAndActivoTrue(3, 8)).thenReturn(0L);
+        when(categorias.save(any())).thenAnswer(i -> i.getArgument(0));
+
+        assertTrue(servicio.desactivar(8).isPresent());
+        assertFalse(c.isActiva());
+    }
+
+    @Test
+    void seNiegaADesactivarUnaCategoriaConProductosActivos() {
+        comoEmpresa(3);
+        when(categorias.findByEmpresaIdAndId(3, 8))
+                .thenReturn(Optional.of(new Categoria(3, "Bebidas", null)));
+        when(productos.countByEmpresaIdAndCategoriaIdAndActivoTrue(3, 8)).thenReturn(4L);
+
+        // Dejarla desactivar dejaría cuatro productos mostrando una
+        // categoría que ya no aparece en ninguna lista.
+        CategoriaEnUsoException e = assertThrows(CategoriaEnUsoException.class,
+                () -> servicio.desactivar(8));
+        assertTrue(e.getMessage().contains("4"));
+        verify(categorias, never()).save(any());
+    }
+
+    @Test
+    void desactivarUnaCategoriaDeOtraEmpresaNoEncuentraNada() {
+        comoEmpresa(3);
+        when(categorias.findByEmpresaIdAndId(3, 8)).thenReturn(Optional.empty());
+
+        assertTrue(servicio.desactivar(8).isEmpty());
+        verify(productos, never()).countByEmpresaIdAndCategoriaIdAndActivoTrue(any(), any());
     }
 }

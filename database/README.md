@@ -100,6 +100,7 @@ falla, verifica que soporte esa directiva.
 | `V14__miniatura_de_imagen.sql` | `producto_imagenes.miniatura_ruta` |
 | `V15__vista_de_precios_acotada_por_empresa.sql` | `v_precios_producto` repite `empresa_id` en la subconsulta de imagen y en sus cuatro enlaces |
 | `V16__retirar_parametros_de_imagen.sql` | Retira los dos parámetros de imagen, que nadie leía y no podían ser por empresa |
+| `V17__vista_de_precios_expone_los_identificadores.sql` | `v_precios_producto` expone `categoria_id` y `proveedor_id`, que los filtros y la edición necesitan |
 
 `extras/restriccion_ambito_regla_iva.sql` queda **fuera** de la cadena a
 propósito. Es una restricción correcta que no se pudo verificar, y el
