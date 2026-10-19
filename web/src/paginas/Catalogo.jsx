@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import Barra from '../componentes/Barra.jsx'
+import Categorias from '../componentes/Categorias.jsx'
+import FormularioProducto from '../componentes/FormularioProducto.jsx'
 import Galeria from '../componentes/Galeria.jsx'
 import SubirImagen from '../componentes/SubirImagen.jsx'
 import { api } from '../servicios/api.js'
@@ -14,10 +16,32 @@ const PESOS = new Intl.NumberFormat('es-CO', {
 export default function Catalogo() {
   const [productos, setProductos] = useState([])
   const [busqueda, setBusqueda] = useState('')
+  // Los tres filtros del RF-16. Vacío significa «sin filtrar», y el
+  // cliente del API los descarta antes de armar la consulta.
+  const [categoria, setCategoria] = useState('')
+  const [proveedor, setProveedor] = useState('')
+  const [estado, setEstado] = useState('')
+  const [categorias, setCategorias] = useState([])
+  const [proveedores, setProveedores] = useState([])
   const [error, setError] = useState(null)
   const [cargando, setCargando] = useState(true)
   const esAdministrador = leerSesion()?.rol === 'ADMINISTRADOR'
   const [galeria, setGaleria] = useState(null)
+  const [editando, setEditando] = useState(null)
+  const [panelCategorias, setPanelCategorias] = useState(false)
+
+  // Las listas de los selectores se piden una sola vez: no cambian
+  // mientras se teclea en el buscador.
+  useEffect(() => {
+    let vigente = true
+    Promise.all([api.categorias(), api.proveedores()])
+      .then(([cs, ps]) => { if (vigente) { setCategorias(cs); setProveedores(ps) } })
+      .catch(() => {
+        // Que falle el relleno de los selectores no debe tapar el
+        // catálogo: se queda sin opciones y el resto funciona.
+      })
+    return () => { vigente = false }
+  }, [])
 
   useEffect(() => {
     let vigente = true
@@ -26,13 +50,15 @@ export default function Catalogo() {
     // desarrollo, y sí en una tienda con el inventario cargado.
     const temporizador = setTimeout(() => {
       setCargando(true)
-      api.catalogo(busqueda)
+      api.catalogo({ busqueda, categoria, proveedor, estado })
         .then((filas) => { if (vigente) { setProductos(filas); setError(null) } })
         .catch((e) => { if (vigente) setError(e.message) })
         .finally(() => { if (vigente) setCargando(false) })
     }, 300)
     return () => { vigente = false; clearTimeout(temporizador) }
-  }, [busqueda])
+  }, [busqueda, categoria, proveedor, estado])
+
+  const hayFiltro = Boolean(busqueda || categoria || proveedor || estado)
 
   return (
     <>
@@ -56,13 +82,88 @@ export default function Catalogo() {
           }}
         />
       )}
+      {editando && (
+        <FormularioProducto
+          producto={editando}
+          categorias={categorias}
+          proveedores={proveedores}
+          onCerrar={() => setEditando(null)}
+          onGuardado={(fresco) => {
+            // Se reemplaza la fila con lo que devolvió el servidor, no
+            // con lo que se envió: cambiar el costo cambia el precio de
+            // venta, y ese lo calcula la vista.
+            setProductos((filas) => filas.map((f) =>
+              f.productoId === fresco.productoId ? fresco : f))
+            setEditando(null)
+          }}
+        />
+      )}
+      {panelCategorias && (
+        <Categorias
+          onCerrar={() => setPanelCategorias(false)}
+          onCambio={(frescas) => {
+            setCategorias(frescas)
+            // Si la categoría por la que se estaba filtrando dejó de
+            // existir, el filtro se suelta: mantenerlo dejaría la tabla
+            // vacía sin explicar por qué.
+            setCategoria((actual) =>
+              actual && !frescas.some((c) => String(c.id) === String(actual)) ? '' : actual)
+          }}
+        />
+      )}
       <main className="contenido">
-        <h2>Catálogo</h2>
+        <div className="titulo-fila">
+          <h2>Catálogo</h2>
+          {esAdministrador && (
+            <button className="boton secundario" onClick={() => setPanelCategorias(true)}>
+              Categorías
+            </button>
+          )}
+        </div>
 
-        <label className="campo">
-          <span>Buscar por nombre, código o SKU</span>
-          <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} />
-        </label>
+        <div className="filtros">
+          <label className="campo">
+            <span>Buscar por nombre, código o SKU</span>
+            <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} />
+          </label>
+
+          <label className="campo">
+            <span>Categoría</span>
+            <select value={categoria} onChange={(e) => setCategoria(e.target.value)}>
+              <option value="">Todas</option>
+              {categorias.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+            </select>
+          </label>
+
+          <label className="campo">
+            <span>Proveedor</span>
+            <select value={proveedor} onChange={(e) => setProveedor(e.target.value)}>
+              <option value="">Todos</option>
+              {proveedores.map((p) => (
+                <option key={p.id} value={p.id}>{p.razonSocial ?? p.nombre}</option>
+              ))}
+            </select>
+          </label>
+
+          <label className="campo">
+            <span>Existencia</span>
+            <select value={estado} onChange={(e) => setEstado(e.target.value)}>
+              <option value="">Cualquiera</option>
+              <option value="ACTIVO">Activo</option>
+              <option value="CRITICO">Crítico</option>
+              <option value="AGOTADO">Agotado</option>
+            </select>
+          </label>
+
+          {hayFiltro && (
+            <button
+              className="enlace"
+              onClick={() => { setBusqueda(''); setCategoria(''); setProveedor(''); setEstado('') }}
+            >
+              limpiar filtros
+            </button>
+          )}
+        </div>
 
         {error && <div className="aviso error" role="alert">{error}</div>}
 
@@ -78,6 +179,7 @@ export default function Catalogo() {
                 <th className="numero">Crédito</th>
                 <th className="numero">Exist.</th>
                 <th>Estado</th>
+                {esAdministrador && <th><span className="oculto">Acciones</span></th>}
               </tr>
             </thead>
             <tbody>
@@ -165,6 +267,11 @@ export default function Catalogo() {
                       {p.estadoStock}
                     </span>
                   </td>
+                  {esAdministrador && (
+                    <td className="acciones">
+                      <button className="enlace" onClick={() => setEditando(p)}>editar</button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -172,7 +279,9 @@ export default function Catalogo() {
 
           {!cargando && productos.length === 0 && (
             <p style={{ color: 'var(--tinta-3)' }}>
-              {busqueda ? 'Ningún producto coincide con la búsqueda.' : 'El catálogo está vacío.'}
+              {hayFiltro
+                ? 'Ningún producto coincide con los filtros.'
+                : 'El catálogo está vacío.'}
             </p>
           )}
         </div>

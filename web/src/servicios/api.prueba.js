@@ -53,9 +53,60 @@ describe('cliente del API', () => {
 
   it('el texto de búsqueda se codifica antes de ponerlo en la ruta', async () => {
     responder(200, [])
-    await api.catalogo('arroz & panela')
+    await api.catalogo({ busqueda: 'arroz & panela' })
     const [ruta] = global.fetch.mock.calls[0]
     expect(ruta).toBe('/api/v1/productos?busqueda=arroz%20%26%20panela')
+  })
+
+  it('los filtros vacíos no viajan en la consulta', async () => {
+    responder(200, [])
+    // Mandar «categoria=» no es lo mismo que no mandarla: el backend
+    // recibiría una cadena en vez de nulo y el filtro dejaría de
+    // anularse a sí mismo.
+    await api.catalogo({ busqueda: '', categoria: '', proveedor: null, estado: undefined })
+    const [ruta] = global.fetch.mock.calls[0]
+    expect(ruta).toBe('/api/v1/productos')
+  })
+
+  it('los filtros que sí tienen valor se combinan', async () => {
+    responder(200, [])
+    await api.catalogo({ busqueda: 'arroz', categoria: 4, proveedor: 9, estado: 'AGOTADO' })
+    const [ruta] = global.fetch.mock.calls[0]
+    expect(ruta).toBe('/api/v1/productos?busqueda=arroz&categoria=4&proveedor=9&estado=AGOTADO')
+  })
+
+  it('sin argumentos pide el catálogo entero', async () => {
+    responder(200, [])
+    await api.catalogo()
+    const [ruta] = global.fetch.mock.calls[0]
+    expect(ruta).toBe('/api/v1/productos')
+  })
+
+  it('editar un producto va por PUT con el cuerpo en JSON', async () => {
+    responder(200, {})
+    await api.editarProducto(11, { nombre: 'Arroz', costo: 3400 })
+    const [ruta, opciones] = global.fetch.mock.calls[0]
+    expect(ruta).toBe('/api/v1/productos/11')
+    expect(opciones.method).toBe('PUT')
+    expect(opciones.headers['Content-Type']).toBe('application/json')
+    expect(JSON.parse(opciones.body).nombre).toBe('Arroz')
+  })
+
+  it('desactivar una categoría es un POST, no un DELETE', async () => {
+    responder(200, {})
+    // Nada se borra: los productos que la usaron conservan su historial.
+    await api.desactivarCategoria(8)
+    const [ruta, opciones] = global.fetch.mock.calls[0]
+    expect(ruta).toBe('/api/v1/categorias/8/desactivar')
+    expect(opciones.method).toBe('POST')
+  })
+
+  it('renombrar una categoría va por PUT', async () => {
+    responder(200, {})
+    await api.editarCategoria(8, { nombre: 'Granos', descripcion: null })
+    const [ruta, opciones] = global.fetch.mock.calls[0]
+    expect(ruta).toBe('/api/v1/categorias/8')
+    expect(opciones.method).toBe('PUT')
   })
 
   it('la subida no fija Content-Type', async () => {
