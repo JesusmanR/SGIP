@@ -1,5 +1,6 @@
 package co.com.bspstore.sgip.logica;
 
+import co.com.bspstore.sgip.api.dto.CruceDeUmbral;
 import co.com.bspstore.sgip.api.dto.ReglaDeMargen;
 import co.com.bspstore.sgip.api.dto.SolicitudReglaMargen;
 import co.com.bspstore.sgip.config.SinEmpresaException;
@@ -245,6 +246,40 @@ class ServicioPreciosTest {
         when(precios.productosAlcanzados(EMPRESA, 4, null)).thenReturn(34);
 
         assertEquals(34, servicio.alcance(4, null));
+    }
+
+    // ----------------------------------------------------------- RF-35
+
+    @Test
+    void laSimulacionDevuelveLasReferenciasQueCruzarianElUmbral() {
+        var cruce = new CruceDeUmbral(1, "PC-001", "Portátil", new BigDecimal("2100000.00"),
+                2520000, 2730000, new BigDecimal("2618700.00"), "EXCLUIDO", "GRAVADO");
+        when(precios.simularCruces(EMPRESA, null, null, "CONTADO", "SOBRE_COSTO",
+                new BigDecimal("1.3000"))).thenReturn(List.of(cruce));
+
+        var resultado = servicio.simular(solicitud("SOBRE_COSTO", "1.3000"));
+
+        assertEquals(1, resultado.size());
+        assertEquals("EXCLUIDO", resultado.get(0).tratamientoAntes());
+        assertEquals("GRAVADO", resultado.get(0).tratamientoDespues());
+    }
+
+    /** El requisito lo pide expresamente: sin cruces, lista vacía y no error. */
+    @Test
+    void unaSimulacionSinCrucesDevuelveListaVaciaYNoUnError() {
+        when(precios.simularCruces(anyInt(), any(), any(), anyString(), anyString(), any()))
+                .thenReturn(List.of());
+
+        assertTrue(servicio.simular(solicitud("SOBRE_COSTO", "1.2000")).isEmpty());
+    }
+
+    @Test
+    void laSimulacionCompruebaElTopeAntesDeConsultarNada() {
+        assertThrows(ReglaInvalidaException.class,
+                () -> servicio.simular(solicitud("SOBRE_PRECIO", "2.5000")));
+
+        verify(precios, never()).simularCruces(anyInt(), any(), any(), anyString(),
+                anyString(), any());
     }
 
     @Test

@@ -1,5 +1,6 @@
 package co.com.bspstore.sgip.api;
 
+import co.com.bspstore.sgip.api.dto.CruceDeUmbral;
 import co.com.bspstore.sgip.api.dto.ReglaDeMargen;
 import co.com.bspstore.sgip.api.dto.SolicitudReglaMargen;
 import co.com.bspstore.sgip.logica.ServicioPrecios;
@@ -69,6 +70,22 @@ public class PreciosControlador {
     public Alcance alcance(@RequestParam(required = false) Integer categoria,
                            @RequestParam(required = false) Integer proveedor) {
         return new Alcance(categoria, proveedor, servicio.alcance(categoria, proveedor));
+    }
+
+    /**
+     * Las referencias que cambiarían de tratamiento tributario si se
+     * aplicara esta regla (RF-35).
+     *
+     * Es un POST aunque no escriba nada: lo que se consulta es el efecto
+     * de una regla que todavía no existe, de modo que hay que mandarla
+     * entera en el cuerpo. Un GET con la regla desarmada en parámetros
+     * diría lo mismo peor.
+     *
+     * Sin cruces devuelve una lista vacía, no un error.
+     */
+    @PostMapping("/simulacion")
+    public List<CruceDeUmbral> simular(@Valid @RequestBody SolicitudReglaMargen solicitud) {
+        return servicio.simular(solicitud);
     }
 
     /** 409 si ya hay una regla del mismo alcance con vigencia solapada. */

@@ -170,6 +170,37 @@ igual "al doblar el costo, el precio se dobla solo" "2400" "$(precio PREC-BASE)"
 
 
 echo
+echo "── el aviso de cruce del umbral (RF-35) ──"
+# La simulación del RF-35 calcula el precio de una regla que todavía no
+# existe, de modo que no puede salir de la vista: repite su fórmula. Si
+# las dos expresiones discreparan, el aviso mentiría. Esta comprobación
+# es la que lo ataja: simular con el factor que YA rige tiene que
+# encontrar cero cruces, porque nada cambia.
+FACTOR_VIGENTE=$(consulta "SELECT factor FROM reglas_margen
+                            WHERE empresa_id = 1 AND forma_pago = 'CONTADO'
+                              AND categoria_id IS NULL AND proveedor_id IS NULL
+                            LIMIT 1;")
+cruces () { # $1 factor
+  consulta "SELECT COUNT(*) FROM v_precios_producto v
+             WHERE v.empresa_id = 1
+               AND v.tratamiento_iva = 'EXCLUIDO_HASTA_UMBRAL'
+               AND ((v.tarifa_contado > 0)
+                    <> (ROUND(v.costo * $1, 0) > v.umbral_pesos));"
+}
+igual "simular con el factor vigente ($FACTOR_VIGENTE) no encuentra cruces" \
+      "0" "$(cruces "$FACTOR_VIGENTE")"
+
+# Y subirlo sí tiene que encontrarlos, o la comprobación de arriba
+# estaría pasando porque la consulta no mira nada.
+SUBIDO=$(consulta "SELECT $FACTOR_VIGENTE + 0.1000;")
+n=$(cruces "$SUBIDO")
+if [[ "${n:-0}" -gt 0 ]]; then
+  ok "subir el factor a $SUBIDO avisa de $n referencia(s) que cruzarían"
+else
+  falla "subir el factor a $SUBIDO no avisó de ninguna: la simulación no está mirando"
+fi
+
+echo
 if [[ "$fallos" -eq 0 ]]; then
   echo "TODO EN VERDE"
   exit 0

@@ -1,5 +1,6 @@
 package co.com.bspstore.sgip.logica;
 
+import co.com.bspstore.sgip.api.dto.CruceDeUmbral;
 import co.com.bspstore.sgip.api.dto.ReglaDeMargen;
 import co.com.bspstore.sgip.api.dto.SolicitudReglaMargen;
 import co.com.bspstore.sgip.config.ContextoEmpresa;
@@ -70,6 +71,27 @@ public class ServicioPrecios {
         Integer empresa = ContextoEmpresa.empresaActual();
         exigirAmbitoPropio(empresa, categoriaId, proveedorId);
         return precios.productosAlcanzados(empresa, categoriaId, proveedorId);
+    }
+
+    /**
+     * Qué referencias cambiarían de tratamiento tributario si se
+     * aplicara esta regla (RF-35).
+     *
+     * Se consulta antes de guardar, no después de romper nada: el
+     * requisito habla de avisar «tras aplicar una lista», y avisar antes
+     * cumple lo mismo y además deja decidir. Cuando el módulo de listas
+     * de precios exista, reutilizará esta misma comparación.
+     *
+     * Sin cruces devuelve una lista vacía, que es lo que el requisito
+     * pide expresamente que ocurra en lugar de un error.
+     */
+    @Transactional(readOnly = true)
+    public List<CruceDeUmbral> simular(SolicitudReglaMargen solicitud) {
+        Integer empresa = ContextoEmpresa.empresaActual();
+        exigirAmbitoPropio(empresa, solicitud.categoriaId(), solicitud.proveedorId());
+        exigirFactorCoherente(solicitud.formaCalculo(), solicitud.factor());
+        return precios.simularCruces(empresa, solicitud.categoriaId(), solicitud.proveedorId(),
+                solicitud.formaPago(), solicitud.formaCalculo(), solicitud.factor());
     }
 
     @Transactional

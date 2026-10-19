@@ -1,5 +1,6 @@
 package co.com.bspstore.sgip.datos;
 
+import co.com.bspstore.sgip.api.dto.CruceDeUmbral;
 import co.com.bspstore.sgip.api.dto.ReglaDeMargen;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
@@ -206,6 +207,64 @@ public class RepositorioPrecios {
                 .param("proveedor", proveedorId)
                 .query(Integer.class)
                 .single() > 0;
+    }
+
+    /**
+     * Las referencias que cambiarían de tratamiento tributario si se
+     * aplicara esta regla (RF-35).
+     *
+     * El precio nuevo se calcula con la misma fórmula que la V25 puso en
+     * la vista, y no es duplicarla por gusto: aquí se necesita el precio
+     * de una regla que todavía no existe, de modo que la vista no lo
+     * puede dar. Si las dos expresiones discreparan, la simulación
+     * mentiría, y por eso `verificar_precios.sh` comprueba que una
+     * simulación con el factor que ya rige no encuentre ningún cruce.
+     *
+     * Solo miran al umbral las referencias cuyo tratamiento lo usa; para
+     * las demás `umbral_pesos` es nulo, la comparación da nulo y la fila
+     * no entra. Una lista vacía significa que nadie cruza, que es lo que
+     * el requisito pide que ocurra en lugar de un error.
+     */
+    public List<CruceDeUmbral> simularCruces(Integer empresaId, Integer categoriaId,
+                                             Integer proveedorId, String formaPago,
+                                             String formaCalculo, BigDecimal factor) {
+        return jdbc.sql("""
+                        SELECT v.producto_id, v.codigo, v.nombre, v.costo,
+                               CASE WHEN :forma = 'CREDITO' THEN v.precio_credito
+                                    ELSE v.precio_contado END         AS precio_antes,
+                               CASE WHEN :calculo = 'SOBRE_PRECIO'
+                                    THEN ROUND(v.costo / (2 - :factor), 0)
+                                    ELSE ROUND(v.costo * :factor, 0) END AS precio_despues,
+                               v.umbral_pesos                          AS umbral,
+                               CASE WHEN (CASE WHEN :forma = 'CREDITO' THEN v.tarifa_credito
+                                               ELSE v.tarifa_contado END) > 0
+                                    THEN 'GRAVADO' ELSE 'EXCLUIDO' END AS tratamiento_antes,
+                               CASE WHEN (CASE WHEN :calculo = 'SOBRE_PRECIO'
+                                               THEN ROUND(v.costo / (2 - :factor), 0)
+                                               ELSE ROUND(v.costo * :factor, 0) END)
+                                         > v.umbral_pesos
+                                    THEN 'GRAVADO' ELSE 'EXCLUIDO' END AS tratamiento_despues
+                          FROM v_precios_producto v
+                         WHERE v.empresa_id = :empresa
+                           AND v.tratamiento_iva = 'EXCLUIDO_HASTA_UMBRAL'
+                           AND (:categoria IS NULL OR v.categoria_id = :categoria)
+                           AND (:proveedor IS NULL OR v.proveedor_id = :proveedor)
+                           AND ((CASE WHEN :forma = 'CREDITO' THEN v.tarifa_credito
+                                      ELSE v.tarifa_contado END) > 0)
+                               <> ((CASE WHEN :calculo = 'SOBRE_PRECIO'
+                                         THEN ROUND(v.costo / (2 - :factor), 0)
+                                         ELSE ROUND(v.costo * :factor, 0) END)
+                                   > v.umbral_pesos)
+                         ORDER BY v.codigo
+                        """)
+                .param("empresa", empresaId)
+                .param("categoria", categoriaId)
+                .param("proveedor", proveedorId)
+                .param("forma", formaPago)
+                .param("calculo", formaCalculo)
+                .param("factor", factor)
+                .query(CruceDeUmbral.class)
+                .list();
     }
 
     /**
