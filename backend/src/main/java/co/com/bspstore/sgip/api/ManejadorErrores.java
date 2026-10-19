@@ -7,8 +7,10 @@ import co.com.bspstore.sgip.logica.CredencialesInvalidasException;
 import co.com.bspstore.sgip.logica.FiltroInvalidoException;
 import co.com.bspstore.sgip.logica.AlmacenArchivos;
 import co.com.bspstore.sgip.logica.ArchivoInvalidoException;
+import co.com.bspstore.sgip.logica.MovimientoInvalidoException;
 import co.com.bspstore.sgip.logica.NombreRepetidoException;
 import co.com.bspstore.sgip.logica.RegistroRepetidoException;
+import co.com.bspstore.sgip.logica.RecepcionInvalidaException;
 import co.com.bspstore.sgip.logica.ReferenciaAjenaException;
 import co.com.bspstore.sgip.logica.RolNoAsignableException;
 import co.com.bspstore.sgip.logica.UltimoAdministradorException;
@@ -77,6 +79,29 @@ public class ManejadorErrores {
         // funciona.
         ProblemDetail p = ProblemDetail.forStatus(HttpStatus.CONFLICT);
         p.setTitle("La empresa quedaría sin administrador");
+        p.setDetail(e.getMessage());
+        return p;
+    }
+
+    @ExceptionHandler(MovimientoInvalidoException.class)
+    public ProblemDetail movimientoInvalido(MovimientoInvalidoException e) {
+        // 400: el cuerpo está bien formado y la regla que incumple
+        // depende del saldo que el producto tiene ahora, que el cliente
+        // no podía conocer al escribir la petición.
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
+        p.setTitle("Movimiento de inventario inválido");
+        p.setDetail(e.getMessage());
+        return p;
+    }
+
+    @ExceptionHandler(RecepcionInvalidaException.class)
+    public ProblemDetail recepcionInvalida(RecepcionInvalidaException e) {
+        // 400, que es lo que el RF-23 pide para «recibir más de lo
+        // ordenado». El cuerpo está bien formado; lo que no encaja es
+        // contra el estado de la orden, y el detalle dice las tres cifras
+        // para que quien recibe sepa cuánto cabe.
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
+        p.setTitle("Recepción inválida");
         p.setDetail(e.getMessage());
         return p;
     }

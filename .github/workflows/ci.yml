@@ -65,9 +65,30 @@ jobs:
                    V19__la_valorizacion_no_resta_lo_que_se_debe \
                    V20__la_vista_de_precios_cierra_la_modalidad_a_credito \
                    V21__auditoria_de_la_plataforma \
-                   V22__parametros_de_la_plataforma; do
+                   V22__parametros_de_la_plataforma \
+                   V23__el_kardex_se_explica_solo \
+                   V24__claves_por_empresa_en_compras; do
             echo "→ $f"
-            mysql -h 127.0.0.1 -u root -psgip_ci sgip < "database/migrations/$f.sql"
+            # El motivo del fallo se emite como anotación además de ir al
+            # registro. Sin esto, una migración que falla deja un «exit
+            # code 1» y el porqué solo se ve abriendo el registro a mano:
+            # la API de comprobaciones expone las anotaciones y no el
+            # registro, de modo que el diagnóstico queda fuera del alcance
+            # de cualquier herramienta que consulte el resultado.
+            if ! salida=$(mysql -h 127.0.0.1 -u root -psgip_ci sgip \
+                            < "database/migrations/$f.sql" 2>&1); then
+              echo "$salida"
+              echo "::error file=database/migrations/$f.sql::$f falló · $(printf '%s' "$salida" | grep -m1 -i '^ERROR' || printf '%s' "$salida" | head -1)"
+              exit 1
+            fi
+            # Un ERROR en la salida sin código distinto de cero también
+            # cuenta: el cliente los mezcla según cómo se le invoque, y
+            # una migración a medias es peor que una que no corrió.
+            if printf '%s' "$salida" | grep -qi '^ERROR'; then
+              echo "$salida"
+              echo "::error file=database/migrations/$f.sql::$f dejó un error · $(printf '%s' "$salida" | grep -m1 -i '^ERROR')"
+              exit 1
+            fi
           done
 
       - name: Verificar el conteo de objetos
@@ -95,14 +116,14 @@ jobs:
                AND column_name='sin_existencia';")
           test "$n" -eq 1
 
-      # Veinte de la V11 y cuatro de la V12.
+      # Veinte de la V11, cuatro de la V12 y cinco de la V24.
       - name: Verificar las claves foráneas por empresa
         run: |
           n=$(mysql -h 127.0.0.1 -u root -psgip_ci -N -B -e \
             "SELECT COUNT(*) FROM information_schema.referential_constraints
              WHERE constraint_schema='sgip' AND constraint_name LIKE '%\\_emp';")
           echo "claves foráneas por empresa: $n"
-          test "$n" -eq 24
+          test "$n" -eq 29
 
       # El conteo de vistas no cambia con la V18, la V19 ni la V20: la
       # primera solo toca restricciones y las otras dos recrean vistas que
@@ -130,8 +151,24 @@ jobs:
           echo "columnas nuevas de la V19 y la V20: $n"
           test "$n" -eq 7
 
+      - name: Verificar la coherencia del kárdex (V23)
+        run: |
+          n=$(mysql -h 127.0.0.1 -u root -psgip_ci -N -B -e \
+            "SELECT COUNT(*) FROM information_schema.check_constraints
+             WHERE constraint_schema='sgip'
+               AND constraint_name='ck_movimientos_coherencia';")
+          test "$n" -eq 1
+          n=$(mysql -h 127.0.0.1 -u root -psgip_ci -N -B -e \
+            "SELECT COUNT(*) FROM information_schema.columns
+             WHERE table_schema='sgip' AND table_name='movimientos_inventario'
+               AND column_name='observacion';")
+          test "$n" -eq 0
+
       - name: Verificar el aislamiento entre empresas
         run: bash database/verificar_aislamiento.sh -h 127.0.0.1 -u root -psgip_ci
+
+      - name: Verificar la invariante del kárdex (RF-49)
+        run: bash database/verificar_kardex.sh -h 127.0.0.1 -u root -psgip_ci
 
       - name: Verificar la configuración tributaria por empresa
         run: bash database/verificar_tributacion.sh -h 127.0.0.1 -u root -psgip_ci
@@ -194,8 +231,29 @@ jobs:
                    V19__la_valorizacion_no_resta_lo_que_se_debe \
                    V20__la_vista_de_precios_cierra_la_modalidad_a_credito \
                    V21__auditoria_de_la_plataforma \
-                   V22__parametros_de_la_plataforma; do
-            mysql -h 127.0.0.1 -u root -psgip_ci sgip < "database/migrations/$f.sql"
+                   V22__parametros_de_la_plataforma \
+                   V23__el_kardex_se_explica_solo \
+                   V24__claves_por_empresa_en_compras; do
+            # El motivo del fallo se emite como anotación además de ir al
+            # registro. Sin esto, una migración que falla deja un «exit
+            # code 1» y el porqué solo se ve abriendo el registro a mano:
+            # la API de comprobaciones expone las anotaciones y no el
+            # registro, de modo que el diagnóstico queda fuera del alcance
+            # de cualquier herramienta que consulte el resultado.
+            if ! salida=$(mysql -h 127.0.0.1 -u root -psgip_ci sgip \
+                            < "database/migrations/$f.sql" 2>&1); then
+              echo "$salida"
+              echo "::error file=database/migrations/$f.sql::$f falló · $(printf '%s' "$salida" | grep -m1 -i '^ERROR' || printf '%s' "$salida" | head -1)"
+              exit 1
+            fi
+            # Un ERROR en la salida sin código distinto de cero también
+            # cuenta: el cliente los mezcla según cómo se le invoque, y
+            # una migración a medias es peor que una que no corrió.
+            if printf '%s' "$salida" | grep -qi '^ERROR'; then
+              echo "$salida"
+              echo "::error file=database/migrations/$f.sql::$f dejó un error · $(printf '%s' "$salida" | grep -m1 -i '^ERROR')"
+              exit 1
+            fi
           done
 
       # application.yml no se versiona. Se arma desde el ejemplo, que es

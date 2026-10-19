@@ -147,6 +147,8 @@ DESPUES_DEL_DEMO=(
   V20__la_vista_de_precios_cierra_la_modalidad_a_credito.sql
   V21__auditoria_de_la_plataforma.sql
   V22__parametros_de_la_plataforma.sql
+  V23__el_kardex_se_explica_solo.sql
+  V24__claves_por_empresa_en_compras.sql
 )
 
 for f in "${ANTES_DEL_DEMO[@]}"; do
@@ -193,14 +195,16 @@ sin_existencia=$("${MYSQL[@]}" -N -B -e \
   fallo=1
 }
 
-# Centinela de las claves compuestas por empresa: veinte de la V11 y
+# Centinela de las claves compuestas por empresa: veinte de la V11,
 # cuatro de la V12 (reglas_iva hacia categorías y hacia productos,
-# producto_imagenes y venta_retenciones).
+# producto_imagenes y venta_retenciones) y cinco de la V24 (las dos de
+# orden_compra_items, las dos de recepciones y la de movimientos hacia
+# recepciones).
 compuestas=$("${MYSQL[@]}" -N -B -e \
   "SELECT COUNT(*) FROM information_schema.referential_constraints
    WHERE constraint_schema='sgip' AND constraint_name LIKE '%\\_emp';")
-[[ "$compuestas" -eq 24 ]] || {
-  echo "ATENCIÓN: se esperaban 24 claves por empresa y hay $compuestas"
+[[ "$compuestas" -eq 29 ]] || {
+  echo "ATENCIÓN: se esperaban 29 claves por empresa y hay $compuestas"
   fallo=1
 }
 
@@ -231,6 +235,28 @@ columnas=$("${MYSQL[@]}" -N -B -e \
       AND column_name IN ('unidades_pendientes','valor_pendiente_al_costo')));")
 [[ "$columnas" -eq 7 ]] || {
   echo "ATENCIÓN: se esperaban 7 columnas de la V19 y la V20 y hay $columnas"
+  fallo=1
+}
+
+# Centinela de la V23: la restriccion de coherencia del kardex y la
+# ausencia de `observacion`, que esa migracion consolido en `motivo`. El
+# conteo de tablas no cambia con la V23, de modo que cuadraria igual sin
+# aplicarla.
+coherencia=$("${MYSQL[@]}" -N -B -e \
+  "SELECT COUNT(*) FROM information_schema.check_constraints
+   WHERE constraint_schema='sgip'
+     AND constraint_name='ck_movimientos_coherencia';")
+[[ "$coherencia" -eq 1 ]] || {
+  echo "ATENCIÓN: falta ck_movimientos_coherencia — la V23 no se aplicó"
+  fallo=1
+}
+
+sobrante=$("${MYSQL[@]}" -N -B -e \
+  "SELECT COUNT(*) FROM information_schema.columns
+   WHERE table_schema='sgip' AND table_name='movimientos_inventario'
+     AND column_name='observacion';")
+[[ "$sobrante" -eq 0 ]] || {
+  echo "ATENCIÓN: movimientos_inventario.observacion sigue ahí — la V23 quedó a medias"
   fallo=1
 }
 

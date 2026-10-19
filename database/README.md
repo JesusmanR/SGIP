@@ -106,6 +106,8 @@ falla, verifica que soporte esa directiva.
 | `V20__la_vista_de_precios_cierra_la_modalidad_a_credito.sql` | `v_precios_producto` expone `total_credito`, `cerca_umbral_credito` y `cruza_umbral_en_credito` |
 | `V21__auditoria_de_la_plataforma.sql` | `auditoria_plataforma`: bitácora inmutable de altas, activaciones, suspensiones y cambios tributarios nacionales, con responsable y fecha (RF-02, RF-05) |
 | `V22__parametros_de_la_plataforma.sql` | `parametros_plataforma`: los ajustes de alcance de plataforma salen de la tabla por empresa, donde el periodo de prueba era un parámetro de la empresa 1 (RN-14, RN-17) |
+| `V23__el_kardex_se_explica_solo.sql` | `cantidad` es una magnitud, el salto tiene que cuadrar con el tipo, el ajuste exige `motivo` y los saldos iniciales del catálogo quedan registrados (RF-49) |
+| `V24__claves_por_empresa_en_compras.sql` | `empresa_id` en `orden_compra_items` y `recepciones`; cinco claves foráneas que podían cruzar comercios pasan a incluirlo |
 
 `extras/restriccion_ambito_regla_iva.sql` queda **fuera** de la cadena a
 propósito. Es una restricción correcta que no se pudo verificar, y el
@@ -362,6 +364,28 @@ MySQL:
 
 - La colación `utf8mb4_0900_ai_ci`, que MariaDB no tiene.
 - `DROP CHECK`, que en MariaDB se escribe `DROP CONSTRAINT`.
+
+Y una tercera diferencia que no se arregla sustituyendo nada, porque va
+en la dirección contraria: **MariaDB acepta expresiones que MySQL
+rechaza**. La V23 definió al principio su restricción de coherencia con
+un `CASE tipo WHEN ... THEN <comparación> END`, que MariaDB aplicó sin
+protestar y MySQL negó:
+
+```
+ERROR 3812: An expression of non-boolean type specified to a check
+            constraint 'ck_movimientos_coherencia'
+```
+
+MySQL exige que la expresión de un `CHECK` sea booleana, y el `CASE`
+devuelve el 1 o el 0 de la comparación, que para su sistema de tipos es
+un entero. Se reescribió como tres implicaciones unidas por `AND` —«no
+es de este tipo O cuadra»—, que es booleana de arriba abajo y además la
+forma que `ck_movimientos_ajuste` ya usaba.
+
+La lección es la que duele: verificar solo contra MariaDB da falsos
+verdes. Desde la V23 la cadena se comprueba contra un **MySQL 8 real**
+antes de enviarla, y MariaDB queda para iterar rápido. La integración
+continua corre contra MySQL 9.7, que es la que manda.
 
 El resto del lenguaje de definición de datos es común a los dos motores.
 Aun así, aplícala en tu entorno antes de darla por buena.
