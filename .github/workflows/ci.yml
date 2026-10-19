@@ -177,6 +177,14 @@ jobs:
       - name: Verificar la configuración tributaria por empresa
         run: bash database/verificar_tributacion.sh -h 127.0.0.1 -u root -psgip_ci
 
+      # El SQL que los repositorios escriben a mano no lo valida nadie
+      # más: Hibernate solo mira las entidades, las pruebas de unidad
+      # simulan JdbcClient y la única que toca una base arranca el
+      # contexto sin pasar por ninguna consulta. Una columna mal escrita
+      # compilaba, pasaba la entrega en verde y reventaba en la pantalla.
+      - name: Analizar el SQL escrito a mano del backend
+        run: python3 database/verificar_sql_del_backend.py -h 127.0.0.1 -u root -psgip_ci
+
       # Esta restricción queda fuera de la cadena porque no se pudo
       # verificar; el archivo explica por qué. Aquí se intenta y se
       # informa el resultado sin hacer fallar el trabajo: si MySQL la
