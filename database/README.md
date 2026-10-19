@@ -101,6 +101,9 @@ falla, verifica que soporte esa directiva.
 | `V15__vista_de_precios_acotada_por_empresa.sql` | `v_precios_producto` repite `empresa_id` en la subconsulta de imagen y en sus cuatro enlaces |
 | `V16__retirar_parametros_de_imagen.sql` | Retira los dos parámetros de imagen, que nadie leía y no podían ser por empresa |
 | `V17__vista_de_precios_expone_los_identificadores.sql` | `v_precios_producto` expone `categoria_id` y `proveedor_id`, que los filtros y la edición necesitan |
+| `V18__movimientos_admiten_existencia_negativa.sql` | `movimientos_inventario` admite el saldo negativo que la V9 autorizó en `productos`; el kárdex ya puede explicar una venta sin existencia (RF-42) |
+| `V19__la_valorizacion_no_resta_lo_que_se_debe.sql` | `v_inventario_valorizado` y `v_rotacion_inventario` acotan la existencia a cero antes de multiplicar, y declaran aparte lo pendiente de reponer |
+| `V20__la_vista_de_precios_cierra_la_modalidad_a_credito.sql` | `v_precios_producto` expone `total_credito`, `cerca_umbral_credito` y `cruza_umbral_en_credito` |
 
 `extras/restriccion_ambito_regla_iva.sql` queda **fuera** de la cadena a
 propósito. Es una restricción correcta que no se pudo verificar, y el
@@ -109,6 +112,33 @@ propio archivo explica por qué está aparte en lugar de dentro de la V12.
 V9 no crea tablas: cambia restricciones y agrega columnas. Las diez
 tablas nuevas de V10 llevan el esquema de 24 a 34, y las cinco de V12 lo
 llevan a 39. V11 no crea tablas: solo cambia claves foráneas e índices.
+
+### Lo que la V18 cierra, y que la V9 dejó a medias
+
+La V9 autorizó la existencia negativa en `productos` y no en
+`movimientos_inventario`, que traía de la V2 dos restricciones con piso
+en cero. El esquema quedaba permitiendo dejar el saldo en negativo y
+prohibiendo anotar por qué: la venta sin existencia del RF-42, escrita
+contra ese esquema, habría abortado su propia transacción.
+
+No se manifestó antes porque todavía nada escribe en esa tabla —el
+módulo de ventas no está construido—, de modo que era un defecto latente
+y no una avería. Se reprodujo sobre una base armada con la cadena V1 a
+V17 antes de escribir la migración, y `verificar_aislamiento.sh` registra
+desde ahora un movimiento que deja el saldo en negativo: esa
+comprobación falla con las restricciones de la V2 y pasa con las de la
+V18.
+
+La V19 y la V20 vienen del mismo repaso. La primera corrige una
+aritmética que la existencia negativa volvió engañosa: con una
+referencia en −2 y costo de 2.100.000, el valor de la bodega de la
+empresa de demostración se reportaba en 59.150.000 en lugar de
+63.350.000, y el tablero no mostraba un error sino una cifra plausible y
+más baja. La segunda cierra la modalidad a crédito, que tenía precio y
+tarifa pero no total: en PC-001 la diferencia entre vender de contado y
+a crédito no es el 5 % del margen, son 603.750 pesos, porque el precio a
+crédito cruza las 50 UVT del Art. 424 y se grava al 19 % mientras el de
+contado queda excluido.
 
 ### Lo que la V12 corrige, y que la V10 dejó pasar
 
@@ -333,3 +363,36 @@ MySQL:
 
 El resto del lenguaje de definición de datos es común a los dos motores.
 Aun así, aplícala en tu entorno antes de darla por buena.
+
+## Anotado para el módulo de ventas
+
+Una pregunta que el esquema deja abierta a propósito y que la lógica de
+Java tendrá que responder cuando se construyan las ventas.
+
+En `cotizaciones` y `ventas`, el total es una columna generada:
+`subtotal - descuento + iva + envio`. En `cotizacion_items` y
+`venta_items`, el `valor_iva` de cada línea se calcula sobre
+`cantidad * precio_unitario * tarifa_iva`, sin restar el descuento de
+cabecera.
+
+En Colombia eso puede estar bien o mal según qué sea ese descuento. Los
+descuentos condicionados no afectan la base del impuesto; los
+descuentos comerciales a pie de factura sí la reducen, y de forma
+proporcional. Con la aritmética actual, un descuento comercial deja el
+impuesto calculado sobre una base mayor que la que la factura declara.
+
+El esquema no decide cuál de los dos es, y no debería: son dos figuras
+distintas y el usuario que registra la venta es quien lo sabe. Lo que
+hay que resolver al construir el módulo es una de estas dos vías, y
+dejarla escrita:
+
+1. Distinguir las dos clases de descuento en la cabecera y, para el
+   comercial, recalcular el impuesto sobre la base ya rebajada.
+2. Documentar que el campo `descuento` es siempre condicionado —menor
+   valor a pagar, sin efecto sobre la base— y ofrecer el descuento
+   comercial únicamente en la línea, donde el `precio_unitario` ya lo
+   incorpora.
+
+La segunda es más simple y hay que decirla en la pantalla, o alguien
+registrará un descuento comercial en la cabecera y la factura saldrá con
+el impuesto de más.

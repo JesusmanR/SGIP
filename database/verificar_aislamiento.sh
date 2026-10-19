@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Comprueba que el aislamiento entre empresas se cumple en el esquema, no
-# solo en el código. Se ejecuta sobre una base con la cadena V1 a V11
+# solo en el código. Se ejecuta sobre una base con la cadena V1 a V20
 # aplicada y los datos de demostración cargados.
 #
 # Los argumentos se pasan tal cual al cliente mysql:
@@ -29,6 +29,19 @@ consulta () { mysql "${CONEXION[@]}" -N -B sgip -e "$1" 2>/dev/null; }
 fallos=0
 ok ()    { echo "  ok    · $1"; }
 falla () { echo "  FALLA · $1"; fallos=$((fallos + 1)); }
+
+# El cliente devuelve el eco de la sentencia junto al error. Para el
+# mensaje de una comprobación fallida sirve la línea del error y nada más:
+# el resto es ruido que esconde lo único que hay que leer.
+solo_error () { grep -m1 "^ERROR" <<<"$1" || echo "${1:-(sin salida)}"; }
+
+# Un conteo que distingue «cero filas» de «la consulta no se pudo
+# ejecutar». Sin esta diferencia, una columna que falta se lee como un
+# conteo vacío y la comprobación falla sin decir por qué.
+conteo () {
+  local n; n=$(consulta "$1")
+  if [[ -z "$n" ]]; then echo "sin-dato"; else echo "$n"; fi
+}
 
 # Una sentencia que DEBE ser rechazada por una clave foránea concreta.
 # Se verifica el código 1452 y el nombre de la restricción: si falla por
@@ -185,6 +198,136 @@ else
   fi
   ejecutar "DELETE FROM producto_imagenes WHERE ruta='empresas/zz/FUGA.jpg';" >/dev/null
 fi
+
+
+# La venta sin existencia disponible (RF-42) necesita dos permisos que
+# viven en sitios distintos: la V9 lo dio en productos y la V18 en
+# movimientos_inventario. Con solo el primero, el esquema deja la
+# existencia en negativo pero prohíbe anotar por qué, y la transacción de
+# venta entera se aborta. Esta comprobación registra el movimiento que
+# deja el saldo en negativo: falla con las restricciones de la V2 y pasa
+# con las de la V18.
+echo
+echo "── el kárdex admite la existencia negativa que el RF-42 autoriza ──"
+PROD_NEG=$(consulta "SELECT producto_id FROM productos
+                      WHERE empresa_id = $ID AND sku = 'SKU-OK' LIMIT 1;")
+if [[ -z "$PROD_NEG" ]]; then
+  falla "no se encontró el producto de prueba SKU-OK"
+else
+  ejecutar "DELETE FROM movimientos_inventario WHERE observacion LIKE 'AISL-%';" >/dev/null
+  ejecutar "DELETE FROM usuarios WHERE correo='aislamiento@prueba.local';" >/dev/null
+  ejecutar "INSERT INTO usuarios (empresa_id, rol_id, nombre, correo, clave_hash,
+                                   activo, bloqueado, cambio_clave_req)
+            SELECT $ID, r.rol_id, 'Operario de prueba', 'aislamiento@prueba.local',
+                   'x', TRUE, FALSE, FALSE
+              FROM roles r WHERE r.nombre = 'ADMINISTRADOR';" >/dev/null
+  USU_NEG=$(consulta "SELECT usuario_id FROM usuarios
+                       WHERE correo='aislamiento@prueba.local';")
+
+  # El producto queda debiendo tres unidades y el movimiento lo explica.
+  ejecutar "UPDATE productos SET existencia = -3
+             WHERE empresa_id = $ID AND producto_id = $PROD_NEG;" >/dev/null
+  neg=$(consulta "SELECT existencia FROM productos
+                   WHERE empresa_id = $ID AND producto_id = $PROD_NEG;")
+  [[ "$neg" == "-3" ]] && ok "productos admite existencia -3 (V9)" \
+                       || falla "productos no admitió la existencia negativa: ${neg:-(sin dato)}"
+
+  salida=$(ejecutar "INSERT INTO movimientos_inventario
+                            (empresa_id, producto_id, usuario_id, tipo, cantidad,
+                             existencia_anterior, existencia_posterior, observacion)
+                     VALUES ($ID, $PROD_NEG, $USU_NEG, 'EGRESO', 3, 0, -3,
+                             'AISL-venta sin existencia');")
+  [[ -z "$salida" ]] && ok "el movimiento con saldo posterior -3 entra (V18)" \
+                     || falla "el movimiento en negativo fue rechazado: $(solo_error "$salida")"
+
+  # Y la venta siguiente parte de un saldo ya negativo.
+  salida=$(ejecutar "INSERT INTO movimientos_inventario
+                            (empresa_id, producto_id, usuario_id, tipo, cantidad,
+                             existencia_anterior, existencia_posterior, observacion)
+                     VALUES ($ID, $PROD_NEG, $USU_NEG, 'EGRESO', 1, -3, -4,
+                             'AISL-segunda sin existencia');")
+  [[ -z "$salida" ]] && ok "el movimiento con saldo anterior -3 entra (V18)" \
+                     || falla "el movimiento desde saldo negativo fue rechazado: $(solo_error "$salida")"
+
+  # Lo que la V18 no debía aflojar. Un piso de -9999 que no rechazara
+  # -10000 no sería un piso, y un movimiento de cero unidades seguiría
+  # siendo una fila sin significado.
+  salida=$(ejecutar "INSERT INTO movimientos_inventario
+                            (empresa_id, producto_id, usuario_id, tipo, cantidad,
+                             existencia_anterior, existencia_posterior, observacion)
+                     VALUES ($ID, $PROD_NEG, $USU_NEG, 'EGRESO', 1, -9999, -10000,
+                             'AISL-bajo el piso');")
+  [[ "$salida" == *"ck_movimientos_posterior"* ]] \
+    && ok "el piso de -9999 sigue cerrado" \
+    || falla "el piso de -9999 no rechazó -10000 por ck_movimientos_posterior: $(solo_error "${salida:-(entró)}")"
+
+  salida=$(ejecutar "INSERT INTO movimientos_inventario
+                            (empresa_id, producto_id, usuario_id, tipo, cantidad,
+                             existencia_anterior, existencia_posterior, observacion)
+                     VALUES ($ID, $PROD_NEG, $USU_NEG, 'EGRESO', 0, 5, 5,
+                             'AISL-cantidad cero');")
+  [[ "$salida" == *"ck_movimientos_cantidad"* ]] \
+    && ok "el movimiento de cero unidades sigue rechazado" \
+    || falla "el movimiento de cero unidades no fue rechazado: $(solo_error "${salida:-(entró)}")"
+
+  # Con el producto todavía en -3, la valorización no debe restar. Antes
+  # de la V19 esta referencia aportaba -6.000 al valor de la bodega.
+  echo
+  echo "── la valorización no resta lo que se debe reponer ──"
+  fila=$(consulta "SELECT valor_al_costo, unidades_pendientes, valor_pendiente_al_costo
+                     FROM v_inventario_valorizado
+                    WHERE empresa_id = $ID AND producto_id = $PROD_NEG;")
+  read -r v_costo v_pend v_valpend <<<"$fila"
+  [[ "${v_costo%%.*}" == "0" ]] \
+    && ok "la referencia en negativo valoriza en cero" \
+    || falla "la referencia en negativo valoriza en ${v_costo:-(sin dato)}"
+  [[ "${v_pend:-0}" == "3" ]] \
+    && ok "declara 3 unidades pendientes de reponer" \
+    || falla "unidades pendientes: ${v_pend:-(sin dato)} (se esperaban 3)"
+  [[ "${v_valpend%%.*}" == "6000" ]] \
+    && ok "declara 6.000 pendientes al costo" \
+    || falla "valor pendiente: ${v_valpend:-(sin dato)} (se esperaban 6000)"
+
+  n=$(conteo "SELECT COUNT(*) FROM v_inventario_valorizado WHERE valor_al_costo < 0;")
+  [[ "$n" == "0" ]] && ok "ninguna referencia valoriza en negativo" \
+                    || falla "referencias que valorizan en negativo: $n"
+  n=$(conteo "SELECT COUNT(*) FROM v_rotacion_inventario WHERE capital_retenido < 0;")
+  [[ "$n" == "0" ]] && ok "ningún capital retenido en negativo" \
+                    || falla "filas con capital retenido negativo: $n"
+
+  ejecutar "DELETE FROM movimientos_inventario WHERE observacion LIKE 'AISL-%';" >/dev/null
+  ejecutar "UPDATE productos SET existencia = 10
+             WHERE empresa_id = $ID AND producto_id = $PROD_NEG;" >/dev/null
+  ejecutar "DELETE FROM usuarios WHERE correo='aislamiento@prueba.local';" >/dev/null
+fi
+
+
+# El total a crédito de la V20 no se comprueba contra una cifra fija: el
+# umbral del Art. 424 se mide en UVT y la UVT cambia cada año, de modo
+# que una prueba con un número escrito a mano caducaría sola. Lo que no
+# cambia es la relación entre las tres columnas.
+echo
+echo "── la vista de precios cierra la modalidad a crédito ──"
+n=$(conteo "SELECT COUNT(*) FROM v_precios_producto
+             WHERE precio_credito IS NOT NULL
+               AND total_credito <> ROUND(precio_credito * (1 + tarifa_credito), 4);")
+[[ "$n" == "0" ]] && ok "total_credito concuerda con su precio y su tarifa" \
+                  || falla "filas con total_credito inconsistente: $n (sin-dato = la columna no existe; ¿falta la V20?)"
+
+# El caso que el margen provoca por sí solo: excluido de contado y
+# gravado a crédito. Donde la bandera se enciende, las dos tarifas deben
+# diferir; donde no, no puede haber una diferencia escondida.
+n=$(conteo "SELECT COUNT(*) FROM v_precios_producto
+             WHERE cruza_umbral_en_credito = 1
+               AND NOT (tarifa_contado = 0 AND tarifa_credito > 0);")
+[[ "$n" == "0" ]] && ok "la bandera de cruce solo marca cruces reales" \
+                  || falla "filas marcadas sin cruzar el umbral: $n"
+n=$(conteo "SELECT COUNT(*) FROM v_precios_producto
+             WHERE cruza_umbral_en_credito = 0
+               AND tratamiento_iva = 'EXCLUIDO_HASTA_UMBRAL'
+               AND tarifa_contado = 0 AND tarifa_credito > 0;")
+[[ "$n" == "0" ]] && ok "no hay cruces sin marcar" \
+                  || falla "filas que cruzan el umbral sin estar marcadas: $n"
 
 echo
 if [[ "$fallos" -eq 0 ]]; then

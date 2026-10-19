@@ -142,6 +142,9 @@ DESPUES_DEL_DEMO=(
   V15__vista_de_precios_acotada_por_empresa.sql
   V16__retirar_parametros_de_imagen.sql
   V17__vista_de_precios_expone_los_identificadores.sql
+  V18__movimientos_admiten_existencia_negativa.sql
+  V19__la_valorizacion_no_resta_lo_que_se_debe.sql
+  V20__la_vista_de_precios_cierra_la_modalidad_a_credito.sql
 )
 
 for f in "${ANTES_DEL_DEMO[@]}"; do
@@ -196,6 +199,36 @@ compuestas=$("${MYSQL[@]}" -N -B -e \
    WHERE constraint_schema='sgip' AND constraint_name LIKE '%\\_emp';")
 [[ "$compuestas" -eq 24 ]] || {
   echo "ATENCIÓN: se esperaban 24 claves por empresa y hay $compuestas"
+  fallo=1
+}
+
+# Centinela de la V18: las dos restricciones del kárdex deben llevar el
+# mismo piso que la V9 puso en productos. Si quedaran en cero, el esquema
+# permitiría dejar la existencia en negativo y prohibiría anotar por qué.
+piso=$("${MYSQL[@]}" -N -B -e \
+  "SELECT COUNT(*) FROM information_schema.check_constraints
+   WHERE constraint_schema='sgip'
+     AND constraint_name IN ('ck_movimientos_anterior','ck_movimientos_posterior')
+     AND check_clause LIKE '%9999%';")
+[[ "$piso" -eq 2 ]] || {
+  echo "ATENCIÓN: el kárdex no admite existencia negativa — falta la V18"
+  fallo=1
+}
+
+# Centinela de la V19 y la V20: siete columnas nuevas repartidas en tres
+# vistas. El conteo de vistas no cambia con esas migraciones, de modo que
+# cuadraría igual si no se hubieran aplicado.
+columnas=$("${MYSQL[@]}" -N -B -e \
+  "SELECT COUNT(*) FROM information_schema.columns
+   WHERE table_schema='sgip' AND (
+     (table_name='v_precios_producto'
+      AND column_name IN ('total_credito','cerca_umbral_credito','cruza_umbral_en_credito'))
+     OR (table_name='v_inventario_valorizado'
+      AND column_name IN ('unidades_pendientes','valor_pendiente_al_costo'))
+     OR (table_name='v_rotacion_inventario'
+      AND column_name IN ('unidades_pendientes','valor_pendiente_al_costo')));")
+[[ "$columnas" -eq 7 ]] || {
+  echo "ATENCIÓN: se esperaban 7 columnas de la V19 y la V20 y hay $columnas"
   fallo=1
 }
 
