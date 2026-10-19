@@ -57,6 +57,18 @@ input  { font-family: inherit; }
 .contenido { padding: 1.5rem; max-width: 1100px; margin: 0 auto; }
 
 table { width: 100%; border-collapse: collapse; }
+
+/* Una tabla de muchas columnas se desplaza dentro de su tarjeta en vez
+   de desbordarla. El min-width evita lo contrario: que el navegador
+   apriete las columnas hasta partir cada cifra en dos renglones. */
+/* El `contain` no sobra. El `overflow-x` ya evita que la tabla se pinte
+   fuera de la tarjeta, pero por sí solo no impide que su anchura siga
+   contando en el desbordamiento de la página: medido a 390 px, el
+   documento daba 886 px de ancho y se podía arrastrar 496 px hacia un
+   costado en blanco. Con `contain: paint` la tabla deja de empujar el
+   documento y solo se desplaza dentro de su caja. */
+.tabla-ancha { overflow-x: auto; contain: paint; }
+.tabla-ancha > table { min-width: 860px; }
 th, td { text-align: left; padding: .6rem .5rem; border-bottom: 1px solid var(--borde); font-size: .9rem; }
 th { color: var(--tinta-2); font-weight: 600; font-size: .8rem; }
 td.numero, th.numero { text-align: right; font-variant-numeric: tabular-nums; }
@@ -65,9 +77,22 @@ td.numero, th.numero { text-align: right; font-variant-numeric: tabular-nums; }
 .insignia.activo  { background: var(--exito-fondo);   color: var(--exito); }
 .insignia.critico { background: var(--aviso-fondo);   color: var(--aviso); }
 .insignia.agotado { background: var(--peligro-fondo); color: var(--peligro); }
+/* El producto excluido de IVA al contado que pasa a gravado a crédito.
+   Lleva los tonos de aviso y no los de peligro: no es un error del
+   catálogo, es una consecuencia del umbral del Art. 424 que quien vende
+   tiene que ver antes de ofrecer el crédito. */
+.insignia.umbral  { background: var(--aviso-fondo);   color: var(--aviso);
+                    display: block; margin-top: .25rem; font-weight: 500; }
 
-/* Segunda línea bajo el nombre del producto: código y, si difiere, SKU. */
-.sub-linea { display: block; font-size: .78rem; color: var(--tinta-3); margin-top: .15rem; }
+/* Segunda línea bajo el nombre del producto: código y, si difiere, SKU.
+   También lleva las anotaciones de cada precio, donde la columna está
+   alineada a la derecha y conviene que el renglón pequeño la siga. */
+.sub-linea { display: block; font-size: .78rem; color: var(--tinta-3); margin-top: .15rem;
+             font-weight: 400; }
+
+/* Nota al pie de una tabla: explica qué significa la ausencia de una
+   anotación, que es lo que no se puede señalar fila por fila. */
+.leyenda { margin: .75rem 0 0; font-size: .78rem; color: var(--tinta-3); max-width: 62ch; }
 
 /* ── Imágenes ──────────────────────────────────────────────────────── */
 .col-imagen { width: 56px; }
