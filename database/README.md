@@ -365,6 +365,28 @@ MySQL:
 - La colación `utf8mb4_0900_ai_ci`, que MariaDB no tiene.
 - `DROP CHECK`, que en MariaDB se escribe `DROP CONSTRAINT`.
 
+Y una tercera diferencia que no se arregla sustituyendo nada, porque va
+en la dirección contraria: **MariaDB acepta expresiones que MySQL
+rechaza**. La V23 definió al principio su restricción de coherencia con
+un `CASE tipo WHEN ... THEN <comparación> END`, que MariaDB aplicó sin
+protestar y MySQL negó:
+
+```
+ERROR 3812: An expression of non-boolean type specified to a check
+            constraint 'ck_movimientos_coherencia'
+```
+
+MySQL exige que la expresión de un `CHECK` sea booleana, y el `CASE`
+devuelve el 1 o el 0 de la comparación, que para su sistema de tipos es
+un entero. Se reescribió como tres implicaciones unidas por `AND` —«no
+es de este tipo O cuadra»—, que es booleana de arriba abajo y además la
+forma que `ck_movimientos_ajuste` ya usaba.
+
+La lección es la que duele: verificar solo contra MariaDB da falsos
+verdes. Desde la V23 la cadena se comprueba contra un **MySQL 8 real**
+antes de enviarla, y MariaDB queda para iterar rápido. La integración
+continua corre contra MySQL 9.7, que es la que manda.
+
 El resto del lenguaje de definición de datos es común a los dos motores.
 Aun así, aplícala en tu entorno antes de darla por buena.
 

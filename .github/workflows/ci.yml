@@ -69,7 +69,26 @@ jobs:
                    V23__el_kardex_se_explica_solo \
                    V24__claves_por_empresa_en_compras; do
             echo "→ $f"
-            mysql -h 127.0.0.1 -u root -psgip_ci sgip < "database/migrations/$f.sql"
+            # El motivo del fallo se emite como anotación además de ir al
+            # registro. Sin esto, una migración que falla deja un «exit
+            # code 1» y el porqué solo se ve abriendo el registro a mano:
+            # la API de comprobaciones expone las anotaciones y no el
+            # registro, de modo que el diagnóstico queda fuera del alcance
+            # de cualquier herramienta que consulte el resultado.
+            if ! salida=$(mysql -h 127.0.0.1 -u root -psgip_ci sgip \
+                            < "database/migrations/$f.sql" 2>&1); then
+              echo "$salida"
+              echo "::error file=database/migrations/$f.sql::$f falló · $(printf '%s' "$salida" | grep -m1 -i '^ERROR' || printf '%s' "$salida" | head -1)"
+              exit 1
+            fi
+            # Un ERROR en la salida sin código distinto de cero también
+            # cuenta: el cliente los mezcla según cómo se le invoque, y
+            # una migración a medias es peor que una que no corrió.
+            if printf '%s' "$salida" | grep -qi '^ERROR'; then
+              echo "$salida"
+              echo "::error file=database/migrations/$f.sql::$f dejó un error · $(printf '%s' "$salida" | grep -m1 -i '^ERROR')"
+              exit 1
+            fi
           done
 
       - name: Verificar el conteo de objetos
@@ -215,7 +234,26 @@ jobs:
                    V22__parametros_de_la_plataforma \
                    V23__el_kardex_se_explica_solo \
                    V24__claves_por_empresa_en_compras; do
-            mysql -h 127.0.0.1 -u root -psgip_ci sgip < "database/migrations/$f.sql"
+            # El motivo del fallo se emite como anotación además de ir al
+            # registro. Sin esto, una migración que falla deja un «exit
+            # code 1» y el porqué solo se ve abriendo el registro a mano:
+            # la API de comprobaciones expone las anotaciones y no el
+            # registro, de modo que el diagnóstico queda fuera del alcance
+            # de cualquier herramienta que consulte el resultado.
+            if ! salida=$(mysql -h 127.0.0.1 -u root -psgip_ci sgip \
+                            < "database/migrations/$f.sql" 2>&1); then
+              echo "$salida"
+              echo "::error file=database/migrations/$f.sql::$f falló · $(printf '%s' "$salida" | grep -m1 -i '^ERROR' || printf '%s' "$salida" | head -1)"
+              exit 1
+            fi
+            # Un ERROR en la salida sin código distinto de cero también
+            # cuenta: el cliente los mezcla según cómo se le invoque, y
+            # una migración a medias es peor que una que no corrió.
+            if printf '%s' "$salida" | grep -qi '^ERROR'; then
+              echo "$salida"
+              echo "::error file=database/migrations/$f.sql::$f dejó un error · $(printf '%s' "$salida" | grep -m1 -i '^ERROR')"
+              exit 1
+            fi
           done
 
       # application.yml no se versiona. Se arma desde el ejemplo, que es

@@ -55,6 +55,13 @@
 --   EGRESO              → posterior = anterior − cantidad
 --   AJUSTE              → |posterior − anterior| = cantidad
 --
+-- Escritas como tres implicaciones unidas por AND —«no es de este tipo
+-- O cuadra»— y no como un CASE: MySQL exige que la expresión de un CHECK
+-- sea booleana y rechaza el CASE, que devuelve el 1 o el 0 de la
+-- comparación. MariaDB lo acepta, de modo que es una diferencia que solo
+-- aparece contra el motor de verdad. Está anotada en database/README.md
+-- junto a las otras dos.
+--
 -- DEVOLUCION suma porque es la devolución de un cliente, que vuelve a la
 -- bodega. Devolver mercancía a un proveedor saca unidades y se registra
 -- como EGRESO o, si corrige un conteo, como AJUSTE.
@@ -128,14 +135,27 @@ ALTER TABLE movimientos_inventario
 -- ---------------------------------------------------------------------
 -- 3. Las tres cifras cuentan la misma historia
 -- ---------------------------------------------------------------------
+-- Tres implicaciones unidas por AND, y no un CASE.
+--
+-- La primera versión usaba `CASE tipo WHEN ... THEN <comparación> END`,
+-- que MariaDB acepta y MySQL rechaza:
+--
+--   ERROR 3812: An expression of non-boolean type specified to a check
+--               constraint 'ck_movimientos_coherencia'
+--
+-- MySQL exige que la expresión de un CHECK sea de tipo booleano, y el
+-- CASE devuelve el 1 o el 0 de la comparación, que para su sistema de
+-- tipos es un entero. La forma «no es de este tipo O cuadra» es booleana
+-- de arriba abajo, dice lo mismo, y además es la que ya usaba
+-- ck_movimientos_ajuste unas líneas más arriba.
 ALTER TABLE movimientos_inventario
   ADD CONSTRAINT ck_movimientos_coherencia CHECK (
-    CASE tipo
-      WHEN 'INGRESO'    THEN existencia_posterior = existencia_anterior + cantidad
-      WHEN 'DEVOLUCION' THEN existencia_posterior = existencia_anterior + cantidad
-      WHEN 'EGRESO'     THEN existencia_posterior = existencia_anterior - cantidad
-      WHEN 'AJUSTE'     THEN ABS(existencia_posterior - existencia_anterior) = cantidad
-    END);
+        (tipo NOT IN ('INGRESO', 'DEVOLUCION')
+         OR existencia_posterior = existencia_anterior + cantidad)
+    AND (tipo <> 'EGRESO'
+         OR existencia_posterior = existencia_anterior - cantidad)
+    AND (tipo <> 'AJUSTE'
+         OR ABS(existencia_posterior - existencia_anterior) = cantidad));
 
 
 -- ---------------------------------------------------------------------
