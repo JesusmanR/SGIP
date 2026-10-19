@@ -7,6 +7,7 @@ import co.com.bspstore.sgip.logica.CredencialesInvalidasException;
 import co.com.bspstore.sgip.logica.FiltroInvalidoException;
 import co.com.bspstore.sgip.logica.AlmacenArchivos;
 import co.com.bspstore.sgip.logica.ArchivoInvalidoException;
+import co.com.bspstore.sgip.logica.MovimientoInvalidoException;
 import co.com.bspstore.sgip.logica.NombreRepetidoException;
 import co.com.bspstore.sgip.logica.RegistroRepetidoException;
 import co.com.bspstore.sgip.logica.ReferenciaAjenaException;
@@ -77,6 +78,17 @@ public class ManejadorErrores {
         // funciona.
         ProblemDetail p = ProblemDetail.forStatus(HttpStatus.CONFLICT);
         p.setTitle("La empresa quedaría sin administrador");
+        p.setDetail(e.getMessage());
+        return p;
+    }
+
+    @ExceptionHandler(MovimientoInvalidoException.class)
+    public ProblemDetail movimientoInvalido(MovimientoInvalidoException e) {
+        // 400: el cuerpo está bien formado y la regla que incumple
+        // depende del saldo que el producto tiene ahora, que el cliente
+        // no podía conocer al escribir la petición.
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
+        p.setTitle("Movimiento de inventario inválido");
         p.setDetail(e.getMessage());
         return p;
     }

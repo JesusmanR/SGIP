@@ -296,7 +296,22 @@ else
                     || falla "filas con capital retenido negativo: $n"
 
   ejecutar "DELETE FROM movimientos_inventario WHERE motivo LIKE 'AISL-%';" >/dev/null
-  ejecutar "UPDATE productos SET existencia = 10
+  # El producto de prueba se deja en cero y no en diez.
+  #
+  # Este guion comprueba el esquema, de modo que escribe la existencia
+  # con UPDATE directo, sin movimiento que la explique. Eso era inocuo
+  # hasta la V23: desde ella, la invariante del RF-49 exige que la suma
+  # de los movimientos de cada referencia iguale su existencia, y una
+  # fila con diez unidades y cero movimientos la incumple. En cero
+  # cuadra sin necesidad de inventarle un kárdex a un producto que solo
+  # existe para probar claves foráneas.
+  #
+  # Sin esto, verificar_kardex.sh falla después de correr este guion, y
+  # el síntoma es desconcertante: señala un PC-001 con diez unidades sin
+  # respaldo, que no es el PC-001 de la demostración sino el homónimo de
+  # la empresa de prueba —precisamente lo que la comprobación «el mismo
+  # código en dos empresas» deja montado.
+  ejecutar "UPDATE productos SET existencia = 0
              WHERE empresa_id = $ID AND producto_id = $PROD_NEG;" >/dev/null
   ejecutar "DELETE FROM usuarios WHERE correo='aislamiento@prueba.local';" >/dev/null
 fi
