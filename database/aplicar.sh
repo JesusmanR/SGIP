@@ -150,6 +150,7 @@ DESPUES_DEL_DEMO=(
   V23__el_kardex_se_explica_solo.sql
   V24__claves_por_empresa_en_compras.sql
   V25__el_precio_respeta_la_forma_de_calculo.sql
+  V26__el_tipo_de_un_parametro_obliga.sql
 )
 
 for f in "${ANTES_DEL_DEMO[@]}"; do

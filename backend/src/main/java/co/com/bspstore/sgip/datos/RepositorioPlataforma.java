@@ -137,8 +137,30 @@ public class RepositorioPlataforma {
                         """)
                 .query(String.class)
                 .optional()
-                .map(Integer::parseInt)
+                .map(RepositorioPlataforma::diasOPorOmision)
                 .orElse(DIAS_PRUEBA_POR_OMISION);
+    }
+
+    /**
+     * El valor leído como número de días, o el de omisión si no lo es.
+     *
+     * La V26 impide guardar aquí algo que no sea un entero entre 1 y 365,
+     * de modo que esto no debería hacer falta. Está igualmente, y por el
+     * mismo motivo que el valor por omisión de arriba: esta consulta es
+     * la que decide el periodo de prueba de cada empresa que se da de
+     * alta, y un `parseInt` suelto convierte una fila rara en un alta
+     * fallida por una razón que no tiene nada que ver con el alta.
+     *
+     * Una base anterior a la V26 puede tener la fila mal. Degradar al
+     * valor por omisión deja el alta en pie; reventar, no.
+     */
+    private static int diasOPorOmision(String valor) {
+        try {
+            int dias = Integer.parseInt(valor.trim());
+            return dias >= 1 && dias <= 365 ? dias : DIAS_PRUEBA_POR_OMISION;
+        } catch (NumberFormatException e) {
+            return DIAS_PRUEBA_POR_OMISION;
+        }
     }
 
     // ---------------------------------------------------------------- escritura
