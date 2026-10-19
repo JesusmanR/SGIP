@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Comprueba que el aislamiento entre empresas se cumple en el esquema, no
-# solo en el código. Se ejecuta sobre una base con la cadena V1 a V23
+# solo en el código. Se ejecuta sobre una base con la cadena V1 a V24
 # aplicada y los datos de demostración cargados.
 #
 # Los argumentos se pasan tal cual al cliente mysql:
@@ -343,6 +343,90 @@ n=$(conteo "SELECT COUNT(*) FROM v_precios_producto
                AND tarifa_contado = 0 AND tarifa_credito > 0;")
 [[ "$n" == "0" ]] && ok "no hay cruces sin marcar" \
                   || falla "filas que cruzan el umbral sin estar marcadas: $n"
+
+
+# El camino de las compras era el que la V11 dejó sin cerrar. Tres claves
+# foráneas apuntaban a su destino sin empresa, y la primera es la que
+# muerde: una orden de un comercio aceptaba una línea con el producto de
+# otro, de modo que recibirla habría registrado un INGRESO sobre el
+# inventario ajeno. No una fuga de lectura: una escritura.
+#
+# Las tres se reprodujeron en una base real antes de escribir la V24, y
+# estas comprobaciones son las que impiden que vuelvan.
+echo
+echo "── las compras no cruzan empresas (V24) ──"
+PROD_PROPIO=$(consulta "SELECT producto_id FROM productos WHERE empresa_id = $ID LIMIT 1;")
+PROD_DE_OTRA=$(consulta "SELECT producto_id FROM productos WHERE empresa_id = 1 LIMIT 1;")
+PRV_PROPIO=$(consulta "SELECT proveedor_id FROM proveedores WHERE empresa_id = $ID LIMIT 1;")
+USU_DE_OTRA=$(consulta "SELECT usuario_id FROM usuarios WHERE empresa_id = 1 LIMIT 1;")
+
+ejecutar "DELETE FROM movimientos_inventario WHERE documento = 'AISL-OC';" >/dev/null
+ejecutar "DELETE FROM recepciones        WHERE observacion = 'AISL-OC';"   >/dev/null
+ejecutar "DELETE FROM orden_compra_items WHERE orden_id IN
+            (SELECT orden_id FROM ordenes_compra WHERE consecutivo = 'AISL-OC');" >/dev/null
+ejecutar "DELETE FROM ordenes_compra     WHERE consecutivo = 'AISL-OC';"   >/dev/null
+
+if [[ -z "$PROD_PROPIO" || -z "$PROD_DE_OTRA" || -z "$PRV_PROPIO" || -z "$USU_DE_OTRA" ]]; then
+  falla "faltan datos para probar las compras (producto, proveedor o usuario)"
+else
+  # La orden la firma el administrador de arranque de la empresa de
+  # prueba, que el bloque del kárdex ya creó y borró; aquí hace falta uno
+  # propio otra vez.
+  ejecutar "DELETE FROM usuarios WHERE correo='compras@prueba.local';" >/dev/null
+  ejecutar "INSERT INTO usuarios (empresa_id, rol_id, nombre, correo, clave_hash,
+                                   activo, bloqueado, cambio_clave_req)
+            SELECT $ID, r.rol_id, 'Compras de prueba', 'compras@prueba.local',
+                   'x', TRUE, FALSE, FALSE
+              FROM roles r WHERE r.nombre = 'ADMINISTRADOR';" >/dev/null
+  USU_PROPIO=$(consulta "SELECT usuario_id FROM usuarios WHERE correo='compras@prueba.local';")
+
+  ejecutar "INSERT INTO ordenes_compra (empresa_id, proveedor_id, usuario_id,
+                                         consecutivo, estado)
+            VALUES ($ID, $PRV_PROPIO, $USU_PROPIO, 'AISL-OC', 'ABIERTA');" >/dev/null
+  ORDEN=$(consulta "SELECT orden_id FROM ordenes_compra WHERE consecutivo = 'AISL-OC';")
+
+  if [[ -z "$ORDEN" ]]; then
+    falla "no se pudo crear la orden de compra de prueba"
+  else
+    rechaza "una línea de orden con el producto de otra empresa" fk_oci_producto_emp \
+      "INSERT INTO orden_compra_items (orden_id, empresa_id, producto_id,
+                                        cantidad, costo_unitario)
+       VALUES ($ORDEN, $ID, $PROD_DE_OTRA, 10, 1000.00);"
+
+    rechaza "una recepción firmada por un usuario de otra empresa" fk_rec_usuario_emp \
+      "INSERT INTO recepciones (orden_id, empresa_id, usuario_id, observacion)
+       VALUES ($ORDEN, $ID, $USU_DE_OTRA, 'AISL-OC');"
+
+    # Y lo propio tiene que seguir entrando, o la restricción estaría
+    # cerrando más de lo que debe.
+    salida=$(ejecutar "INSERT INTO orden_compra_items (orden_id, empresa_id, producto_id,
+                                                        cantidad, costo_unitario)
+                       VALUES ($ORDEN, $ID, $PROD_PROPIO, 10, 1000.00);")
+    [[ -z "$salida" ]] && ok "la línea con producto propio entra" \
+                       || falla "la línea con producto propio fue rechazada: $(solo_error "$salida")"
+
+    salida=$(ejecutar "INSERT INTO recepciones (orden_id, empresa_id, usuario_id, observacion)
+                       VALUES ($ORDEN, $ID, $USU_PROPIO, 'AISL-OC');")
+    [[ -z "$salida" ]] && ok "la recepción firmada por un usuario propio entra" \
+                       || falla "la recepción propia fue rechazada: $(solo_error "$salida")"
+
+    RECEPCION=$(consulta "SELECT recepcion_id FROM recepciones
+                           WHERE observacion = 'AISL-OC' LIMIT 1;")
+    if [[ -n "$RECEPCION" ]]; then
+      rechaza "un movimiento colgado de la recepción de otra empresa" fk_mov_recepcion_emp \
+        "INSERT INTO movimientos_inventario
+                (empresa_id, producto_id, usuario_id, recepcion_id, tipo, cantidad,
+                 existencia_anterior, existencia_posterior, documento)
+         VALUES (1, $PROD_DE_OTRA, $USU_DE_OTRA, $RECEPCION, 'INGRESO', 1, 0, 1, 'AISL-OC');"
+    fi
+  fi
+
+  ejecutar "DELETE FROM movimientos_inventario WHERE documento = 'AISL-OC';" >/dev/null
+  ejecutar "DELETE FROM recepciones        WHERE observacion = 'AISL-OC';"   >/dev/null
+  ejecutar "DELETE FROM orden_compra_items WHERE orden_id = $ORDEN;"         >/dev/null
+  ejecutar "DELETE FROM ordenes_compra     WHERE consecutivo = 'AISL-OC';"   >/dev/null
+  ejecutar "DELETE FROM usuarios WHERE correo = 'compras@prueba.local';"     >/dev/null
+fi
 
 echo
 if [[ "$fallos" -eq 0 ]]; then

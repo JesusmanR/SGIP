@@ -66,7 +66,8 @@ jobs:
                    V20__la_vista_de_precios_cierra_la_modalidad_a_credito \
                    V21__auditoria_de_la_plataforma \
                    V22__parametros_de_la_plataforma \
-                   V23__el_kardex_se_explica_solo; do
+                   V23__el_kardex_se_explica_solo \
+                   V24__claves_por_empresa_en_compras; do
             echo "→ $f"
             mysql -h 127.0.0.1 -u root -psgip_ci sgip < "database/migrations/$f.sql"
           done
@@ -96,14 +97,14 @@ jobs:
                AND column_name='sin_existencia';")
           test "$n" -eq 1
 
-      # Veinte de la V11 y cuatro de la V12.
+      # Veinte de la V11, cuatro de la V12 y cinco de la V24.
       - name: Verificar las claves foráneas por empresa
         run: |
           n=$(mysql -h 127.0.0.1 -u root -psgip_ci -N -B -e \
             "SELECT COUNT(*) FROM information_schema.referential_constraints
              WHERE constraint_schema='sgip' AND constraint_name LIKE '%\\_emp';")
           echo "claves foráneas por empresa: $n"
-          test "$n" -eq 24
+          test "$n" -eq 29
 
       # El conteo de vistas no cambia con la V18, la V19 ni la V20: la
       # primera solo toca restricciones y las otras dos recrean vistas que
@@ -212,7 +213,8 @@ jobs:
                    V20__la_vista_de_precios_cierra_la_modalidad_a_credito \
                    V21__auditoria_de_la_plataforma \
                    V22__parametros_de_la_plataforma \
-                   V23__el_kardex_se_explica_solo; do
+                   V23__el_kardex_se_explica_solo \
+                   V24__claves_por_empresa_en_compras; do
             mysql -h 127.0.0.1 -u root -psgip_ci sgip < "database/migrations/$f.sql"
           done
 

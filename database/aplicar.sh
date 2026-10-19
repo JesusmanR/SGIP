@@ -148,6 +148,7 @@ DESPUES_DEL_DEMO=(
   V21__auditoria_de_la_plataforma.sql
   V22__parametros_de_la_plataforma.sql
   V23__el_kardex_se_explica_solo.sql
+  V24__claves_por_empresa_en_compras.sql
 )
 
 for f in "${ANTES_DEL_DEMO[@]}"; do
@@ -194,14 +195,16 @@ sin_existencia=$("${MYSQL[@]}" -N -B -e \
   fallo=1
 }
 
-# Centinela de las claves compuestas por empresa: veinte de la V11 y
+# Centinela de las claves compuestas por empresa: veinte de la V11,
 # cuatro de la V12 (reglas_iva hacia categorías y hacia productos,
-# producto_imagenes y venta_retenciones).
+# producto_imagenes y venta_retenciones) y cinco de la V24 (las dos de
+# orden_compra_items, las dos de recepciones y la de movimientos hacia
+# recepciones).
 compuestas=$("${MYSQL[@]}" -N -B -e \
   "SELECT COUNT(*) FROM information_schema.referential_constraints
    WHERE constraint_schema='sgip' AND constraint_name LIKE '%\\_emp';")
-[[ "$compuestas" -eq 24 ]] || {
-  echo "ATENCIÓN: se esperaban 24 claves por empresa y hay $compuestas"
+[[ "$compuestas" -eq 29 ]] || {
+  echo "ATENCIÓN: se esperaban 29 claves por empresa y hay $compuestas"
   fallo=1
 }
 
