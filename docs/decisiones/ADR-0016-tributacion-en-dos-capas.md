@@ -98,3 +98,15 @@ electrónica no esté implementada, hay que confirmar ante la DIAN qué
 comprobante puede emitir legalmente un comercio pequeño. Con el énfasis
 en empresas unipersonales esto gana peso, porque son exactamente las que
 operan con documento equivalente.
+
+## Nota posterior
+
+El reparto en dos capas resultó valer para más que la tributación.
+
+Al escribir el módulo de plataforma apareció el mismo problema con los
+ajustes: la duración del periodo de prueba —una política de la
+plataforma— estaba guardada en `parametros`, cuya columna `empresa_id`
+es `NOT NULL`, de modo que vivía como un ajuste de la empresa 1. La
+V22 lo resuelve con la misma figura que esta decisión aplicó a los
+impuestos: `parametros_plataforma` para lo que decide la plataforma,
+`parametros` para lo que decide cada comercio. Ver ADR-0020.

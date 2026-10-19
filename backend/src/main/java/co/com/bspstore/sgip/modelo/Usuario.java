@@ -107,6 +107,28 @@ public class Usuario {
     }
 
     /**
+     * Cambia el nombre y el rol (RF-12).
+     *
+     * Los dos juntos y en un solo método porque son lo único que la
+     * edición permite cambiar, y tenerlos separados invitaría a añadir
+     * un tercero. Lo que no está aquí es tan importante como lo que
+     * está: no hay forma de cambiar el correo, que es la credencial y lo
+     * que la auditoría de accesos guarda; ni la clave, porque un
+     * administrador que pudiera fijarla podría entrar como esa persona y
+     * el rastro dejaría de identificar a nadie; ni la empresa, que es la
+     * garantía del RF-12.
+     */
+    public void reasignar(String nombre, Rol rol) {
+        this.nombre = nombre;
+        this.rol = rol;
+    }
+
+    /** Vuelve a habilitar una cuenta desactivada (RF-12). */
+    public void activar() {
+        this.activo = true;
+    }
+
+    /**
      * Asigna la empresa a la que pertenece. Nulo es válido y significa
      * usuario de plataforma, que no opera dentro de ninguna (RN-17).
      */

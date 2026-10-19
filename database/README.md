@@ -104,14 +104,16 @@ falla, verifica que soporte esa directiva.
 | `V18__movimientos_admiten_existencia_negativa.sql` | `movimientos_inventario` admite el saldo negativo que la V9 autorizó en `productos`; el kárdex ya puede explicar una venta sin existencia (RF-42) |
 | `V19__la_valorizacion_no_resta_lo_que_se_debe.sql` | `v_inventario_valorizado` y `v_rotacion_inventario` acotan la existencia a cero antes de multiplicar, y declaran aparte lo pendiente de reponer |
 | `V20__la_vista_de_precios_cierra_la_modalidad_a_credito.sql` | `v_precios_producto` expone `total_credito`, `cerca_umbral_credito` y `cruza_umbral_en_credito` |
+| `V21__auditoria_de_la_plataforma.sql` | `auditoria_plataforma`: bitácora inmutable de altas, activaciones, suspensiones y cambios tributarios nacionales, con responsable y fecha (RF-02, RF-05) |
+| `V22__parametros_de_la_plataforma.sql` | `parametros_plataforma`: los ajustes de alcance de plataforma salen de la tabla por empresa, donde el periodo de prueba era un parámetro de la empresa 1 (RN-14, RN-17) |
 
 `extras/restriccion_ambito_regla_iva.sql` queda **fuera** de la cadena a
 propósito. Es una restricción correcta que no se pudo verificar, y el
 propio archivo explica por qué está aparte en lugar de dentro de la V12.
 
 V9 no crea tablas: cambia restricciones y agrega columnas. Las diez
-tablas nuevas de V10 llevan el esquema de 24 a 34, y las cinco de V12 lo
-llevan a 39. V11 no crea tablas: solo cambia claves foráneas e índices.
+tablas nuevas de V10 llevan el esquema de 24 a 34, las cinco de V12 lo
+llevan a 39, la de la V21 a 40 y la de la V22 a 41. V11 no crea tablas: solo cambia claves foráneas e índices.
 
 ### Lo que la V18 cierra, y que la V9 dejó a medias
 
@@ -396,3 +398,34 @@ dejarla escrita:
 La segunda es más simple y hay que decirla en la pantalla, o alguien
 registrará un descuento comercial en la cabecera y la factura saldrá con
 el impuesto de más.
+
+## Anotado para el módulo de plataforma
+
+`tipos_impuesto` tiene `vigente_desde` y `vigente_hasta`, y no puede
+guardar historia. La clave `uq_tipos_impuesto_codigo` es única por
+código, de modo que una segunda vigencia del mismo tipo se rechaza con
+un 1062, y `v_regla_iva` filtra por vigencia la tabla `reglas_iva` pero
+no esta. Comprobado: el `INSERT` de una vigencia nueva para
+`EXCL_UMBRAL_PC` no entra.
+
+Eso significa que el RF-05 modifica la tarifa y el umbral **en el
+sitio**, y que la historia del cambio la guarda `auditoria_plataforma`
+con responsable, fecha y los valores anterior y nuevo. No es un apaño:
+las ventas congelan su propia `tarifa_iva` por línea, de modo que
+recalcular una factura vieja no necesita la tarifa histórica del
+catálogo —la tiene el documento—. Lo que el catálogo responde es «qué se
+cobra hoy», y para eso una fila por tipo es lo correcto.
+
+Queda dicho porque las dos columnas invitan a suponer lo contrario.
+Quien algún día necesite de verdad la vigencia en esta tabla tiene que
+cambiar la clave única a `(codigo, vigente_desde)` —como la tiene
+`parametros`— y hacer que `v_regla_iva` filtre también `ti`. Mientras
+las ventas congelen su tarifa, no hace falta.
+
+Lo que sí se comprobó, porque es la promesa del RF-05: un `UPDATE` de
+`uvt_anual` o de `tipos_impuesto` surte efecto en el cálculo de todas
+las empresas sin recompilar ni desplegar. Bajando la UVT de 2026 de
+52.374 a 48.000, los tres computadores de la demostración pasan a
+gravados de contado y `cruza_umbral_en_credito` cae a cero en los tres;
+cambiando la tarifa del 19 % al 5 %, se propaga a todas las tarifas y
+totales. Las vistas recalculan en cada lectura.

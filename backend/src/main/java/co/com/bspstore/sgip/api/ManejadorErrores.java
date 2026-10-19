@@ -2,12 +2,16 @@ package co.com.bspstore.sgip.api;
 
 import co.com.bspstore.sgip.config.SinEmpresaException;
 import co.com.bspstore.sgip.logica.CategoriaEnUsoException;
+import co.com.bspstore.sgip.logica.DatoTributarioInvalidoException;
 import co.com.bspstore.sgip.logica.CredencialesInvalidasException;
 import co.com.bspstore.sgip.logica.FiltroInvalidoException;
 import co.com.bspstore.sgip.logica.AlmacenArchivos;
 import co.com.bspstore.sgip.logica.ArchivoInvalidoException;
 import co.com.bspstore.sgip.logica.NombreRepetidoException;
+import co.com.bspstore.sgip.logica.RegistroRepetidoException;
 import co.com.bspstore.sgip.logica.ReferenciaAjenaException;
+import co.com.bspstore.sgip.logica.RolNoAsignableException;
+import co.com.bspstore.sgip.logica.UltimoAdministradorException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -41,6 +45,49 @@ public class ManejadorErrores {
     public ProblemDetail nombreRepetido(NombreRepetidoException e) {
         ProblemDetail p = ProblemDetail.forStatus(HttpStatus.CONFLICT);
         p.setTitle("Nombre repetido");
+        p.setDetail(e.getMessage());
+        return p;
+    }
+
+    @ExceptionHandler(DatoTributarioInvalidoException.class)
+    public ProblemDetail datoTributarioInvalido(DatoTributarioInvalidoException e) {
+        // 400 y no 422: el cuerpo está bien formado, pero la regla que
+        // incumple depende del tipo que se está cambiando y el cliente
+        // puede corregirla con lo que el detalle le dice.
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
+        p.setTitle("Dato tributario inválido");
+        p.setDetail(e.getMessage());
+        return p;
+    }
+
+    @ExceptionHandler(RolNoAsignableException.class)
+    public ProblemDetail rolNoAsignable(RolNoAsignableException e) {
+        // 403 y no 400: el cuerpo está bien y el rol existe. Lo que no
+        // existe es el permiso para repartirlo.
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.FORBIDDEN);
+        p.setTitle("Rol fuera de tu alcance");
+        p.setDetail(e.getMessage());
+        return p;
+    }
+
+    @ExceptionHandler(UltimoAdministradorException.class)
+    public ProblemDetail ultimoAdministrador(UltimoAdministradorException e) {
+        // 409: la petición es válida y el estado actual es lo que impide
+        // atenderla. Con otro administrador activo, la misma petición
+        // funciona.
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.CONFLICT);
+        p.setTitle("La empresa quedaría sin administrador");
+        p.setDetail(e.getMessage());
+        return p;
+    }
+
+    @ExceptionHandler(RegistroRepetidoException.class)
+    public ProblemDetail registroRepetido(RegistroRepetidoException e) {
+        // 409 igual que el nombre repetido, pero con otro título: aquí la
+        // unicidad es de toda la plataforma y no de dentro de una empresa,
+        // y el detalle dice cuál de los dos datos del alta choca.
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.CONFLICT);
+        p.setTitle("Dato ya registrado");
         p.setDetail(e.getMessage());
         return p;
     }
