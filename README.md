@@ -208,4 +208,4 @@ cargada.
 ## Licencia y autoría
 
 Jesús Manuel Durán Muñoz · SENA CIMI · Ficha 3234206
-Instructor: Pedro Pablo Vega
+Instructora: Yeimi Barrera
