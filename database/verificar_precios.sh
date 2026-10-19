@@ -172,33 +172,108 @@ igual "al doblar el costo, el precio se dobla solo" "2400" "$(precio PREC-BASE)"
 echo
 echo "── el aviso de cruce del umbral (RF-35) ──"
 # La simulación del RF-35 calcula el precio de una regla que todavía no
-# existe, de modo que no puede salir de la vista: repite su fórmula. Si
-# las dos expresiones discreparan, el aviso mentiría. Esta comprobación
-# es la que lo ataja: simular con el factor que YA rige tiene que
-# encontrar cero cruces, porque nada cambia.
-FACTOR_VIGENTE=$(consulta "SELECT factor FROM reglas_margen
-                            WHERE empresa_id = 1 AND forma_pago = 'CONTADO'
-                              AND categoria_id IS NULL AND proveedor_id IS NULL
-                            LIMIT 1;")
-cruces () { # $1 factor
+# existe, de modo que no puede salir de la vista: repite su fórmula (ver
+# ADR-0021). Si las dos expresiones discreparan, el aviso mentiría.
+#
+# Lo que ataja esa discrepancia es la comprobación de aquí abajo, que
+# compara precio contra precio para TODA referencia. La que parecía
+# bastar —simular el factor vigente tiene que dar cero cruces— no basta:
+# probada a propósito con la fórmula desviada un 0,1 %, pasó en verde,
+# porque solo mira la franja pegada al umbral y en esa franja no caía
+# ninguna referencia. Se conserva debajo, pero como prueba de extremo a
+# extremo del aviso, no como guardián de la duplicación.
+#
+# El factor y la base se leen de la vista referencia por referencia, no
+# de la regla general: así la comprobación sigue valiendo cuando un
+# producto esté gobernado por una regla de categoría o de proveedor.
+desviadas () { # cuántas referencias calculan distinto en los dos sitios
+  consulta "SELECT COUNT(*) FROM v_precios_producto v
+             WHERE v.empresa_id = 1
+               AND v.factor_contado IS NOT NULL
+               AND (CASE WHEN v.base_contado = 'SOBRE_PRECIO'
+                         THEN ROUND(v.costo / (2 - v.factor_contado), 0)
+                         ELSE ROUND(v.costo * v.factor_contado, 0) END)
+                   <> v.precio_contado;"
+}
+
+cruces () { # $1 factor · $2 forma de cálculo
+  local precio
+  if [[ "$2" == "SOBRE_PRECIO" ]]; then
+    precio="ROUND(v.costo / (2 - $1), 0)"
+  else
+    precio="ROUND(v.costo * $1, 0)"
+  fi
   consulta "SELECT COUNT(*) FROM v_precios_producto v
              WHERE v.empresa_id = 1
                AND v.tratamiento_iva = 'EXCLUIDO_HASTA_UMBRAL'
                AND ((v.tarifa_contado > 0)
-                    <> (ROUND(v.costo * $1, 0) > v.umbral_pesos));"
+                    <> ($precio > v.umbral_pesos));"
 }
-igual "simular con el factor vigente ($FACTOR_VIGENTE) no encuentra cruces" \
-      "0" "$(cruces "$FACTOR_VIGENTE")"
 
-# Y subirlo sí tiene que encontrarlos, o la comprobación de arriba
-# estaría pasando porque la consulta no mira nada.
-SUBIDO=$(consulta "SELECT $FACTOR_VIGENTE + 0.1000;")
-n=$(cruces "$SUBIDO")
-if [[ "${n:-0}" -gt 0 ]]; then
-  ok "subir el factor a $SUBIDO avisa de $n referencia(s) que cruzarían"
-else
-  falla "subir el factor a $SUBIDO no avisó de ninguna: la simulación no está mirando"
-fi
+regir () { # $1 forma de cálculo · $2 factor
+  ejecutar "UPDATE reglas_margen SET forma_calculo='$1', factor=$2
+             WHERE empresa_id=1 AND forma_pago='CONTADO'
+               AND categoria_id IS NULL AND proveedor_id IS NULL;" >/dev/null
+}
+
+for base in SOBRE_COSTO SOBRE_PRECIO; do
+  # La fórmula duplicada se vigila en sus dos ramas, no solo en la que
+  # rija hoy: dejar una sin guardián es exactamente lo que permitió que
+  # la vista ignorara `forma_calculo` hasta la V25.
+  # Dos factores que dan precios distintos en cada base, para que la
+  # invariante no se cumpla por casualidad de que coincidan. Y los dos
+  # bajos a propósito: con un factor alto casi todo el catálogo ya cruzó
+  # el umbral y el control de abajo se queda sin referencia que mover.
+  if [[ "$base" == "SOBRE_PRECIO" ]]; then f=1.1000; else f=1.0500; fi
+  regir "$base" "$f"
+  igual "con $base, la simulación y la vista dan el mismo precio" \
+        "0" "$(desviadas)"
+  igual "con $base al factor $f, simular lo vigente no encuentra cruces" \
+        "0" "$(cruces "$f" "$base")"
+
+  # Y un factor más alto sí tiene que encontrarlos, o la comprobación de
+  # arriba estaría pasando porque la consulta no mira nada.
+  #
+  # Cuál sea ese factor no se puede fijar a mano: subir un décimo encuentra
+  # referencias o no según dónde caigan los costos de la base cargada, y
+  # una cifra escrita aquí convertiría el control en una lotería. Se
+  # despeja de los datos el factor que cruza a la SIGUIENTE referencia en
+  # hacerlo y se pasa un pelo de ahí:
+  #
+  #   sobre el costo    costo × f > umbral          →  f > umbral / costo
+  #   sobre el precio   costo / (2 − f) > umbral    →  f > 2 − costo / umbral
+  #
+  # El mínimo tiene que buscarse entre los que superan el factor vigente.
+  # El mínimo a secas devuelve el de la referencia más barata, que no es
+  # la siguiente en cruzar sino la última.
+  if [[ "$base" == "SOBRE_PRECIO" ]]; then
+    necesario="(2 - (v.costo / v.umbral_pesos))"
+  else
+    necesario="(v.umbral_pesos / v.costo)"
+  fi
+  SUBIDO=$(consulta "SELECT ROUND(MIN($necesario) + 0.0100, 4)
+                       FROM v_precios_producto v
+                      WHERE v.empresa_id = 1
+                        AND v.tratamiento_iva = 'EXCLUIDO_HASTA_UMBRAL'
+                        AND v.tarifa_contado = 0
+                        AND v.costo > 0
+                        AND $necesario > $f;")
+  if [[ -z "$SUBIDO" || "$SUBIDO" == "NULL" ]]; then
+    echo "  (con $base no queda ninguna referencia por cruzar: el control no se probó)"
+  elif awk -v s="$SUBIDO" 'BEGIN{exit !(s+0 >= 2)}'; then
+    echo "  (con $base haría falta un factor de $SUBIDO, que la restricción prohíbe)"
+  else
+    n=$(cruces "$SUBIDO" "$base")
+    if [[ "${n:-0}" -gt 0 ]]; then
+      ok "con $base, subir a $SUBIDO avisa de $n referencia(s) que cruzarían"
+    else
+      falla "con $base, subir a $SUBIDO no avisó de ninguna: la simulación no mira"
+    fi
+  fi
+done
+
+# Se devuelve la regla general a como estaba.
+regir SOBRE_COSTO 1.2000
 
 echo
 if [[ "$fallos" -eq 0 ]]; then
