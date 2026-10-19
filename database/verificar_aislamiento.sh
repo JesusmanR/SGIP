@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Comprueba que el aislamiento entre empresas se cumple en el esquema, no
-# solo en el código. Se ejecuta sobre una base con la cadena V1 a V20
+# solo en el código. Se ejecuta sobre una base con la cadena V1 a V23
 # aplicada y los datos de demostración cargados.
 #
 # Los argumentos se pasan tal cual al cliente mysql:
@@ -214,7 +214,7 @@ PROD_NEG=$(consulta "SELECT producto_id FROM productos
 if [[ -z "$PROD_NEG" ]]; then
   falla "no se encontró el producto de prueba SKU-OK"
 else
-  ejecutar "DELETE FROM movimientos_inventario WHERE observacion LIKE 'AISL-%';" >/dev/null
+  ejecutar "DELETE FROM movimientos_inventario WHERE motivo LIKE 'AISL-%';" >/dev/null
   ejecutar "DELETE FROM usuarios WHERE correo='aislamiento@prueba.local';" >/dev/null
   ejecutar "INSERT INTO usuarios (empresa_id, rol_id, nombre, correo, clave_hash,
                                    activo, bloqueado, cambio_clave_req)
@@ -234,7 +234,7 @@ else
 
   salida=$(ejecutar "INSERT INTO movimientos_inventario
                             (empresa_id, producto_id, usuario_id, tipo, cantidad,
-                             existencia_anterior, existencia_posterior, observacion)
+                             existencia_anterior, existencia_posterior, motivo)
                      VALUES ($ID, $PROD_NEG, $USU_NEG, 'EGRESO', 3, 0, -3,
                              'AISL-venta sin existencia');")
   [[ -z "$salida" ]] && ok "el movimiento con saldo posterior -3 entra (V18)" \
@@ -243,7 +243,7 @@ else
   # Y la venta siguiente parte de un saldo ya negativo.
   salida=$(ejecutar "INSERT INTO movimientos_inventario
                             (empresa_id, producto_id, usuario_id, tipo, cantidad,
-                             existencia_anterior, existencia_posterior, observacion)
+                             existencia_anterior, existencia_posterior, motivo)
                      VALUES ($ID, $PROD_NEG, $USU_NEG, 'EGRESO', 1, -3, -4,
                              'AISL-segunda sin existencia');")
   [[ -z "$salida" ]] && ok "el movimiento con saldo anterior -3 entra (V18)" \
@@ -254,7 +254,7 @@ else
   # siendo una fila sin significado.
   salida=$(ejecutar "INSERT INTO movimientos_inventario
                             (empresa_id, producto_id, usuario_id, tipo, cantidad,
-                             existencia_anterior, existencia_posterior, observacion)
+                             existencia_anterior, existencia_posterior, motivo)
                      VALUES ($ID, $PROD_NEG, $USU_NEG, 'EGRESO', 1, -9999, -10000,
                              'AISL-bajo el piso');")
   [[ "$salida" == *"ck_movimientos_posterior"* ]] \
@@ -263,7 +263,7 @@ else
 
   salida=$(ejecutar "INSERT INTO movimientos_inventario
                             (empresa_id, producto_id, usuario_id, tipo, cantidad,
-                             existencia_anterior, existencia_posterior, observacion)
+                             existencia_anterior, existencia_posterior, motivo)
                      VALUES ($ID, $PROD_NEG, $USU_NEG, 'EGRESO', 0, 5, 5,
                              'AISL-cantidad cero');")
   [[ "$salida" == *"ck_movimientos_cantidad"* ]] \
@@ -295,7 +295,7 @@ else
   [[ "$n" == "0" ]] && ok "ningún capital retenido en negativo" \
                     || falla "filas con capital retenido negativo: $n"
 
-  ejecutar "DELETE FROM movimientos_inventario WHERE observacion LIKE 'AISL-%';" >/dev/null
+  ejecutar "DELETE FROM movimientos_inventario WHERE motivo LIKE 'AISL-%';" >/dev/null
   ejecutar "UPDATE productos SET existencia = 10
              WHERE empresa_id = $ID AND producto_id = $PROD_NEG;" >/dev/null
   ejecutar "DELETE FROM usuarios WHERE correo='aislamiento@prueba.local';" >/dev/null

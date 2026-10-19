@@ -65,7 +65,8 @@ jobs:
                    V19__la_valorizacion_no_resta_lo_que_se_debe \
                    V20__la_vista_de_precios_cierra_la_modalidad_a_credito \
                    V21__auditoria_de_la_plataforma \
-                   V22__parametros_de_la_plataforma; do
+                   V22__parametros_de_la_plataforma \
+                   V23__el_kardex_se_explica_solo; do
             echo "→ $f"
             mysql -h 127.0.0.1 -u root -psgip_ci sgip < "database/migrations/$f.sql"
           done
@@ -130,8 +131,24 @@ jobs:
           echo "columnas nuevas de la V19 y la V20: $n"
           test "$n" -eq 7
 
+      - name: Verificar la coherencia del kárdex (V23)
+        run: |
+          n=$(mysql -h 127.0.0.1 -u root -psgip_ci -N -B -e \
+            "SELECT COUNT(*) FROM information_schema.check_constraints
+             WHERE constraint_schema='sgip'
+               AND constraint_name='ck_movimientos_coherencia';")
+          test "$n" -eq 1
+          n=$(mysql -h 127.0.0.1 -u root -psgip_ci -N -B -e \
+            "SELECT COUNT(*) FROM information_schema.columns
+             WHERE table_schema='sgip' AND table_name='movimientos_inventario'
+               AND column_name='observacion';")
+          test "$n" -eq 0
+
       - name: Verificar el aislamiento entre empresas
         run: bash database/verificar_aislamiento.sh -h 127.0.0.1 -u root -psgip_ci
+
+      - name: Verificar la invariante del kárdex (RF-49)
+        run: bash database/verificar_kardex.sh -h 127.0.0.1 -u root -psgip_ci
 
       - name: Verificar la configuración tributaria por empresa
         run: bash database/verificar_tributacion.sh -h 127.0.0.1 -u root -psgip_ci
@@ -194,7 +211,8 @@ jobs:
                    V19__la_valorizacion_no_resta_lo_que_se_debe \
                    V20__la_vista_de_precios_cierra_la_modalidad_a_credito \
                    V21__auditoria_de_la_plataforma \
-                   V22__parametros_de_la_plataforma; do
+                   V22__parametros_de_la_plataforma \
+                   V23__el_kardex_se_explica_solo; do
             mysql -h 127.0.0.1 -u root -psgip_ci sgip < "database/migrations/$f.sql"
           done
 

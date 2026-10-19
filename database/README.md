@@ -106,6 +106,7 @@ falla, verifica que soporte esa directiva.
 | `V20__la_vista_de_precios_cierra_la_modalidad_a_credito.sql` | `v_precios_producto` expone `total_credito`, `cerca_umbral_credito` y `cruza_umbral_en_credito` |
 | `V21__auditoria_de_la_plataforma.sql` | `auditoria_plataforma`: bitácora inmutable de altas, activaciones, suspensiones y cambios tributarios nacionales, con responsable y fecha (RF-02, RF-05) |
 | `V22__parametros_de_la_plataforma.sql` | `parametros_plataforma`: los ajustes de alcance de plataforma salen de la tabla por empresa, donde el periodo de prueba era un parámetro de la empresa 1 (RN-14, RN-17) |
+| `V23__el_kardex_se_explica_solo.sql` | `cantidad` es una magnitud, el salto tiene que cuadrar con el tipo, el ajuste exige `motivo` y los saldos iniciales del catálogo quedan registrados (RF-49) |
 
 `extras/restriccion_ambito_regla_iva.sql` queda **fuera** de la cadena a
 propósito. Es una restricción correcta que no se pudo verificar, y el
