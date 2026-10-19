@@ -58,6 +58,30 @@ public class ServicioInventario {
     }
 
     /**
+     * Ingreso que viene de una recepción de compra (RF-23).
+     *
+     * Existe para que el módulo de compras entre por este mismo sitio y
+     * no escriba movimientos por su cuenta. Es la razón de ser del punto
+     * único: si compras insertara su propio INGRESO, habría dos lugares
+     * que suben la existencia y el RF-49 dependería de que los dos se
+     * acuerden de escribir las dos mitades.
+     *
+     * Lo único que añade sobre {@link #ingresar} es el identificador de
+     * la recepción, que deja el movimiento atado al documento que lo
+     * originó. Desde la V24 ese enlace solo acepta una recepción de la
+     * misma empresa.
+     *
+     * No lleva transacción propia a propósito: tiene que correr dentro de
+     * la del servicio de compras, para que la recepción, el acumulado de
+     * las líneas y los movimientos se deshagan juntos si algo falla.
+     */
+    public Optional<MovimientoDeInventario> ingresarPorRecepcion(
+            Integer productoId, int cantidad, String documento, Long recepcionId) {
+        return registrar(TipoMovimiento.INGRESO, productoId, cantidad, null,
+                documento, null, recepcionId);
+    }
+
+    /**
      * Ajuste contra un conteo físico (RF-49).
      *
      * Devuelve vacío en dos casos que el controlador distingue: cuando el
