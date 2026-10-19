@@ -67,7 +67,8 @@ jobs:
                    V21__auditoria_de_la_plataforma \
                    V22__parametros_de_la_plataforma \
                    V23__el_kardex_se_explica_solo \
-                   V24__claves_por_empresa_en_compras; do
+                   V24__claves_por_empresa_en_compras \
+                   V25__el_precio_respeta_la_forma_de_calculo; do
             echo "→ $f"
             # El motivo del fallo se emite como anotación además de ir al
             # registro. Sin esto, una migración que falla deja un «exit
@@ -170,6 +171,9 @@ jobs:
       - name: Verificar la invariante del kárdex (RF-49)
         run: bash database/verificar_kardex.sh -h 127.0.0.1 -u root -psgip_ci
 
+      - name: Verificar el motor de precios (RF-30 a RF-32, RF-34)
+        run: bash database/verificar_precios.sh -h 127.0.0.1 -u root -psgip_ci
+
       - name: Verificar la configuración tributaria por empresa
         run: bash database/verificar_tributacion.sh -h 127.0.0.1 -u root -psgip_ci
 
@@ -233,7 +237,8 @@ jobs:
                    V21__auditoria_de_la_plataforma \
                    V22__parametros_de_la_plataforma \
                    V23__el_kardex_se_explica_solo \
-                   V24__claves_por_empresa_en_compras; do
+                   V24__claves_por_empresa_en_compras \
+                   V25__el_precio_respeta_la_forma_de_calculo; do
             # El motivo del fallo se emite como anotación además de ir al
             # registro. Sin esto, una migración que falla deja un «exit
             # code 1» y el porqué solo se ve abriendo el registro a mano:
