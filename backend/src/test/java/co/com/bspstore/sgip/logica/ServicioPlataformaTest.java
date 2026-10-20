@@ -233,11 +233,13 @@ class ServicioPlataformaTest {
 
     @Test
     void elPeriodoDePruebaSaleDelParametroVigenteYNoDeUnaConstante() {
-        altaViable(12, 45);
+        // Seis, que no es el valor por omisión: si el alta lo ignorara y
+        // usara la constante, la fecha saldría a un mes de aquí.
+        altaViable(12, 6);
 
         servicio.darDeAlta(solicitud());
 
-        verify(plataforma).insertarSuscripcion(12, "BASICO", HOY, HOY.plusDays(45));
+        verify(plataforma).insertarSuscripcion(12, "BASICO", HOY, HOY.plusMonths(6));
     }
 
     @Test
