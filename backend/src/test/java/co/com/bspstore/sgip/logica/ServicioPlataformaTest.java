@@ -95,12 +95,12 @@ class ServicioPlataformaTest {
                 "Ana Pérez", "Ana@Tornillo.CO", "clave-de-prueba");
     }
 
-    private void altaViable(int empresaId, int diasPrueba) {
+    private void altaViable(int empresaId, int mesesPrueba) {
         when(plataforma.existeNit(anyString())).thenReturn(false);
         when(usuarios.existsByCorreo(anyString())).thenReturn(false);
         when(plataforma.insertarEmpresa(anyString(), anyString(), any(), any(), any()))
                 .thenReturn(empresaId);
-        when(plataforma.diasDePrueba()).thenReturn(diasPrueba);
+        when(plataforma.mesesDePrueba()).thenReturn(mesesPrueba);
         when(roles.findByNombre("ADMINISTRADOR"))
                 .thenReturn(Optional.of(new Rol("ADMINISTRADOR", "Operación del negocio")));
         when(plataforma.buscar(empresaId)).thenReturn(Optional.of(empresaEnPlataforma(empresaId)));
@@ -109,28 +109,90 @@ class ServicioPlataformaTest {
     private EmpresaEnPlataforma empresaEnPlataforma(int id) {
         return new EmpresaEnPlataforma(id, "900123456-1", "Ferretería El Tornillo S.A.S.",
                 "contacto@tornillo.co", "3001234567", "Bucaramanga", "PRUEBA",
-                HOY.atStartOfDay(), "BASICO", HOY, HOY.plusDays(30), "PRUEBA", 1);
+                HOY.atStartOfDay(), "BASICO", HOY, HOY.plusMonths(1), "PRUEBA", 1);
     }
 
     // ------------------------------------------------------------ RF-01
 
     @Test
     void daDeAltaLaEmpresaEnPruebaConSuSuscripcionYSuConfiguracion() {
-        altaViable(12, 30);
+        altaViable(12, 1);
 
         EmpresaEnPlataforma creada = servicio.darDeAlta(solicitud());
 
         assertEquals(Integer.valueOf(12), creada.empresaId());
         verify(plataforma).insertarEmpresa("900123456-1", "Ferretería El Tornillo S.A.S.",
                 "contacto@tornillo.co", "3001234567", "Bucaramanga");
-        // El plan llegó nulo y la suscripción arranca hoy, por treinta días.
-        verify(plataforma).insertarSuscripcion(12, "BASICO", HOY, HOY.plusDays(30));
+        // El plan llegó nulo y la suscripción arranca hoy, por un mes:
+        // el RF-04 lo pide «hasta el mismo día del mes siguiente», que
+        // con HOY = 17 de octubre es el 17 de noviembre. Treinta días
+        // habrían dado el 16, y esta prueba lo daba por bueno porque
+        // estaba escrita desde el código y no desde el criterio.
+        verify(plataforma).insertarSuscripcion(12, "BASICO", HOY, HOY.plusMonths(1));
         verify(plataforma).insertarConfiguracion(12);
+    }
+
+    /**
+     * El mismo servicio con el reloj puesto en otro día.
+     *
+     * Las fechas de frontera del RF-04 no se pueden probar con el reloj
+     * de {@code preparar()}: el 17 de octubre cae en un mes de treinta y
+     * un días y oculta justo los casos que importan.
+     */
+    private ServicioPlataforma servicioEl(LocalDate dia) {
+        Clock reloj = Clock.fixed(
+                ZonedDateTime.of(dia.atTime(10, 0), ZoneId.of("America/Bogota")).toInstant(),
+                ZoneId.of("America/Bogota"));
+        return new ServicioPlataforma(plataforma, usuarios, roles, reloj);
+    }
+
+    /**
+     * Las fechas en las que treinta días y un mes no coinciden.
+     *
+     * De las 365 fechas de alta posibles de un año, 240 daban una fecha
+     * de vencimiento distinta de la que el criterio del RF-04 pide. Estas
+     * tres son las formas que toma esa diferencia: el mes de treinta y un
+     * días, el salto sobre febrero y el día que no existe en el mes
+     * siguiente.
+     */
+    @Test
+    void laPruebaVenceElMismoDiaDelMesSiguiente() {
+        String[][] casos = {
+                // alta           vencimiento     lo que daban treinta días
+                {"2026-01-01", "2026-02-01"},   // 2026-01-31
+                {"2026-03-01", "2026-04-01"},   // 2026-03-31
+                {"2026-05-15", "2026-06-15"},   // 2026-06-14
+                // El 31 de febrero no existe: el único vencimiento posible
+                // es el último día que sí existe. Treinta días daban el 2
+                // de marzo, que ya es el mes de después.
+                {"2026-01-31", "2026-02-28"},
+                // En un mes de treinta días las dos cuentas coinciden, y
+                // el criterio se sigue cumpliendo.
+                {"2026-04-10", "2026-05-10"},
+        };
+        altaViable(12, 1);
+
+        for (String[] caso : casos) {
+            LocalDate dia = LocalDate.parse(caso[0]);
+            servicioEl(dia).darDeAlta(solicitud());
+            verify(plataforma).insertarSuscripcion(
+                    12, "BASICO", dia, LocalDate.parse(caso[1]));
+        }
+    }
+
+    @Test
+    void unPeriodoDeVariosMesesTambienCaeEnElMismoDia() {
+        altaViable(12, 3);
+
+        servicioEl(LocalDate.of(2026, 11, 30)).darDeAlta(solicitud());
+
+        verify(plataforma).insertarSuscripcion(
+                12, "BASICO", LocalDate.of(2026, 11, 30), LocalDate.of(2027, 2, 28));
     }
 
     @Test
     void elAdministradorInicialQuedaLigadoALaEmpresaRecienCreada() {
-        altaViable(12, 30);
+        altaViable(12, 1);
 
         servicio.darDeAlta(solicitud());
 
@@ -146,7 +208,7 @@ class ServicioPlataformaTest {
 
     @Test
     void laClaveDelAdministradorSeGuardaDerivadaYNoEnClaro() {
-        altaViable(12, 30);
+        altaViable(12, 1);
 
         servicio.darDeAlta(solicitud());
 
@@ -160,7 +222,7 @@ class ServicioPlataformaTest {
 
     @Test
     void elAltaQuedaEnLaBitacoraConSuResponsable() {
-        altaViable(12, 30);
+        altaViable(12, 1);
 
         servicio.darDeAlta(solicitud());
 

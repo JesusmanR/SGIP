@@ -106,12 +106,16 @@ public class ServicioPlataforma {
                 texto(solicitud.ciudad()));
 
         LocalDate hoy = LocalDate.now(reloj);
+        // En meses y no en días, que es lo que pide el RF-04: «hasta el
+        // mismo día del mes siguiente». `plusMonths` recorta solo cuando
+        // ese día no existe —el 31 de enero vence el 28 de febrero—, que
+        // es la única lectura posible del criterio en esos casos.
         plataforma.insertarSuscripcion(
                 empresaId,
                 solicitud.plan() == null || solicitud.plan().isBlank()
                         ? PLAN_POR_OMISION : solicitud.plan().trim(),
                 hoy,
-                hoy.plusDays(plataforma.diasDePrueba()));
+                hoy.plusMonths(plataforma.mesesDePrueba()));
 
         plataforma.insertarConfiguracion(empresaId);
 

@@ -69,7 +69,8 @@ jobs:
                    V23__el_kardex_se_explica_solo \
                    V24__claves_por_empresa_en_compras \
                    V25__el_precio_respeta_la_forma_de_calculo \
-                   V26__el_tipo_de_un_parametro_obliga; do
+                   V26__el_tipo_de_un_parametro_obliga \
+                   V27__el_periodo_de_prueba_se_mide_en_meses; do
             echo "→ $f"
             # El motivo del fallo se emite como anotación además de ir al
             # registro. Sin esto, una migración que falla deja un «exit
@@ -215,6 +216,32 @@ jobs:
              VALUES ('sgip.plataforma.prueba.dias','45','ENTERO','2027-01-01');
              DELETE FROM parametros_plataforma WHERE vigente_desde='2027-01-01';"
 
+      # El RF-04 pide que la prueba venza «el mismo día del mes
+      # siguiente». Lo que esto comprueba es que el parámetro que el alta
+      # lee sea el de meses y esté vigente: si la V27 no corriera, la
+      # consulta del backend no encontraría fila y el alta caería al
+      # valor por omisión sin que nada lo dijera.
+      - name: Verificar que el periodo de prueba se mide en meses (V27)
+        run: |
+          consulta () { mysql -h 127.0.0.1 -u root -psgip_ci -N -B sgip -e "$1"; }
+          vigente=$(consulta "SELECT valor FROM parametros_plataforma
+                               WHERE clave = 'sgip.plataforma.prueba.meses'
+                                 AND vigente_desde <= CURDATE()
+                                 AND (vigente_hasta IS NULL OR vigente_hasta >= CURDATE());")
+          test "$vigente" = "1" || {
+            echo "::error::el parámetro de meses no rige · valor leído: '$vigente'"; exit 1; }
+          # Y el de días tiene que haber dejado de regir, o habría dos
+          # respuestas vivas para la misma pregunta.
+          abierto=$(consulta "SELECT COUNT(*) FROM parametros_plataforma
+                               WHERE clave = 'sgip.plataforma.prueba.dias'
+                                 AND (vigente_hasta IS NULL OR vigente_hasta >= CURDATE());")
+          test "$abierto" -eq 0 || {
+            echo "::error::el parámetro de días sigue vigente"; exit 1; }
+          if mysql -h 127.0.0.1 -u root -psgip_ci sgip -e \
+              "INSERT INTO parametros_plataforma (clave,valor,tipo_dato,vigente_desde)
+               VALUES ('sgip.plataforma.prueba.meses','25','ENTERO','2028-01-01');" 2>/dev/null
+          then echo "::error::entró un periodo de prueba de 25 meses"; exit 1; fi
+
       - name: Analizar el SQL escrito a mano del backend
         run: python3 database/verificar_sql_del_backend.py -h 127.0.0.1 -u root -psgip_ci
 
@@ -280,7 +307,8 @@ jobs:
                    V23__el_kardex_se_explica_solo \
                    V24__claves_por_empresa_en_compras \
                    V25__el_precio_respeta_la_forma_de_calculo \
-                   V26__el_tipo_de_un_parametro_obliga; do
+                   V26__el_tipo_de_un_parametro_obliga \
+                   V27__el_periodo_de_prueba_se_mide_en_meses; do
             # El motivo del fallo se emite como anotación además de ir al
             # registro. Sin esto, una migración que falla deja un «exit
             # code 1» y el porqué solo se ve abriendo el registro a mano:
