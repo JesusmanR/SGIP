@@ -164,6 +164,7 @@ DESPUES_DEL_DEMO=(
   V26__el_tipo_de_un_parametro_obliga.sql
   V27__el_periodo_de_prueba_se_mide_en_meses.sql
   V28__claves_por_empresa_en_importacion.sql
+  V29__el_rechazo_dice_en_que_fila.sql
 )
 
 for f in "${ANTES_DEL_DEMO[@]}"; do
