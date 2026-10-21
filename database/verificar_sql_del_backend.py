@@ -165,23 +165,47 @@ def evaluar(expr, consts):
             partes.append(trozo[1:-1])
         elif re.fullmatch(r'[A-Z_][A-Z0-9_]*', trozo) and trozo in consts:
             partes.append(consts[trozo])
+        elif re.fullmatch(r'[A-Za-z]\w*\.[A-Z_][A-Z0-9_]*', trozo) \
+                and trozo.split('.')[-1] in consts:
+            # Una constante de otra clase del mismo paquete, como la
+            # fórmula del precio que `RepositorioPrecios` comparte con
+            # la importación. Sin esto, compartir una constante entre
+            # dos repositorios dejaba sin analizar las dos consultas que
+            # la usan, y compartirla es justamente lo que evita que la
+            # fórmula se escriba tres veces.
+            partes.append(consts[trozo.split('.')[-1]])
         else:
             return None
     return ''.join(partes)
 
 
-def constantes(texto):
-    """Las constantes String del fichero, resueltas también entre sí."""
+def constantes(texto, previas=None):
+    """
+    Las constantes String del fichero, resueltas también entre sí.
+
+    `previas` trae las del resto del paquete: una clase puede compartir
+    una constante con otra, y sin ellas las consultas que la usan se
+    quedarían sin analizar.
+    """
     crudas = {}
     for m in re.finditer(r'static final String (\w+)\s*=\s*(.*?);\n', texto, re.S):
         crudas[m.group(1)] = m.group(2)
-    resueltas = {}
+    resueltas = dict(previas or {})
     for _ in range(5):
         for nombre, expr in crudas.items():
             v = evaluar(expr, resueltas)
             if v is not None:
                 resueltas[nombre] = v
     return resueltas
+
+
+def constantes_del_paquete(raiz):
+    """Las constantes de todos los ficheros, para resolverlas entre sí."""
+    todas = {}
+    for _ in range(3):
+        for fichero in sorted(raiz.glob('*.java')):
+            todas = constantes(fichero.read_text(encoding='utf-8'), todas)
+    return todas
 
 
 def analizar(sql, conexion):
@@ -207,11 +231,12 @@ def main():
 
     fallos = total = 0
     sin_analizar = []
+    del_paquete = constantes_del_paquete(RAIZ)
     for fichero in sorted(RAIZ.glob('*.java')):
         texto = fichero.read_text(encoding='utf-8')
         if not any(ll in texto for ll in LLAMADAS):
             continue
-        consts = constantes(texto)
+        consts = constantes(texto, del_paquete)
 
         # Todas las llamadas del fichero, en el orden en que aparecen,
         # para que el número de sentencia que se informa sea el que se

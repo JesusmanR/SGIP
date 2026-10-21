@@ -312,6 +312,28 @@ class ServicioImportacionTest {
     }
 
     @Test
+    void elAvisoDeUmbralSoloTieneSentidoAntesDeAplicar() {
+        cargaEn("VALIDADA", 5);
+        servicio.buscar(CARGA);
+        verify(importacion).cruzarianAlAplicar(EMPRESA, CARGA);
+    }
+
+    @Test
+    void yNoSeCalculaSobreUnaCargaYaAplicada() {
+        cargaEn("APLICADA", 5);
+
+        var resumen = servicio.buscar(CARGA);
+
+        // Sobre una carga aplicada la consulta compararía el costo nuevo
+        // contra sí mismo: no encontraría nada, y ese «ningún cruce»
+        // sería cierto y engañoso a la vez.
+        assertTrue(resumen.isPresent());
+        assertTrue(resumen.get().cruces().isEmpty());
+        verify(importacion, org.mockito.Mockito.never())
+                .cruzarianAlAplicar(anyInt(), anyLong());
+    }
+
+    @Test
     void unaCargaDeOtraEmpresaNoSeEncuentra() {
         when(importacion.buscarCarga(EMPRESA, 999L)).thenReturn(Optional.empty());
         assertTrue(servicio.aplicar(999L).isEmpty());

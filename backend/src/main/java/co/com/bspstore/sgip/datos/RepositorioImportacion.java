@@ -1,5 +1,6 @@
 package co.com.bspstore.sgip.datos;
 
+import co.com.bspstore.sgip.api.dto.CruceDeUmbral;
 import co.com.bspstore.sgip.api.dto.FilaDeCarga;
 import co.com.bspstore.sgip.logica.CabeceraCarga;
 import co.com.bspstore.sgip.logica.ProductoDelCatalogo;
@@ -326,6 +327,63 @@ public class RepositorioImportacion {
                 .param("empresa", empresaId)
                 .param("carga", cargaId)
                 .update();
+    }
+
+    /**
+     * El precio que daría cada referencia con el costo que trae la
+     * carga, usando su propia regla vigente.
+     *
+     * La fórmula no se escribe aquí: se toma de
+     * {@link RepositorioPrecios#PRECIO}, que es la misma que usa la
+     * simulación del RF-35. El ADR-0021 dejó encargado reutilizarla
+     * cuando existiera este módulo, y literalmente no se podía —aquella
+     * simula una regla nueva sobre el costo actual, y esta un costo
+     * nuevo sobre la regla actual— de modo que lo que se comparte es la
+     * fórmula, que es lo que se habría duplicado por tercera vez.
+     */
+    private static final String PRECIO_CON_COSTO_NUEVO =
+            RepositorioPrecios.PRECIO.formatted(
+                    "d.costo", "v.factor_contado", "v.base_contado");
+
+    /**
+     * Qué referencias de la carga cambiarían de tratamiento tributario
+     * al aplicarla (RF-35 sobre RF-27).
+     *
+     * Aplicar una lista sube o baja costos, y el umbral del artículo 424
+     * se mide contra el precio de venta: un costo que sube lo justo
+     * convierte una referencia excluida en gravada, y el cliente ve un
+     * 19 % que ayer no estaba. El requisito pide avisar antes de
+     * aplicar, y aquí «antes» es posible porque validar y aplicar son
+     * dos pasos.
+     *
+     * Solo miran al umbral las referencias cuyo tratamiento lo usa; para
+     * las demás `umbral_pesos` es nulo, la comparación da nulo y la fila
+     * no entra. Sin cruces, lista vacía.
+     */
+    public List<CruceDeUmbral> cruzarianAlAplicar(Integer empresaId, Long cargaId) {
+        return jdbc.sql("""
+                        SELECT v.producto_id, v.codigo, v.nombre, v.costo,
+                               v.precio_contado                        AS precio_antes,
+                               %1$s                                    AS precio_despues,
+                               v.umbral_pesos                          AS umbral,
+                               CASE WHEN v.tarifa_contado > 0
+                                    THEN 'GRAVADO' ELSE 'EXCLUIDO' END AS tratamiento_antes,
+                               CASE WHEN %1$s > v.umbral_pesos
+                                    THEN 'GRAVADO' ELSE 'EXCLUIDO' END AS tratamiento_despues
+                          FROM detalle_carga_precios d
+                          JOIN v_precios_producto v
+                            ON v.empresa_id = d.empresa_id
+                           AND v.producto_id = d.producto_id
+                         WHERE d.empresa_id = :empresa AND d.carga_id = :carga
+                           AND d.aceptado = TRUE
+                           AND v.tratamiento_iva = 'EXCLUIDO_HASTA_UMBRAL'
+                           AND (v.tarifa_contado > 0) <> (%1$s > v.umbral_pesos)
+                         ORDER BY v.codigo
+                        """.formatted(PRECIO_CON_COSTO_NUEVO))
+                .param("empresa", empresaId)
+                .param("carga", cargaId)
+                .query(CruceDeUmbral.class)
+                .list();
     }
 
     public BigDecimal costoActual(Integer empresaId, Integer productoId) {

@@ -67,6 +67,29 @@ ninguna.
 Cuando exista el módulo de importación de listas de precios, reutiliza
 esta misma simulación en lugar de escribir la tercera copia.
 
+## Nota posterior · el módulo de importación llegó, y el encargo no se
+## podía cumplir tal como estaba escrito
+
+El párrafo de arriba daba por hecho que la importación necesitaría la
+misma simulación. No es así, y se ve al intentarlo: `simularCruces`
+calcula el precio de una **regla** que todavía no existe sobre el costo
+actual, y la importación necesita el de un **costo** que todavía no se
+ha aplicado sobre la regla actual. Son la misma fórmula con distinto
+hueco; la consulta no se puede compartir.
+
+Lo que sí se comparte es la fórmula, que es lo que se habría escrito por
+tercera vez. Vive en `RepositorioPrecios.PRECIO`, con huecos para el
+costo, el factor y la forma de cálculo, y la usan las dos consultas.
+
+Al bajarla a una constante salió algo que no se veía: **dentro de
+`simularCruces` la fórmula ya estaba escrita tres veces** —en la columna
+del precio nuevo, en la del tratamiento nuevo y en el filtro—, de modo
+que la extracción mejora también la consulta que ya existía. El recuento
+honesto de copias no era dos, era cuatro.
+
+Siguen siendo dos definiciones: la de la vista y la del backend. El
+guardián que las compara no cambia.
+
 La alternativa descartada era materializar la regla propuesta en una
 tabla temporal y leer la vista contra ella. Habría evitado la
 duplicación, pero exige escribir en la base para responder una pregunta

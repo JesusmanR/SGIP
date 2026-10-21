@@ -14,6 +14,11 @@ import java.util.List;
  * `muestra` son las primeras filas para la vista previa que el RF-24
  * exige antes de aplicar. No es la carga entera: una lista de veinte mil
  * referencias no cabe en una respuesta ni se revisa a ojo.
+ *
+ * `cruces` son las referencias que cambiarían de tratamiento tributario
+ * si la carga se aplicara (RF-35). Van completas y no recortadas: son
+ * pocas por definición —solo las que andan pegadas al umbral— y son
+ * justo lo que hay que mirar antes de decidir.
  */
 public record ResumenCarga(
         Long cargaId,
@@ -26,5 +31,6 @@ public record ResumenCarga(
         int leidos,
         int aceptados,
         int rechazados,
-        List<FilaDeCarga> muestra
+        List<FilaDeCarga> muestra,
+        List<CruceDeUmbral> cruces
 ) {}

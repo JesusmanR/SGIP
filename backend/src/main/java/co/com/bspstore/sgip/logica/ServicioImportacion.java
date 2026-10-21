@@ -163,7 +163,15 @@ public class ServicioImportacion {
                         c.cargaId(), c.proveedorId(), c.proveedor(), c.nombreArchivo(),
                         c.estado(), c.fecha(), c.fechaAplicacion(),
                         c.leidos(), c.aceptados(), c.rechazados(),
-                        importacion.detallesDe(empresa, cargaId, FILAS_DE_MUESTRA)));
+                        importacion.detallesDe(empresa, cargaId, FILAS_DE_MUESTRA),
+                        // Solo tiene sentido avisar de lo que va a pasar
+                        // mientras todavía pueda no pasar. Sobre una
+                        // carga ya aplicada la consulta compararía el
+                        // costo nuevo contra sí mismo y no encontraría
+                        // nada, que sería cierto y engañoso a la vez.
+                        "VALIDADA".equals(c.estado())
+                                ? importacion.cruzarianAlAplicar(empresa, cargaId)
+                                : List.of()));
     }
 
     /**
