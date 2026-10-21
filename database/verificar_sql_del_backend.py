@@ -46,6 +46,16 @@ from pathlib import Path
 RAIZ = (Path(__file__).resolve().parent.parent
         / 'backend/src/main/java/co/com/bspstore/sgip/datos')
 
+# Por dónde entra SQL escrito a mano.
+#
+# `jdbc.sql(` era el único al principio, y eso dejaba una puerta abierta:
+# una sentencia enviada por lotes con `batchUpdate` no la analizaba
+# nadie, y habría pasado la entrega en verde sin que nadie la mirara,
+# que es justo lo que este guion existe para impedir. Al añadir una
+# forma de enviar SQL hay que añadirla aquí.
+LLAMADAS = ('jdbc.sql(', 'plantilla.batchUpdate(', 'plantilla.update(',
+            'plantilla.query(', 'plantilla.queryForObject(')
+
 
 def argumento(texto, inicio):
     """El texto entre los paréntesis de jdbc.sql( … ), con anidamiento."""
@@ -199,17 +209,32 @@ def main():
     sin_analizar = []
     for fichero in sorted(RAIZ.glob('*.java')):
         texto = fichero.read_text(encoding='utf-8')
-        if 'jdbc.sql(' not in texto:
+        if not any(ll in texto for ll in LLAMADAS):
             continue
         consts = constantes(texto)
-        i = n = 0
-        while True:
-            j = texto.find('jdbc.sql(', i)
-            if j < 0:
-                break
-            expr, i = argumento(texto, j + len('jdbc.sql('))
+
+        # Todas las llamadas del fichero, en el orden en que aparecen,
+        # para que el número de sentencia que se informa sea el que se
+        # lee bajando por el archivo.
+        puntos = []
+        for llamada in LLAMADAS:
+            desde = 0
+            while True:
+                j = texto.find(llamada, desde)
+                if j < 0:
+                    break
+                puntos.append((j, llamada))
+                desde = j + len(llamada)
+        puntos.sort()
+
+        n = 0
+        for j, llamada in puntos:
+            expr, _ = argumento(texto, j + len(llamada))
             n += 1
-            sql = evaluar(expr, consts)
+            # El SQL es siempre el primer argumento; `batchUpdate` lleva
+            # además la lista de valores.
+            partes = dividir(expr)
+            sql = evaluar(partes[0], consts) if partes else None
             if sql is None:
                 sin_analizar.append(f'{fichero.name} · sentencia {n}')
                 continue

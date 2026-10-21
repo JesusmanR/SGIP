@@ -3,6 +3,7 @@ package co.com.bspstore.sgip.datos;
 import co.com.bspstore.sgip.api.dto.FilaDeCarga;
 import co.com.bspstore.sgip.logica.CabeceraCarga;
 import co.com.bspstore.sgip.logica.ProductoDelCatalogo;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
@@ -29,8 +30,18 @@ public class RepositorioImportacion {
 
     private final JdbcClient jdbc;
 
-    public RepositorioImportacion(JdbcClient jdbc) {
+    /**
+     * Para el envío por lotes, que {@link JdbcClient} no ofrece.
+     *
+     * Es el mismo origen de datos y la misma transacción: `JdbcClient`
+     * es una fachada sobre esto, de modo que no hay dos conexiones ni
+     * dos transacciones en juego.
+     */
+    private final JdbcTemplate plantilla;
+
+    public RepositorioImportacion(JdbcClient jdbc, JdbcTemplate plantilla) {
         this.jdbc = jdbc;
+        this.plantilla = plantilla;
     }
 
     public boolean proveedorPropio(Integer empresaId, Integer proveedorId) {
@@ -108,43 +119,44 @@ public class RepositorioImportacion {
     }
 
     /**
-     * Guarda el detalle en bloques.
+     * La sentencia de una fila de detalle.
      *
-     * Una sentencia por fila son veinte mil viajes; una sola sentencia
-     * con veinte mil valores revienta el tope del paquete de MySQL. El
-     * bloque es el término medio y el tamaño está puesto por lo que
-     * cabe holgado en el paquete por omisión de cuatro megabytes.
+     * Es una constante y no un texto armado al vuelo a propósito. La
+     * primera versión de esto construía un INSERT de quinientos
+     * paréntesis con un StringBuilder, y `verificar_sql_del_backend.py`
+     * la dejó en rojo con el motivo exacto: una sentencia que el
+     * analizador no puede reconstruir es una sentencia que nadie mira.
+     * Escrita así, el analizador la pasa por PREPARE como a las demás.
+     */
+    private static final String INSERTAR_DETALLE = """
+            INSERT INTO detalle_carga_precios
+                   (empresa_id, carga_id, numero_fila, producto_id,
+                    referencia_origen, descripcion_origen, costo,
+                    costo_anterior, aceptado, motivo_rechazo)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """;
+
+    /**
+     * Guarda el detalle en lotes.
+     *
+     * Una ida y vuelta por fila son veinte mil viajes a la base con el
+     * tope del RF-24. `batchUpdate` manda el lote entero en una sola
+     * ida, con la sentencia preparada una vez, que es lo que hace que
+     * los cinco mil registros del RF-27 quepan en el minuto.
      */
     public void insertarDetalles(Integer empresaId, Long cargaId, List<FilaDeCarga> filas) {
-        final int TAMANO_BLOQUE = 500;
-        for (int desde = 0; desde < filas.size(); desde += TAMANO_BLOQUE) {
-            List<FilaDeCarga> bloque = filas.subList(
-                    desde, Math.min(desde + TAMANO_BLOQUE, filas.size()));
-            StringBuilder sentencia = new StringBuilder("""
-                    INSERT INTO detalle_carga_precios
-                           (empresa_id, carga_id, numero_fila, producto_id,
-                            referencia_origen, descripcion_origen, costo,
-                            costo_anterior, aceptado, motivo_rechazo)
-                    VALUES """);
-            List<Object> valores = new ArrayList<>();
-            for (int i = 0; i < bloque.size(); i++) {
-                sentencia.append(i == 0 ? "" : ", ")
-                         .append("(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        final int TAMANO_LOTE = 500;
+        for (int desde = 0; desde < filas.size(); desde += TAMANO_LOTE) {
+            List<FilaDeCarga> lote = filas.subList(
+                    desde, Math.min(desde + TAMANO_LOTE, filas.size()));
+            List<Object[]> valores = new ArrayList<>(lote.size());
+            for (FilaDeCarga f : lote) {
+                valores.add(new Object[]{
+                        empresaId, cargaId, f.numeroFila(), f.productoId(),
+                        f.referencia(), f.descripcion(), f.costo(),
+                        f.costoAnterior(), f.aceptado(), f.motivoRechazo()});
             }
-            var llamada = jdbc.sql(sentencia.toString());
-            for (FilaDeCarga f : bloque) {
-                valores.add(empresaId);
-                valores.add(cargaId);
-                valores.add(f.numeroFila());
-                valores.add(f.productoId());
-                valores.add(f.referencia());
-                valores.add(f.descripcion());
-                valores.add(f.costo());
-                valores.add(f.costoAnterior());
-                valores.add(f.aceptado());
-                valores.add(f.motivoRechazo());
-            }
-            llamada.params(valores).update();
+            plantilla.batchUpdate(INSERTAR_DETALLE, valores);
         }
     }
 
