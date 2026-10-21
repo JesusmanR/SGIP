@@ -15,7 +15,18 @@ CNF=""
 
 # El archivo temporal con la credencial se borra pase lo que pase:
 # al terminar bien, al fallar o si interrumpes con Ctrl-C.
-limpiar() { [[ -n "$CNF" && -f "$CNF" ]] && rm -f "$CNF"; }
+#
+# El `return 0` no sobra. Sin clave no hay archivo que borrar, la
+# condición da falso y la función devuelve 1; como corre en el trap de
+# EXIT, ese 1 pisaba el código de salida del guion y `aplicar.sh`
+# terminaba en error habiendo aplicado la cadena entera y pasado todos
+# sus centinelas. Se descubrió al ejecutarlo de verdad por primera vez:
+# la verificación local usaba un guion de cadena cruda y nunca pasaba
+# por aquí.
+limpiar() {
+  [[ -n "$CNF" && -f "$CNF" ]] && rm -f "$CNF"
+  return 0
+}
 trap limpiar EXIT INT TERM
 
 while [[ $# -gt 0 ]]; do
@@ -207,8 +218,8 @@ sin_existencia=$("${MYSQL[@]}" -N -B -e \
 compuestas=$("${MYSQL[@]}" -N -B -e \
   "SELECT COUNT(*) FROM information_schema.referential_constraints
    WHERE constraint_schema='sgip' AND constraint_name LIKE '%\\_emp';")
-[[ "$compuestas" -eq 29 ]] || {
-  echo "ATENCIÓN: se esperaban 29 claves por empresa y hay $compuestas"
+[[ "$compuestas" -eq 36 ]] || {
+  echo "ATENCIÓN: se esperaban 36 claves por empresa y hay $compuestas"
   fallo=1
 }
 

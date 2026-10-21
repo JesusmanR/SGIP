@@ -120,14 +120,21 @@ jobs:
                AND column_name='sin_existencia';")
           test "$n" -eq 1
 
-      # Veinte de la V11, cuatro de la V12 y cinco de la V24.
+      # Veinte de la V11, cuatro de la V12, cinco de la V24 y siete de
+      # la V28.
+      #
+      # Este número se sube a mano al añadir claves, y a propósito: es un
+      # centinela, no un conteo informativo. Una migración que quita una
+      # clave por empresa sin que nadie lo decida deja la entrega en rojo,
+      # y eso es justo lo que tiene que pasar. La V28 lo puso en rojo al
+      # subir de 29 a 36, que era la señal correcta.
       - name: Verificar las claves foráneas por empresa
         run: |
           n=$(mysql -h 127.0.0.1 -u root -psgip_ci -N -B -e \
             "SELECT COUNT(*) FROM information_schema.referential_constraints
              WHERE constraint_schema='sgip' AND constraint_name LIKE '%\\_emp';")
           echo "claves foráneas por empresa: $n"
-          test "$n" -eq 29
+          test "$n" -eq 36
 
       # El conteo de vistas no cambia con la V18, la V19 ni la V20: la
       # primera solo toca restricciones y las otras dos recrean vistas que
