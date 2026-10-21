@@ -100,6 +100,61 @@ public class ServicioImportacion {
                 "La carga " + cargaId + " no se encontró justo después de crearla."));
     }
 
+    /**
+     * Aplica la carga: los costos aceptados pasan al catálogo (RF-27).
+     *
+     * «La operación es atómica: si falla a mitad, ningún costo queda
+     * modificado.» Lo sostiene la transacción, y dentro de ella cada
+     * paso es una sola sentencia sobre toda la lista en vez de una por
+     * fila. Con cinco mil registros, cinco mil idas y vueltas no caben
+     * en el minuto que el requisito concede, y cada una sería además
+     * una oportunidad de quedarse a medias.
+     *
+     * El costo anterior no se pierde: antes de escribir se cierra el
+     * periodo que venía rigiendo y se abre el nuevo en
+     * `historico_costos`, que es de lo que vive el RF-28. Hace falta
+     * porque un cambio de costo no deja rastro en el kárdex —no es un
+     * movimiento de existencias— y sin el histórico no habría forma de
+     * reconstruir con qué costo se vendió algo el mes pasado.
+     */
+    @Transactional
+    public Optional<ResumenCarga> aplicar(Long cargaId) {
+        Integer empresa = ContextoEmpresa.empresaActual();
+        Optional<CabeceraCarga> cabecera = importacion.buscarCarga(empresa, cargaId);
+        if (cabecera.isEmpty()) {
+            return Optional.empty();
+        }
+        String estado = cabecera.get().estado();
+        if (!"VALIDADA".equals(estado)) {
+            // Aplicar dos veces duplicaría el movimiento de costo sin
+            // que nada lo delate: el segundo paso encontraría el costo
+            // ya cambiado y lo daría por bueno.
+            throw new ReglaInvalidaException(
+                    "La carga " + cargaId + " está en estado " + estado
+                            + " y solo se puede aplicar una carga validada.");
+        }
+
+        importacion.cerrarCostoVigente(empresa, cargaId);
+        importacion.retirarCostoDeHoy(empresa, cargaId);
+        importacion.abrirCostoDeHoy(empresa, cargaId);
+        int aplicados = importacion.aplicarCostos(empresa, cargaId);
+
+        if (aplicados != cabecera.get().aceptados()) {
+            // Entre validar y aplicar alguien desactivó o borró una
+            // referencia. Deshacer es lo correcto: aplicar la lista a
+            // medias deja un catálogo donde unos precios son de la lista
+            // nueva y otros de la vieja, y nadie sabría cuáles.
+            throw new ReglaInvalidaException(
+                    "La carga declaraba " + cabecera.get().aceptados()
+                            + " referencias y solo se pudieron actualizar " + aplicados
+                            + ". El catálogo cambió desde que se validó; no se aplicó nada. "
+                            + "Vuelve a cargar la lista.");
+        }
+
+        importacion.marcarAplicada(empresa, cargaId);
+        return buscar(cargaId);
+    }
+
     @Transactional(readOnly = true)
     public Optional<ResumenCarga> buscar(Long cargaId) {
         Integer empresa = ContextoEmpresa.empresaActual();

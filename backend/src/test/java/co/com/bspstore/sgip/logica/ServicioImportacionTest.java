@@ -257,6 +257,66 @@ class ServicioImportacionTest {
                         new ByteArrayInputStream(new byte[0])));
     }
 
+    // ------------------------------------------------ aplicar (RF-27)
+
+    private void cargaEn(String estado, int aceptados) {
+        when(importacion.buscarCarga(EMPRESA, CARGA))
+                .thenReturn(Optional.of(new CabeceraCarga(CARGA, PROVEEDOR, "Proveedor",
+                        "lista.csv", estado, null, null, aceptados, aceptados, 0)));
+    }
+
+    @Test
+    void aplicarMueveElCostoYDejaConstanciaDelAnterior() {
+        cargaEn("VALIDADA", 5);
+        when(importacion.aplicarCostos(EMPRESA, CARGA)).thenReturn(5);
+
+        servicio.aplicar(CARGA);
+
+        // El orden importa: cerrar lo que regía, retirar lo que ya se
+        // hubiera abierto hoy, abrir lo nuevo y recién entonces escribir
+        // el catálogo. Al revés, el costo anterior ya no se podría leer.
+        var orden = org.mockito.Mockito.inOrder(importacion);
+        orden.verify(importacion).cerrarCostoVigente(EMPRESA, CARGA);
+        orden.verify(importacion).retirarCostoDeHoy(EMPRESA, CARGA);
+        orden.verify(importacion).abrirCostoDeHoy(EMPRESA, CARGA);
+        orden.verify(importacion).aplicarCostos(EMPRESA, CARGA);
+        orden.verify(importacion).marcarAplicada(EMPRESA, CARGA);
+    }
+
+    @Test
+    void unaCargaYaAplicadaNoSeAplicaDosVeces() {
+        cargaEn("APLICADA", 5);
+
+        ReglaInvalidaException e = assertThrows(ReglaInvalidaException.class,
+                () -> servicio.aplicar(CARGA));
+
+        assertTrue(e.getMessage().contains("APLICADA"), e.getMessage());
+        verify(importacion, org.mockito.Mockito.never()).aplicarCostos(anyInt(), anyLong());
+    }
+
+    @Test
+    void siElCatalogoCambioDesdeLaValidacionNoSeAplicaNada() {
+        cargaEn("VALIDADA", 5);
+        // Alguien desactivó una referencia entre validar y aplicar.
+        when(importacion.aplicarCostos(EMPRESA, CARGA)).thenReturn(4);
+
+        ReglaInvalidaException e = assertThrows(ReglaInvalidaException.class,
+                () -> servicio.aplicar(CARGA));
+
+        // «Si falla a mitad, ningún costo queda modificado»: la
+        // excepción deshace la transacción, y la carga NO queda marcada
+        // como aplicada, que es lo que permite reintentarla.
+        assertTrue(e.getMessage().contains("5") && e.getMessage().contains("4"),
+                e.getMessage());
+        verify(importacion, org.mockito.Mockito.never()).marcarAplicada(anyInt(), anyLong());
+    }
+
+    @Test
+    void unaCargaDeOtraEmpresaNoSeEncuentra() {
+        when(importacion.buscarCarga(EMPRESA, 999L)).thenReturn(Optional.empty());
+        assertTrue(servicio.aplicar(999L).isEmpty());
+    }
+
     @Test
     void validarNoTocaNingunCosto() throws IOException {
         catalogo(Map.of("PC-001",

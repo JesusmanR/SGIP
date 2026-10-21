@@ -99,7 +99,7 @@ public class RepositorioImportacion {
 
     public Long insertarCarga(Integer empresaId, Integer proveedorId, Integer usuarioId,
                               String nombreArchivo, int leidos, int aceptados, int rechazados) {
-        return jdbc.sql("""
+        jdbc.sql("""
                         INSERT INTO cargas_precios
                                (empresa_id, proveedor_id, usuario_id, origen, nombre_archivo,
                                 estado, registros_leidos, registros_aceptados,
@@ -217,6 +217,115 @@ public class RepositorioImportacion {
                 .param("carga", cargaId)
                 .query(FilaDeCarga.class)
                 .list();
+    }
+
+    // ------------------------------------------------------------ aplicar
+
+    /**
+     * Cierra ayer el periodo de costo que venía rigiendo (RF-28).
+     *
+     * Solo los que empezaron antes de hoy. Un periodo abierto hoy mismo
+     * no se puede cerrar ayer: `ck_historico_rango` exige que el fin no
+     * sea anterior al comienzo, y además no significaría nada.
+     */
+    public int cerrarCostoVigente(Integer empresaId, Long cargaId) {
+        return jdbc.sql("""
+                        UPDATE historico_costos h
+                          JOIN detalle_carga_precios d
+                            ON d.empresa_id = h.empresa_id
+                           AND d.producto_id = h.producto_id
+                           SET h.vigente_hasta = CURDATE() - INTERVAL 1 DAY
+                         WHERE d.empresa_id = :empresa AND d.carga_id = :carga
+                           AND d.aceptado = TRUE
+                           AND h.vigente_hasta IS NULL
+                           AND h.vigente_desde < CURDATE()
+                        """)
+                .param("empresa", empresaId)
+                .param("carga", cargaId)
+                .update();
+    }
+
+    /**
+     * Retira el periodo que empezó hoy, si lo hay.
+     *
+     * Dos listas del mismo proveedor aplicadas el mismo día chocarían
+     * contra `uq_historico_vigencia`, que es única por producto y fecha
+     * de comienzo. La segunda sustituye a la primera, que es lo que
+     * significa: el costo que rige hoy es el último que se aplicó hoy.
+     *
+     * Se hace así y no con ON DUPLICATE KEY porque esa forma, sobre un
+     * INSERT ... SELECT, obliga a nombrar la tabla de origen dentro de
+     * la cláusula de actualización, y eso está mal documentado y cambia
+     * entre versiones de MySQL. Esto se entiende leyéndolo y funciona
+     * igual en todas.
+     */
+    public int retirarCostoDeHoy(Integer empresaId, Long cargaId) {
+        return jdbc.sql("""
+                        DELETE h FROM historico_costos h
+                          JOIN detalle_carga_precios d
+                            ON d.empresa_id = h.empresa_id
+                           AND d.producto_id = h.producto_id
+                         WHERE d.empresa_id = :empresa AND d.carga_id = :carga
+                           AND d.aceptado = TRUE
+                           AND h.vigente_desde = CURDATE()
+                        """)
+                .param("empresa", empresaId)
+                .param("carga", cargaId)
+                .update();
+    }
+
+    /** Abre el periodo que empieza hoy con el costo de la carga. */
+    public int abrirCostoDeHoy(Integer empresaId, Long cargaId) {
+        return jdbc.sql("""
+                        INSERT INTO historico_costos
+                               (empresa_id, producto_id, costo, vigente_desde, carga_id)
+                        SELECT d.empresa_id, d.producto_id, d.costo, CURDATE(), d.carga_id
+                          FROM detalle_carga_precios d
+                         WHERE d.empresa_id = :empresa AND d.carga_id = :carga
+                           AND d.aceptado = TRUE
+                        """)
+                .param("empresa", empresaId)
+                .param("carga", cargaId)
+                .update();
+    }
+
+    /**
+     * Aplica los costos aceptados de la carga (RF-27).
+     *
+     * Una sola sentencia para toda la lista, no una por fila. Con cinco
+     * mil registros, cinco mil idas y vueltas no caben en el minuto que
+     * el requisito concede, y además cada una sería una oportunidad de
+     * quedarse a medias: así el motor aplica todo o nada dentro de la
+     * transacción.
+     *
+     * El enlace va por empresa y producto, que es la pareja que la V28
+     * convirtió en clave: una carga no puede alcanzar el catálogo de
+     * otro comercio ni aunque esta consulta se escribiera mal.
+     */
+    public int aplicarCostos(Integer empresaId, Long cargaId) {
+        return jdbc.sql("""
+                        UPDATE productos p
+                          JOIN detalle_carga_precios d
+                            ON d.empresa_id = p.empresa_id
+                           AND d.producto_id = p.producto_id
+                           SET p.costo = d.costo
+                         WHERE d.empresa_id = :empresa AND d.carga_id = :carga
+                           AND d.aceptado = TRUE
+                        """)
+                .param("empresa", empresaId)
+                .param("carga", cargaId)
+                .update();
+    }
+
+    public void marcarAplicada(Integer empresaId, Long cargaId) {
+        jdbc.sql("""
+                 UPDATE cargas_precios
+                    SET estado = 'APLICADA', fecha_aplicacion = NOW()
+                  WHERE empresa_id = :empresa AND carga_id = :carga
+                 """)
+                .param("empresa", empresaId)
+                .param("carga", cargaId)
+                .update();
     }
 
     public BigDecimal costoActual(Integer empresaId, Integer productoId) {
