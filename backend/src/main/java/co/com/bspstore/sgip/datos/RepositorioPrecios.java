@@ -23,6 +23,34 @@ import java.util.Optional;
 @Repository
 public class RepositorioPrecios {
 
+    /**
+     * La fórmula del precio de venta, en un solo sitio del backend.
+     *
+     * `v_precios_producto` la aplica con la regla vigente de cada
+     * referencia. Esta copia existe para los casos en que hace falta el
+     * precio de algo que la vista no puede dar: una regla que todavía no
+     * existe (RF-35) o un costo que todavía no se ha aplicado (RF-27).
+     * El ADR-0021 aceptó esa duplicación y la condicionó a que estuviera
+     * vigilada, y el guardián de `verificar_precios.sh` la vigila
+     * comparando precio contra precio en todas las referencias.
+     *
+     * Lo que no se podía aceptar eran tres copias. Esta constante nació
+     * al ir a escribir la tercera, para el aviso de umbral de la
+     * importación: dentro de `simularCruces` la fórmula ya aparecía
+     * escrita tres veces, de modo que bajarla a una mejora también la
+     * consulta que la tenía.
+     *
+     * Huecos: %1$s el costo, %2$s el factor, %3$s la forma de cálculo.
+     */
+    public static final String PRECIO = """
+            (CASE WHEN %3$s = 'SOBRE_PRECIO'
+                  THEN ROUND(%1$s / (2 - %2$s), 0)
+                  ELSE ROUND(%1$s * %2$s, 0) END)""";
+
+    /** El precio que daría la regla que se está simulando (RF-35). */
+    private static final String PRECIO_CON_REGLA_NUEVA =
+            PRECIO.formatted("v.costo", ":factor", ":calculo");
+
     private final JdbcClient jdbc;
 
     public RepositorioPrecios(JdbcClient jdbc) {
@@ -232,17 +260,12 @@ public class RepositorioPrecios {
                         SELECT v.producto_id, v.codigo, v.nombre, v.costo,
                                CASE WHEN :forma = 'CREDITO' THEN v.precio_credito
                                     ELSE v.precio_contado END         AS precio_antes,
-                               CASE WHEN :calculo = 'SOBRE_PRECIO'
-                                    THEN ROUND(v.costo / (2 - :factor), 0)
-                                    ELSE ROUND(v.costo * :factor, 0) END AS precio_despues,
+                               %1$s                                   AS precio_despues,
                                v.umbral_pesos                          AS umbral,
                                CASE WHEN (CASE WHEN :forma = 'CREDITO' THEN v.tarifa_credito
                                                ELSE v.tarifa_contado END) > 0
                                     THEN 'GRAVADO' ELSE 'EXCLUIDO' END AS tratamiento_antes,
-                               CASE WHEN (CASE WHEN :calculo = 'SOBRE_PRECIO'
-                                               THEN ROUND(v.costo / (2 - :factor), 0)
-                                               ELSE ROUND(v.costo * :factor, 0) END)
-                                         > v.umbral_pesos
+                               CASE WHEN %1$s > v.umbral_pesos
                                     THEN 'GRAVADO' ELSE 'EXCLUIDO' END AS tratamiento_despues
                           FROM v_precios_producto v
                          WHERE v.empresa_id = :empresa
@@ -251,12 +274,9 @@ public class RepositorioPrecios {
                            AND (:proveedor IS NULL OR v.proveedor_id = :proveedor)
                            AND ((CASE WHEN :forma = 'CREDITO' THEN v.tarifa_credito
                                       ELSE v.tarifa_contado END) > 0)
-                               <> ((CASE WHEN :calculo = 'SOBRE_PRECIO'
-                                         THEN ROUND(v.costo / (2 - :factor), 0)
-                                         ELSE ROUND(v.costo * :factor, 0) END)
-                                   > v.umbral_pesos)
+                               <> (%1$s > v.umbral_pesos)
                          ORDER BY v.codigo
-                        """)
+                        """.formatted(PRECIO_CON_REGLA_NUEVA))
                 .param("empresa", empresaId)
                 .param("categoria", categoriaId)
                 .param("proveedor", proveedorId)

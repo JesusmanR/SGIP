@@ -196,3 +196,103 @@ td.acciones .boton { margin-left: .4rem; }
 .panel-acciones input:focus-visible {
   outline: 3px solid var(--acento-sutil); border-color: var(--acento);
 }
+
+/* ── Importación de lista de precios · P-07 ────────────────────────── */
+
+/* El indicador de tres pasos. Su trabajo no es decorar: es dejar claro
+   en todo momento que leer el archivo no cambia el catálogo y que solo
+   aplicar lo hace, que es lo que la especificación de la P-07 pone
+   como primera frase. */
+.pasos {
+  display: flex; align-items: center; gap: .75rem; flex-wrap: wrap;
+  list-style: none; margin: 0 0 1.25rem; padding: 0;
+  font-size: .9rem; color: var(--tinta-3);
+}
+.pasos li { display: flex; align-items: center; gap: .4rem; }
+.pasos li:not(:last-child)::after {
+  content: ''; width: 24px; height: 1px; background: var(--borde); margin-left: .5rem;
+}
+.pasos-numero {
+  display: inline-grid; place-items: center; width: 22px; height: 22px;
+  border-radius: 999px; background: var(--borde); color: var(--tinta-2);
+  font-size: .75rem; font-weight: 700;
+}
+.pasos .hecho  { color: var(--exito); }
+.pasos .hecho  .pasos-numero { background: var(--exito-fondo); color: var(--exito); }
+.pasos .actual { color: var(--tinta); font-weight: 600; }
+.pasos .actual .pasos-numero { background: var(--acento); color: #fff; }
+/* El estado va al final de la fila y sin raya detrás: no es un paso
+   más, es en cuál está la carga. */
+.pasos-estado {
+  margin-left: auto; font-size: .75rem; font-weight: 600;
+  padding: .15rem .5rem; border-radius: var(--radio-insignia);
+  background: var(--info-fondo); color: var(--info);
+}
+.pasos li.pasos-estado::after { content: none; }
+
+/* Las cuatro cifras de la carga, en fila y sin encogerse por debajo de
+   lo legible. */
+.tarjetas-cifra {
+  display: grid; gap: .75rem; margin-bottom: 1.25rem;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+}
+.tarjeta.cifra { padding: .9rem 1rem; display: flex; flex-direction: column; gap: .15rem; }
+.cifra-rotulo { font-size: .78rem; color: var(--tinta-2); }
+.cifra-valor  { font-size: 1.75rem; font-weight: 700; line-height: 1.1;
+                font-variant-numeric: tabular-nums; }
+.cifra-pie    { font-size: .75rem; color: var(--tinta-3); }
+.cifra-valor.exito       { color: var(--exito); }
+.cifra-valor.aviso-texto { color: var(--aviso); }
+
+/* La variación lleva color además del signo, pero el signo va primero:
+   quien no distinga los dos tonos sigue leyendo «+3,8 %».
+
+   El `nowrap` no es cosmético: «+900,0 %» partido en dos renglones deja
+   el número y su unidad en líneas distintas, y es justo la cifra que la
+   columna existe para hacer saltar. */
+.sube, .baja { font-weight: 600; }
+.sube { color: var(--peligro); }
+.baja { color: var(--exito); }
+td.numero { white-space: nowrap; }
+.insignia { white-space: nowrap; }
+
+.peligro-texto { color: var(--peligro); font-size: .85rem; font-weight: 600; }
+
+.insignia.peligro { background: var(--peligro-fondo); color: var(--peligro); }
+
+.aviso.exito { background: var(--exito-fondo); color: var(--exito); }
+.aviso:not(.error):not(.exito) { background: var(--aviso-fondo); color: var(--aviso); }
+
+.acciones-pie {
+  display: flex; gap: .75rem; justify-content: flex-end; flex-wrap: wrap;
+  margin-top: 1rem;
+}
+/* Aplicar al catálogo cambia todos los precios de venta de la empresa.
+   El botón lo dice con su color. */
+.boton.peligro { background: var(--peligro); color: #fff; }
+.boton:disabled { background: var(--bruma); cursor: not-allowed; }
+
+/* La zona de arrastre de la P-07. La etiqueta envuelve un control de
+   archivo oculto, de modo que un clic sigue abriendo el selector y el
+   teclado sigue llegando al control: ocultarlo con `display:none` lo
+   sacaría del orden de tabulación. */
+.campo-rotulo {
+  display: block; font-size: .8rem; color: var(--tinta-2);
+  font-weight: 500; margin-bottom: .35rem;
+}
+.zona-archivo {
+  display: flex; flex-direction: column; align-items: center; gap: .15rem;
+  padding: 1.5rem 1rem; cursor: pointer; text-align: center;
+  border: 2px dashed var(--borde-control); border-radius: var(--radio-control);
+  background: var(--lienzo); color: var(--tinta-2);
+}
+.zona-archivo:hover,
+.zona-archivo.arrastrando { border-color: var(--acento); background: var(--acento-sutil); }
+.zona-archivo:focus-within { outline: 3px solid var(--acento-sutil); border-color: var(--acento); }
+.zona-archivo strong { color: var(--acento); font-size: .95rem; }
+
+/* Visible para un lector de pantalla y para el foco, no a la vista. */
+.oculto-visualmente {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}

@@ -48,6 +48,23 @@
 			<artifactId>spring-boot-starter-webmvc</artifactId>
 		</dependency>
 
+		<!--
+			Lectura de hojas de cálculo para la importación de listas de
+			precios (RF-24). El formato .xlsx es un ZIP de XML y se podría
+			recorrer con la biblioteca estándar, pero sería código propio
+			en el camino por el que entran archivos de terceros, que es el
+			peor sitio para estrenar un analizador.
+
+			Queda acotada detrás de `LectorListaPrecios` (ADR-0007): es la
+			única clase que la importa, de modo que cambiarla no toca el
+			importador.
+		-->
+		<dependency>
+			<groupId>org.apache.poi</groupId>
+			<artifactId>poi-ooxml</artifactId>
+			<version>5.3.0</version>
+		</dependency>
+
 		<dependency>
 			<groupId>com.mysql</groupId>
 			<artifactId>mysql-connector-j</artifactId>

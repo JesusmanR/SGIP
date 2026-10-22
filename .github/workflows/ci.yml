@@ -70,7 +70,10 @@ jobs:
                    V24__claves_por_empresa_en_compras \
                    V25__el_precio_respeta_la_forma_de_calculo \
                    V26__el_tipo_de_un_parametro_obliga \
-                   V27__el_periodo_de_prueba_se_mide_en_meses; do
+                   V27__el_periodo_de_prueba_se_mide_en_meses \
+                   V28__claves_por_empresa_en_importacion \
+                   V29__el_rechazo_dice_en_que_fila \
+                   V30__el_rechazo_tiene_categoria; do
             echo "→ $f"
             # El motivo del fallo se emite como anotación además de ir al
             # registro. Sin esto, una migración que falla deja un «exit
@@ -119,14 +122,21 @@ jobs:
                AND column_name='sin_existencia';")
           test "$n" -eq 1
 
-      # Veinte de la V11, cuatro de la V12 y cinco de la V24.
+      # Veinte de la V11, cuatro de la V12, cinco de la V24 y siete de
+      # la V28.
+      #
+      # Este número se sube a mano al añadir claves, y a propósito: es un
+      # centinela, no un conteo informativo. Una migración que quita una
+      # clave por empresa sin que nadie lo decida deja la entrega en rojo,
+      # y eso es justo lo que tiene que pasar. La V28 lo puso en rojo al
+      # subir de 29 a 36, que era la señal correcta.
       - name: Verificar las claves foráneas por empresa
         run: |
           n=$(mysql -h 127.0.0.1 -u root -psgip_ci -N -B -e \
             "SELECT COUNT(*) FROM information_schema.referential_constraints
              WHERE constraint_schema='sgip' AND constraint_name LIKE '%\\_emp';")
           echo "claves foráneas por empresa: $n"
-          test "$n" -eq 29
+          test "$n" -eq 36
 
       # El conteo de vistas no cambia con la V18, la V19 ni la V20: la
       # primera solo toca restricciones y las otras dos recrean vistas que
@@ -188,6 +198,9 @@ jobs:
       # intentan las cuatro filas que la V26 viene a impedir y el paso
       # falla si alguna entra. Una restricción que no se ha visto negar
       # nada es una línea que da tranquilidad, no un guardián.
+      - name: Verificar el aislamiento de la importación de listas (V28)
+        run: bash database/verificar_importacion.sh -h 127.0.0.1 -u root -psgip_ci
+
       - name: Verificar que el tipo de un parámetro obliga (V26)
         run: |
           rechaza () {
@@ -308,7 +321,10 @@ jobs:
                    V24__claves_por_empresa_en_compras \
                    V25__el_precio_respeta_la_forma_de_calculo \
                    V26__el_tipo_de_un_parametro_obliga \
-                   V27__el_periodo_de_prueba_se_mide_en_meses; do
+                   V27__el_periodo_de_prueba_se_mide_en_meses \
+                   V28__claves_por_empresa_en_importacion \
+                   V29__el_rechazo_dice_en_que_fila \
+                   V30__el_rechazo_tiene_categoria; do
             # El motivo del fallo se emite como anotación además de ir al
             # registro. Sin esto, una migración que falla deja un «exit
             # code 1» y el porqué solo se ve abriendo el registro a mano:
