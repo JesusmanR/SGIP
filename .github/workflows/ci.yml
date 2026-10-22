@@ -67,7 +67,10 @@ jobs:
                    V21__auditoria_de_la_plataforma \
                    V22__parametros_de_la_plataforma \
                    V23__el_kardex_se_explica_solo \
-                   V24__claves_por_empresa_en_compras; do
+                   V24__claves_por_empresa_en_compras \
+                   V25__el_precio_respeta_la_forma_de_calculo \
+                   V26__el_tipo_de_un_parametro_obliga \
+                   V27__el_periodo_de_prueba_se_mide_en_meses; do
             echo "→ $f"
             # El motivo del fallo se emite como anotación además de ir al
             # registro. Sin esto, una migración que falla deja un «exit
@@ -170,8 +173,77 @@ jobs:
       - name: Verificar la invariante del kárdex (RF-49)
         run: bash database/verificar_kardex.sh -h 127.0.0.1 -u root -psgip_ci
 
+      - name: Verificar el motor de precios (RF-30 a RF-32, RF-34)
+        run: bash database/verificar_precios.sh -h 127.0.0.1 -u root -psgip_ci
+
       - name: Verificar la configuración tributaria por empresa
         run: bash database/verificar_tributacion.sh -h 127.0.0.1 -u root -psgip_ci
+
+      # El SQL que los repositorios escriben a mano no lo valida nadie
+      # más: Hibernate solo mira las entidades, las pruebas de unidad
+      # simulan JdbcClient y la única que toca una base arranca el
+      # contexto sin pasar por ninguna consulta. Una columna mal escrita
+      # compilaba, pasaba la entrega en verde y reventaba en la pantalla.
+      # No basta con que la restricción exista: tiene que rechazar. Se
+      # intentan las cuatro filas que la V26 viene a impedir y el paso
+      # falla si alguna entra. Una restricción que no se ha visto negar
+      # nada es una línea que da tranquilidad, no un guardián.
+      - name: Verificar que el tipo de un parámetro obliga (V26)
+        run: |
+          rechaza () {
+            if mysql -h 127.0.0.1 -u root -psgip_ci sgip -e "$1" 2>/dev/null; then
+              echo "::error::entró una fila que la V26 debía rechazar · $2"
+              exit 1
+            fi
+          }
+          rechaza "INSERT INTO parametros_plataforma (clave,valor,tipo_dato,vigente_desde)
+                   VALUES ('sgip.plataforma.prueba.dias','treinta','ENTERO','2027-01-01');" \
+                  "un ENTERO que no es un número"
+          rechaza "INSERT INTO parametros_plataforma (clave,valor,tipo_dato,vigente_desde)
+                   VALUES ('sgip.plataforma.prueba.dias','-5','ENTERO','2027-01-01');" \
+                  "un periodo de prueba negativo"
+          rechaza "INSERT INTO parametros_plataforma (clave,valor,tipo_dato,vigente_desde)
+                   VALUES ('sgip.plataforma.prueba.dias','400','ENTERO','2027-01-01');" \
+                  "un periodo de prueba de más de un año"
+          rechaza "INSERT INTO parametros (empresa_id,clave,valor,tipo_dato,vigente_desde)
+                   VALUES (1,'sgip.prueba.bool','quizá','BOOLEANO','2026-01-01');" \
+                  "un BOOLEANO inventado"
+          # Y el valor correcto sí tiene que entrar, o la restricción
+          # estaría rechazándolo todo y las cuatro de arriba pasarían
+          # por el motivo equivocado.
+          mysql -h 127.0.0.1 -u root -psgip_ci sgip -e \
+            "INSERT INTO parametros_plataforma (clave,valor,tipo_dato,vigente_desde)
+             VALUES ('sgip.plataforma.prueba.dias','45','ENTERO','2027-01-01');
+             DELETE FROM parametros_plataforma WHERE vigente_desde='2027-01-01';"
+
+      # El RF-04 pide que la prueba venza «el mismo día del mes
+      # siguiente». Lo que esto comprueba es que el parámetro que el alta
+      # lee sea el de meses y esté vigente: si la V27 no corriera, la
+      # consulta del backend no encontraría fila y el alta caería al
+      # valor por omisión sin que nada lo dijera.
+      - name: Verificar que el periodo de prueba se mide en meses (V27)
+        run: |
+          consulta () { mysql -h 127.0.0.1 -u root -psgip_ci -N -B sgip -e "$1"; }
+          vigente=$(consulta "SELECT valor FROM parametros_plataforma
+                               WHERE clave = 'sgip.plataforma.prueba.meses'
+                                 AND vigente_desde <= CURDATE()
+                                 AND (vigente_hasta IS NULL OR vigente_hasta >= CURDATE());")
+          test "$vigente" = "1" || {
+            echo "::error::el parámetro de meses no rige · valor leído: '$vigente'"; exit 1; }
+          # Y el de días tiene que haber dejado de regir, o habría dos
+          # respuestas vivas para la misma pregunta.
+          abierto=$(consulta "SELECT COUNT(*) FROM parametros_plataforma
+                               WHERE clave = 'sgip.plataforma.prueba.dias'
+                                 AND (vigente_hasta IS NULL OR vigente_hasta >= CURDATE());")
+          test "$abierto" -eq 0 || {
+            echo "::error::el parámetro de días sigue vigente"; exit 1; }
+          if mysql -h 127.0.0.1 -u root -psgip_ci sgip -e \
+              "INSERT INTO parametros_plataforma (clave,valor,tipo_dato,vigente_desde)
+               VALUES ('sgip.plataforma.prueba.meses','25','ENTERO','2028-01-01');" 2>/dev/null
+          then echo "::error::entró un periodo de prueba de 25 meses"; exit 1; fi
+
+      - name: Analizar el SQL escrito a mano del backend
+        run: python3 database/verificar_sql_del_backend.py -h 127.0.0.1 -u root -psgip_ci
 
       # Esta restricción queda fuera de la cadena porque no se pudo
       # verificar; el archivo explica por qué. Aquí se intenta y se
@@ -233,7 +305,10 @@ jobs:
                    V21__auditoria_de_la_plataforma \
                    V22__parametros_de_la_plataforma \
                    V23__el_kardex_se_explica_solo \
-                   V24__claves_por_empresa_en_compras; do
+                   V24__claves_por_empresa_en_compras \
+                   V25__el_precio_respeta_la_forma_de_calculo \
+                   V26__el_tipo_de_un_parametro_obliga \
+                   V27__el_periodo_de_prueba_se_mide_en_meses; do
             # El motivo del fallo se emite como anotación además de ir al
             # registro. Sin esto, una migración que falla deja un «exit
             # code 1» y el porqué solo se ve abriendo el registro a mano:

@@ -28,6 +28,21 @@ import java.math.BigDecimal;
  * interna de las carpetas no sale al exterior y no hay ninguna cadena
  * del cliente que llegue al sistema de archivos.
  *
+ * baseContado y baseCredito · cuál de las dos formas de cálculo aplicó
+ * la regla vigente, SOBRE_COSTO o SOBRE_PRECIO. El RF-32 pide que «la
+ * interfaz indique cuál de las dos bases está aplicando», y la pantalla
+ * no tiene cómo saberlo mirando el precio: dos productos con el mismo
+ * precio pueden venir de reglas distintas.
+ *
+ * totalCredito · el precio a crédito con su impuesto. Faltaba, y su
+ * ausencia no era menor: en este modelo el umbral del Art. 424 se mide
+ * contra el precio de venta, de modo que un producto puede quedar
+ * excluido de contado y gravado a crédito. Quien ofrecía el crédito
+ * mirando solo precioCredito se quedaba corto.
+ *
+ * cruzaUmbralEnCredito · justamente ese caso, nombrado. Es la única de
+ * estas columnas que no se puede deducir mirando otra.
+ *
  * tieneImagen · lo mismo en forma de sí o no, que es lo que la tabla
  * necesita para decidir si ofrece «ver» o «añadir» imágenes.
  */
@@ -52,8 +67,13 @@ public record ProductoEnCatalogo(
         String tratamientoIva,
         BigDecimal tarifaContado,
         BigDecimal totalContado,
+        BigDecimal totalCredito,
+        String baseContado,
+        String baseCredito,
         Integer tributacionSinConfigurar,
         Integer cercaUmbral,
+        Integer cercaUmbralCredito,
+        Integer cruzaUmbralEnCredito,
         Integer imagenPrincipalId,
         Integer tieneImagen
 ) {}

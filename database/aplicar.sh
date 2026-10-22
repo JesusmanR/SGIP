@@ -149,6 +149,9 @@ DESPUES_DEL_DEMO=(
   V22__parametros_de_la_plataforma.sql
   V23__el_kardex_se_explica_solo.sql
   V24__claves_por_empresa_en_compras.sql
+  V25__el_precio_respeta_la_forma_de_calculo.sql
+  V26__el_tipo_de_un_parametro_obliga.sql
+  V27__el_periodo_de_prueba_se_mide_en_meses.sql
 )
 
 for f in "${ANTES_DEL_DEMO[@]}"; do
@@ -257,6 +260,21 @@ sobrante=$("${MYSQL[@]}" -N -B -e \
      AND column_name='observacion';")
 [[ "$sobrante" -eq 0 ]] || {
   echo "ATENCIÓN: movimientos_inventario.observacion sigue ahí — la V23 quedó a medias"
+  fallo=1
+}
+
+# Centinela de la V25: la restriccion del margen sobre el precio y la
+# columna que dice que base aplico. Sin ellas, la forma de calculo se
+# guarda y no se usa, que es lo que esa migracion corrigio.
+precio=$("${MYSQL[@]}" -N -B -e \
+  "SELECT (SELECT COUNT(*) FROM information_schema.check_constraints
+            WHERE constraint_schema='sgip'
+              AND constraint_name='ck_reglas_margen_sobre_precio')
+        + (SELECT COUNT(*) FROM information_schema.columns
+            WHERE table_schema='sgip' AND table_name='v_precios_producto'
+              AND column_name='base_contado');")
+[[ "$precio" -eq 2 ]] || {
+  echo "ATENCIÓN: la vista de precios no respeta la forma de cálculo — falta la V25"
   fallo=1
 }
 

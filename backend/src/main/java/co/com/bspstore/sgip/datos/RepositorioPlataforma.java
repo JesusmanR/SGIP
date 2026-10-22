@@ -49,7 +49,10 @@ public class RepositorioPlataforma {
      * nulo y la suscripción no se podría crear, de modo que el alta
      * fallaría por una razón que no tiene nada que ver con el alta.
      */
-    private static final int DIAS_PRUEBA_POR_OMISION = 30;
+    private static final int MESES_PRUEBA_POR_OMISION = 1;
+
+    /** Tope de sensatez: un periodo de prueba de más de dos años no lo es. */
+    private static final int MESES_PRUEBA_MAXIMO = 24;
 
     /**
      * Los nombres de columna van en snake_case y no en camelCase porque
@@ -119,17 +122,23 @@ public class RepositorioPlataforma {
     }
 
     /**
-     * Los días de prueba vigentes hoy (RN-14).
+     * Los meses de prueba vigentes hoy (RN-14).
+     *
+     * En meses y no en días. El RF-04 pide que una empresa creada hoy
+     * quede en prueba «hasta el mismo día del mes siguiente», y eso no es
+     * lo mismo que treinta días: solo coinciden en los cuatro meses que
+     * los tienen. Medido sobre un año, 240 de las 365 fechas de alta
+     * posibles daban una fecha distinta de la que el criterio pide.
      *
      * La vigencia se filtra en la consulta, no en Java: la tabla guarda
      * el histórico y lo que importa es el valor que rige en la fecha de
      * la operación. Si hubiera varias filas vigentes —la clave única lo
      * impide para la misma fecha de inicio— gana la más reciente.
      */
-    public int diasDePrueba() {
+    public int mesesDePrueba() {
         return jdbc.sql("""
                         SELECT valor FROM parametros_plataforma
-                         WHERE clave = 'sgip.plataforma.prueba.dias'
+                         WHERE clave = 'sgip.plataforma.prueba.meses'
                            AND vigente_desde <= CURDATE()
                            AND (vigente_hasta IS NULL OR vigente_hasta >= CURDATE())
                          ORDER BY vigente_desde DESC
@@ -137,8 +146,31 @@ public class RepositorioPlataforma {
                         """)
                 .query(String.class)
                 .optional()
-                .map(Integer::parseInt)
-                .orElse(DIAS_PRUEBA_POR_OMISION);
+                .map(RepositorioPlataforma::mesesOPorOmision)
+                .orElse(MESES_PRUEBA_POR_OMISION);
+    }
+
+    /**
+     * El valor leído como número de meses, o el de omisión si no lo es.
+     *
+     * La V27 impide guardar aquí algo que no sea un entero entre 1 y 24,
+     * de modo que esto no debería hacer falta. Está igualmente, y por el
+     * mismo motivo que el valor por omisión de arriba: esta consulta es
+     * la que decide el periodo de prueba de cada empresa que se da de
+     * alta, y un `parseInt` suelto convierte una fila rara en un alta
+     * fallida por una razón que no tiene nada que ver con el alta.
+     *
+     * Una base anterior a la V27 puede no tener la fila. Degradar al
+     * valor por omisión deja el alta en pie; reventar, no.
+     */
+    private static int mesesOPorOmision(String valor) {
+        try {
+            int meses = Integer.parseInt(valor.trim());
+            return meses >= 1 && meses <= MESES_PRUEBA_MAXIMO
+                    ? meses : MESES_PRUEBA_POR_OMISION;
+        } catch (NumberFormatException e) {
+            return MESES_PRUEBA_POR_OMISION;
+        }
     }
 
     // ---------------------------------------------------------------- escritura

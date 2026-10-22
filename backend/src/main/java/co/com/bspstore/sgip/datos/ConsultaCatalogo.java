@@ -54,7 +54,9 @@ public class ConsultaCatalogo {
             categoria_id, categoria, proveedor_id, proveedor,
             costo, existencia, existencia_minima, estado_stock,
             precio_contado, precio_credito, tratamiento_iva, tarifa_contado,
-            total_contado, tributacion_sin_configurar, cerca_umbral,
+            total_contado, total_credito, base_contado, base_credito,
+            tributacion_sin_configurar, cerca_umbral, cerca_umbral_credito,
+            cruza_umbral_en_credito,
             %1$s AS imagen_principal_id,
             %1$s IS NOT NULL AS tiene_imagen
             """.formatted(IMAGEN_PRINCIPAL);
@@ -120,16 +122,17 @@ public class ConsultaCatalogo {
 
     /** Lo que la pantalla P-10 necesita tras leer un código de barras. */
     public Optional<ProductoEnCatalogo> porCodigoBarras(Integer empresaId, String codigoBarras) {
-        // La vista no expone codigo_barras, de modo que el producto se
-        // localiza en la tabla y se lee de la vista. La subconsulta repite
-        // el filtro de empresa a propósito: así ninguna de las dos mitades
-        // depende de que la otra acote bien.
+        // Esta consulta localizaba el producto con una subconsulta contra
+        // `productos`, porque cuando se escribió la vista no exponía
+        // codigo_barras. La V17 se lo añadió y el rodeo quedó sin motivo,
+        // pero el comentario siguió afirmando lo contrario. Comprobado
+        // sobre MySQL 8: las dos formas devuelven la misma fila. Queda la
+        // directa, que no obliga a verificar que las dos mitades acoten
+        // igual por empresa.
         return jdbc.sql("""
                         SELECT %s FROM v_precios_producto v
                          WHERE empresa_id = :empresa
-                           AND producto_id = (SELECT p.producto_id FROM productos p
-                                               WHERE p.empresa_id = :empresa
-                                                 AND p.codigo_barras = :barras)
+                           AND codigo_barras = :barras
                         """.formatted(COLUMNAS))
                 .param("empresa", empresaId)
                 .param("barras", codigoBarras)

@@ -50,3 +50,26 @@ También expone `tributacion_sin_configurar`: una empresa sin
 configuración tributaria no tiene regla aplicable y su precio al cliente
 no se puede calcular. Antes la vista habría devuelto nulo sin explicar
 por qué.
+
+## Nota posterior · las dos bases de cálculo
+
+La vista aplicaba siempre `costo × factor`, y `reglas_margen` guardaba
+desde la V3 una columna `forma_calculo` con dos valores posibles. Nadie
+la leía: un margen configurado «sobre el precio de venta» se calculaba
+como un recargo sobre el costo. Con 20 % y costo 1.000 el precio salía
+1.200 en vez de 1.250.
+
+La V25 lo corrige. La vista distingue las dos bases y una restricción
+impide el único factor sin sentido: con 2 el divisor es cero, de modo que
+un margen del 100 % sobre el precio exigiría costo cero.
+
+No cambia esta decisión —el precio se sigue resolviendo en la vista—,
+pero sí la refuerza: el motivo de que el defecto durara veintidós
+migraciones es que nada comparaba lo que la regla declaraba con lo que la
+vista calculaba. Ahora `database/verificar_precios.sh` lo compara, con
+las cifras del propio requisito.
+
+La vista expone además `base_contado` y `base_credito`, que es lo que el
+RF-32 pide que la interfaz indique. Dos productos con el mismo precio
+pueden venir de reglas distintas y la pantalla no tiene cómo saberlo
+mirando el número.

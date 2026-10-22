@@ -12,7 +12,47 @@ const PESOS = new Intl.NumberFormat('es-CO', {
   style: 'currency', currency: 'COP', maximumFractionDigits: 0,
 })
 
+/**
+ * Si el total con impuesto dice algo que el precio no diga ya.
+ *
+ * Un producto excluido tiene total igual a precio, y pintar «con IVA
+ * 2.520.000» debajo de «2.520.000» no informa: ocupa sitio y obliga a
+ * comparar dos cifras para descubrir que son la misma.
+ */
+function conImpuesto(precio, total) {
+  if (precio == null || total == null) return false
+  return Math.round(Number(total)) !== Math.round(Number(precio))
+}
+
+/**
+ * Lo que hay que decir de un precio, además de su cifra.
+ *
+ * La vista expone cinco columnas alrededor de cada precio y ninguna se
+ * veía en pantalla. Van como renglones pequeños bajo la cifra, y cada
+ * uno aparece solo en su caso, de modo que la fila corriente sigue
+ * midiendo un renglón:
+ *
+ *   · el total con impuesto, cuando difiere del precio;
+ *   · que el precio está cerca del umbral del artículo 424, porque una
+ *     subida de costo lo volvería gravado y eso cambia la cifra que ve
+ *     el cliente;
+ *   · con qué base se calculó, pero solo si fue SOBRE_PRECIO. El RF-32
+ *     pide que la interfaz diga cuál de las dos aplicó, y decirlo en
+ *     todas las filas repetiría la misma palabra doscientas veces: lo
+ *     que se señala es la minoritaria, y la leyenda bajo la tabla dice
+ *     qué significa su ausencia. Por eso la leyenda no es decorativa:
+ *     sin ella la anotación no se puede interpretar.
+ */
+function anotaciones(precio, total, cerca, base) {
+  const partes = []
+  if (conImpuesto(precio, total)) partes.push(`con IVA ${PESOS.format(total)}`)
+  if (cerca === 1) partes.push('cerca del umbral')
+  if (base === 'SOBRE_PRECIO') partes.push('sobre el precio')
+  return partes
+}
+
 /** Pantalla P-03 · Catálogo de productos. */
+
 export default function Catalogo() {
   const [productos, setProductos] = useState([])
   const [busqueda, setBusqueda] = useState('')
@@ -168,6 +208,12 @@ export default function Catalogo() {
         {error && <div className="aviso error" role="alert">{error}</div>}
 
         <div className="tarjeta">
+          {/* La tabla tiene nueve columnas y en un teléfono no cabe. Sin
+              este contenedor no se recortaba: se derramaba fuera de la
+              tarjeta y arrastraba la página entera hacia la derecha, de
+              modo que el precio quedaba sobre el fondo y no sobre la
+              tabla. Con él, la tabla se desplaza sola y la página no. */}
+          <div className="tabla-ancha">
           <table>
             <thead>
               <tr>
@@ -255,11 +301,37 @@ export default function Catalogo() {
                   </td>
                   <td>{p.categoria}</td>
                   <td className="numero">{PESOS.format(p.costo)}</td>
+                  {/* Bajo cada precio va su total con impuesto, y solo
+                      cuando difiere: si el producto está excluido, el
+                      total es el precio y repetirlo sería ruido. El
+                      RF-33 pide los dos precios; la V20 añadió el total
+                      a crédito, que faltaba. */}
                   <td className="numero">
                     {p.precioContado == null ? '—' : PESOS.format(p.precioContado)}
+                    {anotaciones(p.precioContado, p.totalContado,
+                      p.cercaUmbral, p.baseContado).map((t) => (
+                        <span className="sub-linea" key={t}>{t}</span>
+                      ))}
                   </td>
                   <td className="numero">
                     {p.precioCredito == null ? '—' : PESOS.format(p.precioCredito)}
+                    {anotaciones(p.precioCredito, p.totalCredito,
+                      p.cercaUmbralCredito, p.baseCredito).map((t) => (
+                        <span className="sub-linea" key={t}>{t}</span>
+                      ))}
+                    {/* El caso que el margen provoca por sí solo:
+                        excluido de contado y gravado a crédito, porque
+                        el umbral se mide contra el precio de venta. Un
+                        vendedor que ofrezca el crédito mirando solo el
+                        precio se queda corto por el importe del
+                        impuesto. */}
+                    {p.cruzaUmbralEnCredito === 1 && (
+                      <span className="insignia umbral" title={
+                        'Excluido de IVA al contado y gravado a crédito: el margen '
+                        + 'a crédito cruza el umbral del Art. 424.'}>
+                        cruza el umbral
+                      </span>
+                    )}
                   </td>
                   <td className="numero">{p.existencia}</td>
                   <td>
@@ -276,6 +348,19 @@ export default function Catalogo() {
               ))}
             </tbody>
           </table>
+          </div>
+
+          {/* Sin esta línea, la anotación «margen sobre el precio» no se
+              puede interpretar: quien no la vea en una fila no sabe si
+              es que allí se aplicó la otra base o que nadie la anotó. */}
+          {!cargando && productos.length > 0 && (
+            <p className="leyenda">
+              Los precios sin anotación se calculan como recargo sobre el costo.
+              Los marcados «sobre el precio» aplican el margen sobre el precio de
+              venta, de modo que un 20 % da 1.250 y no 1.200 sobre un costo de
+              1.000.
+            </p>
+          )}
 
           {!cargando && productos.length === 0 && (
             <p style={{ color: 'var(--tinta-3)' }}>

@@ -10,6 +10,7 @@ import co.com.bspstore.sgip.logica.ArchivoInvalidoException;
 import co.com.bspstore.sgip.logica.MovimientoInvalidoException;
 import co.com.bspstore.sgip.logica.NombreRepetidoException;
 import co.com.bspstore.sgip.logica.RegistroRepetidoException;
+import co.com.bspstore.sgip.logica.ReglaInvalidaException;
 import co.com.bspstore.sgip.logica.RecepcionInvalidaException;
 import co.com.bspstore.sgip.logica.ReferenciaAjenaException;
 import co.com.bspstore.sgip.logica.RolNoAsignableException;
@@ -102,6 +103,17 @@ public class ManejadorErrores {
         // para que quien recibe sepa cuánto cabe.
         ProblemDetail p = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
         p.setTitle("Recepción inválida");
+        p.setDetail(e.getMessage());
+        return p;
+    }
+
+    @ExceptionHandler(ReglaInvalidaException.class)
+    public ProblemDetail reglaInvalida(ReglaInvalidaException e) {
+        // 400: el cuerpo está bien formado y la regla que incumple
+        // depende de la base de cálculo o de la vigencia que ya tenía,
+        // cosas que una anotación no puede mirar.
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
+        p.setTitle("Regla de ganancia inválida");
         p.setDetail(e.getMessage());
         return p;
     }
