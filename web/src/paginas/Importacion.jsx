@@ -63,6 +63,7 @@ export default function Importacion() {
   const [error, setError] = useState(null)
   const [trabajando, setTrabajando] = useState(false)
   const [confirmando, setConfirmando] = useState(false)
+  const [arrastrando, setArrastrando] = useState(false)
   const esAdministrador = leerSesion()?.rol === 'ADMINISTRADOR'
 
   useEffect(() => {
@@ -142,14 +143,33 @@ export default function Importacion() {
               </select>
             </label>
 
-            <label className="campo">
-              <span>Archivo de lista de precios</span>
+            {/* El control de archivo nativo se oculta y la etiqueta hace
+                de botón. No es por estética: su texto lo pone el
+                navegador en el idioma del sistema —«Choose File» en uno
+                en inglés— y no hay forma de traducirlo. Una pantalla en
+                español con un botón en inglés en su acción principal es
+                lo primero que se nota. La etiqueta además es la zona de
+                arrastre que pide el diseño de la P-07. */}
+            <label
+              className={`zona-archivo${arrastrando ? ' arrastrando' : ''}`}
+              onDragOver={(e) => { e.preventDefault(); setArrastrando(true) }}
+              onDragLeave={() => setArrastrando(false)}
+              onDrop={(e) => {
+                e.preventDefault()
+                setArrastrando(false)
+                subir(e.dataTransfer.files?.[0])
+              }}
+            >
+              <span className="campo-rotulo">Archivo de lista de precios</span>
               <input
                 type="file"
                 accept=".xlsx,.csv"
                 disabled={trabajando}
+                className="oculto-visualmente"
                 onChange={(e) => subir(e.target.files?.[0])}
               />
+              <strong>{trabajando ? 'Leyendo el archivo…' : 'Elegir archivo'}</strong>
+              <span className="sub-linea">o arrástralo aquí</span>
             </label>
             <p className="leyenda">
               Se admiten .xlsx y .csv de hasta 10 MB y 20 000 filas. El archivo se lee
