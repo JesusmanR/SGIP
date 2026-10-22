@@ -61,6 +61,21 @@ public class ImportacionControlador {
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
+    /**
+     * Descarta una carga validada sin aplicarla.
+     *
+     * Es la otra mitad de la decisión que la P-07 pone al pie de la
+     * vista previa, y tiene que ser una acción: una carga que se queda
+     * en VALIDADA para siempre es una que alguien aplica tres semanas
+     * después, cuando sus costos ya no son los del proveedor.
+     */
+    @PostMapping("/{cargaId}/rechazar")
+    public ResponseEntity<ResumenCarga> rechazar(@PathVariable Long cargaId) {
+        return servicio.rechazar(cargaId)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
     /** Aplica los costos aceptados de una carga ya validada (RF-27). */
     @PostMapping("/{cargaId}/aplicar")
     public ResponseEntity<ResumenCarga> aplicar(@PathVariable Long cargaId) {

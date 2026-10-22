@@ -72,7 +72,8 @@ jobs:
                    V26__el_tipo_de_un_parametro_obliga \
                    V27__el_periodo_de_prueba_se_mide_en_meses \
                    V28__claves_por_empresa_en_importacion \
-                   V29__el_rechazo_dice_en_que_fila; do
+                   V29__el_rechazo_dice_en_que_fila \
+                   V30__el_rechazo_tiene_categoria; do
             echo "→ $f"
             # El motivo del fallo se emite como anotación además de ir al
             # registro. Sin esto, una migración que falla deja un «exit
@@ -322,7 +323,8 @@ jobs:
                    V26__el_tipo_de_un_parametro_obliga \
                    V27__el_periodo_de_prueba_se_mide_en_meses \
                    V28__claves_por_empresa_en_importacion \
-                   V29__el_rechazo_dice_en_que_fila; do
+                   V29__el_rechazo_dice_en_que_fila \
+                   V30__el_rechazo_tiene_categoria; do
             # El motivo del fallo se emite como anotación además de ir al
             # registro. Sin esto, una migración que falla deja un «exit
             # code 1» y el porqué solo se ve abriendo el registro a mano:

@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import Acceso from './paginas/Acceso.jsx'
 import Catalogo from './paginas/Catalogo.jsx'
 import Empresa from './paginas/Empresa.jsx'
+import Importacion from './paginas/Importacion.jsx'
 import { haySesion } from './servicios/sesion.js'
 
 /**
@@ -20,6 +21,7 @@ export default function App() {
       <Route path="/acceso" element={<Acceso />} />
       <Route path="/catalogo" element={<Privada><Catalogo /></Privada>} />
       <Route path="/empresa" element={<Privada><Empresa /></Privada>} />
+      <Route path="/importar" element={<Privada><Importacion /></Privada>} />
       <Route path="*" element={<Navigate to={haySesion() ? '/catalogo' : '/acceso'} replace />} />
     </Routes>
   )

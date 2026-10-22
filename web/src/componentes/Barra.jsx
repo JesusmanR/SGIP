@@ -24,6 +24,7 @@ export default function Barra() {
       <span className="marca">SGIP</span>
       <Link to="/catalogo">Catálogo</Link>
       <Link to="/empresa">Mi empresa</Link>
+      {sesion?.rol === 'ADMINISTRADOR' && <Link to="/importar">Importar precios</Link>}
       <span className="empuje">{sesion?.nombre}</span>
       <button className="boton secundario" onClick={salir}>Salir</button>
     </header>

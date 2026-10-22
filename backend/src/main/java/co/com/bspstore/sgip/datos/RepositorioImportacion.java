@@ -133,8 +133,8 @@ public class RepositorioImportacion {
             INSERT INTO detalle_carga_precios
                    (empresa_id, carga_id, numero_fila, producto_id,
                     referencia_origen, descripcion_origen, costo,
-                    costo_anterior, aceptado, motivo_rechazo)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    costo_anterior, aceptado, motivo_rechazo, motivo_codigo)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """;
 
     /**
@@ -155,7 +155,8 @@ public class RepositorioImportacion {
                 valores.add(new Object[]{
                         empresaId, cargaId, f.numeroFila(), f.productoId(),
                         f.referencia(), f.descripcion(), f.costo(),
-                        f.costoAnterior(), f.aceptado(), f.motivoRechazo()});
+                        f.costoAnterior(), f.aceptado(), f.motivoRechazo(),
+                        f.motivoCodigo()});
             }
             plantilla.batchUpdate(INSERTAR_DETALLE, valores);
         }
@@ -191,7 +192,7 @@ public class RepositorioImportacion {
         return jdbc.sql("""
                         SELECT numero_fila, producto_id, referencia_origen AS referencia,
                                descripcion_origen AS descripcion, costo, costo_anterior,
-                               aceptado, motivo_rechazo
+                               aceptado, motivo_rechazo, motivo_codigo
                           FROM detalle_carga_precios
                          WHERE empresa_id = :empresa AND carga_id = :carga
                          ORDER BY aceptado ASC, numero_fila ASC
@@ -208,7 +209,7 @@ public class RepositorioImportacion {
         return jdbc.sql("""
                         SELECT numero_fila, producto_id, referencia_origen AS referencia,
                                descripcion_origen AS descripcion, costo, costo_anterior,
-                               aceptado, motivo_rechazo
+                               aceptado, motivo_rechazo, motivo_codigo
                           FROM detalle_carga_precios
                          WHERE empresa_id = :empresa AND carga_id = :carga
                            AND aceptado = TRUE
@@ -384,6 +385,24 @@ public class RepositorioImportacion {
                 .param("carga", cargaId)
                 .query(CruceDeUmbral.class)
                 .list();
+    }
+
+    /**
+     * Marca la carga como descartada sin tocar su detalle.
+     *
+     * `fecha_aplicacion` se queda nula, que es coherente con
+     * `ck_cargas_aplicacion`: esa restricción solo exige la fecha cuando
+     * el estado es APLICADA.
+     */
+    public void marcarRechazada(Integer empresaId, Long cargaId) {
+        jdbc.sql("""
+                 UPDATE cargas_precios
+                    SET estado = 'RECHAZADA'
+                  WHERE empresa_id = :empresa AND carga_id = :carga
+                 """)
+                .param("empresa", empresaId)
+                .param("carga", cargaId)
+                .update();
     }
 
     public BigDecimal costoActual(Integer empresaId, Integer productoId) {

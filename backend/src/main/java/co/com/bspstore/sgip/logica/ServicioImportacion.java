@@ -155,6 +155,37 @@ public class ServicioImportacion {
         return buscar(cargaId);
     }
 
+    /**
+     * Descarta una carga validada sin aplicarla.
+     *
+     * La P-07 ofrece «Rechazar carga» al lado de «Aplicar al catálogo»,
+     * y hace falta que sea una acción y no simplemente cerrar la
+     * pantalla: una carga que se queda en VALIDADA para siempre es una
+     * que alguien puede aplicar tres semanas después, cuando sus costos
+     * ya no son los del proveedor. Rechazarla deja dicho que se miró y
+     * se decidió que no.
+     *
+     * No se borra. El detalle con sus motivos de rechazo es lo que
+     * permite reclamarle al proveedor que su archivo venía mal.
+     */
+    @Transactional
+    public Optional<ResumenCarga> rechazar(Long cargaId) {
+        Integer empresa = ContextoEmpresa.empresaActual();
+        Optional<CabeceraCarga> cabecera = importacion.buscarCarga(empresa, cargaId);
+        if (cabecera.isEmpty()) {
+            return Optional.empty();
+        }
+        String estado = cabecera.get().estado();
+        if ("APLICADA".equals(estado)) {
+            throw new ReglaInvalidaException(
+                    "La carga " + cargaId + " ya se aplicó y sus costos están en el "
+                            + "catálogo. Rechazarla ahora no los devolvería: para eso "
+                            + "hay que cargar la lista anterior.");
+        }
+        importacion.marcarRechazada(empresa, cargaId);
+        return buscar(cargaId);
+    }
+
     @Transactional(readOnly = true)
     public Optional<ResumenCarga> buscar(Long cargaId) {
         Integer empresa = ContextoEmpresa.empresaActual();
@@ -202,14 +233,14 @@ public class ServicioImportacion {
             String referencia = RepositorioImportacion.normalizar(fila.referencia());
 
             if (referencia.isEmpty()) {
-                juzgadas.add(rechazo(fila, null, null,
+                juzgadas.add(rechazo(fila, null, null, "REFERENCIA_VACIA",
                         "La fila no trae referencia: no hay producto que actualizar."));
                 continue;
             }
 
             Integer repetidaEn = vistas.putIfAbsent(referencia, fila.numeroFila());
             if (repetidaEn != null) {
-                juzgadas.add(rechazo(fila, null, null,
+                juzgadas.add(rechazo(fila, null, null, "REFERENCIA_REPETIDA",
                         "La referencia " + fila.referencia() + " ya venía en la fila "
                                 + repetidaEn + " de este archivo."));
                 continue;
@@ -217,7 +248,7 @@ public class ServicioImportacion {
 
             ProductoDelCatalogo producto = catalogo.get(referencia);
             if (producto == null) {
-                juzgadas.add(rechazo(fila, null, null,
+                juzgadas.add(rechazo(fila, null, null, "REFERENCIA_INEXISTENTE",
                         "La referencia " + fila.referencia()
                                 + " no existe en el catálogo de esta empresa."));
                 continue;
@@ -226,11 +257,13 @@ public class ServicioImportacion {
             Optional<BigDecimal> costo = Costos.interpretar(fila.costoCrudo());
             if (costo.isEmpty()) {
                 juzgadas.add(rechazo(fila, producto.productoId(), producto.costo(),
+                        "COSTO_NO_NUMERICO",
                         "El costo «" + recortar(fila.costoCrudo()) + "» no es un número."));
                 continue;
             }
             if (costo.get().signum() <= 0) {
                 juzgadas.add(rechazo(fila, producto.productoId(), producto.costo(),
+                        "COSTO_NO_POSITIVO",
                         "El costo es " + costo.get().toPlainString()
                                 + " y tiene que ser mayor que cero."));
                 continue;
@@ -238,18 +271,19 @@ public class ServicioImportacion {
 
             juzgadas.add(new FilaDeCarga(fila.numeroFila(), producto.productoId(),
                     fila.referencia(), fila.descripcion(), costo.get(), producto.costo(),
-                    true, null));
+                    true, null, null));
         }
         return juzgadas;
     }
 
     private static FilaDeCarga rechazo(FilaLeida fila, Integer productoId,
-                                       BigDecimal costoAnterior, String motivo) {
+                                       BigDecimal costoAnterior, String codigo,
+                                       String motivo) {
         // El costo NO se guarda en una fila rechazada: `ck_detalle_costo`
         // exige que sea mayor que cero cuando está, y justamente los
         // rechazos por costo son los que no lo cumplen.
         return new FilaDeCarga(fila.numeroFila(), productoId, fila.referencia(),
-                fila.descripcion(), null, costoAnterior, false, motivo);
+                fila.descripcion(), null, costoAnterior, false, motivo, codigo);
     }
 
     /** El motivo cabe en 200 caracteres en la base; el texto crudo no. */

@@ -173,10 +173,26 @@ acepta "un detalle sobre un producto propio" \
 
 # Un rechazo por referencia inexistente no tiene producto al que apuntar,
 # y tiene que poder quedar anotado igualmente con su motivo (RF-26).
-acepta "un rechazo sin producto, con su motivo" \
+acepta "un rechazo sin producto, con su motivo y su categoría" \
+  "INSERT INTO detalle_carga_precios (empresa_id, carga_id, producto_id,
+                                      referencia_origen, costo, aceptado,
+                                      motivo_rechazo, motivo_codigo)
+   VALUES (1, $CARGA, NULL, 'IMP-NO-EXISTE', NULL, 0, 'referencia inexistente',
+           'REFERENCIA_INEXISTENTE');"
+
+# La categoría y la frase van juntas o no van (V30). Una pastilla sin
+# texto no explica, y un texto sin pastilla no se puede pintar.
+rechaza "un rechazo con motivo pero sin categoría" \
   "INSERT INTO detalle_carga_precios (empresa_id, carga_id, producto_id,
                                       referencia_origen, costo, aceptado, motivo_rechazo)
-   VALUES (1, $CARGA, NULL, 'IMP-NO-EXISTE', NULL, 0, 'referencia inexistente');"
+   VALUES (1, $CARGA, NULL, 'IMP-SIN-CATEGORIA', NULL, 0, 'referencia inexistente');"
+
+rechaza "una fila aceptada que trae motivo de rechazo" \
+  "INSERT INTO detalle_carga_precios (empresa_id, carga_id, producto_id,
+                                      referencia_origen, costo, aceptado,
+                                      motivo_rechazo, motivo_codigo)
+   VALUES (1, $CARGA, $PRD_PROPIO, 'IMP-INCOHERENTE', 1500.00, 1,
+           'esto no debería estar', 'COSTO_NO_NUMERICO');"
 
 rechaza "un rechazo sin motivo" \
   "INSERT INTO detalle_carga_precios (empresa_id, carga_id, producto_id,

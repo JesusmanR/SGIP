@@ -137,6 +137,18 @@ export const api = {
   desactivarCategoria: (categoriaId) =>
     pedir(`/categorias/${categoriaId}/desactivar`, { method: 'POST' }),
   proveedores: () => pedir('/proveedores'),
+
+  // Importación de listas de precios (P-07). Son tres llamadas y no una
+  // a propósito: subir el archivo lo valida y lo deja registrado sin
+  // tocar un solo costo, y aplicar o rechazar es la decisión que la
+  // persona toma después de mirar la vista previa.
+  cargarLista: (proveedorId, archivo) =>
+    subir(`/importaciones?proveedor=${encodeURIComponent(proveedorId)}`, archivo),
+  verCarga: (cargaId) => pedir(`/importaciones/${cargaId}`),
+  aplicarCarga: (cargaId) =>
+    pedir(`/importaciones/${cargaId}/aplicar`, { method: 'POST' }),
+  rechazarCarga: (cargaId) =>
+    pedir(`/importaciones/${cargaId}/rechazar`, { method: 'POST' }),
   empresa: () => pedir('/empresa'),
   subirLogo: (archivo) => subir('/empresa/logo', archivo),
   subirImagen: (productoId, archivo) => subir(`/productos/${productoId}/imagenes`, archivo),

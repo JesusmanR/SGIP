@@ -165,6 +165,7 @@ DESPUES_DEL_DEMO=(
   V27__el_periodo_de_prueba_se_mide_en_meses.sql
   V28__claves_por_empresa_en_importacion.sql
   V29__el_rechazo_dice_en_que_fila.sql
+  V30__el_rechazo_tiene_categoria.sql
 )
 
 for f in "${ANTES_DEL_DEMO[@]}"; do

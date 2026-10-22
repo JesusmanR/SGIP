@@ -14,6 +14,11 @@ import java.math.BigDecimal;
  * el RF-26 pide listar los registros rechazados «con su causa», y una
  * causa en blanco no es una causa.
  *
+ * `motivoCodigo` es la misma causa como categoría, para que la pantalla
+ * pinte su pastilla sin cotejar el texto del motivo. Cotejarlo acoplaría
+ * el color de la pastilla a la redacción del mensaje, y cambiar una coma
+ * lo rompería lejos de donde se nota.
+ *
  * `productoId` es nulo en una fila rechazada por referencia inexistente:
  * no hay producto al que apuntar, y aun así la fila tiene que quedar
  * registrada. `numeroFila` es nulo cuando la carga no viene de un
@@ -27,5 +32,6 @@ public record FilaDeCarga(
         BigDecimal costo,
         BigDecimal costoAnterior,
         boolean aceptado,
-        String motivoRechazo
+        String motivoRechazo,
+        String motivoCodigo
 ) {}
