@@ -95,3 +95,30 @@ tabla temporal y leer la vista contra ella. Habría evitado la
 duplicación, pero exige escribir en la base para responder una pregunta
 de solo lectura, y deja la puerta abierta a que una simulación
 interrumpida deje reglas a medias en una tabla que nadie mira.
+
+## Nota posterior · los cinco verificadores no eran independientes
+
+Esta decisión se apoya en que una comprobación que no se ha visto
+fallar no demuestra nada. Hay una variante del mismo problema que no
+estaba contemplada: una comprobación que falla por algo que no es su
+asunto.
+
+`verificar_tributacion.sh` creaba el producto `SKU-TRIB` con existencia
+40 y ningún movimiento, y no lo retiraba al terminar.
+`verificar_kardex.sh` comprueba exactamente eso —que no haya
+referencias con existencia sin kárdex que la sustente— de modo que
+pasaba si se ejecutaba antes y fallaba si se ejecutaba después, con un
+descuadre que no era del esquema sino del guion anterior. Integración
+continua los ejecuta en el orden que pasa. Estaba verde por el orden.
+
+El arreglo es que cada guion deshaga lo que crea, y la comprobación del
+arreglo es ejecutar la batería en el orden de integración continua, en
+el inverso, y dos veces seguidas sin reconstruir la base. Los tres
+pases tienen que dar lo mismo; si no lo dan, el resultado de cualquiera
+de ellos no significa nada.
+
+De paso quedó a la vista otra suposición: una base recién construida
+con datos de demostración tiene **cero** ventas. Una comprobación que
+buscaba una venta existente para probar la facturación estaba midiendo
+el rastro de un guion anterior, no el esquema. Las comprobaciones
+nuevas crean lo que necesitan.

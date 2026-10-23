@@ -428,6 +428,192 @@ else
   ejecutar "DELETE FROM usuarios WHERE correo = 'compras@prueba.local';"     >/dev/null
 fi
 
+# Lo comercial (V31). Cuatro tablas apuntaban a `productos(producto_id)`
+# por la clave simple, de modo que un renglón de venta podía nombrar el
+# producto de otro comercio. Las tres primeras comprobaciones son las
+# tres reproducciones que la V31 documenta; la cuarta es la gemela que
+# allí no se reprodujo aparte.
+echo
+echo "── lo comercial no cruza empresas (V31) ──"
+
+ejecutar "DELETE FROM venta_items      WHERE empresa_id = $ID;"         >/dev/null
+ejecutar "DELETE FROM cotizacion_items WHERE empresa_id = $ID;"         >/dev/null
+ejecutar "DELETE FROM descuadres_existencia WHERE empresa_id = $ID;"    >/dev/null
+ejecutar "DELETE FROM producto_proveedor    WHERE empresa_id = $ID;"    >/dev/null
+ejecutar "DELETE FROM ventas       WHERE consecutivo = 'V-AISL-1';"     >/dev/null
+ejecutar "DELETE FROM cotizaciones WHERE consecutivo = 'C-AISL-1';"     >/dev/null
+ejecutar "DELETE FROM cola_sincronizacion
+           WHERE clave_idempotencia = 'aisl-v31-0000-0000-000000000001';" >/dev/null
+ejecutar "DELETE FROM clientes WHERE nit = 'AISL-V31';"                 >/dev/null
+ejecutar "DELETE FROM usuarios WHERE correo = 'comercial@prueba.local';" >/dev/null
+
+ejecutar "INSERT INTO clientes (empresa_id, razon_social, nit)
+          VALUES ($ID, 'Cliente de prueba', 'AISL-V31');" >/dev/null
+CLI_PROPIO=$(consulta "SELECT cliente_id FROM clientes WHERE nit = 'AISL-V31';")
+
+ejecutar "INSERT INTO usuarios (empresa_id, rol_id, nombre, correo, clave_hash,
+                                 activo, bloqueado, cambio_clave_req)
+          SELECT $ID, r.rol_id, 'Comercial de prueba', 'comercial@prueba.local',
+                 'x', TRUE, FALSE, FALSE
+            FROM roles r WHERE r.nombre = 'ADMINISTRADOR';" >/dev/null
+USU_COM=$(consulta "SELECT usuario_id FROM usuarios
+                     WHERE correo = 'comercial@prueba.local';")
+
+PRV_DE_OTRA=$(consulta "SELECT proveedor_id FROM proveedores
+                         WHERE empresa_id = 1 LIMIT 1;")
+
+if [[ -z "$CLI_PROPIO" || -z "$USU_COM" || -z "$PROD_PROPIO" || -z "$PROD_DE_OTRA" || -z "$PRV_DE_OTRA" ]]; then
+  falla "faltan datos para probar lo comercial (cliente, usuario, producto o proveedor)"
+else
+  # 1. producto_proveedor · la tabla sin padre del que heredar la empresa.
+  rechaza "un producto abastecido por el proveedor de otra empresa" fk_pp_proveedor_emp \
+    "INSERT INTO producto_proveedor (empresa_id, producto_id, proveedor_id,
+                                      referencia, costo, plazo_dias, preferente)
+     VALUES ($ID, $PROD_PROPIO, $PRV_DE_OTRA, 'AISL-V31', 1000.00, 0, FALSE);"
+
+  rechaza "un producto de otra empresa abastecido por el proveedor propio" fk_pp_producto_emp \
+    "INSERT INTO producto_proveedor (empresa_id, producto_id, proveedor_id,
+                                      referencia, costo, plazo_dias, preferente)
+     VALUES ($ID, $PROD_DE_OTRA, $PRV_PROPIO, 'AISL-V31', 1000.00, 0, FALSE);"
+
+  salida=$(ejecutar "INSERT INTO producto_proveedor (empresa_id, producto_id, proveedor_id,
+                                                      referencia, costo, plazo_dias, preferente)
+                     VALUES ($ID, $PROD_PROPIO, $PRV_PROPIO, 'AISL-V31', 1000.00, 0, FALSE);")
+  [[ -z "$salida" ]] && ok "la pareja propia entra" \
+                     || falla "la pareja propia fue rechazada: $(solo_error "$salida")"
+
+  # 2. venta_items · la que muerde.
+  ejecutar "INSERT INTO ventas (empresa_id, consecutivo, cliente_id, usuario_id, forma_pago)
+            VALUES ($ID, 'V-AISL-1', $CLI_PROPIO, $USU_COM, 'CONTADO');" >/dev/null
+  VENTA=$(consulta "SELECT venta_id FROM ventas WHERE consecutivo = 'V-AISL-1';")
+
+  if [[ -z "$VENTA" ]]; then
+    falla "no se pudo crear la venta de prueba"
+  else
+    rechaza "un renglón de venta con el producto de otra empresa" fk_venitems_producto_emp \
+      "INSERT INTO venta_items (venta_id, empresa_id, producto_id, cantidad,
+                                 precio_unitario, costo_unitario, tarifa_iva, tratamiento_iva)
+       VALUES ($VENTA, $ID, $PROD_DE_OTRA, 1, 2500000, 2000, 0.19, 'GRAVADO');"
+
+    salida=$(ejecutar "INSERT INTO venta_items (venta_id, empresa_id, producto_id, cantidad,
+                                                 precio_unitario, costo_unitario, tarifa_iva,
+                                                 tratamiento_iva)
+                       VALUES ($VENTA, $ID, $PROD_PROPIO, 1, 2500000, 2000, 0.19, 'GRAVADO');")
+    [[ -z "$salida" ]] && ok "el renglón con producto propio entra" \
+                       || falla "el renglón propio fue rechazado: $(solo_error "$salida")"
+  fi
+
+  # 3. descuadres_existencia · lo que la cola no pudo aplicar.
+  ejecutar "INSERT INTO cola_sincronizacion (empresa_id, usuario_id, clave_idempotencia,
+                                              tipo, carga, registrada_dispositivo)
+            VALUES ($ID, $USU_COM, 'aisl-v31-0000-0000-000000000001',
+                    'VENTA', '{}', NOW());" >/dev/null
+  OPER=$(consulta "SELECT operacion_id FROM cola_sincronizacion
+                    WHERE clave_idempotencia = 'aisl-v31-0000-0000-000000000001';")
+
+  if [[ -z "$OPER" ]]; then
+    falla "no se pudo encolar la operación de prueba"
+  else
+    rechaza "un descuadre sobre el producto de otra empresa" fk_desc_producto_emp \
+      "INSERT INTO descuadres_existencia (operacion_id, empresa_id, producto_id,
+                                           solicitada, disponible, resultante)
+       VALUES ($OPER, $ID, $PROD_DE_OTRA, 5, 0, -5);"
+
+    salida=$(ejecutar "INSERT INTO descuadres_existencia (operacion_id, empresa_id, producto_id,
+                                                           solicitada, disponible, resultante)
+                       VALUES ($OPER, $ID, $PROD_PROPIO, 5, 0, -5);")
+    [[ -z "$salida" ]] && ok "el descuadre sobre producto propio entra" \
+                       || falla "el descuadre propio fue rechazado: $(solo_error "$salida")"
+  fi
+
+  # 4. cotizacion_items · la gemela de venta_items.
+  ejecutar "INSERT INTO cotizaciones (empresa_id, consecutivo, cliente_id, usuario_id)
+            VALUES ($ID, 'C-AISL-1', $CLI_PROPIO, $USU_COM);" >/dev/null
+  COTIZA=$(consulta "SELECT cotizacion_id FROM cotizaciones WHERE consecutivo = 'C-AISL-1';")
+
+  if [[ -z "$COTIZA" ]]; then
+    falla "no se pudo crear la cotización de prueba"
+  else
+    rechaza "un renglón de cotización con el producto de otra empresa" fk_cotitems_producto_emp \
+      "INSERT INTO cotizacion_items (cotizacion_id, empresa_id, producto_id, cantidad,
+                                      precio_unitario, tarifa_iva, tratamiento_iva)
+       VALUES ($COTIZA, $ID, $PROD_DE_OTRA, 1, 2500000, 0.19, 'GRAVADO');"
+
+    salida=$(ejecutar "INSERT INTO cotizacion_items (cotizacion_id, empresa_id, producto_id,
+                                                      cantidad, precio_unitario, tarifa_iva,
+                                                      tratamiento_iva)
+                       VALUES ($COTIZA, $ID, $PROD_PROPIO, 1, 2500000, 0.19, 'GRAVADO');")
+    [[ -z "$salida" ]] && ok "el renglón de cotización propio entra" \
+                       || falla "el renglón de cotización propio fue rechazado: $(solo_error "$salida")"
+  fi
+
+  # 5. facturas_electronicas · la factura de la venta de otra empresa.
+  #
+  # La venta ajena se crea aquí y no se busca entre las existentes: una
+  # base recién construida con datos de demostración tiene cero ventas,
+  # de modo que buscarla dejaba la comprobación sin probar nada o
+  # dependiendo de que otro guion hubiera pasado antes. Eso último es el
+  # acoplamiento que `verificar_tributacion.sh` tenía y se corrigió.
+  ejecutar "DELETE FROM facturas_electronicas WHERE numero LIKE 'AISL-%';" >/dev/null
+  ejecutar "DELETE FROM ventas WHERE consecutivo = 'V-AISL-OTRA';"         >/dev/null
+  ejecutar "INSERT INTO ventas (empresa_id, consecutivo, cliente_id, usuario_id, forma_pago)
+            SELECT 1, 'V-AISL-OTRA',
+                   (SELECT cliente_id FROM clientes WHERE empresa_id = 1 LIMIT 1),
+                   (SELECT usuario_id FROM usuarios WHERE empresa_id = 1 LIMIT 1),
+                   'CONTADO';" >/dev/null
+  VENTA_DE_OTRA=$(consulta "SELECT venta_id FROM ventas WHERE consecutivo = 'V-AISL-OTRA';")
+
+  if [[ -z "$VENTA_DE_OTRA" || -z "${VENTA:-}" ]]; then
+    falla "no se pudieron preparar las dos ventas para probar la facturación"
+  else
+    rechaza "una factura emitida sobre la venta de otra empresa" fk_facturas_venta_emp \
+      "INSERT INTO facturas_electronicas (empresa_id, venta_id, numero, estado)
+       VALUES ($ID, $VENTA_DE_OTRA, 'AISL-F1', 'GENERADA');"
+
+    salida=$(ejecutar "INSERT INTO facturas_electronicas (empresa_id, venta_id, numero, estado)
+                       VALUES ($ID, $VENTA, 'AISL-F2', 'GENERADA');")
+    [[ -z "$salida" ]] && ok "la factura de la venta propia entra" \
+                       || falla "la factura propia fue rechazada: $(solo_error "$salida")"
+  fi
+  ejecutar "DELETE FROM facturas_electronicas WHERE numero LIKE 'AISL-%';" >/dev/null
+  ejecutar "DELETE FROM ventas WHERE consecutivo = 'V-AISL-OTRA';"         >/dev/null
+
+  # 6. auditoria_accesos · el registro que declara una empresa ajena.
+  ejecutar "DELETE FROM auditoria_accesos WHERE correo LIKE 'aisl-%';" >/dev/null
+  rechaza "un acceso que declara la empresa propia para un usuario ajeno" fk_auditoria_usuario_emp \
+    "INSERT INTO auditoria_accesos (empresa_id, usuario_id, correo, exitoso, fecha)
+     VALUES ($ID, $USU_DE_OTRA, 'aisl-mentira@prueba.local', TRUE, NOW());"
+
+  salida=$(ejecutar "INSERT INTO auditoria_accesos (empresa_id, usuario_id, correo, exitoso, fecha)
+                     VALUES ($ID, $USU_COM, 'aisl-propio@prueba.local', TRUE, NOW());")
+  [[ -z "$salida" ]] && ok "el acceso del usuario propio entra" \
+                     || falla "el acceso propio fue rechazado: $(solo_error "$salida")"
+
+  # Y el intento fallido sin usuario ni empresa tiene que seguir
+  # entrando: las dos columnas admiten nulo justamente para eso, y una
+  # clave compuesta no se comprueba cuando una de ellas lo es.
+  salida=$(ejecutar "INSERT INTO auditoria_accesos (empresa_id, usuario_id, correo, exitoso,
+                                                     motivo, fecha)
+                     VALUES (NULL, NULL, 'aisl-desconocido@prueba.local', FALSE,
+                             'CORREO_INEXISTENTE', NOW());")
+  [[ -z "$salida" ]] && ok "el intento fallido sin usuario ni empresa sigue entrando" \
+                     || falla "el intento fallido fue rechazado: $(solo_error "$salida")"
+  ejecutar "DELETE FROM auditoria_accesos WHERE correo LIKE 'aisl-%';" >/dev/null
+fi
+
+# El orden del desmontaje importa: los hijos antes que las cabeceras, y
+# el cliente y el usuario al final, porque las cabeceras los referencian.
+ejecutar "DELETE FROM venta_items          WHERE empresa_id = $ID;"     >/dev/null
+ejecutar "DELETE FROM cotizacion_items     WHERE empresa_id = $ID;"     >/dev/null
+ejecutar "DELETE FROM descuadres_existencia WHERE empresa_id = $ID;"    >/dev/null
+ejecutar "DELETE FROM producto_proveedor    WHERE empresa_id = $ID;"    >/dev/null
+ejecutar "DELETE FROM ventas       WHERE consecutivo = 'V-AISL-1';"     >/dev/null
+ejecutar "DELETE FROM cotizaciones WHERE consecutivo = 'C-AISL-1';"     >/dev/null
+ejecutar "DELETE FROM cola_sincronizacion
+           WHERE clave_idempotencia = 'aisl-v31-0000-0000-000000000001';" >/dev/null
+ejecutar "DELETE FROM clientes WHERE nit = 'AISL-V31';"                 >/dev/null
+ejecutar "DELETE FROM usuarios WHERE correo = 'comercial@prueba.local';" >/dev/null
+
 echo
 if [[ "$fallos" -eq 0 ]]; then
   echo "TODO EN VERDE"
