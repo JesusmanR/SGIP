@@ -166,6 +166,7 @@ DESPUES_DEL_DEMO=(
   V28__claves_por_empresa_en_importacion.sql
   V29__el_rechazo_dice_en_que_fila.sql
   V30__el_rechazo_tiene_categoria.sql
+  V31__claves_por_empresa_en_lo_comercial.sql
 )
 
 for f in "${ANTES_DEL_DEMO[@]}"; do
@@ -214,14 +215,53 @@ sin_existencia=$("${MYSQL[@]}" -N -B -e \
 
 # Centinela de las claves compuestas por empresa: veinte de la V11,
 # cuatro de la V12 (reglas_iva hacia categorías y hacia productos,
-# producto_imagenes y venta_retenciones) y cinco de la V24 (las dos de
+# producto_imagenes y venta_retenciones), cinco de la V24 (las dos de
 # orden_compra_items, las dos de recepciones y la de movimientos hacia
-# recepciones).
+# recepciones), siete de la V28 y diez de la V31 (dos por cada una de
+# venta_items, cotizacion_items, producto_proveedor y
+# descuadres_existencia, más facturas_electronicas y auditoria_accesos).
 compuestas=$("${MYSQL[@]}" -N -B -e \
   "SELECT COUNT(*) FROM information_schema.referential_constraints
    WHERE constraint_schema='sgip' AND constraint_name LIKE '%\\_emp';")
-[[ "$compuestas" -eq 36 ]] || {
-  echo "ATENCIÓN: se esperaban 36 claves por empresa y hay $compuestas"
+[[ "$compuestas" -eq 46 ]] || {
+  echo "ATENCIÓN: se esperaban 46 claves por empresa y hay $compuestas"
+  fallo=1
+}
+
+# El centinela de arriba cuenta, y un conteo es un número que alguien
+# tiene que acordarse de subir. Cuatro migraciones —V11, V24, V28 y
+# V31— han corregido el mismo defecto, y el conteo no encontró ninguna
+# de las tres últimas: las encontró ir a construir encima.
+#
+# Esto mide la propiedad en lugar del número: toda clave foránea que
+# apunta a una tabla con `empresa_id` debe incluir `empresa_id`. Una
+# clave nueva que se olvide de la empresa aparece aquí el día que se
+# escribe, sin que nadie tenga que contar nada. Los dos centinelas no
+# se solapan: este no ve una clave que alguien borre del todo, y el
+# conteo no ve una clave nueva mal formada.
+#
+# Las dos excepciones van nombradas y no por tabla, para que una clave
+# nueva hacia `usuarios` desde esas mismas tablas no herede la
+# excepción. El porqué de cada una está en la V31.
+descuidadas=$("${MYSQL[@]}" -N -B -e \
+  "SELECT GROUP_CONCAT(x.table_name, '.', x.constraint_name SEPARATOR ', ')
+     FROM (SELECT k.table_name, k.constraint_name,
+                  GROUP_CONCAT(k.column_name ORDER BY k.ordinal_position) cols
+             FROM information_schema.key_column_usage k
+            WHERE k.table_schema='sgip'
+              AND k.referenced_table_name IS NOT NULL
+              AND k.referenced_table_name <> 'empresas'
+              AND k.constraint_name NOT IN ('fk_sesiones_usuario',
+                                            'fk_auditoria_plataforma_usuario')
+              AND EXISTS (SELECT 1 FROM information_schema.columns c
+                           WHERE c.table_schema='sgip'
+                             AND c.table_name = k.referenced_table_name
+                             AND c.column_name = 'empresa_id')
+            GROUP BY k.constraint_schema, k.constraint_name, k.table_name) x
+    WHERE FIND_IN_SET('empresa_id', x.cols) = 0;")
+[[ -z "$descuidadas" || "$descuidadas" == "NULL" ]] || {
+  echo "ATENCIÓN: hay claves foráneas hacia tablas por empresa que no"
+  echo "          incluyen empresa_id: $descuidadas"
   fallo=1
 }
 

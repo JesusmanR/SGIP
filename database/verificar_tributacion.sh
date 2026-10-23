@@ -41,14 +41,45 @@ borrar_de_la_prueba () {  # $1 = tabla
   ejecutar "DELETE t FROM $1 t JOIN empresas e ON e.empresa_id = t.empresa_id
              WHERE e.nit = '900000000-2';" >/dev/null
 }
-borrar_de_la_prueba reglas_iva
-borrar_de_la_prueba reglas_margen
-ejecutar "DELETE FROM productos     WHERE sku = 'SKU-TRIB';"        >/dev/null
-ejecutar "DELETE FROM categorias    WHERE nombre = 'Panaderia';"    >/dev/null
-ejecutar "DELETE FROM proveedores   WHERE nit = '800000000-3';"     >/dev/null
-ejecutar "DELETE FROM empresa_config WHERE empresa_id IN
-            (SELECT empresa_id FROM empresas WHERE nit = '900000000-2');" >/dev/null
-ejecutar "DELETE FROM empresas      WHERE nit = '900000000-2';"     >/dev/null
+# Esta limpieza se llama dos veces: al empezar, para que el guion se pueda
+# repetir, y al terminar, para que no deje nada detrás.
+#
+# Lo segundo no es simetría por gusto. Este guion crea el producto
+# SKU-TRIB con existencia 40 y ningún movimiento que lo explique, y
+# `verificar_kardex.sh` comprueba justo eso: que no haya referencias con
+# existencia sin kárdex que la sustente. Mientras el desmontaje no
+# existió, el orden de los dos guiones decidía el resultado:
+# `verificar_kardex.sh` pasaba antes de este y fallaba después, con un
+# descuadre que no era del esquema sino del guion anterior. Integración
+# continua los ejecuta en el orden que pasa, de modo que estaba verde por
+# el orden y no por estar bien.
+#
+# Los borrados van de hijas a padres: las imágenes y las reglas antes del
+# producto, el producto antes de la categoría y el proveedor, y la
+# empresa al final.
+limpiar_la_prueba () {
+  ejecutar "DELETE i FROM producto_imagenes i
+              JOIN productos p ON p.producto_id = i.producto_id
+             WHERE p.sku = 'SKU-TRIB';" >/dev/null
+  borrar_de_la_prueba reglas_iva
+  borrar_de_la_prueba reglas_margen
+  borrar_de_la_prueba ventas
+  ejecutar "DELETE FROM productos     WHERE sku = 'SKU-TRIB';"        >/dev/null
+  ejecutar "DELETE FROM categorias    WHERE nombre = 'Panaderia';"    >/dev/null
+  ejecutar "DELETE FROM proveedores   WHERE nit = '800000000-3';"     >/dev/null
+  ejecutar "DELETE FROM empresa_config WHERE empresa_id IN
+              (SELECT empresa_id FROM empresas WHERE nit = '900000000-2');" >/dev/null
+  ejecutar "DELETE FROM empresas      WHERE nit = '900000000-2';"     >/dev/null
+}
+
+# Lo que esta limpieza deliberadamente NO toca: la comprobación 6
+# sustituye la venta V-0001 de la empresa 1, que es dato de
+# demostración, por una propia, y le anota una retención. Queda así. La
+# base recién construida tiene una V-0001 en la empresa 1 y después de
+# este guion también, de modo que dejarla se parece más al estado
+# inicial que borrarla, que dejaría la tabla vacía. Lo que cambia son
+# los valores de esa fila; ningún otro guion los lee.
+limpiar_la_prueba
 
 ejecutar "INSERT INTO empresas (nit, razon_social, estado)
           VALUES ('900000000-2','Panaderia de prueba','ACTIVA');" >/dev/null
@@ -187,6 +218,8 @@ n=$(consulta "SELECT COUNT(*) FROM information_schema.views v
                              WHERE c.table_schema='sgip' AND c.table_name=v.table_name
                                AND c.column_name='empresa_id');")
 igual "vistas con empresa_id" "6" "$n"
+
+limpiar_la_prueba
 
 echo
 if [[ "$fallos" -eq 0 ]]; then

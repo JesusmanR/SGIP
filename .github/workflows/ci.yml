@@ -73,7 +73,8 @@ jobs:
                    V27__el_periodo_de_prueba_se_mide_en_meses \
                    V28__claves_por_empresa_en_importacion \
                    V29__el_rechazo_dice_en_que_fila \
-                   V30__el_rechazo_tiene_categoria; do
+                   V30__el_rechazo_tiene_categoria \
+                   V31__claves_por_empresa_en_lo_comercial; do
             echo "→ $f"
             # El motivo del fallo se emite como anotación además de ir al
             # registro. Sin esto, una migración que falla deja un «exit
@@ -130,13 +131,52 @@ jobs:
       # clave por empresa sin que nadie lo decida deja la entrega en rojo,
       # y eso es justo lo que tiene que pasar. La V28 lo puso en rojo al
       # subir de 29 a 36, que era la señal correcta.
+      # Dos centinelas, y miden cosas distintas a propósito.
+      #
+      # El conteo ve una clave que desaparece. Su número está también en
+      # `database/aplicar.sh`, porque este trabajo aplica las migraciones
+      # con su propio bucle y no a través de ese guion; al subirlo hay
+      # que subirlo en los dos sitios. La V31 lo comprobó por las malas:
+      # se subió aquí y no allí, y este paso dejó el trabajo en rojo.
+      #
+      # El segundo no tiene número que mantener: toda clave foránea que
+      # apunte a una tabla con `empresa_id` debe incluir `empresa_id`.
+      # Una clave nueva que se olvide de la empresa aparece el día que se
+      # escribe. Es el que importa de los dos; el conteo se queda porque
+      # cubre el caso que este no ve.
+      #
+      # Las dos excepciones van nombradas una por una, no por tabla, para
+      # que una clave nueva desde esas mismas tablas no herede la
+      # excepción. El porqué de cada una está en la V31.
       - name: Verificar las claves foráneas por empresa
         run: |
           n=$(mysql -h 127.0.0.1 -u root -psgip_ci -N -B -e \
             "SELECT COUNT(*) FROM information_schema.referential_constraints
              WHERE constraint_schema='sgip' AND constraint_name LIKE '%\\_emp';")
           echo "claves foráneas por empresa: $n"
-          test "$n" -eq 36
+          test "$n" -eq 46
+
+          descuidadas=$(mysql -h 127.0.0.1 -u root -psgip_ci -N -B -e \
+            "SELECT GROUP_CONCAT(x.table_name, '.', x.constraint_name SEPARATOR ', ')
+               FROM (SELECT k.table_name, k.constraint_name,
+                            GROUP_CONCAT(k.column_name ORDER BY k.ordinal_position) cols
+                       FROM information_schema.key_column_usage k
+                      WHERE k.table_schema='sgip'
+                        AND k.referenced_table_name IS NOT NULL
+                        AND k.referenced_table_name <> 'empresas'
+                        AND k.constraint_name NOT IN ('fk_sesiones_usuario',
+                                                      'fk_auditoria_plataforma_usuario')
+                        AND EXISTS (SELECT 1 FROM information_schema.columns c
+                                     WHERE c.table_schema='sgip'
+                                       AND c.table_name = k.referenced_table_name
+                                       AND c.column_name = 'empresa_id')
+                      GROUP BY k.constraint_schema, k.constraint_name, k.table_name) x
+              WHERE FIND_IN_SET('empresa_id', x.cols) = 0;")
+          if [ -n "$descuidadas" ] && [ "$descuidadas" != "NULL" ]; then
+            echo "::error title=Claves foráneas sin empresa_id::$descuidadas"
+            exit 1
+          fi
+          echo "ninguna clave hacia una tabla por empresa se olvida de empresa_id"
 
       # El conteo de vistas no cambia con la V18, la V19 ni la V20: la
       # primera solo toca restricciones y las otras dos recrean vistas que
@@ -324,7 +364,8 @@ jobs:
                    V27__el_periodo_de_prueba_se_mide_en_meses \
                    V28__claves_por_empresa_en_importacion \
                    V29__el_rechazo_dice_en_que_fila \
-                   V30__el_rechazo_tiene_categoria; do
+                   V30__el_rechazo_tiene_categoria \
+                   V31__claves_por_empresa_en_lo_comercial; do
             # El motivo del fallo se emite como anotación además de ir al
             # registro. Sin esto, una migración que falla deja un «exit
             # code 1» y el porqué solo se ve abriendo el registro a mano:
