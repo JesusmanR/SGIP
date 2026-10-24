@@ -50,6 +50,26 @@ describe('pantalla de acceso', () => {
     expect(navegar).toHaveBeenCalledWith('/catalogo', { replace: true })
   })
 
+  it('al administrador lo lleva al panel, que es su primera pantalla', async () => {
+    // No es una preferencia de navegación: la especificación de P-02
+    // dice que el panel «es la primera pantalla tras el acceso del
+    // administrador». La regla vive en `inicioSegunRol` porque tres
+    // sitios la deciden —el acceso, la ruta comodín y la barra— y basta
+    // olvidar uno para que entrar y recargar lleven a sitios distintos.
+    api.entrar.mockResolvedValue({ token: 'abc', nombre: 'Ana', rol: 'ADMINISTRADOR' })
+    await entrar()
+    await waitFor(() => expect(navegar).toHaveBeenCalledWith('/panel', { replace: true }))
+  })
+
+  it('al super administrador no, porque el panel es de una empresa', async () => {
+    // El panel enseña el inventario y el capital de UNA empresa, y el
+    // super administrador no pertenece a ninguna (ADR-0020). Llevarlo
+    // allí le mostraría un panel en cero que no significa nada.
+    api.entrar.mockResolvedValue({ token: 'abc', nombre: 'Raíz', rol: 'SUPER_ADMIN' })
+    await entrar()
+    await waitFor(() => expect(navegar).toHaveBeenCalledWith('/catalogo', { replace: true }))
+  })
+
   it('muestra el motivo que da el servidor', async () => {
     api.entrar.mockRejectedValue(new ErrorApi(401, 'Correo o contraseña incorrectos.'))
     await entrar()

@@ -125,6 +125,13 @@ function consulta(parametros) {
 
 export const api = {
   entrar: (correo, clave) => pedir('/auth/login', { method: 'POST', body: { correo, clave } }),
+
+  // El panel de indicadores (P-02) en una sola llamada. No son cinco,
+  // una por tarjeta, para que las cinco cifras vengan del mismo
+  // instante: con cinco peticiones el conteo de agotadas podría ser de
+  // antes de un movimiento y la tabla de críticas de después, y la
+  // pantalla mostraría dos verdades que no concuerdan.
+  panel: () => pedir('/panel'),
   salir: () => pedir('/auth/logout', { method: 'POST' }),
   catalogo: ({ busqueda, categoria, proveedor, estado } = {}) =>
     pedir(`/productos${consulta({ busqueda, categoria, proveedor, estado })}`),

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, ErrorApi } from '../servicios/api.js'
-import { guardarSesion } from '../servicios/sesion.js'
+import { guardarSesion, inicioSegunRol } from '../servicios/sesion.js'
 
 /** Pantalla P-01 · Acceso. */
 export default function Acceso() {
@@ -18,7 +18,11 @@ export default function Acceso() {
     try {
       const sesion = await api.entrar(correo, clave)
       guardarSesion(sesion)
-      navegar('/catalogo', { replace: true })
+      // El administrador entra al panel y los demás al catálogo. La
+      // regla vive en `inicioSegunRol` porque hay tres sitios que la
+      // deciden y repetirla sería suficiente para que entrar y recargar
+      // llevaran a pantallas distintas.
+      navegar(inicioSegunRol(sesion), { replace: true })
     } catch (e) {
       // El backend no distingue entre correo inexistente y clave errada,
       // y el front tampoco debe hacerlo: decir cuál de los dos falló

@@ -37,3 +37,20 @@ export function borrarSesion() {
 export function haySesion() {
   return leerSesion() !== null
 }
+
+/**
+ * A dónde lleva entrar, según el rol.
+ *
+ * La especificación de P-02 dice que el panel «es la primera pantalla
+ * tras el acceso del administrador», de modo que esto no es una
+ * preferencia de navegación: es parte del requisito. Para los demás
+ * roles sigue siendo el catálogo, que es donde un vendedor trabaja.
+ *
+ * Está aquí y no en cada pantalla porque hay tres sitios que deciden lo
+ * mismo —el acceso, la ruta comodín y la barra— y con la regla
+ * repetida tres veces basta con olvidar uno para que entrar y recargar
+ * lleven a pantallas distintas.
+ */
+export function inicioSegunRol(sesion = leerSesion()) {
+  return sesion?.rol === 'ADMINISTRADOR' ? '/panel' : '/catalogo'
+}
