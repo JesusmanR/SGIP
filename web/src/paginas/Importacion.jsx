@@ -3,9 +3,7 @@ import Barra from '../componentes/Barra.jsx'
 import { api } from '../servicios/api.js'
 import { leerSesion } from '../servicios/sesion.js'
 
-const PESOS = new Intl.NumberFormat('es-CO', {
-  style: 'currency', currency: 'COP', maximumFractionDigits: 0,
-})
+import { PESOS } from '../servicios/formato.js'
 
 /** Las categorías que la V30 guarda, con su texto y su color. */
 const PASTILLAS = {

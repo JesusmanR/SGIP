@@ -40,6 +40,24 @@ describe('barra superior', () => {
     expect(screen.getByText('Jesús Manuel')).toBeInTheDocument()
   })
 
+  it('el administrador ve el panel y la importación', () => {
+    montar()
+    expect(screen.getByRole('link', { name: 'Panel' })).toHaveAttribute('href', '/panel')
+    expect(screen.getByRole('link', { name: /importar precios/i })).toBeInTheDocument()
+  })
+
+  it('el vendedor no ve ninguna de las dos', () => {
+    // No es seguridad —el backend responde 403 al vendedor que pida
+    // `/api/v1/panel`— sino no ofrecer una puerta que no se abre. El
+    // panel enseña capital inmovilizado y resultado de cargas de
+    // precios, que son datos de gestión y no de venta (RN-17).
+    guardarSesion({ token: 'abc', nombre: 'Luis', rol: 'VENDEDOR' })
+    montar()
+    expect(screen.queryByRole('link', { name: 'Panel' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /importar precios/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /catálogo/i })).toBeInTheDocument()
+  })
+
   it('al salir cierra la sesión y vuelve al acceso', async () => {
     const teclado = userEvent.setup()
     api.salir.mockResolvedValue({})

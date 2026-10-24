@@ -22,6 +22,7 @@ export default function Barra() {
   return (
     <header className="barra">
       <span className="marca">SGIP</span>
+      {sesion?.rol === 'ADMINISTRADOR' && <Link to="/panel">Panel</Link>}
       <Link to="/catalogo">Catálogo</Link>
       <Link to="/empresa">Mi empresa</Link>
       {sesion?.rol === 'ADMINISTRADOR' && <Link to="/importar">Importar precios</Link>}

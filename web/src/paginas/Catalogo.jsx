@@ -8,9 +8,7 @@ import { api } from '../servicios/api.js'
 import { subirImagenes } from '../servicios/subidas.js'
 import { leerSesion } from '../servicios/sesion.js'
 
-const PESOS = new Intl.NumberFormat('es-CO', {
-  style: 'currency', currency: 'COP', maximumFractionDigits: 0,
-})
+import { PESOS } from '../servicios/formato.js'
 
 /**
  * Si el total con impuesto dice algo que el precio no diga ya.
