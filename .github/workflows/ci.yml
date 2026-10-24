@@ -241,6 +241,15 @@ jobs:
       - name: Verificar el aislamiento de la importación de listas (V28)
         run: bash database/verificar_importacion.sh -h 127.0.0.1 -u root -psgip_ci
 
+      # Las cinco lecturas del panel (P-02). Construye su propio
+      # histórico de costos porque los datos de demostración lo dejan
+      # vacío: sin esa construcción, la consulta de cruces de umbral
+      # devuelve cero filas y el paso estaría en verde sin haber
+      # ejecutado la parte que importa. El guion falla si la consulta
+      # devuelve cero.
+      - name: Verificar las lecturas del panel de indicadores (P-02)
+        run: bash database/verificar_panel.sh -h 127.0.0.1 -u root -psgip_ci
+
       - name: Verificar que el tipo de un parámetro obliga (V26)
         run: |
           rechaza () {
