@@ -1,5 +1,6 @@
 package co.com.bspstore.sgip.logica;
 
+import co.com.bspstore.sgip.api.dto.CuadreDeInventario;
 import co.com.bspstore.sgip.api.dto.MovimientoDeInventario;
 import co.com.bspstore.sgip.api.dto.SolicitudAjuste;
 import co.com.bspstore.sgip.api.dto.SolicitudIngreso;
@@ -229,7 +230,56 @@ class ServicioInventarioTest {
         verify(inventario, never()).fijarSaldo(anyInt(), anyInt(), anyInt());
     }
 
+    // ------------------------------------------------- saldo inicial
+
+    @Test
+    void elSaldoInicialEsUnIngresoConMotivo() {
+        when(inventario.bloquearSaldo(EMPRESA, PRODUCTO)).thenReturn(Optional.of(0));
+        elKardexDevuelve(0, 120);
+
+        var resultado = servicio.registrarSaldoInicial(PRODUCTO, 120);
+
+        assertTrue(resultado.isPresent());
+        // Un INGRESO que arranca de cero, con el motivo que lo explica en
+        // el kárdex: sin documento, porque nace del alta y no de una factura.
+        verify(inventario).insertarMovimiento(EMPRESA, PRODUCTO, USUARIO,
+                TipoMovimiento.INGRESO, 120, 0, 120, null, "Saldo inicial del producto", null);
+        verify(inventario).fijarSaldo(EMPRESA, PRODUCTO, 120);
+    }
+
     // ------------------------------------------------- lectura y cuadre
+
+    @Test
+    void elCuadreLeeLaExistenciaDeLaTablaDeProductos() {
+        // El saldo y la suma discrepan: 40 en la tabla, 30 en el kárdex.
+        when(inventario.saldoActual(EMPRESA, PRODUCTO)).thenReturn(Optional.of(40));
+        when(inventario.sumaDeMovimientos(EMPRESA, PRODUCTO)).thenReturn(30);
+
+        var cuadre = servicio.cuadre(PRODUCTO).orElseThrow();
+
+        assertEquals(new CuadreDeInventario(PRODUCTO, 40, 30, false), cuadre);
+        // No debe apoyarse en el último movimiento: sin movimientos, o con
+        // uno perdido, ese número no es la existencia.
+        verify(inventario, never()).kardex(anyInt(), anyInt(), anyInt());
+    }
+
+    @Test
+    void unProductoSinMovimientosYEnCeroCuadra() {
+        when(inventario.saldoActual(EMPRESA, PRODUCTO)).thenReturn(Optional.of(0));
+        when(inventario.sumaDeMovimientos(EMPRESA, PRODUCTO)).thenReturn(0);
+
+        var cuadre = servicio.cuadre(PRODUCTO).orElseThrow();
+
+        assertTrue(cuadre.cuadra());
+    }
+
+    @Test
+    void unProductoAjenoNoTieneCuadre() {
+        when(inventario.saldoActual(EMPRESA, PRODUCTO)).thenReturn(Optional.empty());
+
+        assertTrue(servicio.cuadre(PRODUCTO).isEmpty());
+        verify(inventario, never()).sumaDeMovimientos(anyInt(), anyInt());
+    }
 
     @Test
     void elCuadreUsaLaMismaExpresionQueElGuionDeVerificacion() {

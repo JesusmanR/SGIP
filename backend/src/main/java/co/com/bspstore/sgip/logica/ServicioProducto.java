@@ -27,15 +27,18 @@ public class ServicioProducto {
     private final CategoriaRepositorio categorias;
     private final ProveedorRepositorio proveedores;
     private final ConsultaCatalogo catalogo;
+    private final ServicioInventario inventario;
 
     public ServicioProducto(ProductoRepositorio productos,
                             CategoriaRepositorio categorias,
                             ProveedorRepositorio proveedores,
-                            ConsultaCatalogo catalogo) {
+                            ConsultaCatalogo catalogo,
+                            ServicioInventario inventario) {
         this.productos = productos;
         this.categorias = categorias;
         this.proveedores = proveedores;
         this.catalogo = catalogo;
+        this.inventario = inventario;
     }
 
     /** Los estados que la columna generada estado_stock puede tomar. */
@@ -125,10 +128,20 @@ public class ServicioProducto {
         Producto p = new Producto(empresa, s.categoriaId(), s.proveedorId(),
                 codigo, sku, s.nombre(), s.costo());
         p.describir(s.presentacion(), s.descripcion(), barras);
-        p.fijarExistencias(
-                s.existencia() == null ? 0 : s.existencia(),
-                s.existenciaMinima() == null ? 5 : s.existenciaMinima());
-        return productos.save(p);
+        p.fijarExistenciaMinima(s.existenciaMinima() == null ? 5 : s.existenciaMinima());
+        Producto guardado = productos.save(p);
+
+        // El producto nace en cero y el kárdex lo sube, dentro de esta misma
+        // transacción: si el movimiento falla, el alta se deshace entera
+        // (RF-49: no hay existencia sin su movimiento).
+        int inicial = s.existencia() == null ? 0 : s.existencia();
+        if (inicial > 0) {
+            inventario.registrarSaldoInicial(guardado.getId(), inicial)
+                    .orElseThrow(() -> new IllegalStateException(
+                            "El producto " + guardado.getId()
+                                    + " no se encontró justo después de guardarlo."));
+        }
+        return guardado;
     }
 
     /**

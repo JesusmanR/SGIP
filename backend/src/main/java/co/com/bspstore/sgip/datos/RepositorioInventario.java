@@ -62,6 +62,24 @@ public class RepositorioInventario {
                 .optional();
     }
 
+    /**
+     * El saldo actual del producto, sin bloquear nada.
+     *
+     * Es para leer —el cuadre del RF-49—, no para escribir: quien vaya a
+     * cambiar la existencia tiene que usar {@link #bloquearSaldo}. Vacío
+     * si el producto no es de esta empresa, igual que allí.
+     */
+    public Optional<Integer> saldoActual(Integer empresaId, Integer productoId) {
+        return jdbc.sql("""
+                        SELECT existencia FROM productos
+                         WHERE empresa_id = :empresa AND producto_id = :producto
+                        """)
+                .param("empresa", empresaId)
+                .param("producto", productoId)
+                .query(Integer.class)
+                .optional();
+    }
+
     /** Devuelve el identificador que el motor asignó al movimiento. */
     public Long insertarMovimiento(Integer empresaId, Integer productoId, Integer usuarioId,
                                    TipoMovimiento tipo, int cantidad,

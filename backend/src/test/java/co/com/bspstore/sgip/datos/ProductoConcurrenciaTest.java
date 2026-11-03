@@ -103,8 +103,11 @@ class ProductoConcurrenciaTest {
 
         Producto p = new Producto(empresaId, categoriaId, proveedorId,
                 "CONC-" + marca, "CONC-" + marca, "Producto original", new BigDecimal("100.00"));
-        p.fijarExistencias(10, 5);
+        p.fijarExistenciaMinima(5);
         productoId = productos.save(p).getId();
+        // El producto nace en cero; los 10 se dejan como lo haría un
+        // movimiento, sin pasar por la entidad.
+        inventario.fijarSaldo(empresaId, productoId, 10);
     }
 
     @AfterEach
@@ -178,6 +181,27 @@ class ProductoConcurrenciaTest {
 
         assertFalse(productos.existsByEmpresaIdAndCodigo(empresaId, codigo),
                 "el alta se deshace entera: sin movimiento no hay producto");
+    }
+
+    @Test
+    void elAltaConExistenciaDejaElProductoYSuMovimientoCuadrados() {
+        comoAdministradorDeLaEmpresa();
+        String codigo = "INI-" + marca;
+
+        Integer nuevoId = servicioProducto.crear(new SolicitudProducto(
+                categoriaId, proveedorId, codigo, codigo, null, "Producto con saldo inicial",
+                null, null, new BigDecimal("100.00"), 120, 5)).getId();
+
+        var kardex = inventario.kardex(empresaId, nuevoId, 10);
+        assertEquals(1, kardex.size());
+        assertEquals("INGRESO", kardex.get(0).tipo());
+        assertEquals(0, kardex.get(0).existenciaAnterior());
+        assertEquals(120, kardex.get(0).existenciaPosterior());
+        assertEquals("Saldo inicial del producto", kardex.get(0).motivo());
+        assertEquals(120, inventario.saldoActual(empresaId, nuevoId).orElseThrow());
+        assertEquals(120, inventario.sumaDeMovimientos(empresaId, nuevoId));
+        // Lo que lee la pantalla tras el alta, por la vista del catálogo.
+        assertEquals(120, servicioProducto.buscar(nuevoId).orElseThrow().existencia());
     }
 
     @Test
