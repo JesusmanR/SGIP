@@ -47,6 +47,8 @@ input  { font-family: inherit; }
 .acceso h1 { margin: 0 0 .25rem; font-size: 1.4rem; }
 .acceso p.sub { margin: 0 0 1.5rem; color: var(--tinta-3); font-size: .9rem; }
 
+.acceso .acciones-formulario { display: flex; flex-wrap: wrap; gap: .6rem; }
+
 .barra {
   display: flex; align-items: center; gap: 1rem;
   background: var(--chrome); color: #fff; padding: .75rem 1.25rem;

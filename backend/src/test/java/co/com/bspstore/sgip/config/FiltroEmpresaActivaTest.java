@@ -117,6 +117,46 @@ class FiltroEmpresaActivaTest {
         }
     }
 
+    // ------------------------- lo que una empresa en consulta sí puede hacer
+
+    /**
+     * Cambiar la contraseña y salir no escriben datos de la empresa: son
+     * del usuario. Si el modo de consulta los bloqueara, el usuario de
+     * una empresa desactivada que aún tiene su contraseña inicial
+     * quedaría atrapado: el filtro del cambio le exige cambiarla y este
+     * le impide hacerlo.
+     */
+    @Test
+    void laEmpresaDesactivadaDejaCambiarLaClaveYSalir() throws Exception {
+        for (String ruta : List.of("/api/v1/auth/clave", "/api/v1/auth/logout")) {
+            comoUsuarioDe(4);
+            when(plataforma.estadoDe(4)).thenReturn(Optional.of(EstadoEmpresa.DESACTIVADA));
+            var r = new MockHttpServletResponse();
+            var c = org.mockito.Mockito.mock(FilterChain.class);
+
+            filtro().doFilter(peticion("POST", ruta), r, c);
+
+            verify(c).doFilter(any(), any());
+            assertEquals(200, r.getStatus(), ruta);
+        }
+    }
+
+    @Test
+    void laExencionNoSeExtiendeAOtrasRutasNiAVariantes() throws Exception {
+        for (String ruta : List.of("/api/v1/productos", "/api/v1/auth/clave/",
+                "/api/v1/auth/otra", "/api/v1/auth/%63lave")) {
+            comoUsuarioDe(4);
+            when(plataforma.estadoDe(4)).thenReturn(Optional.of(EstadoEmpresa.DESACTIVADA));
+            var r = new MockHttpServletResponse();
+            var c = org.mockito.Mockito.mock(FilterChain.class);
+
+            filtro().doFilter(peticion("POST", ruta), r, c);
+
+            verify(c, never()).doFilter(any(), any());
+            assertEquals(403, r.getStatus(), ruta);
+        }
+    }
+
     // ------------------------------------------------ quién sí puede escribir
 
     @Test

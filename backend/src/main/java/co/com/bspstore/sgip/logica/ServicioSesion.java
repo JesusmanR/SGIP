@@ -86,4 +86,19 @@ public class ServicioSesion {
     public int cerrarLasDe(Integer usuarioId) {
         return sesiones.cerrarLasDe(usuarioId);
     }
+
+    /**
+     * Cierra todas las sesiones de un usuario salvo la del token dado.
+     *
+     * Sin token no cierra nada: no saber cuál es la sesión en curso
+     * podría llevar a cerrar justo la que acaba de cambiar la clave.
+     * Se excluye por el hash porque es lo único que la base conoce.
+     */
+    @Transactional
+    public int cerrarLasDemasDe(Integer usuarioId, String tokenActual) {
+        if (tokenActual == null || tokenActual.isBlank()) {
+            return 0;
+        }
+        return sesiones.cerrarLasDemasDe(usuarioId, Seguridad.hashToken(tokenActual));
+    }
 }

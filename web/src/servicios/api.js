@@ -78,7 +78,12 @@ async function pedir(ruta, opciones = {}) {
   const sesion = leerSesion()
   const cabeceras = { ...opciones.headers }
   if (opciones.body !== undefined) cabeceras['Content-Type'] = 'application/json'
-  if (sesion?.token) cabeceras.Authorization = `Bearer ${sesion.token}`
+  // El ingreso es público y no lleva token. Si lo llevara, el servidor
+  // autenticaría con la sesión que la pestaña aún guarde, y quien tiene el
+  // cambio de contraseña pendiente (o la empresa en modo de consulta)
+  // recibiría un 403 al intentar entrar de nuevo, como sí mismo o como otra
+  // cuenta.
+  if (sesion?.token && ruta !== '/auth/login') cabeceras.Authorization = `Bearer ${sesion.token}`
 
   const respuesta = await fetch(`/api/v1${ruta}`, {
     ...opciones,
@@ -136,6 +141,11 @@ export const api = {
   // pantalla mostraría dos verdades que no concuerdan.
   panel: () => pedir('/panel'),
   salir: () => pedir('/auth/logout', { method: 'POST' }),
+  // Los errores de contraseña llegan como 400 y no como 401, y es a
+  // propósito: un 401 hace que `pedir` dé por expirada la sesión y la
+  // borre, y equivocarse al teclear no debe echar a nadie.
+  cambiarClave: (claveActual, claveNueva) =>
+    pedir('/auth/clave', { method: 'POST', body: { claveActual, claveNueva } }),
   catalogo: ({ busqueda, categoria, proveedor, estado } = {}) =>
     pedir(`/productos${consulta({ busqueda, categoria, proveedor, estado })}`),
   editarProducto: (productoId, datos) =>

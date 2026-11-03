@@ -70,6 +70,18 @@ describe('pantalla de acceso', () => {
     await waitFor(() => expect(navegar).toHaveBeenCalledWith('/catalogo', { replace: true }))
   })
 
+  it('con la contraseña inicial pendiente, lo lleva a cambiarla antes que a trabajar', async () => {
+    // Vale para cualquier rol: el administrador tampoco pasa por el panel
+    // hasta cambiarla. El servidor lo exige igual; esto evita que la
+    // primera pantalla sea un muro de 403.
+    api.entrar.mockResolvedValue({
+      token: 'abc', nombre: 'Ana', rol: 'ADMINISTRADOR', debeCambiarClave: true,
+    })
+    await entrar()
+    await waitFor(() => expect(navegar).toHaveBeenCalledWith('/cambiar-clave', { replace: true }))
+    expect(leerSesion().debeCambiarClave).toBe(true)
+  })
+
   it('muestra el motivo que da el servidor', async () => {
     api.entrar.mockRejectedValue(new ErrorApi(401, 'Correo o contraseña incorrectos.'))
     await entrar()

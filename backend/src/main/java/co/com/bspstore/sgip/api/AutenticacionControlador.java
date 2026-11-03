@@ -1,7 +1,10 @@
 package co.com.bspstore.sgip.api;
 
 import co.com.bspstore.sgip.api.dto.RespuestaLogin;
+import co.com.bspstore.sgip.api.dto.SolicitudCambioClave;
 import co.com.bspstore.sgip.api.dto.SolicitudLogin;
+import co.com.bspstore.sgip.config.ContextoEmpresa;
+import co.com.bspstore.sgip.config.UsuarioAutenticado;
 import co.com.bspstore.sgip.logica.ServicioAutenticacion;
 import co.com.bspstore.sgip.logica.ServicioSesion;
 import co.com.bspstore.sgip.modelo.Usuario;
@@ -52,6 +55,33 @@ public class AutenticacionControlador {
         if (cabecera != null && cabecera.startsWith(PREFIJO)) {
             sesiones.cerrar(cabecera.substring(PREFIJO.length()).trim());
         }
+        return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Cambio de la propia contraseña, que es lo único (además de salir)
+     * que puede hacer quien aún tiene la inicial.
+     *
+     * La clave que se cambia es la de quien hace la petición, tomada de
+     * su sesión; la solicitud no lleva identificador. Al terminar se
+     * cierran las demás sesiones del usuario y se conserva esta: así
+     * quien tuviera la clave anterior pierde el acceso y quien la cambió
+     * sigue trabajando con el mismo token.
+     *
+     * Los errores de contraseña son 400 y no 401: un 401 haría que el
+     * cliente diera por expirada la sesión.
+     */
+    @PostMapping("/clave")
+    public ResponseEntity<Void> cambiarClave(
+            @Valid @RequestBody SolicitudCambioClave solicitud,
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String cabecera) {
+        UsuarioAutenticado quien = ContextoEmpresa.actual().orElseThrow(() ->
+                new IllegalStateException("No hay usuario autenticado en el contexto."));
+        servicio.cambiarClave(quien.usuarioId(), solicitud.claveActual(), solicitud.claveNueva());
+        String token = (cabecera != null && cabecera.startsWith(PREFIJO))
+                ? cabecera.substring(PREFIJO.length()).trim()
+                : null;
+        sesiones.cerrarLasDemasDe(quien.usuarioId(), token);
         return ResponseEntity.noContent().build();
     }
 }

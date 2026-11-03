@@ -2,6 +2,8 @@ package co.com.bspstore.sgip.api;
 
 import co.com.bspstore.sgip.config.SinEmpresaException;
 import co.com.bspstore.sgip.logica.CategoriaEnUsoException;
+import co.com.bspstore.sgip.logica.ClaveActualIncorrectaException;
+import co.com.bspstore.sgip.logica.ClaveNuevaInvalidaException;
 import co.com.bspstore.sgip.logica.DatoTributarioInvalidoException;
 import co.com.bspstore.sgip.logica.EstadoDeCargaInvalidoException;
 import co.com.bspstore.sgip.logica.RecursoNoEncontradoException;
@@ -46,6 +48,25 @@ public class ManejadorErrores {
         ProblemDetail p = ProblemDetail.forStatus(HttpStatus.UNAUTHORIZED);
         p.setTitle("Credenciales inválidas");
         p.setDetail("El correo o la contraseña no son correctos.");
+        return p;
+    }
+
+    @ExceptionHandler(ClaveActualIncorrectaException.class)
+    public ProblemDetail claveActualIncorrecta(ClaveActualIncorrectaException e) {
+        // 400 y no 401: el cliente trata todo 401 como «la sesión expiró»
+        // y echaría al usuario por un error de tecleo. La sesión es
+        // válida; lo que falla es un dato del cuerpo.
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
+        p.setTitle("Contraseña actual incorrecta");
+        p.setDetail(e.getMessage());
+        return p;
+    }
+
+    @ExceptionHandler(ClaveNuevaInvalidaException.class)
+    public ProblemDetail claveNuevaInvalida(ClaveNuevaInvalidaException e) {
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
+        p.setTitle("Contraseña nueva no válida");
+        p.setDetail(e.getMessage());
         return p;
     }
 

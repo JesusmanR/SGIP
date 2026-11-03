@@ -86,6 +86,14 @@ public class FiltroEmpresaActiva extends OncePerRequestFilter {
             return;
         }
 
+        if (FiltroCambioClave.esClaveOSalida(peticion)) {
+            // Cambiar la propia contraseña y salir son del usuario, no del
+            // negocio. Bloquearlos atraparía a quien tiene la clave inicial
+            // en una empresa desactivada: el otro filtro le exige cambiarla.
+            cadena.doFilter(peticion, respuesta);
+            return;
+        }
+
         Optional<Integer> empresa = ContextoEmpresa.actual()
                 .filter(u -> !u.esDePlataforma())
                 .map(UsuarioAutenticado::empresaId);

@@ -53,6 +53,7 @@ public class ConfiguracionSeguridad {
 
     @Bean
     SecurityFilterChain cadena(HttpSecurity http, FiltroSesion filtroSesion,
+                               FiltroCambioClave filtroCambioClave,
                                FiltroEmpresaActiva filtroEmpresaActiva) throws Exception {
         return http
                 .csrf(csrf -> csrf.disable())
@@ -63,12 +64,16 @@ public class ConfiguracionSeguridad {
                 .addFilterBefore(filtroSesion, UsernamePasswordAuthenticationFilter.class)
                 // Después del de sesión y no antes: necesita saber quién
                 // hace la petición, y eso lo pone aquel en el contexto.
+                // La contraseña inicial se cambia antes que cualquier otra
+                // cosa, y se exige aquí y no en la pantalla porque un
+                // cliente que no sea la pantalla ignoraría la bandera.
+                .addFilterAfter(filtroCambioClave, FiltroSesion.class)
                 // El modo de consulta de la RN-15 se decide aquí, delante
                 // de todos los controladores, porque el requisito dice
                 // «toda operación de escritura» y una comprobación
                 // repartida por los servicios se cumple solo en los que
                 // alguien se acordó de tocar.
-                .addFilterAfter(filtroEmpresaActiva, FiltroSesion.class)
+                .addFilterAfter(filtroEmpresaActiva, FiltroCambioClave.class)
                 // Sin esto, una petición sin credenciales recibe 403. Para un
                 // cliente la diferencia importa: 401 significa «identifícate»
                 // y 403 significa «ya sé quién eres y aun así no puedes».

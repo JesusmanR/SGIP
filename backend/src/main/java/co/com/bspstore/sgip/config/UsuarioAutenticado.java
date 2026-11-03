@@ -14,12 +14,23 @@ import co.com.bspstore.sgip.modelo.Usuario;
  * ninguna empresa (RN-17). Quien necesite una debe pedirla a
  * {@link ContextoEmpresa}, que convierte ese nulo en un rechazo claro en
  * lugar de en una consulta sin filtro.
+ *
+ * {@code debeCambiarClave} sale del usuario de la base en cada petición,
+ * porque {@link FiltroSesion} reconstruye el principal cada vez. No se
+ * guarda en la sesión: así, en cuanto la clave cambia, el mismo token
+ * deja de estar restringido sin volver a ingresar.
  */
-public record UsuarioAutenticado(Integer usuarioId, String correo, String rol, Integer empresaId) {
+public record UsuarioAutenticado(Integer usuarioId, String correo, String rol,
+                                 Integer empresaId, boolean debeCambiarClave) {
+
+    /** Sin cambio de clave pendiente: la forma habitual fuera del filtro. */
+    public UsuarioAutenticado(Integer usuarioId, String correo, String rol, Integer empresaId) {
+        this(usuarioId, correo, rol, empresaId, false);
+    }
 
     public static UsuarioAutenticado de(Usuario u) {
         return new UsuarioAutenticado(u.getId(), u.getCorreo(),
-                u.getRol().getNombre(), u.getEmpresaId());
+                u.getRol().getNombre(), u.getEmpresaId(), u.isCambioClaveRequerido());
     }
 
     public boolean esDePlataforma() {

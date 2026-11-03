@@ -165,6 +165,29 @@ class ServicioSesionTest {
         assertFalse(servicio.cerrar(token));
     }
 
+    @Test
+    void cambiarLaClaveCierraLasDemasSesionesYConservaLaActual() {
+        String token = "token-de-prueba";
+        when(sesiones.cerrarLasDemasDe(20, Seguridad.hashToken(token))).thenReturn(2);
+
+        int cerradas = servicioEn(ARRANQUE).cerrarLasDemasDe(20, token);
+
+        assertEquals(2, cerradas);
+        // Se excluye por el hash, que es lo único que la base conoce: el
+        // token en claro no sale de este servicio.
+        verify(sesiones).cerrarLasDemasDe(20, Seguridad.hashToken(token));
+        verify(sesiones, never()).cerrarLasDe(any());
+    }
+
+    @Test
+    void sinTokenActualNoSeCierraNada() {
+        // Si no se sabe cuál es la sesión en curso, cerrar «las demás»
+        // podría cerrar justo la que acaba de cambiar la clave.
+        assertEquals(0, servicioEn(ARRANQUE).cerrarLasDemasDe(20, null));
+        assertEquals(0, servicioEn(ARRANQUE).cerrarLasDemasDe(20, "  "));
+        verify(sesiones, never()).cerrarLasDemasDe(any(), any());
+    }
+
     private Sesion sesionDe(String token, Instant momento) {
         LocalDateTime inicio = LocalDateTime.ofInstant(momento, ZONA);
         return new Sesion(usuario, Seguridad.hashToken(token), inicio,
