@@ -19,13 +19,17 @@
 --      La aplicación hace lo mismo al guardar; sin esto, «123 » y «123»
 --      se tomarían por distintos aquí y por iguales allí.
 --   2. Si varios productos de una empresa repiten un código, lo conserva
---      el de menor producto_id (el más antiguo) y a los demás se les
---      deja NULL.
+--      uno activo y a los demás se les deja NULL. Entre varios activos,
+--      o si ninguno lo está, lo conserva el de menor producto_id (el más
+--      antiguo). Se prefiere el activo porque el lector del punto de
+--      venta lee v_precios_producto, que solo muestra productos activos:
+--      si el código se quedara en un producto viejo y desactivado, el
+--      lector dejaría de encontrar al que sí se vende.
 --
 -- Qué se pierde y cómo se recupera: el código que se retira de un
 -- producto no se guarda en otra parte. No hay forma de saber cuál de los
--- productos repetidos tenía la etiqueta correcta, y quedarse con el más
--- antiguo es una regla, no un acierto. Quien lo necesite lo vuelve a
+-- productos repetidos tenía la etiqueta correcta, y quedarse con el activo
+-- más antiguo es una regla, no un acierto. Quien lo necesite lo vuelve a
 -- capturar editando el producto (o leyendo su etiqueta con el lector);
 -- hasta entonces ese producto se vende por su código interno. El sistema
 -- no inventa un código para ocultar el choque.
@@ -50,7 +54,9 @@ UPDATE productos
 -- (utf8mb4_0900_ai_ci), así que «ABC» y «abc» cuentan como repetidos
 -- aquí por la misma razón que la clave los rechazaría después.
 UPDATE productos p
-  JOIN (SELECT empresa_id, codigo_barras, MIN(producto_id) AS conserva
+  JOIN (SELECT empresa_id, codigo_barras,
+               COALESCE(MIN(CASE WHEN activo THEN producto_id END),
+                        MIN(producto_id)) AS conserva
           FROM productos
          WHERE codigo_barras IS NOT NULL
          GROUP BY empresa_id, codigo_barras
