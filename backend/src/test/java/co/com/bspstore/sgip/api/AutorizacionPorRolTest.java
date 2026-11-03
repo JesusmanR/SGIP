@@ -13,6 +13,9 @@ import co.com.bspstore.sgip.logica.ServicioInventario;
 import co.com.bspstore.sgip.logica.ServicioProducto;
 import co.com.bspstore.sgip.logica.ServicioProveedor;
 import co.com.bspstore.sgip.logica.ServicioSesion;
+import co.com.bspstore.sgip.modelo.EstadoEmpresa;
+import co.com.bspstore.sgip.modelo.Producto;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullSource;
@@ -25,6 +28,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 import java.math.BigDecimal;
@@ -32,10 +36,15 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -44,11 +53,16 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *
  * Pasa por la cadena de seguridad real —los tres filtros y la anotación
  * {@code @PreAuthorize}—, no por los controladores sueltos: una prueba que
- * llamara al método directamente no vería nunca un 403, y una que
- * pasara con la seguridad apagada no probaría nada. Por eso
- * {@link #sinPermisoNoSePuedeCrearUnProducto} existe: es un rechazo que ya
- * dependía de una anotación vieja, y si alguna vez deja de dar 403 es que
- * la seguridad de métodos no está activa en esta prueba.
+ * llamara al método directamente no vería nunca un 403.
+ *
+ * Qué prueban las pruebas de la seguridad de métodos: la empresa de la
+ * sesión está ACTIVA (ver {@link #empresaActiva}), de modo que
+ * {@code FiltroEmpresaActiva} deja pasar las escrituras y un 403 en un
+ * {@code POST} o {@code PUT} de productos solo puede venir de la anotación.
+ * Si se quita {@code @EnableMethodSecurity} esas pruebas se ponen en rojo,
+ * porque el servicio se llega a invocar. Las denegaciones salen como
+ * {@code ProblemDetail} con un texto fijo en español, no con el mensaje de
+ * la excepción (el de Spring es «Access Denied»).
  */
 @WebMvcTest(controllers = {ProductoControlador.class, ProveedorControlador.class,
         InventarioControlador.class, AutenticacionControlador.class})
@@ -67,6 +81,16 @@ class AutorizacionPorRolTest {
     @MockitoBean ServicioSesion sesiones;
     @MockitoBean RepositorioPlataforma plataforma;
 
+    private static final String TITULO_SIN_PERMISO = "Sin permiso para esta operación";
+    private static final String DETALLE_SIN_PERMISO = "Tu rol no tiene permiso para hacer esto.";
+
+    @BeforeEach
+    void empresaActiva() {
+        // Sin esto el mock devuelve vacío y FiltroEmpresaActiva (que falla
+        // cerrado) respondería 403 a toda escritura antes del controlador.
+        when(plataforma.estadoDe(4)).thenReturn(Optional.of(EstadoEmpresa.ACTIVA));
+    }
+
     private static RequestPostProcessor como(String rol) {
         return como(new UsuarioAutenticado(7, "ana@tienda.co", rol, 4));
     }
@@ -84,6 +108,15 @@ class AutorizacionPorRolTest {
                 "ACTIVO", new BigDecimal("3720.00"), new BigDecimal("3875.00"), "EXCLUIDO",
                 BigDecimal.ZERO, new BigDecimal("3720.00"), new BigDecimal("3875.00"),
                 "SOBRE_COSTO", "SOBRE_PRECIO", 0, 0, 0, 0, null, 0);
+    }
+
+    /** El 403 de la API: ProblemDetail con texto fijo, no el cuerpo vacío del contenedor. */
+    private static ResultActions esDenegado(ResultActions r) throws Exception {
+        return r.andExpect(status().isForbidden())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.status").value(403))
+                .andExpect(jsonPath("$.title").value(TITULO_SIN_PERMISO))
+                .andExpect(jsonPath("$.detail").value(DETALLE_SIN_PERMISO));
     }
 
     private void hayProducto() {
@@ -150,8 +183,8 @@ class AutorizacionPorRolTest {
     void filtrarPorProveedorSeNiegaAQuienNoEsAdministrador(String rol) throws Exception {
         hayProducto();
 
-        mvc.perform(get("/api/v1/productos").param("proveedor", "9").with(como(rol)))
-                .andExpect(status().isForbidden());
+        esDenegado(mvc.perform(get("/api/v1/productos").param("proveedor", "9").with(como(rol))));
+        verifyNoInteractions(productos);
     }
 
     @ParameterizedTest
@@ -164,16 +197,18 @@ class AutorizacionPorRolTest {
                 "/api/v1/inventario/movimientos",
                 "/api/v1/inventario/productos/1/movimientos",
                 "/api/v1/inventario/productos/1/cuadre")) {
-            mvc.perform(get(ruta).with(como(rol)))
-                    .andExpect(status().isForbidden());
+            esDenegado(mvc.perform(get(ruta).with(como(rol))));
         }
+        verifyNoInteractions(proveedores);
     }
 
     @Test
     void sinAutenticarTodoEsUn401() throws Exception {
         for (String ruta : List.of("/api/v1/productos", "/api/v1/productos/9",
                 "/api/v1/productos/barras/7701", "/api/v1/proveedores",
-                "/api/v1/inventario/movimientos")) {
+                "/api/v1/proveedores/9", "/api/v1/inventario/movimientos",
+                "/api/v1/inventario/productos/1/movimientos",
+                "/api/v1/inventario/productos/1/cuadre")) {
             mvc.perform(get(ruta)).andExpect(status().isUnauthorized());
         }
     }
@@ -214,15 +249,38 @@ class AutorizacionPorRolTest {
 
     // ---- la seguridad de métodos está activa en esta prueba ----------
 
+    private static final String CUERPO_PRODUCTO = """
+            {"categoriaId":4,"proveedorId":3,"codigo":"ARZ-500","nombre":"Arroz Diana",
+             "costo":3100.00}""";
+
     @Test
     void sinPermisoNoSePuedeCrearUnProducto() throws Exception {
-        String cuerpo = """
-                {"categoriaId":4,"proveedorId":3,"codigo":"ARZ-500","nombre":"Arroz Diana",
-                 "costo":3100.00}""";
+        esDenegado(mvc.perform(post("/api/v1/productos").with(como("VENDEDOR"))
+                .contentType(MediaType.APPLICATION_JSON).content(CUERPO_PRODUCTO)));
 
-        mvc.perform(post("/api/v1/productos").with(como("VENDEDOR"))
-                        .contentType(MediaType.APPLICATION_JSON).content(cuerpo))
-                .andExpect(status().isForbidden());
+        verifyNoInteractions(productos);
+    }
+
+    @Test
+    void sinPermisoNoSePuedeEditarUnProducto() throws Exception {
+        esDenegado(mvc.perform(put("/api/v1/productos/9").with(como("VENDEDOR"))
+                .contentType(MediaType.APPLICATION_JSON).content(CUERPO_PRODUCTO)));
+
+        verifyNoInteractions(productos);
+    }
+
+    @Test
+    void elAdministradorSiLlegaAlServicioAlCrearUnProducto() throws Exception {
+        var creado = mock(Producto.class);
+        when(creado.getId()).thenReturn(9);
+        when(productos.crear(any())).thenReturn(creado);
+        when(productos.buscar(9)).thenReturn(Optional.of(producto()));
+
+        mvc.perform(post("/api/v1/productos").with(como("ADMINISTRADOR"))
+                        .contentType(MediaType.APPLICATION_JSON).content(CUERPO_PRODUCTO))
+                .andExpect(status().isCreated());
+
+        verify(productos).crear(any());
     }
 
     // ---- la puerta del cambio de contraseña, con la cadena real -------
