@@ -1,5 +1,6 @@
 package co.com.bspstore.sgip.api;
 
+import co.com.bspstore.sgip.api.dto.CuadreDeInventario;
 import co.com.bspstore.sgip.api.dto.MovimientoDeInventario;
 import co.com.bspstore.sgip.api.dto.SolicitudAjuste;
 import co.com.bspstore.sgip.api.dto.SolicitudIngreso;
@@ -68,18 +69,12 @@ public class InventarioControlador {
      * cuadran en lugar de que haya que creerlo.
      */
     @GetMapping("/productos/{productoId}/cuadre")
-    public ResponseEntity<Cuadre> cuadre(@PathVariable Integer productoId) {
-        List<MovimientoDeInventario> ultimo = servicio.kardex(productoId, 1);
-        if (ultimo.isEmpty()) {
-            // Sin movimientos no se puede afirmar nada sobre esta
-            // referencia por esta vía: puede ser ajena, o puede estar en
-            // cero y sin historia. El cuadre de todo el catálogo lo
-            // resuelve database/verificar_kardex.sh, que sí ve productos.
-            return ResponseEntity.notFound().build();
-        }
-        int suma = servicio.sumaDeMovimientos(productoId);
-        int existencia = ultimo.get(0).existenciaPosterior();
-        return ResponseEntity.ok(new Cuadre(productoId, existencia, suma, existencia == suma));
+    public ResponseEntity<CuadreDeInventario> cuadre(@PathVariable Integer productoId) {
+        // 404 solo si el producto no es de esta empresa: uno propio, aunque
+        // esté en cero y sin movimientos, tiene cuadre.
+        return servicio.cuadre(productoId)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     /** RF-48. Una cantidad menor o igual a cero la rechaza la validación con 400. */
@@ -118,8 +113,4 @@ public class InventarioControlador {
         }
         return Math.min(limite, LIMITE_MAXIMO);
     }
-
-    /** La existencia frente a la suma de sus movimientos (RF-49). */
-    public record Cuadre(Integer productoId, int existencia, int sumaDeMovimientos,
-                         boolean cuadra) {}
 }

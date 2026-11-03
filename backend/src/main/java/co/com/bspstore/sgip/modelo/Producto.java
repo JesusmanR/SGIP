@@ -73,9 +73,10 @@ public class Producto {
     private BigDecimal costo;
 
     /**
-     * Solo se escribe al crear. Después la cambia únicamente el movimiento
-     * de inventario (RepositorioInventario.fijarSaldo), que es el que deja
-     * el rastro del RF-49.
+     * La entidad nunca la cambia: el producto se inserta en cero y la sube
+     * únicamente el movimiento de inventario (RepositorioInventario.fijarSaldo),
+     * que es el que deja el rastro del RF-49, desde el saldo inicial del
+     * alta hasta el último ajuste.
      *
      * Con {@code updatable = false} guardar una edición no incluye esta
      * columna en el UPDATE. Sin eso, la edición reescribía la existencia
@@ -135,12 +136,12 @@ public class Producto {
     }
 
     /**
-     * Solo para el alta: la columna de existencia no se actualiza desde la
-     * entidad, así que llamarlo sobre un producto ya guardado no cambia el
-     * saldo en la base.
+     * Para el alta. La existencia no se fija aquí a propósito: un producto
+     * nace en cero y la sube el kárdex con su movimiento de saldo inicial
+     * (ServicioInventario.registrarSaldoInicial), de modo que ningún saldo
+     * existe sin su explicación (RF-49).
      */
-    public void fijarExistencias(int existencia, int existenciaMinima) {
-        this.existencia = existencia;
+    public void fijarExistenciaMinima(int existenciaMinima) {
         this.existenciaMinima = existenciaMinima;
     }
 

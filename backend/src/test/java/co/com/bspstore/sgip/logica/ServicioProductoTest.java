@@ -1,5 +1,6 @@
 package co.com.bspstore.sgip.logica;
 
+import co.com.bspstore.sgip.api.dto.MovimientoDeInventario;
 import co.com.bspstore.sgip.api.dto.SolicitudEdicionProducto;
 import co.com.bspstore.sgip.api.dto.SolicitudProducto;
 import co.com.bspstore.sgip.config.SinEmpresaException;
@@ -12,6 +13,7 @@ import co.com.bspstore.sgip.modelo.Categoria;
 import co.com.bspstore.sgip.modelo.Producto;
 import co.com.bspstore.sgip.modelo.Proveedor;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -21,8 +23,10 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -45,7 +49,20 @@ class ServicioProductoTest {
     @Mock CategoriaRepositorio categorias;
     @Mock ProveedorRepositorio proveedores;
     @Mock ConsultaCatalogo catalogo;
+    @Mock ServicioInventario inventario;
     @InjectMocks ServicioProducto servicio;
+
+    private static final int ID_GUARDADO = 55;
+
+    @BeforeEach
+    void elInventarioAceptaElSaldoInicial() {
+        // Tolerante porque solo las pruebas de alta con existencia llegan
+        // a pedirlo; las de edición y las de rechazo no lo tocan.
+        lenient().when(inventario.registrarSaldoInicial(any(), anyInt())).thenReturn(
+                Optional.of(new MovimientoDeInventario(900L, ID_GUARDADO, "ARZ-500", "Arroz Diana",
+                        "INGRESO", 120, 0, 120, null, "Saldo inicial del producto", null,
+                        7, "Ana", LocalDateTime.now())));
+    }
 
     @AfterEach
     void limpiar() {
@@ -105,6 +122,69 @@ class ServicioProductoTest {
     }
 
     // ── Alta ─────────────────────────────────────────────────────────
+    /** Lo que hace la base al guardar: asigna el identificador. */
+    private void elGuardadoAsignaElIdentificador() {
+        when(productos.save(any())).thenAnswer(i -> {
+            Producto p = i.getArgument(0);
+            ReflectionTestUtils.setField(p, "id", ID_GUARDADO);
+            return p;
+        });
+    }
+
+    @Test
+    void elAltaNaceEnCeroYPideElSaldoInicialAlInventario() {
+        comoEmpresa(3);
+        referenciasPropias();
+        elGuardadoAsignaElIdentificador();
+
+        servicio.crear(solicitud("ARZ-500", "ARZ-500"));
+
+        ArgumentCaptor<Producto> captor = ArgumentCaptor.forClass(Producto.class);
+        verify(productos).save(captor.capture());
+        // Nace en cero y es el kárdex quien lo sube: así los 120 llevan su
+        // movimiento y la existencia nunca se explica a medias (RF-49).
+        assertEquals(0, captor.getValue().getExistencia());
+        assertEquals(20, captor.getValue().getExistenciaMinima());
+        verify(inventario).registrarSaldoInicial(ID_GUARDADO, 120);
+    }
+
+    @Test
+    void unAltaConExistenciaCeroNoEscribeMovimientos() {
+        comoEmpresa(3);
+        referenciasPropias();
+        elGuardadoAsignaElIdentificador();
+
+        servicio.crear(new SolicitudProducto(4, 9, "ARZ-500", "ARZ-500", null,
+                "Arroz Diana", "500 g", null, new BigDecimal("3100.00"), 0, 20));
+
+        verify(inventario, never()).registrarSaldoInicial(anyInt(), anyInt());
+    }
+
+    @Test
+    void unAltaSinExistenciaNoEscribeMovimientos() {
+        comoEmpresa(3);
+        referenciasPropias();
+        elGuardadoAsignaElIdentificador();
+
+        servicio.crear(new SolicitudProducto(4, 9, "ARZ-500", "ARZ-500", null,
+                "Arroz Diana", "500 g", null, new BigDecimal("3100.00"), null, null));
+
+        verify(inventario, never()).registrarSaldoInicial(anyInt(), anyInt());
+    }
+
+    @Test
+    void siElInventarioNoEncuentraElProductoRecienGuardadoElAltaFalla() {
+        comoEmpresa(3);
+        referenciasPropias();
+        elGuardadoAsignaElIdentificador();
+        when(inventario.registrarSaldoInicial(ID_GUARDADO, 120)).thenReturn(Optional.empty());
+
+        // Lanzar es lo que deshace la transacción del alta: dejar pasar el
+        // producto sin su movimiento sería la inconsistencia que esto evita.
+        assertThrows(IllegalStateException.class,
+                () -> servicio.crear(solicitud("ARZ-500", "ARZ-500")));
+    }
+
     @Test
     void guardaConLaEmpresaDelContexto() {
         comoEmpresa(3);
@@ -247,7 +327,10 @@ class ServicioProductoTest {
     private Producto productoGuardado() {
         Producto p = new Producto(3, 4, 9, "ARZ-500", "ARZ-500",
                 "Arroz Diana", new BigDecimal("3100.00"));
-        p.fijarExistencias(120, 20);
+        p.fijarExistenciaMinima(20);
+        // Como si viniera de la base: la entidad no tiene forma de fijar la
+        // existencia, porque solo la cambia el kárdex.
+        ReflectionTestUtils.setField(p, "existencia", 120);
         return p;
     }
 

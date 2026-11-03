@@ -1,5 +1,6 @@
 package co.com.bspstore.sgip.logica;
 
+import co.com.bspstore.sgip.api.dto.CuadreDeInventario;
 import co.com.bspstore.sgip.api.dto.MovimientoDeInventario;
 import co.com.bspstore.sgip.api.dto.SolicitudAjuste;
 import co.com.bspstore.sgip.api.dto.SolicitudIngreso;
@@ -39,6 +40,9 @@ public class ServicioInventario {
      * copia solo evita que el usuario reciba un error de integridad.
      */
     private static final int PISO_EXISTENCIA = -9999;
+
+    /** El texto con el que el kárdex explica la existencia con la que nació un producto. */
+    static final String MOTIVO_SALDO_INICIAL = "Saldo inicial del producto";
 
     private final RepositorioInventario inventario;
 
@@ -82,6 +86,21 @@ public class ServicioInventario {
     }
 
     /**
+     * La existencia con la que un producto nace (RF-49): un ingreso desde
+     * cero, con su motivo, para que el kárdex explique desde el primer
+     * renglón todo lo que hay en bodega.
+     *
+     * Lo llama el alta del producto, que ya guardó la fila con existencia
+     * cero; por eso no lleva transacción propia y tiene que correr dentro
+     * de la del alta: si este movimiento falla, el producto no debe
+     * quedar guardado con una existencia que nadie explica.
+     */
+    public Optional<MovimientoDeInventario> registrarSaldoInicial(Integer productoId, int cantidad) {
+        return registrar(TipoMovimiento.INGRESO, productoId, cantidad, null,
+                null, MOTIVO_SALDO_INICIAL, null);
+    }
+
+    /**
      * Ajuste contra un conteo físico (RF-49).
      *
      * Devuelve vacío en dos casos que el controlador distingue: cuando el
@@ -120,15 +139,35 @@ public class ServicioInventario {
     }
 
     /**
-     * La comprobación del RF-49 para una referencia, expuesta para que la
-     * pantalla de inventario pueda mostrarla y para que una prueba de
-     * integración pueda afirmarla sobre datos reales.
-     *
-     * Devuelve vacío si el producto no es de esta empresa.
+     * La suma algebraica de los movimientos de una referencia (RF-49). Es
+     * cero si no tiene ninguno, y también si el producto no es de esta
+     * empresa: para distinguir ese caso está {@link #cuadre}.
      */
     @Transactional(readOnly = true)
     public int sumaDeMovimientos(Integer productoId) {
         return inventario.sumaDeMovimientos(ContextoEmpresa.empresaActual(), productoId);
+    }
+
+    /**
+     * La comprobación del RF-49 para una referencia, expuesta para que la
+     * pantalla de inventario pueda mostrarla y para que una prueba de
+     * integración pueda afirmarla sobre datos reales.
+     *
+     * La existencia sale de la tabla de productos, no del último
+     * movimiento: la comprobación existe para descubrir que esas dos
+     * cifras discrepan, y leer la una de la otra la haría dar siempre
+     * verde. Por lo mismo un producto en cero y sin movimientos cuadra en
+     * lugar de responder «no encontrado».
+     *
+     * Vacío solo si el producto no es de esta empresa.
+     */
+    @Transactional(readOnly = true)
+    public Optional<CuadreDeInventario> cuadre(Integer productoId) {
+        Integer empresa = ContextoEmpresa.empresaActual();
+        return inventario.saldoActual(empresa, productoId).map(existencia -> {
+            int suma = inventario.sumaDeMovimientos(empresa, productoId);
+            return new CuadreDeInventario(productoId, existencia, suma, existencia == suma);
+        });
     }
 
     /**
