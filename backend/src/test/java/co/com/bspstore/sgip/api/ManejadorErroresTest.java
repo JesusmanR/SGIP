@@ -2,9 +2,11 @@ package co.com.bspstore.sgip.api;
 
 import co.com.bspstore.sgip.logica.EstadoDeCargaInvalidoException;
 import co.com.bspstore.sgip.logica.RecursoNoEncontradoException;
+import co.com.bspstore.sgip.modelo.Producto;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.ProblemDetail;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 
 import java.sql.SQLIntegrityConstraintViolationException;
 
@@ -98,5 +100,18 @@ class ManejadorErroresTest {
         assertEquals(409, p.getStatus());
         assertEquals("La carga no admite esa operación", p.getTitle());
         assertEquals("La carga 4 ya está aplicada.", p.getDetail());
+    }
+
+    @Test
+    void unaEdicionQueLlegaTardeEsUn409SinExponerNingunNombreInterno() {
+        // El mensaje de Hibernate nombra la clase y el identificador.
+        var e = new ObjectOptimisticLockingFailureException(Producto.class, 42);
+
+        ProblemDetail p = manejador.edicionConcurrente(e);
+
+        assertEquals(409, p.getStatus());
+        assertEquals("El producto cambió mientras lo editabas", p.getTitle());
+        assertNotNull(p.getDetail());
+        sinTextoDelMotor(p, "co.com", "bspstore", "Producto.class", "42", "version", "Row was");
     }
 }

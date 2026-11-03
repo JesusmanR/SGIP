@@ -6,6 +6,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -71,7 +72,18 @@ public class Producto {
     @Column(name = "costo", nullable = false, precision = 14, scale = 2)
     private BigDecimal costo;
 
-    @Column(name = "existencia", nullable = false)
+    /**
+     * Solo se escribe al crear. Después la cambia únicamente el movimiento
+     * de inventario (RepositorioInventario.fijarSaldo), que es el que deja
+     * el rastro del RF-49.
+     *
+     * Con {@code updatable = false} guardar una edición no incluye esta
+     * columna en el UPDATE. Sin eso, la edición reescribía la existencia
+     * con el valor que había leído al abrir el formulario, y un ingreso
+     * confirmado entre la lectura y el guardado se perdía sin dejar
+     * diferencia visible en el kárdex.
+     */
+    @Column(name = "existencia", nullable = false, updatable = false)
     private int existencia;
 
     @Column(name = "existencia_minima", nullable = false)
@@ -79,6 +91,16 @@ public class Producto {
 
     @Column(name = "activo", nullable = false)
     private boolean activo = true;
+
+    /**
+     * Para que dos ediciones del mismo producto no se pisen: el UPDATE lleva
+     * {@code WHERE version = ?} y, si otra transacción ya cambió la fila, no
+     * encuentra nada y JPA lanza un error de bloqueo optimista. La V32 la
+     * agregó; el SQL a mano que cambie el catálogo debe sumarla.
+     */
+    @Version
+    @Column(name = "version", nullable = false)
+    private int version;
 
     @Column(name = "creado_en", insertable = false, updatable = false)
     private LocalDateTime creadoEn;
@@ -112,6 +134,11 @@ public class Producto {
         this.codigoBarras = codigoBarras;
     }
 
+    /**
+     * Solo para el alta: la columna de existencia no se actualiza desde la
+     * entidad, así que llamarlo sobre un producto ya guardado no cambia el
+     * saldo en la base.
+     */
     public void fijarExistencias(int existencia, int existenciaMinima) {
         this.existencia = existencia;
         this.existenciaMinima = existenciaMinima;
