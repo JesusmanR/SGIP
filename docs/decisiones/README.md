@@ -38,6 +38,7 @@ nueva. La decisión original se deja tal como se escribió.
 | 0020 | La plataforma administra las empresas desde fuera, y no entra en ellas | vigente |
 | 0021 | La simulación del umbral repite la fórmula de la vista, y una prueba la sostiene | vigente |
 | 0022 | El mes de prueba es un mes de calendario, no treinta días | vigente |
+| 0023 | Flyway gobierna las migraciones desde la V32 | vigente |
 
 ## Las cuatro que conviene leer antes de escribir código
 

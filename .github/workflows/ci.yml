@@ -98,6 +98,38 @@ jobs:
             fi
           done
 
+      # Desde la V32 las migraciones las aplica Flyway al arrancar el
+      # backend (ADR-0023), no esta lista. Este trabajo no arranca el
+      # backend, y `verificar_sql_del_backend.py` tiene que ver el
+      # esquema final, así que aquí se aplican con el cliente `mysql`.
+      #
+      # `sort -V` ordena por número de versión (V9 antes que V32), que es
+      # lo que un comodín no hace. Mientras la carpeta no tenga ninguna
+      # migración, `find` no devuelve nada y el paso no hace nada.
+      #
+      # Flyway no corre aquí: estas migraciones no quedan registradas en
+      # `flyway_schema_history`. El trabajo `backend` es el que prueba el
+      # camino real, el de Flyway sobre una base ya poblada.
+      - name: Aplicar las migraciones nuevas (V32 en adelante)
+        run: |
+          set -e
+          mapfile -t nuevas < <(find backend/src/main/resources/db/migration                                   -maxdepth 1 -name 'V*.sql' | sort -V)
+          echo "migraciones nuevas: ${#nuevas[@]}"
+          for ruta in "${nuevas[@]}"; do
+            f=$(basename "$ruta")
+            echo "→ $f"
+            if ! salida=$(mysql -h 127.0.0.1 -u root -psgip_ci sgip                             < "$ruta" 2>&1); then
+              echo "$salida"
+              echo "::error file=$ruta::$f falló · $(printf '%s' "$salida" | grep -m1 -i '^ERROR' || printf '%s' "$salida" | head -1)"
+              exit 1
+            fi
+            if printf '%s' "$salida" | grep -qi '^ERROR'; then
+              echo "$salida"
+              echo "::error file=$ruta::$f dejó un error · $(printf '%s' "$salida" | grep -m1 -i '^ERROR')"
+              exit 1
+            fi
+          done
+
       - name: Verificar el conteo de objetos
         run: |
           consulta () { mysql -h 127.0.0.1 -u root -psgip_ci -N -B -e "$1"; }
@@ -424,6 +456,20 @@ jobs:
             done
             exit 1
           fi
+
+      # Este trabajo parte de la cadena V1 a V31 con la V8 de datos de
+      # demostración en medio, y después arranca el backend: Flyway ve un
+      # esquema con tablas y sin historial, toma la V31 como línea base y
+      # aplica lo posterior sobre esos datos. Si la línea base no está,
+      # Flyway no corrió, o corrió desde otro punto y volvió a ejecutar
+      # migraciones que ya estaban aplicadas.
+      - name: Verificar que Flyway tomó la V31 como línea base
+        run: |
+          n=$(mysql -h 127.0.0.1 -u root -psgip_ci -N -B sgip -e             "SELECT COUNT(*) FROM flyway_schema_history
+             WHERE type = 'BASELINE' AND version = '31' AND success = 1;")
+          echo "filas BASELINE con versión 31: $n"
+          test "$n" -eq 1 || {
+            echo "::error::flyway_schema_history no tiene la línea base en la V31"; exit 1; }
 
   web:
     name: Compilación del front web
