@@ -86,7 +86,10 @@ async function pedir(ruta, opciones = {}) {
     body: opciones.body === undefined ? undefined : JSON.stringify(opciones.body),
   })
 
-  if (respuesta.status === 401) {
+  // Un 401 del login significa «credenciales incorrectas», no «sesión
+  // caducada». Si entrara aquí, un intento fallido borraría la sesión que
+  // la pestaña ya tuviera; por eso cae en el tratamiento general de abajo.
+  if (respuesta.status === 401 && ruta !== '/auth/login') {
     // El token caducó o alguien cerró la sesión desde otro dispositivo.
     borrarSesion()
     throw new ErrorApi(401, 'La sesión expiró. Vuelve a entrar.')

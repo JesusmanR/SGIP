@@ -39,6 +39,20 @@ describe('cliente del API', () => {
     expect(haySesion()).toBe(false)
   })
 
+  it('un 401 del login muestra el detalle del backend y no habla de sesión', async () => {
+    responder(401, { detail: 'El correo o la contraseña no son correctos.' })
+    await expect(api.entrar('a@b.co', 'x')).rejects.toThrow('El correo o la contraseña no son correctos.')
+  })
+
+  it('un 401 del login no borra una sesión que ya exista', async () => {
+    // Un intento fallido de entrar no debe echar a quien ya tenía una
+    // sesión abierta en la pestaña.
+    guardarSesion({ token: 'vigente', nombre: 'Ana' })
+    responder(401, { detail: 'x' })
+    await expect(api.entrar('a@b.co', 'x')).rejects.toBeInstanceOf(ErrorApi)
+    expect(haySesion()).toBe(true)
+  })
+
   it('usa el detalle del ProblemDetail como mensaje', async () => {
     responder(409, { detail: 'Ya existe una categoría llamada «Bebidas».' })
     await expect(api.categorias()).rejects.toThrow('Ya existe una categoría llamada «Bebidas».')
