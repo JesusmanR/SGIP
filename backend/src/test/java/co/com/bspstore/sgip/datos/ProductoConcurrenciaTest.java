@@ -1,6 +1,9 @@
 package co.com.bspstore.sgip.datos;
 
 import co.com.bspstore.sgip.api.dto.FilaDeCarga;
+import co.com.bspstore.sgip.api.dto.SolicitudProducto;
+import co.com.bspstore.sgip.config.UsuarioAutenticado;
+import co.com.bspstore.sgip.logica.ServicioProducto;
 import co.com.bspstore.sgip.modelo.Categoria;
 import co.com.bspstore.sgip.modelo.Producto;
 import co.com.bspstore.sgip.modelo.Proveedor;
@@ -12,6 +15,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -21,7 +28,11 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.doThrow;
 
 /**
  * Qué pasa cuando alguien edita un producto mientras otra operación lo
@@ -45,7 +56,10 @@ class ProductoConcurrenciaTest {
     @Autowired ProductoRepositorio productos;
     @Autowired CategoriaRepositorio categorias;
     @Autowired ProveedorRepositorio proveedores;
-    @Autowired RepositorioInventario inventario;
+    // Espía y no simulacro: las demás pruebas de esta clase siguen usando
+    // el repositorio real; solo una le ordena fallar al escribir el movimiento.
+    @MockitoSpyBean RepositorioInventario inventario;
+    @Autowired ServicioProducto servicioProducto;
     @Autowired RepositorioImportacion importacion;
     @Autowired RepositorioPlataforma plataforma;
     @Autowired JdbcClient jdbc;
@@ -58,6 +72,8 @@ class ProductoConcurrenciaTest {
     private Integer proveedorId;
     private Integer usuarioId;
     private Integer productoId;
+    private Integer categoriaId;
+    private String marca;
 
     @BeforeEach
     void prepararDatosPropios() {
@@ -65,7 +81,7 @@ class ProductoConcurrenciaTest {
         transaccionAparte = new TransactionTemplate(gestor);
         transaccionAparte.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
 
-        String marca = UUID.randomUUID().toString().replace("-", "").substring(0, 12).toUpperCase();
+        marca = UUID.randomUUID().toString().replace("-", "").substring(0, 12).toUpperCase();
 
         empresaId = plataforma.insertarEmpresa("T" + marca, "Prueba concurrencia " + marca,
                 null, null, null);
@@ -82,7 +98,7 @@ class ProductoConcurrenciaTest {
                 .param("empresa", empresaId)
                 .query(Integer.class).single();
 
-        Integer categoriaId = categorias.save(new Categoria(empresaId, "Prueba", null)).getId();
+        categoriaId = categorias.save(new Categoria(empresaId, "Prueba", null)).getId();
         proveedorId = proveedores.save(new Proveedor(empresaId, "Proveedor de prueba", "P" + marca)).getId();
 
         Producto p = new Producto(empresaId, categoriaId, proveedorId,
@@ -93,12 +109,14 @@ class ProductoConcurrenciaTest {
 
     @AfterEach
     void borrarLoQueCreo() {
+        SecurityContextHolder.clearContext();
         if (empresaId == null) {
             return;
         }
         // De las hojas hacia la raíz: las claves compuestas por empresa
         // impiden borrar un padre con hijos.
-        for (String tabla : List.of("detalle_carga_precios", "cargas_precios", "productos",
+        for (String tabla : List.of("detalle_carga_precios", "cargas_precios",
+                "movimientos_inventario", "productos",
                 "proveedores", "categorias", "usuarios", "empresas")) {
             jdbc.sql("DELETE FROM " + tabla + " WHERE empresa_id = :empresa")
                     .param("empresa", empresaId)
@@ -125,6 +143,41 @@ class ProductoConcurrenciaTest {
         p.reemplazarDatos(p.getCategoriaId(), p.getProveedorId(), p.getCodigo(), p.getSku(),
                 nombre, p.getPresentacion(), p.getDescripcion(), p.getCodigoBarras(),
                 p.getCosto(), p.getExistenciaMinima());
+    }
+
+    /** Un fallo simulado, para reconocer que la excepción vino del movimiento y no de otro sitio. */
+    private static final class FalloDelMovimiento extends RuntimeException {
+        FalloDelMovimiento() {
+            super("fallo simulado al escribir el movimiento");
+        }
+    }
+
+    private void comoAdministradorDeLaEmpresa() {
+        var u = new UsuarioAutenticado(usuarioId, "prueba@ejemplo.co", "ADMINISTRADOR", empresaId);
+        SecurityContext c = SecurityContextHolder.createEmptyContext();
+        c.setAuthentication(new UsernamePasswordAuthenticationToken(u, null, List.of()));
+        SecurityContextHolder.setContext(c);
+    }
+
+    /**
+     * El alta con existencia y su movimiento inicial son una sola unidad:
+     * si el movimiento no se puede escribir, el producto no puede quedar
+     * guardado con una existencia que ningún renglón del kárdex explica.
+     */
+    @Test
+    void siElMovimientoInicialFallaNoQuedaElProducto() {
+        comoAdministradorDeLaEmpresa();
+        doThrow(new FalloDelMovimiento()).when(inventario).insertarMovimiento(
+                anyInt(), anyInt(), anyInt(), any(), anyInt(), anyInt(), anyInt(),
+                any(), any(), any());
+        String codigo = "INI-" + marca;
+
+        assertThrows(FalloDelMovimiento.class, () -> servicioProducto.crear(new SolicitudProducto(
+                categoriaId, proveedorId, codigo, codigo, null, "Producto con saldo inicial",
+                null, null, new BigDecimal("100.00"), 120, 5)));
+
+        assertFalse(productos.existsByEmpresaIdAndCodigo(empresaId, codigo),
+                "el alta se deshace entera: sin movimiento no hay producto");
     }
 
     @Test
