@@ -336,6 +336,14 @@ jobs:
                VALUES ('sgip.plataforma.prueba.meses','25','ENTERO','2028-01-01');" 2>/dev/null
           then echo "::error::entró un periodo de prueba de 25 meses"; exit 1; fi
 
+      # Lo que la puesta a punto cambió en el esquema, visto rechazar:
+      # una restricción que nunca se ha visto negar nada solo da
+      # tranquilidad. Va después de las migraciones nuevas (V32 en
+      # adelante), que es donde vive lo que comprueba. Cada tarea de la
+      # puesta a punto amplía este mismo guion.
+      - name: Verificar la puesta a punto del esquema
+        run: bash database/verificar_puesta_a_punto.sh -h 127.0.0.1 -u root -psgip_ci
+
       - name: Analizar el SQL escrito a mano del backend
         run: python3 database/verificar_sql_del_backend.py -h 127.0.0.1 -u root -psgip_ci
 
