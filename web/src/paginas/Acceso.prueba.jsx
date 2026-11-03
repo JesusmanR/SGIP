@@ -22,11 +22,11 @@ vi.mock('react-router-dom', async (original) => ({
   useNavigate: () => navegar,
 }))
 
-vi.mock('../servicios/api.js', () => {
-  class ErrorApi extends Error {
-    constructor(estado, detalle) { super(detalle); this.estado = estado }
-  }
-  return { api: { entrar: vi.fn() }, ErrorApi }
+vi.mock('../servicios/api.js', async (original) => {
+  // ErrorApi es la clase real: la pantalla decide con `instanceof`, y una
+  // copia local no lo cumpliría con los errores que lanza la API real.
+  const real = await original()
+  return { api: { entrar: vi.fn() }, ErrorApi: real.ErrorApi }
 })
 
 async function entrar(correo = 'ana@bsp.com.co', clave = 'secreta') {
@@ -75,6 +75,23 @@ describe('pantalla de acceso', () => {
     await entrar()
     await waitFor(() => expect(screen.getByRole('alert'))
       .toHaveTextContent('Correo o contraseña incorrectos.'))
+  })
+
+  it('unas credenciales rechazadas no se presentan como sesión expirada', async () => {
+    // Aquí el módulo de la API está sustituido, así que la prueba usa la
+    // implementación real con un fetch simulado: lo que importa es el
+    // texto que llega al usuario tras un 401 del login.
+    const real = await vi.importActual('../servicios/api.js')
+    api.entrar.mockImplementation(real.api.entrar)
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      json: async () => ({ detail: 'El correo o la contraseña no son correctos.' }),
+    })
+    await entrar()
+    const aviso = await screen.findByRole('alert')
+    expect(aviso).toHaveTextContent('El correo o la contraseña no son correctos.')
+    expect(aviso.textContent).not.toMatch(/sesión expiró/i)
   })
 
   it('no dice cuál de los dos campos falló', async () => {
