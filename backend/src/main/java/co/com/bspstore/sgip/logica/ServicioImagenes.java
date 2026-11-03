@@ -62,7 +62,7 @@ public class ServicioImagenes {
         // bastaría con poner el identificador de un producto ajeno en la
         // ruta para colgarle una imagen.
         productos.findByEmpresaIdAndId(empresa, productoId)
-                .orElseThrow(() -> new ReferenciaAjenaException(
+                .orElseThrow(() -> new RecursoNoEncontradoException(
                         "El producto indicado no existe en esta empresa."));
 
         int cuantas = imagenes.countByEmpresaIdAndProductoId(empresa, productoId);
@@ -103,7 +103,7 @@ public class ServicioImagenes {
     public ProductoImagen marcarPrincipal(Integer imagenId) {
         Integer empresa = ContextoEmpresa.empresaActual();
         ProductoImagen nueva = imagenes.findByEmpresaIdAndId(empresa, imagenId)
-                .orElseThrow(() -> new ReferenciaAjenaException(
+                .orElseThrow(() -> new RecursoNoEncontradoException(
                         "La imagen indicada no existe en esta empresa."));
 
         imagenes.findByEmpresaIdAndProductoIdAndPrincipalTrue(empresa, nueva.getProductoId())
@@ -130,7 +130,7 @@ public class ServicioImagenes {
     public void eliminar(Integer imagenId) {
         Integer empresa = ContextoEmpresa.empresaActual();
         ProductoImagen imagen = imagenes.findByEmpresaIdAndId(empresa, imagenId)
-                .orElseThrow(() -> new ReferenciaAjenaException(
+                .orElseThrow(() -> new RecursoNoEncontradoException(
                         "La imagen indicada no existe en esta empresa."));
 
         boolean eraLaPrincipal = imagen.isPrincipal();
@@ -170,7 +170,7 @@ public class ServicioImagenes {
     public byte[] miniaturaDe(Integer imagenId) {
         Integer empresa = ContextoEmpresa.empresaActual();
         ProductoImagen imagen = imagenes.findByEmpresaIdAndId(empresa, imagenId)
-                .orElseThrow(() -> new ReferenciaAjenaException(
+                .orElseThrow(() -> new RecursoNoEncontradoException(
                         "La imagen indicada no existe en esta empresa."));
         try {
             if (imagen.getMiniaturaRuta() != null) {

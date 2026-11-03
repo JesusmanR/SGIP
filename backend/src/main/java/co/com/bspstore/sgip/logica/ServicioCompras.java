@@ -5,6 +5,7 @@ import co.com.bspstore.sgip.api.dto.SolicitudOrdenCompra;
 import co.com.bspstore.sgip.api.dto.SolicitudRecepcion;
 import co.com.bspstore.sgip.config.ContextoEmpresa;
 import co.com.bspstore.sgip.config.UsuarioAutenticado;
+import co.com.bspstore.sgip.datos.ProveedorRepositorio;
 import co.com.bspstore.sgip.datos.RepositorioCompras;
 import co.com.bspstore.sgip.datos.RepositorioCompras.LineaBloqueada;
 import org.springframework.stereotype.Service;
@@ -47,10 +48,13 @@ public class ServicioCompras {
 
     private final RepositorioCompras compras;
     private final ServicioInventario inventario;
+    private final ProveedorRepositorio proveedores;
 
-    public ServicioCompras(RepositorioCompras compras, ServicioInventario inventario) {
+    public ServicioCompras(RepositorioCompras compras, ServicioInventario inventario,
+                           ProveedorRepositorio proveedores) {
         this.compras = compras;
         this.inventario = inventario;
+        this.proveedores = proveedores;
     }
 
     @Transactional(readOnly = true)
@@ -80,17 +84,27 @@ public class ServicioCompras {
      * tiene que decir qué producto para que quien lo escribió lo
      * encuentre.
      *
+     * El proveedor sí se comprueba antes de escribir: es una sola
+     * consulta y permite responder 422 con un mensaje entendible en vez
+     * de dejar que el motor rechace la clave foránea.
+     *
      * Las referencias a productos de otra empresa las rechaza
      * `fk_oci_producto_emp` desde la V24, y la transacción se deshace
-     * entera. No se comprueba además aquí a propósito: sería una consulta
-     * por línea para adelantarse a un caso que solo ocurre si alguien
-     * manipula la petición, y la restricción no se puede saltar.
+     * entera; esa violación llega al cliente como 422 genérico desde
+     * `ManejadorErrores.integridad`. No se comprueba además aquí a
+     * propósito: sería una consulta por línea para adelantarse a un caso
+     * que solo ocurre si alguien manipula la petición, y la restricción
+     * no se puede saltar.
      */
     @Transactional
     public OrdenDeCompra registrar(SolicitudOrdenCompra solicitud) {
         Integer empresa = ContextoEmpresa.empresaActual();
         String consecutivo = solicitud.consecutivo().trim();
 
+        if (proveedores.findByEmpresaIdAndId(empresa, solicitud.proveedorId()).isEmpty()) {
+            throw new ReferenciaAjenaException(
+                    "El proveedor indicado no existe en esta empresa.");
+        }
         if (compras.existeConsecutivo(empresa, consecutivo)) {
             throw new RegistroRepetidoException(
                     "Ya hay una orden de compra con el consecutivo " + consecutivo + ".");

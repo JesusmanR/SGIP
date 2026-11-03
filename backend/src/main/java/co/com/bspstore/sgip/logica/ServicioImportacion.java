@@ -129,7 +129,7 @@ public class ServicioImportacion {
             // Aplicar dos veces duplicaría el movimiento de costo sin
             // que nada lo delate: el segundo paso encontraría el costo
             // ya cambiado y lo daría por bueno.
-            throw new ReglaInvalidaException(
+            throw new EstadoDeCargaInvalidoException(
                     "La carga " + cargaId + " está en estado " + estado
                             + " y solo se puede aplicar una carga validada.");
         }
@@ -144,7 +144,7 @@ public class ServicioImportacion {
             // referencia. Deshacer es lo correcto: aplicar la lista a
             // medias deja un catálogo donde unos precios son de la lista
             // nueva y otros de la vieja, y nadie sabría cuáles.
-            throw new ReglaInvalidaException(
+            throw new EstadoDeCargaInvalidoException(
                     "La carga declaraba " + cabecera.get().aceptados()
                             + " referencias y solo se pudieron actualizar " + aplicados
                             + ". El catálogo cambió desde que se validó; no se aplicó nada. "
@@ -177,7 +177,7 @@ public class ServicioImportacion {
         }
         String estado = cabecera.get().estado();
         if ("APLICADA".equals(estado)) {
-            throw new ReglaInvalidaException(
+            throw new EstadoDeCargaInvalidoException(
                     "La carga " + cargaId + " ya se aplicó y sus costos están en el "
                             + "catálogo. Rechazarla ahora no los devolvería: para eso "
                             + "hay que cargar la lista anterior.");

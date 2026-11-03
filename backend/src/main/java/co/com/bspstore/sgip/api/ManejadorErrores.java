@@ -3,6 +3,8 @@ package co.com.bspstore.sgip.api;
 import co.com.bspstore.sgip.config.SinEmpresaException;
 import co.com.bspstore.sgip.logica.CategoriaEnUsoException;
 import co.com.bspstore.sgip.logica.DatoTributarioInvalidoException;
+import co.com.bspstore.sgip.logica.EstadoDeCargaInvalidoException;
+import co.com.bspstore.sgip.logica.RecursoNoEncontradoException;
 import co.com.bspstore.sgip.logica.CredencialesInvalidasException;
 import co.com.bspstore.sgip.logica.FiltroInvalidoException;
 import co.com.bspstore.sgip.logica.AlmacenArchivos;
@@ -15,6 +17,9 @@ import co.com.bspstore.sgip.logica.RecepcionInvalidaException;
 import co.com.bspstore.sgip.logica.ReferenciaAjenaException;
 import co.com.bspstore.sgip.logica.RolNoAsignableException;
 import co.com.bspstore.sgip.logica.UltimoAdministradorException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -22,10 +27,18 @@ import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import java.sql.SQLException;
 import java.util.stream.Collectors;
 
 @RestControllerAdvice
 public class ManejadorErrores {
+
+    private static final Logger LOG = LoggerFactory.getLogger(ManejadorErrores.class);
+
+    // Códigos de error de MySQL (no los SQLState, que son los mismos
+    // 23000 para casi todo y no distinguen un duplicado de una referencia).
+    private static final int MYSQL_ENTRADA_DUPLICADA = 1062;
+    private static final int MYSQL_CLAVE_FORANEA_AL_ESCRIBIR = 1452;
 
     @ExceptionHandler(CredencialesInvalidasException.class)
     public ProblemDetail credencialesInvalidas(CredencialesInvalidasException e) {
@@ -136,6 +149,64 @@ public class ManejadorErrores {
         ProblemDetail p = ProblemDetail.forStatus(HttpStatus.UNPROCESSABLE_ENTITY);
         p.setTitle("Referencia de otra empresa");
         p.setDetail(e.getMessage());
+        return p;
+    }
+
+    @ExceptionHandler(RecursoNoEncontradoException.class)
+    public ProblemDetail recursoNoEncontrado(RecursoNoEncontradoException e) {
+        // 404: el identificador está en la ruta y no corresponde a nada
+        // de esta empresa. Si fuera una referencia del cuerpo sería 422.
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.NOT_FOUND);
+        p.setTitle("Recurso no encontrado");
+        p.setDetail(e.getMessage());
+        return p;
+    }
+
+    @ExceptionHandler(EstadoDeCargaInvalidoException.class)
+    public ProblemDetail estadoDeCargaInvalido(EstadoDeCargaInvalidoException e) {
+        // 409: la petición es válida y es el estado actual de la carga lo
+        // que impide atenderla.
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.CONFLICT);
+        p.setTitle("La carga no admite esa operación");
+        p.setDetail(e.getMessage());
+        return p;
+    }
+
+    /**
+     * La red de seguridad: lo que ninguna comprobación previa atrapó y el
+     * motor rechazó. Se traduce por el código del motor y el cliente
+     * recibe siempre un texto fijo: el mensaje del motor trae nombres de
+     * restricciones, tablas y a veces el valor que chocó, y nada de eso
+     * es asunto suyo. El error completo queda en el log.
+     */
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ProblemDetail integridad(DataIntegrityViolationException e) {
+        LOG.error("El motor rechazó la operación por integridad de datos", e);
+
+        // Hibernate envuelve el SQLException una o dos veces, así que
+        // getCause() a secas no llega; se baja por la cadena entera.
+        Integer codigo = null;
+        for (Throwable t = e; t != null && codigo == null; t = t.getCause() == t ? null : t.getCause()) {
+            if (t instanceof SQLException sql) {
+                codigo = sql.getErrorCode();
+            }
+        }
+
+        ProblemDetail p;
+        if (codigo != null && codigo == MYSQL_ENTRADA_DUPLICADA) {
+            p = ProblemDetail.forStatus(HttpStatus.CONFLICT);
+            p.setTitle("Dato ya registrado");
+            p.setDetail("Ya existe un registro con esos datos.");
+        } else if (codigo != null && codigo == MYSQL_CLAVE_FORANEA_AL_ESCRIBIR) {
+            p = ProblemDetail.forStatus(HttpStatus.UNPROCESSABLE_ENTITY);
+            p.setTitle("Referencia no válida");
+            p.setDetail("Uno de los datos indicados no existe o no corresponde a esta empresa.");
+        } else {
+            p = ProblemDetail.forStatus(HttpStatus.INTERNAL_SERVER_ERROR);
+            p.setTitle("Error interno");
+            p.setDetail("No se pudo completar la operación. Inténtalo de nuevo; "
+                    + "si persiste, avisa al administrador.");
+        }
         return p;
     }
 

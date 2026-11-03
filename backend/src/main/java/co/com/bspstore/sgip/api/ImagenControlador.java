@@ -5,7 +5,7 @@ import co.com.bspstore.sgip.api.dto.ImagenResumen;
 import co.com.bspstore.sgip.config.ContextoEmpresa;
 import co.com.bspstore.sgip.datos.ProductoImagenRepositorio;
 import co.com.bspstore.sgip.logica.AlmacenArchivos;
-import co.com.bspstore.sgip.logica.ReferenciaAjenaException;
+import co.com.bspstore.sgip.logica.RecursoNoEncontradoException;
 import co.com.bspstore.sgip.logica.ServicioImagenes;
 import co.com.bspstore.sgip.modelo.Empresa;
 import co.com.bspstore.sgip.modelo.ProductoImagen;
@@ -102,7 +102,7 @@ public class ImagenControlador {
     @GetMapping("/imagenes/{imagenId}")
     public ResponseEntity<InputStreamResource> ver(@PathVariable Integer imagenId) throws IOException {
         ProductoImagen i = imagenes.findByEmpresaIdAndId(ContextoEmpresa.empresaActual(), imagenId)
-                .orElseThrow(() -> new ReferenciaAjenaException(
+                .orElseThrow(() -> new RecursoNoEncontradoException(
                         "La imagen indicada no existe en esta empresa."));
         return archivoInmutable(i.getRuta());
     }
