@@ -54,7 +54,7 @@ public class ProductoControlador {
                                         @RequestParam(required = false) Integer limite) {
         boolean completa = veTodo();
         if (proveedor != null && !completa) {
-            // El texto es para el log: quien llama recibe el 403 fijo de
+            // El texto no llega a quien llama: recibe el 403 fijo de
             // ManejadorErrores.
             throw new AccessDeniedException("Filtrar por proveedor es del administrador.");
         }

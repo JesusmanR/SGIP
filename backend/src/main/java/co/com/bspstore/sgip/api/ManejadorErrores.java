@@ -88,8 +88,8 @@ public class ManejadorErrores {
      * seguridad de métodos, hereda de esta y queda cubierta.
      *
      * El texto es fijo y no el de la excepción: el de Spring es el inglés
-     * «Access Denied», y el que ponga un controlador es para el log, no
-     * para quien llama. Las otras dos puertas que responden 403, la del
+     * «Access Denied», y un rol sin permiso no necesita más explicación.
+     * Las otras dos puertas que responden 403, la del
      * cambio de clave y la del modo de consulta, son filtros y escriben su
      * propio cuerpo; este manejador no las alcanza.
      */
