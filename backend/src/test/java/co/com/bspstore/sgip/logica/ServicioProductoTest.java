@@ -27,11 +27,13 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -336,5 +338,122 @@ class ServicioProductoTest {
 
         assertEquals("ARZ-700", guardado.getCodigo());
         assertEquals("ARZ-700", guardado.getSku());
+    }
+
+    // ── Un código de barras por empresa (V33) ───────────────────────
+    private SolicitudProducto conBarras(String barras) {
+        return new SolicitudProducto(4, 9, "ARZ-500", "ARZ-500", barras,
+                "Arroz Diana", "500 g", null, new BigDecimal("3100.00"), 120, 20);
+    }
+
+    private SolicitudEdicionProducto edicionConBarras(String barras) {
+        return new SolicitudEdicionProducto(4, 9, "ARZ-500", "ARZ-500", barras,
+                "Arroz Diana", "500 g", null, new BigDecimal("3400.00"), 20);
+    }
+
+    @Test
+    void unCodigoDeBarrasRepetidoSeRechazaAlCrear() {
+        comoEmpresa(3);
+        referenciasPropias();
+        when(productos.existsByEmpresaIdAndCodigoBarras(3, "7701234567890")).thenReturn(true);
+
+        NombreRepetidoException e = assertThrows(NombreRepetidoException.class,
+                () -> servicio.crear(conBarras("7701234567890")));
+
+        assertTrue(e.getMessage().contains("7701234567890"));
+        verify(productos, never()).save(any());
+    }
+
+    @Test
+    void unCodigoDeBarrasRepetidoSeRechazaAlEditar() {
+        comoEmpresa(3);
+        when(productos.findByEmpresaIdAndId(3, 11)).thenReturn(Optional.of(productoGuardado()));
+        referenciasPropias();
+        when(productos.existsByEmpresaIdAndCodigoBarrasAndIdNot(3, "7709999999999", 11))
+                .thenReturn(true);
+
+        NombreRepetidoException e = assertThrows(NombreRepetidoException.class,
+                () -> servicio.actualizar(11, edicionConBarras("7709999999999")));
+
+        assertTrue(e.getMessage().contains("7709999999999"));
+        verify(productos, never()).save(any());
+    }
+
+    @Test
+    void editarSinCambiarSuCodigoDeBarrasNoChocaConsigoMismo() {
+        comoEmpresa(3);
+        when(productos.findByEmpresaIdAndId(3, 11)).thenReturn(Optional.of(productoGuardado()));
+        referenciasPropias();
+        // La comprobación de la edición excluye al propio producto. Si el
+        // servicio usara la de la creación, este «true» (el producto
+        // mismo, que ya tiene ese código) lo haría fallar contra sí mismo.
+        lenient().when(productos.existsByEmpresaIdAndCodigoBarras(3, "7701234567890"))
+                .thenReturn(true);
+        when(productos.existsByEmpresaIdAndCodigoBarrasAndIdNot(3, "7701234567890", 11))
+                .thenReturn(false);
+        when(productos.save(any())).thenAnswer(i -> i.getArgument(0));
+
+        assertTrue(servicio.actualizar(11, edicionConBarras("7701234567890")).isPresent());
+        verify(productos).existsByEmpresaIdAndCodigoBarrasAndIdNot(3, "7701234567890", 11);
+    }
+
+    @Test
+    void unCodigoDeBarrasEnBlancoSeGuardaComoNulo() {
+        comoEmpresa(3);
+        referenciasPropias();
+        when(productos.save(any())).thenAnswer(i -> i.getArgument(0));
+
+        servicio.crear(conBarras("   "));
+
+        ArgumentCaptor<Producto> captor = ArgumentCaptor.forClass(Producto.class);
+        verify(productos).save(captor.capture());
+        assertNull(captor.getValue().getCodigoBarras());
+        // Un nulo no compite con nadie: la clave deja pasar todos los que
+        // haga falta, y consultarlo diría «repetido» contra otro sin código.
+        verify(productos, never()).existsByEmpresaIdAndCodigoBarras(any(), any());
+    }
+
+    @Test
+    void editarConElCodigoDeBarrasEnBlancoLoDejaNuloSinConsultar() {
+        comoEmpresa(3);
+        Producto guardado = productoGuardado();
+        when(productos.findByEmpresaIdAndId(3, 11)).thenReturn(Optional.of(guardado));
+        referenciasPropias();
+        when(productos.save(any())).thenAnswer(i -> i.getArgument(0));
+
+        servicio.actualizar(11, edicionConBarras(""));
+
+        assertNull(guardado.getCodigoBarras());
+        verify(productos, never()).existsByEmpresaIdAndCodigoBarrasAndIdNot(any(), any(), any());
+    }
+
+    @Test
+    void elCodigoDeBarrasSeGuardaSinEspaciosAlBorde() {
+        comoEmpresa(3);
+        referenciasPropias();
+        when(productos.save(any())).thenAnswer(i -> i.getArgument(0));
+
+        servicio.crear(conBarras("  7701234567890  "));
+
+        ArgumentCaptor<Producto> captor = ArgumentCaptor.forClass(Producto.class);
+        verify(productos).save(captor.capture());
+        assertEquals("7701234567890", captor.getValue().getCodigoBarras());
+        // Se consulta ya recortado: «  77…  » no puede pasar por distinto
+        // de «77…» y chocar después contra la clave del motor.
+        verify(productos).existsByEmpresaIdAndCodigoBarras(3, "7701234567890");
+    }
+
+    @Test
+    void elCodigoDeBarrasEditadoTambienSeGuardaSinEspaciosAlBorde() {
+        comoEmpresa(3);
+        Producto guardado = productoGuardado();
+        when(productos.findByEmpresaIdAndId(3, 11)).thenReturn(Optional.of(guardado));
+        referenciasPropias();
+        when(productos.save(any())).thenAnswer(i -> i.getArgument(0));
+
+        servicio.actualizar(11, edicionConBarras(" 7709999999999 "));
+
+        assertEquals("7709999999999", guardado.getCodigoBarras());
+        verify(productos).existsByEmpresaIdAndCodigoBarrasAndIdNot(3, "7709999999999", 11);
     }
 }

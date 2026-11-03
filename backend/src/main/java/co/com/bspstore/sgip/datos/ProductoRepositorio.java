@@ -31,6 +31,15 @@ public interface ProductoRepositorio extends JpaRepository<Producto, Integer> {
     boolean existsByEmpresaIdAndSkuAndIdNot(Integer empresaId, String sku, Integer id);
 
     /**
+     * El codigo de barras es unico por empresa desde la V33. Un codigo
+     * nulo no se consulta: la clave deja pasar tantos NULL como haga
+     * falta, y los productos sin etiqueta son lo normal.
+     */
+    boolean existsByEmpresaIdAndCodigoBarras(Integer empresaId, String codigoBarras);
+
+    boolean existsByEmpresaIdAndCodigoBarrasAndIdNot(Integer empresaId, String codigoBarras, Integer id);
+
+    /**
      * Para negarse a desactivar una categoria que todavia sostiene
      * productos. Cuenta solo los activos: los ya desactivados no
      * necesitan una categoria viva.
