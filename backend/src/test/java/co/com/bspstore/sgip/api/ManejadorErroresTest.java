@@ -1,5 +1,7 @@
 package co.com.bspstore.sgip.api;
 
+import co.com.bspstore.sgip.logica.ClaveActualIncorrectaException;
+import co.com.bspstore.sgip.logica.ClaveNuevaInvalidaException;
 import co.com.bspstore.sgip.logica.EstadoDeCargaInvalidoException;
 import co.com.bspstore.sgip.logica.RecursoNoEncontradoException;
 import co.com.bspstore.sgip.modelo.Producto;
@@ -113,5 +115,21 @@ class ManejadorErroresTest {
         assertEquals("El producto cambió mientras lo editabas", p.getTitle());
         assertNotNull(p.getDetail());
         sinTextoDelMotor(p, "co.com", "bspstore", "Producto.class", "42", "version", "Row was");
+    }
+
+    /**
+     * El cliente trata todo 401 como «la sesión expiró» y borra la sesión.
+     * Un error al teclear la contraseña no puede echar al usuario.
+     */
+    @Test
+    void losErroresDeContrasenaSonDe400YNuncaDe401() {
+        ProblemDetail actual = manejador.claveActualIncorrecta(new ClaveActualIncorrectaException());
+        ProblemDetail nueva = manejador.claveNuevaInvalida(
+                new ClaveNuevaInvalidaException("La contraseña nueva debe ser distinta de la actual."));
+
+        assertEquals(400, actual.getStatus());
+        assertEquals(400, nueva.getStatus());
+        assertEquals("La contraseña actual no es correcta.", actual.getDetail());
+        assertEquals("La contraseña nueva debe ser distinta de la actual.", nueva.getDetail());
     }
 }

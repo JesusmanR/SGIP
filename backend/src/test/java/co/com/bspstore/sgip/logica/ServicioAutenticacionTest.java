@@ -183,4 +183,77 @@ class ServicioAutenticacionTest {
         // que un número en la ruta alcance a otro comercio.
         verify(usuarios).findByIdAndEmpresaId(20, 3);
     }
+
+    // ------------------------------------------ cambio de contraseña inicial
+
+    @Test
+    void cambiarLaClaveGuardaLaNuevaYQuitaLaObligacion() {
+        when(usuarios.findById(20)).thenReturn(Optional.of(usuario));
+        assertTrue(usuario.isCambioClaveRequerido(), "el usuario nace con el cambio pendiente");
+
+        servicio.cambiarClave(20, CLAVE, "NuevaClave2026");
+
+        assertFalse(usuario.isCambioClaveRequerido());
+        assertTrue(Seguridad.verificar("NuevaClave2026", usuario.getClaveHash()));
+        assertFalse(Seguridad.verificar(CLAVE, usuario.getClaveHash()),
+                "la contraseña anterior deja de servir");
+        // Acertar la actual vuelve a empezar la cuenta de intentos.
+        assertEquals(0, usuario.getIntentosFallidos());
+    }
+
+    @Test
+    void laClaveActualIncorrectaSeRechazaYCuentaComoIntento() {
+        when(usuarios.findById(20)).thenReturn(Optional.of(usuario));
+        String hashAntes = usuario.getClaveHash();
+
+        assertThrows(ClaveActualIncorrectaException.class,
+                () -> servicio.cambiarClave(20, "incorrecta", "NuevaClave2026"));
+
+        assertEquals(1, usuario.getIntentosFallidos(),
+                "adivinar la actual desde una sesión robada no puede salir gratis");
+        assertEquals(hashAntes, usuario.getClaveHash());
+        assertTrue(usuario.isCambioClaveRequerido());
+    }
+
+    @Test
+    void elQuintoIntentoConLaActualIncorrectaBloqueaLaCuenta() {
+        when(usuarios.findById(20)).thenReturn(Optional.of(usuario));
+
+        for (int i = 0; i < 5; i++) {
+            assertThrows(ClaveActualIncorrectaException.class,
+                    () -> servicio.cambiarClave(20, "incorrecta", "NuevaClave2026"));
+        }
+
+        assertTrue(usuario.isBloqueado());
+    }
+
+    @Test
+    void laClaveNuevaIgualALaActualSeRechaza() {
+        when(usuarios.findById(20)).thenReturn(Optional.of(usuario));
+        String hashAntes = usuario.getClaveHash();
+
+        assertThrows(ClaveNuevaInvalidaException.class,
+                () -> servicio.cambiarClave(20, CLAVE, CLAVE));
+
+        assertEquals(hashAntes, usuario.getClaveHash());
+        assertTrue(usuario.isCambioClaveRequerido(),
+                "si la nueva es la inicial, el cambio sigue pendiente");
+    }
+
+    @Test
+    void unaClaveNuevaDemasiadoCortaSeRechazaAunqueElDtoNoLaHayaFiltrado() {
+        when(usuarios.findById(20)).thenReturn(Optional.of(usuario));
+
+        assertThrows(ClaveNuevaInvalidaException.class,
+                () -> servicio.cambiarClave(20, CLAVE, "corta"));
+        assertTrue(usuario.isCambioClaveRequerido());
+    }
+
+    @Test
+    void cambiarLaClaveDeUnUsuarioInexistenteEsUnRecursoNoEncontrado() {
+        when(usuarios.findById(99)).thenReturn(Optional.empty());
+
+        assertThrows(RecursoNoEncontradoException.class,
+                () -> servicio.cambiarClave(99, CLAVE, "NuevaClave2026"));
+    }
 }

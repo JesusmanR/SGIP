@@ -16,6 +16,9 @@ import java.util.Locale;
 @Service
 public class ServicioAutenticacion {
 
+    /** El mismo mínimo que el alta de usuario y el inicializador. */
+    private static final int CLAVE_MINIMA = 8;
+
     private final UsuarioRepositorio usuarios;
     private final AuditoriaAccesoRepositorio auditoria;
     private final int intentosMaximos;
@@ -81,6 +84,47 @@ public class ServicioAutenticacion {
                     return true;
                 })
                 .orElse(false);
+    }
+
+    /**
+     * Cambia la contraseña de quien tiene la sesión abierta y le quita la
+     * obligación de cambiarla.
+     *
+     * El identificador sale de la sesión autenticada y no de la petición,
+     * así que no se acota por empresa: el super administrador no tiene
+     * ninguna y también debe poder cambiar la suya. Lo que se busca es la
+     * identidad de quien pide, no un recurso ajeno.
+     *
+     * Pedir la actual no es un trámite. Con la sesión robada, la
+     * contraseña nueva le daría al ladrón una cuenta propia; por eso
+     * equivocarse cuenta como un intento fallido y a los mismos intentos
+     * que el ingreso la cuenta se bloquea. Y por eso la transacción no se
+     * revierte con esa excepción: si lo hiciera, el contador nunca
+     * avanzaría y se podría adivinar sin límite.
+     *
+     * Ningún mensaje ni registro lleva la contraseña, ni la actual ni la
+     * nueva.
+     */
+    @Transactional(noRollbackFor = ClaveActualIncorrectaException.class)
+    public void cambiarClave(Integer usuarioId, String actual, String nueva) {
+        Usuario usuario = usuarios.findById(usuarioId)
+                .orElseThrow(() -> new RecursoNoEncontradoException("El usuario no existe."));
+
+        if (!Seguridad.verificar(actual, usuario.getClaveHash())) {
+            usuario.registrarIntentoFallido(intentosMaximos);
+            throw new ClaveActualIncorrectaException();
+        }
+        if (nueva == null || nueva.length() < CLAVE_MINIMA) {
+            throw new ClaveNuevaInvalidaException(
+                    "La contraseña nueva debe tener al menos " + CLAVE_MINIMA + " caracteres.");
+        }
+        if (nueva.equals(actual)) {
+            throw new ClaveNuevaInvalidaException(
+                    "La contraseña nueva debe ser distinta de la actual.");
+        }
+
+        usuario.registrarIngresoExitoso();
+        usuario.cambiarClave(Seguridad.derivar(nueva));
     }
 
     private void rechazar(Usuario usuario, String correo, MotivoRechazo motivo, String origen) {

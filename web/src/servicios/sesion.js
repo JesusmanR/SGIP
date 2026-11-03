@@ -52,5 +52,15 @@ export function haySesion() {
  * lleven a pantallas distintas.
  */
 export function inicioSegunRol(sesion = leerSesion()) {
+  // Con la contraseña inicial pendiente no hay otro sitio al que ir: el
+  // backend responde 403 a todo lo demás. Mandarlo aquí en lugar de a su
+  // pantalla de siempre evita que lo primero que vea sea un muro. La
+  // bandera llega en la respuesta del ingreso, que se guarda tal cual.
+  if (sesion?.debeCambiarClave) return '/cambiar-clave'
   return sesion?.rol === 'ADMINISTRADOR' ? '/panel' : '/catalogo'
+}
+
+/** Si quien tiene la sesión abierta aún debe cambiar su contraseña inicial. */
+export function debeCambiarClave() {
+  return leerSesion()?.debeCambiarClave === true
 }

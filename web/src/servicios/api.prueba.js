@@ -44,12 +44,48 @@ describe('cliente del API', () => {
     await expect(api.entrar('a@b.co', 'x')).rejects.toThrow('El correo o la contraseña no son correctos.')
   })
 
+  it('el ingreso no manda el token de una sesión que la pestaña aún guarde', async () => {
+    // Con el cambio de contraseña pendiente, el servidor respondería 403 a
+    // un ingreso que llegue con ese token: la ruta es pública y debe serlo
+    // también para quien conserva una sesión restringida.
+    guardarSesion({ token: 'pendiente', nombre: 'Ana', debeCambiarClave: true })
+    responder(200, { token: 'nuevo' })
+
+    await api.entrar('a@b.co', 'x')
+
+    const [, opciones] = global.fetch.mock.calls[0]
+    expect(opciones.headers.Authorization).toBeUndefined()
+  })
+
   it('un 401 del login no borra una sesión que ya exista', async () => {
     // Un intento fallido de entrar no debe echar a quien ya tenía una
     // sesión abierta en la pestaña.
     guardarSesion({ token: 'vigente', nombre: 'Ana' })
     responder(401, { detail: 'x' })
     await expect(api.entrar('a@b.co', 'x')).rejects.toBeInstanceOf(ErrorApi)
+    expect(haySesion()).toBe(true)
+  })
+
+  it('cambiar la clave manda las dos contraseñas y acepta el 204', async () => {
+    guardarSesion({ token: 'abc', nombre: 'Ana' })
+    global.fetch.mockResolvedValue({ ok: true, status: 204, json: async () => { throw new Error('sin cuerpo') } })
+
+    await expect(api.cambiarClave('actual-1', 'nueva-1234')).resolves.toBeNull()
+
+    const [ruta, opciones] = global.fetch.mock.calls[0]
+    expect(ruta).toBe('/api/v1/auth/clave')
+    expect(opciones.method).toBe('POST')
+    expect(JSON.parse(opciones.body)).toEqual({ claveActual: 'actual-1', claveNueva: 'nueva-1234' })
+  })
+
+  it('un 400 al cambiar la clave no se toma por sesión expirada', async () => {
+    // Por eso el backend responde 400 y no 401 cuando la actual está mal:
+    // un 401 cerraría la sesión del usuario por un error de tecleo.
+    guardarSesion({ token: 'vigente', nombre: 'Ana' })
+    responder(400, { detail: 'La contraseña actual no es correcta.' })
+
+    await expect(api.cambiarClave('mala', 'nueva-1234'))
+      .rejects.toThrow('La contraseña actual no es correcta.')
     expect(haySesion()).toBe(true)
   })
 
