@@ -21,21 +21,23 @@ import java.util.List;
 /**
  * El inventario de la propia empresa (RF-48, RF-49).
  *
- * La lectura la tiene cualquier usuario de la empresa: el vendedor
- * necesita saber qué hay en bodega antes de prometer una entrega, y es
- * información de su propio negocio.
+ * Todo el controlador es del administrador, la lectura incluida. El kárdex
+ * dice cuánto entró, cuándo y con qué anotación, y con eso se reconstruye
+ * qué se compra y con qué frecuencia: es de la misma familia que el costo
+ * y los proveedores, y se cierra igual. El vendedor sabe cuánto hay en
+ * bodega por la existencia del catálogo, que no pasa por aquí.
  *
- * La escritura es del administrador. El informe le atribuye el
- * inventario a ese rol y no se lo concede al vendedor, de modo que
- * conceder aquí un permiso que el documento no concede sería peor que
- * retenerlo. Si Black Steel Parts decide que quien recibe mercancía en
- * bodega es el vendedor, es una palabra en la anotación del ingreso —el
- * ajuste conviene que siga siendo del administrador, porque es la única
- * operación en la que una persona reescribe el saldo sin que se mueva
- * mercancía.
+ * El informe le atribuye el inventario a ese rol y no se lo concede al
+ * vendedor, de modo que conceder aquí un permiso que el documento no
+ * concede sería peor que retenerlo. Si Black Steel Parts decide que quien
+ * recibe mercancía en bodega es el vendedor, se abre por método y con una
+ * decisión explícita; el ajuste conviene que siga siendo del
+ * administrador, porque es la única operación en la que una persona
+ * reescribe el saldo sin que se mueva mercancía.
  *
  * Ningún método recibe la empresa: sale de la sesión.
  */
+@PreAuthorize("hasRole('ADMINISTRADOR')")
 @RestController
 @RequestMapping("/api/v1/inventario")
 public class InventarioControlador {
@@ -78,7 +80,6 @@ public class InventarioControlador {
     }
 
     /** RF-48. Una cantidad menor o igual a cero la rechaza la validación con 400. */
-    @PreAuthorize("hasRole('ADMINISTRADOR')")
     @PostMapping("/ingresos")
     public ResponseEntity<MovimientoDeInventario> ingresar(
             @Valid @RequestBody SolicitudIngreso solicitud) {
@@ -94,7 +95,6 @@ public class InventarioControlador {
      * había nada que registrar», que es la verdad; devolver 200 con un
      * cuerpo vacío o 404 harían creer otra cosa.
      */
-    @PreAuthorize("hasRole('ADMINISTRADOR')")
     @PostMapping("/ajustes")
     public ResponseEntity<MovimientoDeInventario> ajustar(
             @Valid @RequestBody SolicitudAjuste solicitud) {

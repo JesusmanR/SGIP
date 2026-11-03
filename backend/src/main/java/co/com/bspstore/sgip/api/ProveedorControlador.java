@@ -16,7 +16,12 @@ import org.springframework.web.bind.annotation.RestController;
 import java.net.URI;
 import java.util.List;
 
-/** Pantalla P-06. */
+/**
+ * Pantalla P-06. Los proveedores, igual que el costo, son del administrador:
+ * saber a quién se le compra cada cosa le sirve a un vendedor para saltarse
+ * al comercio.
+ */
+@PreAuthorize("hasRole('ADMINISTRADOR')")
 @RestController
 @RequestMapping("/api/v1/proveedores")
 public class ProveedorControlador {
@@ -40,7 +45,6 @@ public class ProveedorControlador {
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
-    @PreAuthorize("hasRole('ADMINISTRADOR')")
     @PostMapping
     public ResponseEntity<ProveedorResumen> crear(@Valid @RequestBody SolicitudProveedor solicitud) {
         ProveedorResumen creado = ProveedorResumen.de(servicio.crear(solicitud));

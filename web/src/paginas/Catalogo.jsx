@@ -70,16 +70,24 @@ export default function Catalogo() {
 
   // Las listas de los selectores se piden una sola vez: no cambian
   // mientras se teclea en el buscador.
+  //
+  // Van en peticiones separadas: los proveedores solo los puede pedir el
+  // administrador, y si compartieran promesa el 403 de quien vende se
+  // llevaría por delante también las categorías.
   useEffect(() => {
     let vigente = true
-    Promise.all([api.categorias(), api.proveedores()])
-      .then(([cs, ps]) => { if (vigente) { setCategorias(cs); setProveedores(ps) } })
-      .catch(() => {
-        // Que falle el relleno de los selectores no debe tapar el
-        // catálogo: se queda sin opciones y el resto funciona.
-      })
+    // Que falle el relleno de un selector no debe tapar el catálogo: se
+    // queda sin opciones y el resto funciona.
+    api.categorias()
+      .then((cs) => { if (vigente) setCategorias(cs) })
+      .catch(() => {})
+    if (esAdministrador) {
+      api.proveedores()
+        .then((ps) => { if (vigente) setProveedores(ps) })
+        .catch(() => {})
+    }
     return () => { vigente = false }
-  }, [])
+  }, [esAdministrador])
 
   useEffect(() => {
     let vigente = true
@@ -173,15 +181,19 @@ export default function Catalogo() {
             </select>
           </label>
 
-          <label className="campo">
-            <span>Proveedor</span>
-            <select value={proveedor} onChange={(e) => setProveedor(e.target.value)}>
-              <option value="">Todos</option>
-              {proveedores.map((p) => (
-                <option key={p.id} value={p.id}>{p.razonSocial ?? p.nombre}</option>
-              ))}
-            </select>
-          </label>
+          {/* El proveedor, como el costo, es del administrador: la API
+              rechaza el filtro a quien vende, así que ni se ofrece. */}
+          {esAdministrador && (
+            <label className="campo">
+              <span>Proveedor</span>
+              <select value={proveedor} onChange={(e) => setProveedor(e.target.value)}>
+                <option value="">Todos</option>
+                {proveedores.map((p) => (
+                  <option key={p.id} value={p.id}>{p.razonSocial ?? p.nombre}</option>
+                ))}
+              </select>
+            </label>
+          )}
 
           <label className="campo">
             <span>Existencia</span>
@@ -206,7 +218,7 @@ export default function Catalogo() {
         {error && <div className="aviso error" role="alert">{error}</div>}
 
         <div className="tarjeta">
-          {/* La tabla tiene nueve columnas y en un teléfono no cabe. Sin
+          {/* La tabla tiene hasta nueve columnas y en un teléfono no cabe. Sin
               este contenedor no se recortaba: se derramaba fuera de la
               tarjeta y arrastraba la página entera hacia la derecha, de
               modo que el precio quedaba sobre el fondo y no sobre la
@@ -218,7 +230,7 @@ export default function Catalogo() {
                 <th className="col-imagen"><span className="oculto">Imagen</span></th>
                 <th>Producto</th>
                 <th>Categoría</th>
-                <th className="numero">Costo</th>
+                {esAdministrador && <th className="numero">Costo</th>}
                 <th className="numero">Contado</th>
                 <th className="numero">Crédito</th>
                 <th className="numero">Exist.</th>
@@ -298,7 +310,7 @@ export default function Catalogo() {
                     </span>
                   </td>
                   <td>{p.categoria}</td>
-                  <td className="numero">{PESOS.format(p.costo)}</td>
+                  {esAdministrador && <td className="numero">{PESOS.format(p.costo)}</td>}
                   {/* Bajo cada precio va su total con impuesto, y solo
                       cuando difiere: si el producto está excluido, el
                       total es el precio y repetirlo sería ruido. El
