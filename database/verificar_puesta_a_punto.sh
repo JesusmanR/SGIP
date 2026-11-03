@@ -143,13 +143,13 @@ acepta "y otro más sin código de barras en la misma empresa" \
 
 # La clave única sirve también a la búsqueda del POS por empresa y código
 # de barras, así que el índice simple de la V10 sobra y sobraría dos veces.
-clave=$(consulta "SELECT GROUP_CONCAT(column_name ORDER BY seq_in_index)
+clave=$(consulta "SELECT COALESCE(GROUP_CONCAT(column_name ORDER BY seq_in_index), '(no existe)')
                     FROM information_schema.statistics
                    WHERE table_schema = DATABASE() AND table_name = 'productos'
                      AND index_name = 'uq_productos_barras' AND non_unique = 0;")
 [[ "$clave" == "empresa_id,codigo_barras" ]] \
   && ok "la clave única cubre (empresa_id, codigo_barras)" \
-  || falla "la clave uq_productos_barras no es única sobre (empresa_id, codigo_barras): '${clave:-(no existe)}'"
+  || falla "la clave uq_productos_barras no es única sobre (empresa_id, codigo_barras): '$clave'"
 
 viejo=$(consulta "SELECT COUNT(*) FROM information_schema.statistics
                    WHERE table_schema = DATABASE() AND table_name = 'productos'

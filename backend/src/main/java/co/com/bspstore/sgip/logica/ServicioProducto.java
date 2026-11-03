@@ -116,10 +116,15 @@ public class ServicioProducto {
         if (productos.existsByEmpresaIdAndSku(empresa, sku)) {
             throw new NombreRepetidoException("Ya existe un producto con el SKU " + sku + ".");
         }
+        String barras = normalizarCodigoBarras(s.codigoBarras());
+        if (barras != null && productos.existsByEmpresaIdAndCodigoBarras(empresa, barras)) {
+            throw new NombreRepetidoException(
+                    "Ya existe un producto con el código de barras " + barras + ".");
+        }
 
         Producto p = new Producto(empresa, s.categoriaId(), s.proveedorId(),
                 codigo, sku, s.nombre(), s.costo());
-        p.describir(s.presentacion(), s.descripcion(), s.codigoBarras());
+        p.describir(s.presentacion(), s.descripcion(), barras);
         p.fijarExistencias(
                 s.existencia() == null ? 0 : s.existencia(),
                 s.existenciaMinima() == null ? 5 : s.existenciaMinima());
@@ -164,11 +169,34 @@ public class ServicioProducto {
         if (productos.existsByEmpresaIdAndSkuAndIdNot(empresa, sku, productoId)) {
             throw new NombreRepetidoException("Ya existe un producto con el SKU " + sku + ".");
         }
+        String barras = normalizarCodigoBarras(s.codigoBarras());
+        if (barras != null
+                && productos.existsByEmpresaIdAndCodigoBarrasAndIdNot(empresa, barras, productoId)) {
+            throw new NombreRepetidoException(
+                    "Ya existe un producto con el código de barras " + barras + ".");
+        }
 
         p.reemplazarDatos(s.categoriaId(), s.proveedorId(), codigo, sku, s.nombre(),
-                s.presentacion(), s.descripcion(), s.codigoBarras(), s.costo(),
+                s.presentacion(), s.descripcion(), barras, s.costo(),
                 s.existenciaMinima() == null ? p.getExistenciaMinima() : s.existenciaMinima());
         return Optional.of(productos.save(p));
+    }
+
+    /**
+     * Sin espacios al borde y, si queda vacío, nulo. No pasa a mayúsculas:
+     * el lector entrega el código tal cual está impreso y, a diferencia
+     * del código interno, no es un nombre que la persona escribe.
+     *
+     * El nulo importa más que el recorte: la clave única de la V33 deja
+     * pasar todos los NULL que haga falta, pero dos cadenas vacías
+     * chocarían entre sí, de modo que «sin etiqueta» no puede guardarse
+     * como «».
+     */
+    private static String normalizarCodigoBarras(String s) {
+        if (s == null || s.isBlank()) {
+            return null;
+        }
+        return s.trim();
     }
 
     private static String normalizar(String s) {
