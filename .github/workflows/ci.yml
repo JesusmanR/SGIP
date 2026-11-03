@@ -41,7 +41,7 @@ jobs:
           --health-cmd="mysqladmin ping -h 127.0.0.1 -psgip_ci"
           --health-interval=10s --health-timeout=5s --health-retries=10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # El orden va escrito a mano. Con un comodín, el orden alfabético
       # pone V10 antes de V2 y la cadena falla en la primera clave
@@ -369,9 +369,9 @@ jobs:
           --health-cmd="mysqladmin ping -h 127.0.0.1 -psgip_ci"
           --health-interval=10s --health-timeout=5s --health-retries=10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-java@v5
+      - uses: actions/setup-java@v6
         with:
           java-version: '25'
           distribution: temurin
@@ -475,15 +475,18 @@ jobs:
     name: Compilación del front web
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      # La 22 es la que se usó para escribirlo. Las versiones se fijan y
-      # no se mueven a mitad de sprint (ADR-0010).
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      # La 26 es la LTS vigente (ADR-0027). El proyecto también compila en
+      # la 24 que usa el equipo en local.
+      - uses: actions/setup-node@v7
         with:
-          node-version: '22'
+          node-version: '26'
           cache: npm
           cache-dependency-path: web/package-lock.json
       - run: npm ci --prefix web
+      # Protege lo que llega al navegador: un aviso alto o crítico en una
+      # dependencia de ejecución rompe la integración (ADR-0027).
+      - run: npm audit --omit=dev --audit-level=high --prefix web
       - run: npm run lint --prefix web
       - run: npm test --prefix web
       - run: npm run build --prefix web

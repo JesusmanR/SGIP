@@ -75,3 +75,11 @@ recibiendo correcciones.
 No fija una política de actualización. Cuándo pasar a la siguiente
 versión mayor, y con qué criterio, queda sin decidir hasta que haya un
 motivo concreto para plantearlo.
+
+## Nota posterior
+
+El 2026-11-03 el backend pasó de Spring Boot 4.1.1 a 4.1.2 por fallas de
+seguridad, y la integración continua de Node 22 a Node 26. La decisión
+de fondo (Java 25, Spring Boot 4.1) sigue vigente. Lo que la última
+sección dejaba sin decidir, la política de actualización, lo resuelve
+el ADR-0027.

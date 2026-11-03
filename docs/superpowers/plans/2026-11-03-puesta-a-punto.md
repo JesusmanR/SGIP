@@ -215,6 +215,54 @@ Casos: 1062→409, 1452→422, 3819→500; ninguno de los tres expone el texto d
 
 ---
 
+### Task 4b: Versiones seguras (pedido del usuario, 2026-11-03)
+
+**Rama:** `fix/versiones-seguras`
+
+El usuario pidió pasar a las versiones LTS vigentes por fallas de seguridad. «LTS» solo existe para Java y Node; en las librerías se usa la versión estable que cierra las fallas, sin cambiar de versión mayor salvo que haga falta.
+
+**Files:**
+- Create: `docs/decisiones/ADR-0027-versiones-seguras.md`
+- Modify: `backend/pom.xml`, `.github/workflows/ci.yml`, `web/package.json`, `web/package-lock.json`, `README.md`, `docs/decisiones/README.md`, y ADR-0018 solo si hace falta una nota de enmienda
+
+**Valores decididos:**
+
+| Pieza | Hoy | Destino | No hacer |
+|---|---|---|---|
+| Java | 25 | Sigue en 25: es la LTS más nueva. La CI con `java-version: '25'` ya toma el último parche | No pasar a 27, que no es LTS |
+| Spring Boot | 4.1.1 | 4.1.2, solo en el `parent`. Trae Tomcat 11.0.27, Framework 7.0.10 y Security 7.1.2 | No usar 4.2.0-RC1 ni fijar versiones sueltas de lo que gestiona Boot |
+| Apache POI | 5.3.0 | Último 5.x, igual o superior a 5.4.0 | No pasar a 6.0.0 |
+| commons-lang3 | 3.17.0 según se vio | Mirar con `dependency:tree` tras los cambios anteriores; si queda por debajo de 3.18.0, fijar la propiedad gestionada | |
+| Node en la CI | 22 | 26 (LTS desde 2026-10-28) | El PC del usuario se queda en 24.22.2 por decisión suya: el proyecto debe funcionar en ambas |
+| `actions/checkout` | v4, avisa Node 20 obsoleto | Última versión mayor estable; revisar también las demás acciones | |
+| react-router-dom | 6.28.0 | Último 6.x, igual o superior a 6.30.6 | |
+| vite | 5.4.11 | 5.4.21 | |
+| vitest | 2.1.8 | 2.1.9 | |
+| eslint y @eslint/js | 9.17.0 | 9.39.5 o el último 9.x | |
+| react, react-dom | 18.3.1 | Sin cambio: sin avisos, va con el rediseño | No pasar a 19 |
+| eslint-plugin-react | 7.37.3 | Último 7.x | Ignorar la sugerencia de bajar a 7.22.0 |
+
+Usar `--save-exact`, como el resto del proyecto, y confirmar el lockfile.
+
+- [ ] **Step 1: Registrar el rojo.** Guardar para el informe: `npm audit --prefix web` (14 avisos: 2 críticos, 4 altos, 7 moderados, 1 bajo) y la consulta a OSV de las versiones resueltas del backend (`https://api.osv.dev/v1/query`), que hoy da 4 críticas en `tomcat-embed-core` 11.0.24, 1 moderada en `poi-ooxml` 5.3.0 y 1 moderada en `commons-lang3` 3.17.0. Consultar toda la salida de `./mvnw dependency:list` con ámbito de ejecución, no solo esas.
+
+- [ ] **Step 2: Añadir a la CI la comprobación que protege esto.** En el trabajo web, antes de compilar: `npm audit --omit=dev --audit-level=high`. Falla hoy por react-router-dom, y protege lo que llega al navegador. Comprobar en local que falla antes del cambio.
+
+- [ ] **Step 3: Backend.** Aplicar la tabla. Run: `cd backend && ./mvnw -B test -DexcludedGroups=conBase`. Expected: verde. Hibernate pasa de 7.4.5 a 7.4.13 y el proyecto usa `ddl-auto: validate`: lo que dependa de base lo confirma la CI. Commit `fix(deps): el backend pasa a Spring Boot 4.1.2 y POI sin fallas conocidas`. Repetir la consulta a OSV: expected 0 en todo el ámbito de ejecución. Cualquier resto se explica en el informe.
+
+- [ ] **Step 4: Web, dentro de la misma versión mayor.** Aplicar la tabla. Run: verificación web completa. Expected: verde. Commit `fix(deps): la web cierra las fallas de React Router y sus herramientas`.
+
+- [ ] **Step 5: Repetir `npm audit` y clasificar cada aviso restante.** No fiarse de `fixAvailable`: varios rangos van más allá de lo que npm propone (vitest hasta 4.1.10, vite hasta 6.4.3, tinypool hasta 2.1.1, react-router hasta 7.17.0).
+  - Por cada aviso: paquete, gravedad, si llega al navegador o es de desarrollo, y si aplica a SGIP. SGIP es una SPA sin SSR y no usa el servidor API ni la UI de vitest; el servidor de desarrollo sí se usa en local.
+  - Regla de decisión: un aviso alto o crítico que queda, sea o no de desarrollo, se resuelve subiendo la versión. Vite, plugin-react, vitest y jsdom van juntos a su última versión mayor (8, 6, 5 y 30), en un commit aparte `fix(deps): las herramientas de la web pasan a su versión mayor vigente`, ajustando la configuración mínima y dejando las pruebas verdes. Lo mismo si la CI en Node 26 falla con las versiones antiguas. Un aviso alto de react-router que aplique a SGIP se resuelve pasando a 7.x en commit aparte.
+  - Los moderados y bajos solo de desarrollo pueden quedar, justificados uno por uno. Sin `--force`.
+
+- [ ] **Step 6: Documentar.** ADR-0027 corto: política (LTS para Java y Node; en librerías, último parche estable de la versión mayor), qué no se movió y por qué, Node 24 en el PC del usuario frente a 26 en la CI, y los avisos que queden con su justificación. Actualizar `README.md:43-44` y buscar otras menciones a `4.1.1` y `Node 22` en la documentación vigente. Añadir el ADR al índice.
+
+- [ ] **Step 7: Commit** `docs(adr): política de versiones seguras`
+
+---
+
 ### Task 5: Un código de barras por empresa (arreglo 4)
 
 **Rama:** `fix/codigo-de-barras-unico`
