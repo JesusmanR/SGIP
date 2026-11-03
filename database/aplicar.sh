@@ -133,7 +133,12 @@ echo "→ creando la base de datos"
 
 # El orden va escrito a mano, no con comodín. Un glob los ordena
 # alfabéticamente y 'V10' queda antes de 'V2', lo que rompe la cadena en
-# la primera clave foránea. Al agregar una migración, añádela aquí.
+# la primera clave foránea.
+#
+# La lista queda congelada en la V31. Desde la V32 las migraciones van en
+# backend/src/main/resources/db/migration y las aplica el backend al
+# arrancar (Flyway, ADR-0023): NO se añaden aquí. Sobre una base vacía,
+# este guion va primero; después se arranca el backend.
 ANTES_DEL_DEMO=(
   V1__seguridad.sql
   V2__catalogo.sql

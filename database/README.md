@@ -79,6 +79,29 @@ V5 usa la directiva `DELIMITER`, que interpreta el cliente `mysql` pero
 no todos los conectores. Si lo ejecutas desde una herramienta gráfica y
 falla, verifica que soporte esa directiva.
 
+## Desde la V32 las migraciones las aplica el backend
+
+Las V1 a V31 de esta carpeta están **congeladas**: no se editan y no se
+les añaden hermanas aquí. `aplicar.sh` las aplica con el orden escrito
+a mano (la V8 de demostración va en medio de la cadena, algo que Flyway
+no sabe expresar).
+
+Las migraciones nuevas, de la V32 en adelante, van en
+`backend/src/main/resources/db/migration/` y las aplica el backend con
+Flyway cada vez que arranca (ADR-0023). Para una base nueva:
+
+1. `bash aplicar.sh -u root -p` deja la base en la V31.
+2. Al arrancar el backend, Flyway ve un esquema con tablas pero sin
+   historial, registra la V31 como línea base y aplica solo lo posterior.
+
+El historial queda en la tabla `flyway_schema_history`. Esa tabla no
+cuenta como parte del esquema de SGIP: `aplicar.sh` y la CI cuentan las
+tablas antes de que Flyway la cree.
+
+Si una migración de Flyway falla, el backend no arranca. MySQL no deshace
+las sentencias de definición de datos, de modo que el esquema puede
+quedar a medias; ver el ADR-0023 para saber qué hacer.
+
 ## Contenido
 
 | Script | Contenido |
