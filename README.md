@@ -40,8 +40,8 @@ y al que cada comercio entra como inquilino.
 
 | Componente | Tecnología | Estado |
 |---|---|---|
-| `backend/` | Java 25 · Spring Boot 4.1.1 · API REST | En construcción: seguridad, catálogo, proveedores e imágenes |
-| `web/` | React 18 sobre HTML, CSS y JavaScript · Vite · Node 22 | En construcción: acceso, catálogo y datos de empresa |
+| `backend/` | Java 25 · Spring Boot 4.1.2 · API REST | En construcción: seguridad, catálogo, proveedores e imágenes |
+| `web/` | React 18 sobre HTML, CSS y JavaScript · Vite · Node 24 en local, 26 en la CI | En construcción: acceso, catálogo y datos de empresa |
 | `escritorio/` | React Native · cliente con respaldo sin conexión | Sin iniciar |
 | `movil/` | React Native · vendedor y cliente | Sin iniciar |
 | `database/` | MySQL 9.7 LTS · 39 tablas en tercera forma normal | Esquema verificado en cada entrega |
