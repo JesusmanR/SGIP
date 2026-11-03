@@ -22,6 +22,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -207,6 +208,23 @@ public class ManejadorErrores {
             p.setDetail("No se pudo completar la operación. Inténtalo de nuevo; "
                     + "si persiste, avisa al administrador.");
         }
+        return p;
+    }
+
+    /**
+     * Alguien guardó el producto después de que esta persona lo abriera
+     * (o se aplicó una carga de precios). 409: la petición es válida y es
+     * el estado actual lo que impide atenderla. El mensaje de la
+     * excepción nombra la clase y el identificador, así que no se
+     * reenvía; el cliente recibe un texto fijo.
+     */
+    @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
+    public ProblemDetail edicionConcurrente(ObjectOptimisticLockingFailureException e) {
+        LOG.warn("Edición rechazada por bloqueo optimista: {}", e.getMessage());
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.CONFLICT);
+        p.setTitle("El producto cambió mientras lo editabas");
+        p.setDetail("Otra persona o un proceso modificó este producto antes de que guardaras. "
+                + "Vuelve a abrirlo para ver los datos actuales y repite tu cambio.");
         return p;
     }
 

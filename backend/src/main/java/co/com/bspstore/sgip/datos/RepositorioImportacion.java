@@ -300,6 +300,10 @@ public class RepositorioImportacion {
      * quedarse a medias: así el motor aplica todo o nada dentro de la
      * transacción.
      *
+     * Suma uno a {@code version} porque esta sentencia cambia el costo por
+     * fuera de JPA. Sin eso, una edición abierta antes de aplicar la carga
+     * guardaría después con el costo viejo y lo desharía sin avisar.
+     *
      * El enlace va por empresa y producto, que es la pareja que la V28
      * convirtió en clave: una carga no puede alcanzar el catálogo de
      * otro comercio ni aunque esta consulta se escribiera mal.
@@ -310,7 +314,8 @@ public class RepositorioImportacion {
                           JOIN detalle_carga_precios d
                             ON d.empresa_id = p.empresa_id
                            AND d.producto_id = p.producto_id
-                           SET p.costo = d.costo
+                           SET p.costo = d.costo,
+                               p.version = p.version + 1
                          WHERE d.empresa_id = :empresa AND d.carga_id = :carga
                            AND d.aceptado = TRUE
                         """)
