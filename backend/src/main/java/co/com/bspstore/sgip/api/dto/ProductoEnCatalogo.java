@@ -45,6 +45,9 @@ import java.math.BigDecimal;
  *
  * tieneImagen · lo mismo en forma de sí o no, que es lo que la tabla
  * necesita para decidir si ofrece «ver» o «añadir» imágenes.
+ *
+ * Esta es la forma completa, con costo y proveedor, y solo la recibe el
+ * administrador. Quien vende recibe {@link ProductoParaVenta}.
  */
 public record ProductoEnCatalogo(
         Integer productoId,
@@ -76,4 +79,4 @@ public record ProductoEnCatalogo(
         Integer cruzaUmbralEnCredito,
         Integer imagenPrincipalId,
         Integer tieneImagen
-) {}
+) implements VistaDeProducto {}

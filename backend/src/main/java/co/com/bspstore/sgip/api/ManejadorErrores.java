@@ -25,6 +25,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -76,6 +77,27 @@ public class ManejadorErrores {
         ProblemDetail p = ProblemDetail.forStatus(HttpStatus.FORBIDDEN);
         p.setTitle("Operación propia de una empresa");
         p.setDetail(e.getMessage());
+        return p;
+    }
+
+    /**
+     * Lo que deniega un controlador o un {@code @PreAuthorize}. Sin este
+     * manejador la excepción llega a Spring Security, que contesta un 403
+     * con el cuerpo vacío del contenedor, y el cliente solo lee el
+     * {@code detail}. {@code AuthorizationDeniedException}, la de la
+     * seguridad de métodos, hereda de esta y queda cubierta.
+     *
+     * El texto es fijo y no el de la excepción: el de Spring es el inglés
+     * «Access Denied», y un rol sin permiso no necesita más explicación.
+     * Las otras dos puertas que responden 403, la del
+     * cambio de clave y la del modo de consulta, son filtros y escriben su
+     * propio cuerpo; este manejador no las alcanza.
+     */
+    @ExceptionHandler(AccessDeniedException.class)
+    public ProblemDetail accesoDenegado(AccessDeniedException e) {
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.FORBIDDEN);
+        p.setTitle("Sin permiso para esta operación");
+        p.setDetail("Tu rol no tiene permiso para hacer esto.");
         return p;
     }
 

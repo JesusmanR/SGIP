@@ -196,6 +196,62 @@ describe('catálogo de productos', () => {
     })
   })
 
+  describe('el costo y los proveedores son del administrador', () => {
+    // La API ya no manda costo ni proveedor a quien vende; estos casos
+    // comprueban que la pantalla tampoco los pida ni deje un hueco.
+    const paraVenta = ({ costo: _costo, proveedorId: _id, proveedor: _nombre, ...resto }) => resto
+
+    beforeEach(() => {
+      guardarSesion({ token: 't', nombre: 'Ana', rol: 'VENDEDOR' })
+      api.catalogo.mockResolvedValue([PC, CEL, MON].map(paraVenta))
+      api.proveedores.mockRejectedValue(new Error('403'))
+    })
+
+    it('un vendedor no pide los proveedores y aun así ve categorías y productos',
+      async () => {
+        montar()
+        await conFilas()
+        expect(api.proveedores).not.toHaveBeenCalled()
+        expect(api.categorias).toHaveBeenCalled()
+        // Las categorías llenan su selector aunque los proveedores no se
+        // pidan: antes iban en la misma promesa y una sola rechazada
+        // vaciaba las dos.
+        expect(screen.getByRole('option', { name: 'Monitores' })).toBeInTheDocument()
+        expect(fila(screen, 'PC-001')).toBeInTheDocument()
+      })
+
+    it('un vendedor no ve la columna de costo ni el filtro de proveedor', async () => {
+      montar()
+      await conFilas()
+      expect(screen.queryByRole('columnheader', { name: 'Costo' })).not.toBeInTheDocument()
+      expect(screen.queryByLabelText(/proveedor/i)).not.toBeInTheDocument()
+      expect(screen.getAllByRole('columnheader')).toHaveLength(7)
+      expect(fila(screen, 'PC-001').querySelectorAll('td')).toHaveLength(7)
+      expect(fila(screen, 'PC-001')).not.toHaveTextContent('2.100.000')
+    })
+
+    it('un administrador sí los pide, y ve el costo y el filtro', async () => {
+      guardarSesion({ token: 't', nombre: 'Jesús Manuel', rol: 'ADMINISTRADOR' })
+      api.catalogo.mockResolvedValue([PC, CEL, MON])
+      api.proveedores.mockResolvedValue(PROVEEDORES)
+      montar()
+      await conFilas()
+      expect(api.proveedores).toHaveBeenCalled()
+      expect(screen.getByRole('columnheader', { name: 'Costo' })).toBeInTheDocument()
+      expect(screen.getAllByRole('columnheader')).toHaveLength(9)
+      expect(screen.getByLabelText(/proveedor/i)).toBeInTheDocument()
+      expect(fila(screen, 'PC-001')).toHaveTextContent('2.100.000')
+    })
+
+    it('si los proveedores fallan, el administrador conserva las categorías', async () => {
+      guardarSesion({ token: 't', nombre: 'Jesús Manuel', rol: 'ADMINISTRADOR' })
+      api.catalogo.mockResolvedValue([PC, CEL, MON])
+      montar()
+      await conFilas()
+      expect(screen.getByRole('option', { name: 'Monitores' })).toBeInTheDocument()
+    })
+  })
+
   it('un fallo del servidor se dice, no se queda en una tabla vacía', async () => {
     api.catalogo.mockRejectedValue(new Error('El servidor no respondió.'))
     montar()
