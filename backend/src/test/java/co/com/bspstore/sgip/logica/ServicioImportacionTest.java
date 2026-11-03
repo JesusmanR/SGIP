@@ -287,7 +287,7 @@ class ServicioImportacionTest {
     void unaCargaYaAplicadaNoSeAplicaDosVeces() {
         cargaEn("APLICADA", 5);
 
-        ReglaInvalidaException e = assertThrows(ReglaInvalidaException.class,
+        EstadoDeCargaInvalidoException e = assertThrows(EstadoDeCargaInvalidoException.class,
                 () -> servicio.aplicar(CARGA));
 
         assertTrue(e.getMessage().contains("APLICADA"), e.getMessage());
@@ -300,7 +300,7 @@ class ServicioImportacionTest {
         // Alguien desactivó una referencia entre validar y aplicar.
         when(importacion.aplicarCostos(EMPRESA, CARGA)).thenReturn(4);
 
-        ReglaInvalidaException e = assertThrows(ReglaInvalidaException.class,
+        EstadoDeCargaInvalidoException e = assertThrows(EstadoDeCargaInvalidoException.class,
                 () -> servicio.aplicar(CARGA));
 
         // «Si falla a mitad, ningún costo queda modificado»: la
@@ -316,6 +316,17 @@ class ServicioImportacionTest {
         cargaEn("VALIDADA", 5);
         servicio.buscar(CARGA);
         verify(importacion).cruzarianAlAplicar(EMPRESA, CARGA);
+    }
+
+    @Test
+    void unaCargaYaAplicadaNoSePuedeRechazar() {
+        cargaEn("APLICADA", 5);
+
+        var e = assertThrows(EstadoDeCargaInvalidoException.class,
+                () -> servicio.rechazar(CARGA));
+
+        assertTrue(e.getMessage().contains("ya se aplicó"), e.getMessage());
+        verify(importacion, org.mockito.Mockito.never()).marcarRechazada(anyInt(), anyLong());
     }
 
     @Test

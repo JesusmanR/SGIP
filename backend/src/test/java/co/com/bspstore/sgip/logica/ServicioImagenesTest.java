@@ -125,7 +125,7 @@ class ServicioImagenesTest {
         comoEmpresa(3);
         when(productos.findByEmpresaIdAndId(3, 11)).thenReturn(Optional.empty());
 
-        assertThrows(ReferenciaAjenaException.class, () -> servicio.subirDeProducto(11, imagen()));
+        assertThrows(RecursoNoEncontradoException.class, () -> servicio.subirDeProducto(11, imagen()));
         verify(almacen, never()).leerValidado(any());
     }
 
@@ -254,7 +254,7 @@ class ServicioImagenesTest {
         comoEmpresa(3);
         when(imagenes.findByEmpresaIdAndId(3, 55)).thenReturn(Optional.empty());
 
-        assertThrows(ReferenciaAjenaException.class, () -> servicio.miniaturaDe(55));
+        assertThrows(RecursoNoEncontradoException.class, () -> servicio.miniaturaDe(55));
     }
 
     @Test
@@ -277,7 +277,7 @@ class ServicioImagenesTest {
         comoEmpresa(3);
         when(imagenes.findByEmpresaIdAndId(3, 55)).thenReturn(Optional.empty());
 
-        assertThrows(ReferenciaAjenaException.class, () -> servicio.eliminar(55));
+        assertThrows(RecursoNoEncontradoException.class, () -> servicio.eliminar(55));
         verify(almacen, never()).borrar(any());
     }
 

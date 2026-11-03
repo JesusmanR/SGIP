@@ -5,9 +5,11 @@ import co.com.bspstore.sgip.api.dto.OrdenDeCompra;
 import co.com.bspstore.sgip.api.dto.SolicitudOrdenCompra;
 import co.com.bspstore.sgip.api.dto.SolicitudRecepcion;
 import co.com.bspstore.sgip.config.UsuarioAutenticado;
+import co.com.bspstore.sgip.datos.ProveedorRepositorio;
 import co.com.bspstore.sgip.datos.RepositorioCompras;
 import co.com.bspstore.sgip.datos.RepositorioCompras.Cabecera;
 import co.com.bspstore.sgip.datos.RepositorioCompras.LineaBloqueada;
+import co.com.bspstore.sgip.modelo.Proveedor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -51,12 +53,13 @@ class ServicioComprasTest {
 
     @Mock RepositorioCompras compras;
     @Mock ServicioInventario inventario;
+    @Mock ProveedorRepositorio proveedores;
 
     private ServicioCompras servicio;
 
     @BeforeEach
     void preparar() {
-        servicio = new ServicioCompras(compras, inventario);
+        servicio = new ServicioCompras(compras, inventario, proveedores);
         var u = new UsuarioAutenticado(USUARIO, "ana@tienda.co", "ADMINISTRADOR", EMPRESA);
         SecurityContext c = SecurityContextHolder.createEmptyContext();
         c.setAuthentication(new UsernamePasswordAuthenticationToken(u, null, List.of()));
@@ -69,6 +72,8 @@ class ServicioComprasTest {
         when(compras.lineasDe(EMPRESA, ORDEN)).thenReturn(List.of());
         when(inventario.ingresarPorRecepcion(anyInt(), anyInt(), any(), anyLong()))
                 .thenReturn(Optional.of(movimiento()));
+        // El proveedor de las órdenes de prueba (id 2) es de esta empresa.
+        when(proveedores.findByEmpresaIdAndId(EMPRESA, 2)).thenReturn(Optional.of(new Proveedor(EMPRESA, "Distribuidora", "900123456")));
     }
 
     @AfterEach
@@ -125,6 +130,17 @@ class ServicioComprasTest {
         // El estado no se escribe: la columna lo pone en ABIERTA por omisión
         // y aceptarlo desde fuera permitiría registrar una ya recibida.
         verify(compras, never()).fijarEstado(anyInt(), anyLong(), any());
+    }
+
+    @Test
+    void unProveedorAjenoSeRechazaAntesDeEscribir() {
+        when(proveedores.findByEmpresaIdAndId(EMPRESA, 2)).thenReturn(Optional.empty());
+
+        assertThrows(ReferenciaAjenaException.class,
+                () -> servicio.registrar(orden(linea(PC, 100))));
+
+        verify(compras, never()).insertarOrden(anyInt(), anyInt(), anyInt(), any(), any());
+        verify(compras, never()).insertarItem(anyInt(), anyLong(), anyInt(), anyInt(), any());
     }
 
     @Test
