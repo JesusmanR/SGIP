@@ -50,6 +50,7 @@ limpiar () {
   ejecutar "DELETE FROM empresa_config WHERE empresa_id IN
               (SELECT empresa_id FROM empresas WHERE nit LIKE 'PAN-%');"        >/dev/null
   ejecutar "DELETE FROM empresas       WHERE nit LIKE 'PAN-%';"                 >/dev/null
+  ejecutar "DELETE FROM uvt_anual      WHERE resolucion LIKE 'PAN-%';"          >/dev/null
   # Los costos se devuelven a los de demostración para que el resto de
   # los verificadores encuentren la base como la dejó `aplicar.sh`.
   ejecutar "UPDATE productos SET costo = 2200000.00 WHERE empresa_id = 1 AND codigo = 'PC-002';" >/dev/null
@@ -60,6 +61,14 @@ limpiar () {
 }
 trap limpiar EXIT
 limpiar
+
+# Las cifras de abajo salen de la UVT de 2026 (52 374). La vista mide el
+# umbral con la UVT del año en curso: sin esa fila, el 1 de enero de 2027
+# `umbral_pesos` sería nulo y el guion se detendría aquí. Si falta la del
+# año en curso se pone una de prueba, que `limpiar` retira.
+ejecutar "INSERT INTO uvt_anual (anio, valor, resolucion)
+          SELECT YEAR(CURDATE()), 52374.00, 'PAN- UVT de prueba'
+           WHERE NOT EXISTS (SELECT 1 FROM uvt_anual WHERE anio = YEAR(CURDATE()));" >/dev/null
 
 # Los datos de demostración son el punto de partida de todas las cifras
 # esperadas de este guion. Si cambian, esto lo dice en lugar de fallar

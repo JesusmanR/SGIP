@@ -33,9 +33,18 @@ limpiar () {
                                     WHERE codigo LIKE 'PREC-%');" >/dev/null
   ejecutar "DELETE FROM reglas_margen WHERE factor IN (1.3300, 1.4400);" >/dev/null
   ejecutar "DELETE FROM productos WHERE codigo LIKE 'PREC-%';" >/dev/null
+  ejecutar "DELETE FROM uvt_anual WHERE resolucion LIKE 'PREC-%';" >/dev/null
 }
 trap limpiar EXIT
 limpiar
+
+# La vista mide el umbral con la UVT del año en curso, y los datos de
+# demostración traen solo 2025 y 2026. Sin esta fila, el 1 de enero de 2027
+# `umbral_pesos` sería nulo y la prueba del umbral no probaría nada. Si
+# falta la UVT del año en curso se pone una de prueba, que `limpiar` retira.
+ejecutar "INSERT INTO uvt_anual (anio, valor, resolucion)
+          SELECT YEAR(CURDATE()), 52374.00, 'PREC- UVT de prueba'
+           WHERE NOT EXISTS (SELECT 1 FROM uvt_anual WHERE anio = YEAR(CURDATE()));" >/dev/null
 
 CAT=$(consulta "SELECT categoria_id FROM categorias WHERE empresa_id = 1 LIMIT 1;")
 PRV=$(consulta "SELECT proveedor_id FROM proveedores WHERE empresa_id = 1 LIMIT 1;")

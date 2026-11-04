@@ -1,5 +1,6 @@
 package co.com.bspstore.sgip.logica;
 
+import co.com.bspstore.sgip.api.dto.AlertaUvt;
 import co.com.bspstore.sgip.api.dto.SolicitudTipoImpuesto;
 import co.com.bspstore.sgip.api.dto.SolicitudValorUvt;
 import co.com.bspstore.sgip.api.dto.TipoImpuestoNacional;
@@ -12,6 +13,10 @@ import co.com.bspstore.sgip.modelo.AccionPlataforma;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+import java.time.LocalDate;
+import java.time.Month;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Optional;
 
@@ -37,11 +42,14 @@ public class ServicioTributario {
 
     private final RepositorioTributario tributario;
     private final RepositorioPlataforma plataforma;
+    private final Clock reloj;
 
     public ServicioTributario(RepositorioTributario tributario,
-                              RepositorioPlataforma plataforma) {
+                              RepositorioPlataforma plataforma,
+                              Clock reloj) {
         this.tributario = tributario;
         this.plataforma = plataforma;
+        this.reloj = reloj;
     }
 
     @Transactional(readOnly = true)
@@ -52,6 +60,44 @@ public class ServicioTributario {
     @Transactional(readOnly = true)
     public List<TipoImpuestoNacional> listarImpuestos() {
         return tributario.listarImpuestos();
+    }
+
+    /**
+     * Dice si falta la UVT de un año que ya importa, para avisar al
+     * operador de la plataforma. Avisa; no bloquea nada.
+     *
+     * La UVT es opcional: solo cambia el cálculo de la empresa responsable
+     * de IVA que activó la exclusión por umbral, y a esa, sin la cifra, se
+     * le cobra la tarifa (el tratamiento conservador de la V5). Por eso no
+     * hay una fecha límite, y el aviso no distingue empresas.
+     *
+     * Reglas, con «hoy» tomado del reloj inyectado:
+     * <ul>
+     *   <li>Falta la UVT del año en curso: avisa de ese año, con cero
+     *       días, porque ya empezó. Nunca da días negativos.</li>
+     *   <li>Desde el 1 de noviembre falta la del año siguiente: avisa de
+     *       ese año con los días que quedan hasta el 1 de enero.</li>
+     *   <li>En cualquier otro caso, nada. En particular, en enero con el
+     *       año ya cargado no se pide el siguiente: faltan diez meses.</li>
+     * </ul>
+     *
+     * No lee el contexto de empresa ni el usuario: lo llama el aviso del
+     * arranque, que corre sin sesión, y {@code uvt_anual} no tiene empresa.
+     */
+    @Transactional(readOnly = true)
+    public AlertaUvt alertaUvt() {
+        LocalDate hoy = LocalDate.now(reloj);
+        int anio = hoy.getYear();
+
+        if (tributario.buscarUvt(anio).isEmpty()) {
+            return new AlertaUvt(true, anio, 0);
+        }
+        boolean enLaVentanaDelAnioSiguiente = hoy.getMonth().compareTo(Month.NOVEMBER) >= 0;
+        if (enLaVentanaDelAnioSiguiente && tributario.buscarUvt(anio + 1).isEmpty()) {
+            long dias = ChronoUnit.DAYS.between(hoy, LocalDate.of(anio + 1, 1, 1));
+            return new AlertaUvt(true, anio + 1, dias);
+        }
+        return new AlertaUvt(false, anio, 0);
     }
 
     /**

@@ -1,5 +1,6 @@
 package co.com.bspstore.sgip.api;
 
+import co.com.bspstore.sgip.api.dto.AlertaUvt;
 import co.com.bspstore.sgip.api.dto.SolicitudTipoImpuesto;
 import co.com.bspstore.sgip.api.dto.SolicitudValorUvt;
 import co.com.bspstore.sgip.api.dto.TipoImpuestoNacional;
@@ -54,6 +55,15 @@ public class TributarioControlador {
     @GetMapping("/uvt")
     public List<ValorUvt> listarUvt() {
         return servicio.listarUvt();
+    }
+
+    /**
+     * El aviso de que falta la UVT del año que viene (o la del que corre).
+     * Es solo una lectura y no impide vender: ver {@link AlertaUvt}.
+     */
+    @GetMapping("/alerta-uvt")
+    public AlertaUvt alertaUvt() {
+        return servicio.alertaUvt();
     }
 
     /**

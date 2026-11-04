@@ -100,3 +100,12 @@ la que se declaró responsable y no ha creado la regla.
 negocio:** si una empresa debería ser responsable de IVA es una obligación
 legal que depende de sus ingresos y su actividad. El sistema la deja
 elegir y avisa cuando la elección está incompleta; no la decide por ella.
+
+## Nota posterior · un año sin UVT también avisa
+
+Desde la V35, `tributacion_sin_configurar` también vale 1 en un producto
+`EXCLUIDO_HASTA_UMBRAL` cuando falta la UVT del año en curso: sin esa cifra
+no se puede demostrar la exclusión y se cobra la tarifa. Tampoco impide
+vender. El campo tiene ahora dos causas y la segunda no la resuelve el
+comercio, sino quien opera la plataforma: una pantalla que muestre el aviso
+debe distinguirlas antes de pedirle al comercio que configure sus reglas.

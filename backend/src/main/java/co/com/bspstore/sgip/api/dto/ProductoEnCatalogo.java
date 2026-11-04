@@ -17,7 +17,9 @@ import java.math.BigDecimal;
  * impuesto aunque la empresa diga que lo cobra: falta decir cuál. Es un aviso
  * y no impide vender: sin regla, el total es el precio (ADR-0024). Una
  * empresa que no es responsable de IVA no tiene nada que configurar y
- * siempre recibe 0.
+ * siempre recibe 0. Vale 1 también para el producto excluido hasta el umbral
+ * mientras falte la UVT del año en curso: sin la cifra no se puede demostrar
+ * la exclusión y se cobra la tarifa (V35). Tampoco impide vender.
  *
  * cercaUmbral · el precio quedó en el último diez por ciento antes del
  * umbral del artículo 424. Un ajuste pequeño de costo lo vuelve gravado.

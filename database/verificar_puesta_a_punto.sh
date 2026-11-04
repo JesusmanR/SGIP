@@ -49,6 +49,9 @@ limpiar () {
       ejecutar "DELETE r FROM reglas_margen r JOIN empresas e ON e.empresa_id = r.empresa_id
                  WHERE e.nit LIKE 'PAP-%';"
       ejecutar "DELETE FROM tipos_impuesto WHERE codigo LIKE 'PAP-%';"
+      # La UVT de prueba que la sección de la V35 pone solo si falta la del
+      # año en curso (ver más abajo).
+      ejecutar "DELETE FROM uvt_anual WHERE resolucion LIKE 'PAP-%';"
       ejecutar "DELETE FROM productos   WHERE codigo LIKE 'PAP-%';"
       ejecutar "DELETE FROM proveedores WHERE nit    LIKE 'PAP-%';"
       ejecutar "DELETE FROM categorias  WHERE nombre LIKE 'PAP-%';"
@@ -357,6 +360,121 @@ rechaza "y un tratamiento inventado sigue rechazado" 1265 tratamiento_iva \
                             costo_unitario, tarifa_iva, tratamiento_iva)
    VALUES (LAST_INSERT_ID(), 1, $PIDB, 1, 1500, 1000, 0, 'INVENTADO');
    ROLLBACK;"
+
+# ── Un año sin UVT avisa y no impide vender (V35) ───────────────────────
+# La UVT solo cambia el cálculo de la empresa responsable de IVA que activó
+# la exclusión por umbral; sin la cifra no se puede demostrar la exclusión
+# y se cobra la tarifa. Que falte no debe impedir vender a nadie: avisa. La
+# V35 hace que `tributacion_sin_configurar` valga 1 para esos productos, y
+# solo para ellos, mientras `fn_valor_uvt(CURDATE())` sea nulo.
+#
+# El guion no depende del año en que corre. `fn_valor_uvt(CURDATE())` mira
+# la UVT del año en curso, y los datos de demostración traen solo 2025 y
+# 2026: el 1 de enero de 2027 la fila no existiría y las comprobaciones
+# «con UVT» fallarían por una razón ajena. Por eso, si falta la del año en
+# curso, se pone una de prueba (con prefijo PAP- en la resolución, que
+# `limpiar` retira). El caso «sin UVT» no depende de lo que haya: borra la
+# fila del año en curso dentro de una transacción que se deshace.
+echo
+echo "── un año sin UVT avisa y no impide vender (V35) ──"
+
+ejecutar "INSERT INTO uvt_anual (anio, valor, resolucion)
+          SELECT YEAR(CURDATE()), 52374.00, 'PAP- UVT de prueba'
+           WHERE NOT EXISTS (SELECT 1 FROM uvt_anual WHERE anio = YEAR(CURDATE()));" >/dev/null
+igual "la UVT del año en curso está cargada" "1" \
+  "$(consulta "SELECT COUNT(*) FROM uvt_anual WHERE anio = YEAR(CURDATE());")"
+
+# Crea una empresa de prueba con su configuración, categoría, proveedor y
+# las dos reglas de ganancia (costo 1 000 → precio 1 500), y deja sus
+# identificadores en E_ID, E_CAT y E_PRV. No se llama en una subcapa
+# `$(...)` porque las variables se perderían.
+# $1 NIT · $2 responsable de IVA · $3 aplica la exclusión por umbral
+nueva_empresa () {
+  ejecutar "INSERT INTO empresas (nit, razon_social, estado)
+            VALUES ('$1','Comercio de prueba de la UVT','ACTIVA');" >/dev/null
+  E_ID=$(consulta "SELECT empresa_id FROM empresas WHERE nit = '$1';")
+  ejecutar "INSERT INTO empresa_config (empresa_id, responsable_iva, aplica_exclusion_umbral)
+            VALUES ($E_ID, $2, $3);" >/dev/null
+  ejecutar "INSERT INTO categorias (empresa_id, nombre, activa)
+            VALUES ($E_ID, 'PAP- categoría UVT', TRUE);" >/dev/null
+  ejecutar "INSERT INTO proveedores (empresa_id, razon_social, nit, plazo_dias,
+                                     origen_lista, activo)
+            VALUES ($E_ID, 'PAP- proveedor UVT', 'PAP-800-$E_ID', 30, 'NINGUNO', TRUE);" >/dev/null
+  E_CAT=$(consulta "SELECT categoria_id FROM categorias  WHERE empresa_id = $E_ID LIMIT 1;")
+  E_PRV=$(consulta "SELECT proveedor_id FROM proveedores WHERE empresa_id = $E_ID LIMIT 1;")
+  ejecutar "INSERT INTO reglas_margen (empresa_id, categoria_id, proveedor_id, forma_pago,
+                                       forma_calculo, factor, vigente_desde)
+            VALUES ($E_ID, NULL, NULL, 'CONTADO', 'SOBRE_COSTO', 1.5000, '2026-01-01'),
+                   ($E_ID, NULL, NULL, 'CREDITO', 'SOBRE_COSTO', 1.6000, '2026-01-01');" >/dev/null
+}
+
+# Una regla de IVA. $1 empresa · $2 producto (o NULL, para toda la empresa)
+# · $3 código del tipo de impuesto
+regla_de () {
+  ejecutar "INSERT INTO reglas_iva (empresa_id, categoria_id, producto_id, tipo_impuesto_id, vigente_desde)
+            SELECT $1, NULL, $2, tipo_impuesto_id, '2026-01-01'
+              FROM tipos_impuesto WHERE codigo = '$3';" >/dev/null
+}
+
+# Empresa 1: responsable de IVA con la exclusión por umbral activada. Dos
+# productos con regla propia: uno excluido hasta el umbral y otro gravado.
+nueva_empresa "PAP-901-1" TRUE TRUE
+EMP_UVT=$E_ID
+acepta "un producto de la responsable con exclusión" "$(producto "$EMP_UVT" "$E_CAT" "$E_PRV" PAP-U1 NULL)"
+acepta "un producto gravado de la misma empresa"     "$(producto "$EMP_UVT" "$E_CAT" "$E_PRV" PAP-U2 NULL)"
+regla_de "$EMP_UVT" "$(consulta "SELECT producto_id FROM productos WHERE codigo = 'PAP-U1';")" EXCL_UMBRAL_PC
+regla_de "$EMP_UVT" "$(consulta "SELECT producto_id FROM productos WHERE codigo = 'PAP-U2';")" IVA_19
+
+# Empresa 2: también con la regla de umbral para toda la empresa, pero sin
+# ser responsable de IVA. Más abajo pasa a ser responsable sin la exclusión.
+nueva_empresa "PAP-901-2" FALSE FALSE
+EMP_OTRA=$E_ID
+acepta "un producto de la empresa que no es responsable" \
+  "$(producto "$EMP_OTRA" "$E_CAT" "$E_PRV" PAP-U3 NULL)"
+regla_de "$EMP_OTRA" NULL EXCL_UMBRAL_PC
+
+# Lo que la venta mira de un producto: tratamiento, aviso, y si cobra la
+# tarifa del 19 % y el total correspondiente.
+# $1 código · $2 sentencias previas, dentro de la transacción (puede ir vacío)
+estado () {
+  consulta "START TRANSACTION; $2
+            SELECT CONCAT_WS('|', COALESCE(tratamiento_iva, 'nulo'), tributacion_sin_configurar,
+                             tarifa_contado = 0.19, total_contado = 1785)
+              FROM v_precios_producto WHERE codigo = '$1';
+            ROLLBACK;"
+}
+# La misma lectura con el año en curso sin UVT: la fila se borra dentro de la
+# transacción y el ROLLBACK la devuelve.
+sin_uvt () { estado "$1" "DELETE FROM uvt_anual WHERE anio = YEAR(CURDATE());"; }
+
+# Con la UVT del año en curso cargada, nada avisa.
+igual "con UVT · la excluida hasta el umbral: sin aviso y sin impuesto" \
+  "EXCLUIDO_HASTA_UMBRAL|0|0|0" "$(estado PAP-U1 "")"
+igual "con UVT · la gravada: sin aviso" "GRAVADO|0|1|1" "$(estado PAP-U2 "")"
+igual "con UVT · la que no es responsable: sin aviso" "NO_GRAVADO|0|0|0" "$(estado PAP-U3 "")"
+
+# Sin la UVT del año en curso: solo la excluida hasta el umbral avisa, y se
+# cobra la tarifa (el tratamiento conservador de la V5): el aviso no
+# cambia el cálculo ni impide vender.
+igual "sin UVT · la excluida hasta el umbral avisa y se cobra la tarifa" \
+  "EXCLUIDO_HASTA_UMBRAL|1|1|1" "$(sin_uvt PAP-U1)"
+igual "sin UVT · la gravada no avisa" "GRAVADO|0|1|1" "$(sin_uvt PAP-U2)"
+igual "sin UVT · la de la empresa que no es responsable no avisa" \
+  "NO_GRAVADO|0|0|0" "$(sin_uvt PAP-U3)"
+
+# La responsable que no activó la exclusión por umbral: la V12 trata el tipo
+# como gravado, la UVT no le sirve y no hay de qué avisar.
+ejecutar "UPDATE empresa_config SET responsable_iva = TRUE, aplica_exclusion_umbral = FALSE
+           WHERE empresa_id = $EMP_OTRA;" >/dev/null
+igual "sin UVT · la responsable sin la exclusión activada no avisa" \
+  "GRAVADO|0|1|1" "$(sin_uvt PAP-U3)"
+
+# Tras el ROLLBACK la fila volvió y nadie avisa.
+igual "la UVT del año en curso sigue cargada tras deshacer el borrado" "1" \
+  "$(consulta "SELECT COUNT(*) FROM uvt_anual WHERE anio = YEAR(CURDATE());")"
+igual "tras el ROLLBACK ningún producto de prueba avisa" "0" \
+  "$(consulta "SELECT COUNT(*) FROM v_precios_producto
+                WHERE codigo LIKE 'PAP-U%' AND tributacion_sin_configurar = 1;")"
 
 # La vista devuelve una fila por producto activo, también donde no hay regla,
 # y ninguna de más: un LEFT JOIN mal puesto duplicaría los productos.
