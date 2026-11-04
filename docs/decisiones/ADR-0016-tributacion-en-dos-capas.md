@@ -118,3 +118,6 @@ rige. El ADR-0024 la retira: una empresa que no configuró nada vende sin
 impuesto, y `tributacion_sin_configurar` avisa solo a quien se declaró
 responsable de IVA y dejó un producto sin regla. La separación en dos
 capas, que es lo que esta decisión establece, no cambia.
+
+Desde la V35 el aviso también marca a un producto excluido hasta el umbral
+si falta la UVT del año en curso. Ver la nota final del ADR-0024.

@@ -80,3 +80,6 @@ mirando el número.
 se puede calcular». Desde la V34 una empresa sin reglas de IVA vende al
 precio, y el aviso es solo para la que se declaró responsable de IVA y
 dejó un producto sin regla. Ver ADR-0024.
+
+Desde la V35 también avisa de un producto excluido hasta el umbral si falta
+la UVT del año en curso. Ver la nota final del ADR-0024.
