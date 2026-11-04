@@ -152,6 +152,10 @@ t=$(consulta "SELECT tratamiento_iva FROM v_precios_producto WHERE sku='SKU-TRIB
 tar=$(consulta "SELECT tarifa_contado FROM v_precios_producto WHERE sku='SKU-TRIB';")
 igual "el tratamiento es NO_GRAVADO" "NO_GRAVADO" "$t"
 igual "la tarifa es cero" "0.0000" "$tar"
+tot=$(consulta "SELECT total_contado = precio_contado FROM v_precios_producto WHERE sku='SKU-TRIB';")
+igual "el total es el precio: sin responsabilidad no hay impuesto" "1" "$tot"
+av=$(consulta "SELECT tributacion_sin_configurar FROM v_precios_producto WHERE sku='SKU-TRIB';")
+igual "tener una regla y no ser responsable no da aviso" "0" "$av"
 ejecutar "UPDATE empresa_config SET responsable_iva=TRUE WHERE empresa_id=$ID;" >/dev/null
 
 echo
