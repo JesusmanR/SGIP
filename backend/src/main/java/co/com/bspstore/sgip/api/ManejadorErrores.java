@@ -9,6 +9,7 @@ import co.com.bspstore.sgip.logica.EstadoDeCargaInvalidoException;
 import co.com.bspstore.sgip.logica.RecursoNoEncontradoException;
 import co.com.bspstore.sgip.logica.CredencialesInvalidasException;
 import co.com.bspstore.sgip.logica.FiltroInvalidoException;
+import co.com.bspstore.sgip.logica.ImpuestoNoDisponibleException;
 import co.com.bspstore.sgip.logica.AlmacenArchivos;
 import co.com.bspstore.sgip.logica.ArchivoInvalidoException;
 import co.com.bspstore.sgip.logica.MovimientoInvalidoException;
@@ -177,9 +178,10 @@ public class ManejadorErrores {
 
     @ExceptionHandler(RegistroRepetidoException.class)
     public ProblemDetail registroRepetido(RegistroRepetidoException e) {
-        // 409 igual que el nombre repetido, pero con otro título: aquí la
-        // unicidad es de toda la plataforma y no de dentro de una empresa,
-        // y el detalle dice cuál de los dos datos del alta choca.
+        // 409 igual que el nombre repetido, pero con otro título: «dato ya
+        // registrado» sirve a la unicidad de toda la plataforma (el NIT, el
+        // correo) y también a dos reglas del mismo alcance a la vez dentro de
+        // una empresa; el detalle dice cuál es el dato que choca.
         ProblemDetail p = ProblemDetail.forStatus(HttpStatus.CONFLICT);
         p.setTitle("Dato ya registrado");
         p.setDetail(e.getMessage());
@@ -192,6 +194,17 @@ public class ManejadorErrores {
         // existir; lo que no es válido es usarlo desde esta empresa.
         ProblemDetail p = ProblemDetail.forStatus(HttpStatus.UNPROCESSABLE_ENTITY);
         p.setTitle("Referencia de otra empresa");
+        p.setDetail(e.getMessage());
+        return p;
+    }
+
+    @ExceptionHandler(ImpuestoNoDisponibleException.class)
+    public ProblemDetail impuestoNoDisponible(ImpuestoNoDisponibleException e) {
+        // 422 como la referencia ajena, y con su propio título: el catálogo
+        // de impuestos no es de ninguna empresa, de modo que «otra empresa»
+        // sería mentir sobre dónde está el problema.
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.UNPROCESSABLE_ENTITY);
+        p.setTitle("Impuesto no disponible");
         p.setDetail(e.getMessage());
         return p;
     }

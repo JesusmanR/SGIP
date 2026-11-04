@@ -3,6 +3,7 @@ package co.com.bspstore.sgip.api;
 import co.com.bspstore.sgip.logica.ClaveActualIncorrectaException;
 import co.com.bspstore.sgip.logica.ClaveNuevaInvalidaException;
 import co.com.bspstore.sgip.logica.EstadoDeCargaInvalidoException;
+import co.com.bspstore.sgip.logica.ImpuestoNoDisponibleException;
 import co.com.bspstore.sgip.logica.RecursoNoEncontradoException;
 import co.com.bspstore.sgip.modelo.Producto;
 import org.junit.jupiter.api.Test;
@@ -131,5 +132,17 @@ class ManejadorErroresTest {
         assertEquals(400, nueva.getStatus());
         assertEquals("La contraseña actual no es correcta.", actual.getDetail());
         assertEquals("La contraseña nueva debe ser distinta de la actual.", nueva.getDetail());
+    }
+
+    @Test
+    void unImpuestoQueNoSePuedeUsarEsUn422ConSuPropioTitulo() {
+        ProblemDetail p = manejador.impuestoNoDisponible(
+                new ImpuestoNoDisponibleException("El impuesto «X» no existe o no está activo."));
+
+        // 422 como la referencia ajena, pero con otro título: el de aquella
+        // habla de «otra empresa», y el catálogo de impuestos no es de ninguna.
+        assertEquals(422, p.getStatus());
+        assertEquals("Impuesto no disponible", p.getTitle());
+        assertEquals("El impuesto «X» no existe o no está activo.", p.getDetail());
     }
 }

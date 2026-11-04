@@ -283,10 +283,16 @@ export default function Catalogo() {
                   <td>
                     {p.nombre}{p.presentacion ? ` · ${p.presentacion}` : ''}
                     {/* El aviso va en la fila del producto: enterarse de que
-                        la tributación no está configurada al facturar es
-                        enterarse tarde. */}
-                    {p.tributacionSinConfigurar === 1 && (
-                      <> <span className="insignia critico">Sin impuesto configurado</span></>
+                        falta la regla de impuesto al facturar es enterarse
+                        tarde. Solo lo recibe la empresa que se declaró
+                        responsable de IVA. Informa y no bloquea: sin regla
+                        el producto se vende al precio (ADR-0024), y la
+                        leyenda de abajo lo dice con palabras. Es del
+                        administrador, que es quien puede crear la regla:
+                        quien vende no puede atenderlo y le estorbaría
+                        delante del cliente. */}
+                    {esAdministrador && p.tributacionSinConfigurar === 1 && (
+                      <> <span className="insignia critico">Impuestos sin configurar</span></>
                     )}
                     {/* El código va bajo el nombre, como en el diseño de la
                         P-03. El SKU solo aparece cuando difiere: por omisión
@@ -369,6 +375,17 @@ export default function Catalogo() {
               Los marcados «sobre el precio» aplican el margen sobre el precio de
               venta, de modo que un 20 % da 1.250 y no 1.200 sobre un costo de
               1.000.
+            </p>
+          )}
+
+          {/* La insignia sola no dice qué pasa con el producto. Esto lo
+              dice, y solo cuando hay alguno marcado. */}
+          {!cargando && esAdministrador
+            && productos.some((p) => p.tributacionSinConfigurar === 1) && (
+            <p className="leyenda">
+              «Impuestos sin configurar» marca un producto sin regla de IVA en una
+              empresa responsable de IVA. Se vende al precio, sin impuesto, hasta que
+              se cree la regla.
             </p>
           )}
 

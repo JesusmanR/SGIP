@@ -306,14 +306,15 @@ comercios sin fallar. En desarrollo, con una sola empresa cargada, el
 defecto es invisible. Debe resolverse en un único punto de la capa de
 datos, no consulta por consulta.
 
-**Que la configuración esté completa antes de vender.** `empresa_config`
-guarda el interruptor `configuracion_completa`, pero no impide que se
-registre una venta con él en falso. Eso es la RN-25 y se resuelve en la
-autorización, igual que el estado desactivado de la empresa. Lo que el
-esquema sí hace es dejarlo visible: un producto de una empresa sin
-configurar sale de `v_precios_producto` con
-`tributacion_sin_configurar = 1` y sin precio, en lugar de con un total
-vacío sin explicación.
+**La configuración tributaria ya no se exige para vender.** La RN-25
+pedía que `empresa_config.configuracion_completa` estuviera en verdadero
+antes de registrar una venta. Desde la V34 y el ADR-0024 se retira:
+muchos comercios pequeños no están obligados a cobrar impuestos, y una
+empresa sin reglas de IVA vende al precio. El interruptor sigue existiendo
+como marca para la pantalla. Lo que el esquema hace visible es otra cosa:
+un producto de una empresa que se declaró responsable de IVA y no tiene
+regla sale de `v_precios_producto` con `tributacion_sin_configurar = 1`,
+con el total igual al precio. Es un aviso, no un bloqueo.
 
 **La atomicidad entre tablas.** El descuento de existencias y el registro
 de la venta deben ocurrir en una sola transacción.

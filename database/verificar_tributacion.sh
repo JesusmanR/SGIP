@@ -99,11 +99,21 @@ ejecutar "INSERT INTO productos (empresa_id, categoria_id, proveedor_id, codigo,
 echo "  empresa de prueba: $ID"
 
 echo
-echo "── 1. una empresa sin configurar no puede calcular impuesto ──"
-# Sin reglas_iva propias no hay regla aplicable. La vista lo dice en una
-# bandera en lugar de devolver un total vacío sin explicación.
+echo "── 1. una empresa sin configurar vende sin impuesto ──"
+# Los impuestos son opcionales (V34, ADR-0024): muchos comercios pequeños
+# no están obligados a cobrarlos. Una empresa nueva no es responsable de
+# IVA, de modo que sin reglas el producto sale NO_GRAVADO y sin aviso. Solo
+# quien se declara responsable y no tiene regla recibe el aviso, que no
+# impide vender: el tratamiento queda vacío y el total es el precio.
+t=$(consulta "SELECT tratamiento_iva FROM v_precios_producto WHERE sku='SKU-TRIB';")
+igual "sin ser responsable, el tratamiento es NO_GRAVADO" "NO_GRAVADO" "$t"
 v=$(consulta "SELECT tributacion_sin_configurar FROM v_precios_producto WHERE sku='SKU-TRIB';")
-igual "el producto sale marcado como sin configurar" "1" "$v"
+igual "sin ser responsable, no hay aviso de configuración" "0" "$v"
+ejecutar "UPDATE empresa_config SET responsable_iva=TRUE WHERE empresa_id=$ID;" >/dev/null
+v=$(consulta "SELECT tributacion_sin_configurar FROM v_precios_producto WHERE sku='SKU-TRIB';")
+igual "siendo responsable y sin regla, el producto sale con el aviso" "1" "$v"
+t=$(consulta "SELECT COALESCE(tratamiento_iva,'nulo') FROM v_precios_producto WHERE sku='SKU-TRIB';")
+igual "siendo responsable y sin regla, el tratamiento queda vacío" "nulo" "$t"
 
 echo
 echo "── 2. la regla de IVA de una empresa no alcanza a otra ──"
@@ -142,6 +152,10 @@ t=$(consulta "SELECT tratamiento_iva FROM v_precios_producto WHERE sku='SKU-TRIB
 tar=$(consulta "SELECT tarifa_contado FROM v_precios_producto WHERE sku='SKU-TRIB';")
 igual "el tratamiento es NO_GRAVADO" "NO_GRAVADO" "$t"
 igual "la tarifa es cero" "0.0000" "$tar"
+tot=$(consulta "SELECT total_contado = precio_contado FROM v_precios_producto WHERE sku='SKU-TRIB';")
+igual "el total es el precio: sin responsabilidad no hay impuesto" "1" "$tot"
+av=$(consulta "SELECT tributacion_sin_configurar FROM v_precios_producto WHERE sku='SKU-TRIB';")
+igual "tener una regla y no ser responsable no da aviso" "0" "$av"
 ejecutar "UPDATE empresa_config SET responsable_iva=TRUE WHERE empresa_id=$ID;" >/dev/null
 
 echo

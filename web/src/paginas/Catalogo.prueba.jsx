@@ -121,6 +121,62 @@ describe('catálogo de productos', () => {
     })
   })
 
+  describe('el aviso de impuestos sin configurar (ADR-0024)', () => {
+    // Una empresa responsable de IVA con un producto sin regla: el
+    // tratamiento llega vacío, la tarifa en cero y el total igual al
+    // precio, que es lo que la base devuelve.
+    const SIN_REGLA = {
+      ...CEL, productoId: 9, codigo: 'SRV-009', nombre: 'Servicio técnico',
+      tratamientoIva: null, tarifaContado: 0, tributacionSinConfigurar: 1,
+      cercaUmbral: 0,
+    }
+
+    it('dice que los impuestos no están configurados', async () => {
+      api.catalogo.mockResolvedValue([PC, SIN_REGLA])
+      montar()
+      await conFilas()
+      expect(fila(screen, 'SRV-009')).toHaveTextContent('Impuestos sin configurar')
+    })
+
+    it('no dice ni sugiere que el producto no se pueda vender', async () => {
+      api.catalogo.mockResolvedValue([PC, SIN_REGLA])
+      montar()
+      await conFilas()
+      // Se vende al precio: el aviso informa, no bloquea. El precio sigue ahí.
+      expect(fila(screen, 'SRV-009')).toHaveTextContent('744.000')
+      expect(screen.queryByText(/no se puede vender|no puede vender|no podrás vender/i))
+        .not.toBeInTheDocument()
+    })
+
+    it('la leyenda explica la consecuencia con palabras', async () => {
+      api.catalogo.mockResolvedValue([PC, SIN_REGLA])
+      montar()
+      await conFilas()
+      // El título de una insignia no llega al teclado ni al tacto: lo que
+      // pasa con el producto tiene que estar escrito en la página.
+      expect(screen.getByText(/se vende al precio, sin impuesto/i)).toBeInTheDocument()
+    })
+
+    it('quien vende no ve ni la insignia ni la leyenda', async () => {
+      // Configurar los impuestos es del administrador: un aviso que quien
+      // vende no puede atender solo le estorba delante del cliente.
+      guardarSesion({ token: 't', nombre: 'Ana', rol: 'VENDEDOR' })
+      api.catalogo.mockResolvedValue([PC, SIN_REGLA])
+      montar()
+      await conFilas()
+      expect(fila(screen, 'SRV-009')).toBeInTheDocument()
+      expect(screen.queryByText('Impuestos sin configurar')).not.toBeInTheDocument()
+      expect(screen.queryByText(/se vende al precio, sin impuesto/i)).not.toBeInTheDocument()
+    })
+
+    it('no aparece en los productos que sí tienen su impuesto resuelto', async () => {
+      montar()
+      await conFilas()
+      expect(screen.queryByText('Impuestos sin configurar')).not.toBeInTheDocument()
+      expect(screen.queryByText(/se vende al precio, sin impuesto/i)).not.toBeInTheDocument()
+    })
+  })
+
   describe('la base de cálculo (RF-32)', () => {
     it('se anota cuando el margen va sobre el precio de venta', async () => {
       montar()
