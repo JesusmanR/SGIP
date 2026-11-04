@@ -65,12 +65,38 @@
 -- leen, y el backend arranca con `ddl-auto: validate`.
 --
 --
+-- ## Las líneas de venta y de cotización
+--
+-- `venta_items.tratamiento_iva` y `cotizacion_items.tratamiento_iva` (V4)
+-- eran ENUM('GRAVADO','EXCLUIDO','EXENTO'). La vista da NO_GRAVADO a la
+-- empresa que no es responsable de IVA, y esa es justo la que ahora vende
+-- sin configurar nada: la primera venta habría fallado al guardar la línea
+-- con "Data truncated". Se añade NO_GRAVADO al final de los dos tipos, que
+-- en MySQL es un cambio de metadatos que no reescribe la tabla. Se
+-- conservan NOT NULL y el valor por omisión GRAVADO. Se comprobó antes que
+-- ningún disparador, vista, restricción ni columna generada depende de
+-- estas columnas (`subtotal` es cantidad por precio unitario).
+--
+-- Cuando la vista da tratamiento NULL —empresa responsable sin regla—, el
+-- punto de venta no tiene qué copiar: guarda NO_GRAVADO, porque no se
+-- cobró impuesto. Ver el ADR-0024.
+--
+--
+-- ## Una empresa sin fila en `empresa_config`
+--
+-- `v_regla_iva` ya no pierde los productos de una empresa a la que le falta
+-- su fila de configuración: el JOIN es LEFT y esa empresa se trata como no
+-- responsable y sin exclusión por umbral (COALESCE a FALSE). El alta crea la
+-- fila siempre, de modo que esto es una red de seguridad y no un caso
+-- esperado.
+--
+--
 -- ## Lo que no cambia
 --
 -- `tratamiento_iva`, `tarifa_*` y `total_*` de los productos CON regla son
 -- los de siempre, y `cerca_umbral*` y `cruza_umbral_en_credito` también:
 -- un tratamiento NULL no es EXCLUIDO_HASTA_UMBRAL. Esta migración no toca
--- datos, de modo que no sube `version` en `productos` (V32).
+-- datos de `productos`, de modo que no sube `version` (V32).
 -- =====================================================================
 
 -- ---------------------------------------------------------------------
@@ -88,21 +114,22 @@ FROM (
     ti.tipo_impuesto_id,
     ti.codigo AS codigo_impuesto,
     CASE
-      WHEN ec.responsable_iva = FALSE THEN 'NO_GRAVADO'
+      WHEN COALESCE(ec.responsable_iva, FALSE) = FALSE THEN 'NO_GRAVADO'
       WHEN ti.tratamiento = 'EXCLUIDO_HASTA_UMBRAL'
-           AND ec.aplica_exclusion_umbral = FALSE THEN 'GRAVADO'
+           AND COALESCE(ec.aplica_exclusion_umbral, FALSE) = FALSE THEN 'GRAVADO'
       ELSE ti.tratamiento
     END AS tratamiento,
     CASE
-      WHEN ec.aplica_exclusion_umbral = FALSE THEN NULL
+      WHEN COALESCE(ec.aplica_exclusion_umbral, FALSE) = FALSE THEN NULL
       ELSE ti.umbral_uvt
     END AS umbral_uvt,
     CASE
-      WHEN ec.responsable_iva = FALSE OR ri.regla_iva_id IS NULL THEN 0.0000
+      WHEN COALESCE(ec.responsable_iva, FALSE) = FALSE
+           OR ri.regla_iva_id IS NULL THEN 0.0000
       ELSE ti.tarifa
     END AS tarifa,
     ri.regla_iva_id,
-    ec.responsable_iva,
+    COALESCE(ec.responsable_iva, FALSE) AS responsable_iva,
     ROW_NUMBER() OVER (
       PARTITION BY p.producto_id
       ORDER BY (ri.producto_id IS NOT NULL) DESC,
@@ -111,7 +138,7 @@ FROM (
                ri.regla_iva_id DESC
     ) AS prioridad
   FROM productos p
-  JOIN empresa_config ec ON ec.empresa_id = p.empresa_id
+  LEFT JOIN empresa_config ec ON ec.empresa_id = p.empresa_id
   LEFT JOIN (reglas_iva ri
              JOIN tipos_impuesto ti
                ON ti.tipo_impuesto_id = ri.tipo_impuesto_id
@@ -259,6 +286,19 @@ LEFT JOIN v_regla_margen mk ON mk.producto_id = p.producto_id
 LEFT JOIN v_regla_iva    ri ON ri.producto_id = p.producto_id
                            AND ri.empresa_id  = p.empresa_id
 WHERE p.activo = 1;
+
+
+-- ---------------------------------------------------------------------
+-- 3. Las líneas de venta y de cotización admiten NO_GRAVADO
+-- ---------------------------------------------------------------------
+-- El valor nuevo va al final: los existentes conservan su posición.
+ALTER TABLE venta_items
+  MODIFY tratamiento_iva ENUM('GRAVADO','EXCLUIDO','EXENTO','NO_GRAVADO')
+         NOT NULL DEFAULT 'GRAVADO';
+
+ALTER TABLE cotizacion_items
+  MODIFY tratamiento_iva ENUM('GRAVADO','EXCLUIDO','EXENTO','NO_GRAVADO')
+         NOT NULL DEFAULT 'GRAVADO';
 
 
 -- =====================================================================

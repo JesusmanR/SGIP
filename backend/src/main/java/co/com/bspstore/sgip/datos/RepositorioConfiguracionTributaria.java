@@ -217,6 +217,22 @@ public class RepositorioConfiguracionTributaria {
         return jdbc.sql("SELECT LAST_INSERT_ID()").query(Integer.class).single();
     }
 
+    /**
+     * Bloquea la fila de la empresa hasta que termine la transacción.
+     *
+     * Sirve para que dos peticiones simultáneas de crear una regla del mismo
+     * alcance se pongan en fila: sin esto las dos leen «no hay solape» antes
+     * de que la otra escriba, y las dos crean. La empresa existe siempre; el
+     * bloqueo se pide a la fila que ya hace de ancla de todo lo suyo, no a
+     * una tabla de reglas que puede estar vacía.
+     */
+    public void bloquearEmpresa(Integer empresaId) {
+        jdbc.sql("SELECT empresa_id FROM empresas WHERE empresa_id = :empresa FOR UPDATE")
+                .param("empresa", empresaId)
+                .query(Integer.class)
+                .list();
+    }
+
     /** Cierra la vigencia sin borrar la fila: una venta se explica con la regla que regía. */
     public int cerrarRegla(Integer empresaId, Integer reglaId, LocalDate hasta) {
         return jdbc.sql("""
@@ -224,6 +240,21 @@ public class RepositorioConfiguracionTributaria {
                          WHERE empresa_id = :empresa AND regla_iva_id = :regla
                         """)
                 .param("hasta", hasta)
+                .param("empresa", empresaId)
+                .param("regla", reglaId)
+                .update();
+    }
+
+    /**
+     * Borra una regla. Solo se llama para una que todavía no empezó a regir:
+     * nunca explicó una venta, de modo que retirarla corrige una equivocación
+     * y no borra historia. Ninguna tabla apunta a {@code reglas_iva}.
+     */
+    public int borrarRegla(Integer empresaId, Integer reglaId) {
+        return jdbc.sql("""
+                        DELETE FROM reglas_iva
+                         WHERE empresa_id = :empresa AND regla_iva_id = :regla
+                        """)
                 .param("empresa", empresaId)
                 .param("regla", reglaId)
                 .update();

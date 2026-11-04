@@ -157,6 +157,18 @@ describe('catálogo de productos', () => {
       expect(screen.getByText(/se vende al precio, sin impuesto/i)).toBeInTheDocument()
     })
 
+    it('quien vende no ve ni la insignia ni la leyenda', async () => {
+      // Configurar los impuestos es del administrador: un aviso que quien
+      // vende no puede atender solo le estorba delante del cliente.
+      guardarSesion({ token: 't', nombre: 'Ana', rol: 'VENDEDOR' })
+      api.catalogo.mockResolvedValue([PC, SIN_REGLA])
+      montar()
+      await conFilas()
+      expect(fila(screen, 'SRV-009')).toBeInTheDocument()
+      expect(screen.queryByText('Impuestos sin configurar')).not.toBeInTheDocument()
+      expect(screen.queryByText(/se vende al precio, sin impuesto/i)).not.toBeInTheDocument()
+    })
+
     it('no aparece en los productos que sí tienen su impuesto resuelto', async () => {
       montar()
       await conFilas()

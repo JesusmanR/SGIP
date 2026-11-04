@@ -26,12 +26,19 @@ import java.util.Optional;
  * decide si la empresa puede vender: desde el ADR-0024 puede hacerlo sin
  * haber configurado nada.
  *
- * Las reglas se crean y se cierran, no se editan ni se borran: una venta se
- * explica con la regla que regía el día que se hizo, igual que las reglas
- * de ganancia.
+ * Las reglas se crean y se cierran, no se editan: una venta se explica
+ * con la regla que regía el día que se hizo, igual que las reglas de
+ * ganancia. La única que se borra es la que todavía no empezó a regir, porque
+ * nunca explicó nada (ver {@link #cerrarRegla}).
  */
 @Service
 public class ServicioConfiguracionTributaria {
+
+    /**
+     * Qué pasó con una regla al «cerrarla»: se cerró y queda su fila, o se
+     * retiró porque aún no había empezado.
+     */
+    public record ResultadoCierre(ReglaDeIva regla, boolean retirada) {}
 
     /** Lo que ve una empresa que nadie ha configurado: los valores por omisión de la V12. */
     private static final ConfiguracionTributaria SIN_CONFIGURAR =
@@ -103,6 +110,11 @@ public class ServicioConfiguracionTributaria {
     @Transactional
     public ReglaDeIva crearRegla(SolicitudReglaIva s) {
         Integer empresa = ContextoEmpresa.empresaActual();
+        // Lo primero, antes de leer nada: el solape se comprueba y se escribe
+        // con la empresa bloqueada, y el bloqueo se suelta al confirmar. Con
+        // un doble clic, la segunda petición espera aquí y ve la regla de la
+        // primera.
+        repositorio.bloquearEmpresa(empresa);
 
         if (s.categoriaId() != null && s.productoId() != null) {
             throw new DatoTributarioInvalidoException(
@@ -143,31 +155,53 @@ public class ServicioConfiguracionTributaria {
     }
 
     /**
-     * Cierra la vigencia de una regla, que no es borrarla: la fila se
+     * Cierra la vigencia de una regla. Casi nunca es borrarla: la fila se
      * conserva porque una venta se explica con la regla que regía.
      *
-     * Sin fecha, cierra ayer: así la regla deja de aplicar desde hoy. Con la
-     * fecha de hoy seguiría vigente la jornada entera, que casi nunca es lo
-     * que quiere quien la está retirando.
+     * <ul>
+     *   <li>Con {@code hasta}, la regla termina ese día. Vale desde el día de
+     *       inicio (rige un día) y también para una regla futura.</li>
+     *   <li>Sin {@code hasta}, cierra ayer: así deja de aplicar desde hoy. Con
+     *       la fecha de hoy seguiría vigente la jornada entera, que casi
+     *       nunca es lo que quiere quien la retira.</li>
+     *   <li>Excepción: sin {@code hasta} y con la regla todavía por empezar,
+     *       se <b>retira</b> (se borra). Una regla que nunca rigió no explicó
+     *       ninguna venta, y cerrarla «ayer» sería cerrarla antes de empezar.
+     *       Es la forma de deshacer una regla creada por equivocación.</li>
+     *   <li>Sin {@code hasta} y con la regla que empieza hoy no se hace nada:
+     *       rige hoy, y se cierra indicando {@code hasta} con la fecha de hoy.</li>
+     * </ul>
      *
      * Cerrar solo acorta. Alargar el cierre de una regla que ya terminaba
      * podría solaparla con la que la sustituyó, y el solape es justo lo que
      * {@link #crearRegla} impide al crear.
      */
     @Transactional
-    public Optional<ReglaDeIva> cerrarRegla(Integer reglaId, LocalDate hasta) {
+    public Optional<ResultadoCierre> cerrarRegla(Integer reglaId, LocalDate hasta) {
         Integer empresa = ContextoEmpresa.empresaActual();
         Optional<ReglaDeIva> actual = repositorio.buscarRegla(empresa, reglaId);
         if (actual.isEmpty()) {
             return Optional.empty();
         }
         ReglaDeIva regla = actual.get();
-        LocalDate fin = hasta != null ? hasta : LocalDate.now(reloj).minusDays(1);
+        LocalDate hoy = LocalDate.now(reloj);
 
+        if (hasta == null && regla.vigenteDesde().isAfter(hoy)) {
+            repositorio.borrarRegla(empresa, reglaId);
+            return Optional.of(new ResultadoCierre(regla, true));
+        }
+
+        LocalDate fin = hasta != null ? hasta : hoy.minusDays(1);
         if (fin.isBefore(regla.vigenteDesde())) {
+            if (hasta == null) {
+                throw new DatoTributarioInvalidoException(
+                        "La regla rige desde hoy, " + hoy + ", y sin fecha se cierra ayer, "
+                                + "antes de empezar. Para cerrarla, indica «hasta» con la fecha "
+                                + "de hoy (" + hoy + ").");
+            }
             throw new DatoTributarioInvalidoException(
-                    "La regla empezó a regir el " + regla.vigenteDesde()
-                            + " y no puede cerrarse antes de esa fecha.");
+                    "La regla empieza el " + regla.vigenteDesde() + ": «hasta» (" + hasta
+                            + ") no puede ser anterior a esa fecha.");
         }
         if (regla.vigenteHasta() != null && fin.isAfter(regla.vigenteHasta())) {
             throw new DatoTributarioInvalidoException(
@@ -175,7 +209,8 @@ public class ServicioConfiguracionTributaria {
                             + ": cerrarla puede acortar su vigencia, no alargarla.");
         }
         repositorio.cerrarRegla(empresa, reglaId, fin);
-        return repositorio.buscarRegla(empresa, reglaId);
+        return repositorio.buscarRegla(empresa, reglaId)
+                .map(r -> new ResultadoCierre(r, false));
     }
 
     /** Un fundamento en blanco se guarda como ausente, no como una cadena vacía. */

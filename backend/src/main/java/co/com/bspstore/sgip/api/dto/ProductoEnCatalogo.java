@@ -13,10 +13,11 @@ import java.math.BigDecimal;
  * avisos que la vista calcula:
  *
  * tributacionSinConfigurar · la empresa se declaró responsable de IVA y el
- * producto no tiene regla de impuesto, de modo que el precio mostrado puede
- * no ser el que se cobrará. Es un aviso y no impide vender: sin regla, el
- * total es el precio (ADR-0024). Una empresa que no es responsable de IVA
- * no tiene nada que configurar y siempre recibe 0.
+ * producto no tiene regla de impuesto, de modo que se venderá al precio y sin
+ * impuesto aunque la empresa diga que lo cobra: falta decir cuál. Es un aviso
+ * y no impide vender: sin regla, el total es el precio (ADR-0024). Una
+ * empresa que no es responsable de IVA no tiene nada que configurar y
+ * siempre recibe 0.
  *
  * cercaUmbral · el precio quedó en el último diez por ciento antes del
  * umbral del artículo 424. Un ajuste pequeño de costo lo vuelve gravado.

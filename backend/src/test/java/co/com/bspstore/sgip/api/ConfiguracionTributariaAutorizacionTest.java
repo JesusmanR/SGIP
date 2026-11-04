@@ -202,16 +202,40 @@ class ConfiguracionTributariaAutorizacionTest {
     }
 
     @Test
-    void elAdministradorCierraUnaReglaYUnaAjenaEsUn404() throws Exception {
-        when(servicio.cerrarRegla(5, LocalDate.of(2026, 12, 31))).thenReturn(Optional.of(regla()));
-        when(servicio.cerrarRegla(6, null)).thenReturn(Optional.empty());
+    void elAdministradorCierraUnaReglaYRecibeLaReglaCerrada() throws Exception {
+        when(servicio.cerrarRegla(5, LocalDate.of(2026, 12, 31)))
+                .thenReturn(Optional.of(new ServicioConfiguracionTributaria.ResultadoCierre(
+                        regla(), false)));
 
         mvc.perform(request(HttpMethod.POST, BASE + "/reglas/5/cerrar")
                         .param("hasta", "2026-12-31").with(como("ADMINISTRADOR")))
-                .andExpect(status().isOk());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.reglaId").value(5));
+    }
+
+    @Test
+    void unaReglaPorEstrenarQueSeRetiraResponde204SinCuerpo() throws Exception {
+        when(servicio.cerrarRegla(5, null))
+                .thenReturn(Optional.of(new ServicioConfiguracionTributaria.ResultadoCierre(
+                        regla(), true)));
+
+        mvc.perform(request(HttpMethod.POST, BASE + "/reglas/5/cerrar")
+                        .with(como("ADMINISTRADOR")))
+                .andExpect(status().isNoContent())
+                .andExpect(content().string(""));
+    }
+
+    @Test
+    void cerrarUnaReglaAjenaEsUn404ConProblemDetail() throws Exception {
+        when(servicio.cerrarRegla(6, null)).thenReturn(Optional.empty());
+
         mvc.perform(request(HttpMethod.POST, BASE + "/reglas/6/cerrar")
                         .with(como("ADMINISTRADOR")))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isNotFound())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.status").value(404))
+                .andExpect(jsonPath("$.title").value("Recurso no encontrado"))
+                .andExpect(jsonPath("$.detail").value("La regla 6 no existe en esta empresa."));
     }
 
     @Test

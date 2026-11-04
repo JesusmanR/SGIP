@@ -5,6 +5,7 @@ import co.com.bspstore.sgip.api.dto.ReglaDeIva;
 import co.com.bspstore.sgip.api.dto.SolicitudConfiguracionTributaria;
 import co.com.bspstore.sgip.api.dto.SolicitudReglaIva;
 import co.com.bspstore.sgip.api.dto.TipoImpuestoNacional;
+import co.com.bspstore.sgip.logica.RecursoNoEncontradoException;
 import co.com.bspstore.sgip.logica.ServicioConfiguracionTributaria;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -34,7 +35,9 @@ import java.util.List;
  *
  * No hay {@code PUT} ni {@code DELETE} de reglas, y no es un olvido: una
  * venta se explica con la regla que regía el día que se hizo, igual que en
- * {@link PreciosControlador}. Una regla se crea y se cierra.
+ * {@link PreciosControlador}. Una regla se crea y se cierra. La única salida
+ * que borra es cerrar sin fecha una regla que todavía no empezó: nunca
+ * explicó una venta, y es la manera de deshacer una creada por error.
  *
  * Nada de esto es requisito para vender. Una empresa que no configura
  * impuestos vende al precio, sin impuesto (ADR-0024).
@@ -87,16 +90,28 @@ public class ConfiguracionTributariaControlador {
     }
 
     /**
-     * Cierra la vigencia, que no es borrar. Sin fecha, cierra ayer, de modo
-     * que la regla deja de aplicar hoy mismo. 404 si la regla es de otra
-     * empresa o no existe.
+     * Cierra la vigencia, que casi nunca es borrar.
+     *
+     * <ul>
+     *   <li>Con {@code hasta}: la regla termina ese día (200 con la regla).</li>
+     *   <li>Sin fecha: cierra ayer, de modo que deja de aplicar hoy mismo.</li>
+     *   <li>Sin fecha y con la regla por empezar: se retira (204, sin cuerpo),
+     *       porque nunca explicó una venta.</li>
+     *   <li>Sin fecha y con la regla que empieza hoy: 400, que dice que se
+     *       cierre con {@code hasta} igual a hoy.</li>
+     *   <li>Regla de otra empresa o inexistente: 404.</li>
+     * </ul>
      */
     @PostMapping("/reglas/{reglaId}/cerrar")
     public ResponseEntity<ReglaDeIva> cerrarRegla(
             @PathVariable Integer reglaId,
             @RequestParam(required = false) LocalDate hasta) {
-        return servicio.cerrarRegla(reglaId, hasta)
-                .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+        ServicioConfiguracionTributaria.ResultadoCierre resultado = servicio
+                .cerrarRegla(reglaId, hasta)
+                .orElseThrow(() -> new RecursoNoEncontradoException(
+                        "La regla " + reglaId + " no existe en esta empresa."));
+        return resultado.retirada()
+                ? ResponseEntity.noContent().build()
+                : ResponseEntity.ok(resultado.regla());
     }
 }

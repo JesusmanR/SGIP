@@ -25,7 +25,11 @@ vender.
 ## Decisión
 
 **Los impuestos son opcionales.** Una empresa puede vender sin haber
-configurado ninguno, y el sistema nunca pone un total vacío en una venta.
+configurado ninguno. Lo que se garantiza es esto, y no más: el
+impuesto de un producto nunca es la causa de que su total salga vacío. Sin
+regla de impuesto, la tarifa es 0 y el total es el precio. El total sigue
+vacío si el producto no tiene regla de **ganancia**, porque entonces no hay
+precio sobre el cual sumar nada (ver «Lo que no cambia»).
 
 - Una empresa nace **no responsable de IVA** (el valor por omisión de
   `empresa_config.responsable_iva` es falso, sin cambios). Sin reglas,
@@ -48,11 +52,19 @@ configurado ninguno, y el sistema nunca pone un total vacío en una venta.
 | No responsable | ninguna | `NO_GRAVADO` | 0 | igual al precio |
 | Responsable | ninguna | vacío | 1 | igual al precio |
 | Responsable | general `IVA_19` | `GRAVADO` | 0 | precio + 19 % |
+| Deja de ser responsable teniendo reglas | general `IVA_19` | `NO_GRAVADO` | 0 | igual al precio |
+
+La última fila es la de una empresa que pasa de responsable a no
+responsable: sus reglas se conservan, pero no se aplican mientras no sea
+responsable. No cobra impuesto y no recibe aviso.
 
 La empresa configura sus impuestos por la API (`/api/v1/empresa/tributacion`,
 solo el administrador): los interruptores, la tarifa de ICA y las reglas de
-IVA, que se **crean y se cierran** pero no se editan ni se borran, porque
-una venta se explica con la regla que regía el día que se hizo.
+IVA, que se **crean y se cierran** pero no se editan, porque una venta se
+explica con la regla que regía el día que se hizo. Hay una sola salida que
+borra: cerrar sin fecha una regla que **todavía no empezó**. Nunca explicó
+una venta, de modo que retirarla corrige una equivocación y no borra
+historia. Una regla que ya rige se cierra con fecha, no se borra.
 
 ## Lo que no cambia
 
@@ -70,6 +82,15 @@ una venta se explica con la regla que regía el día que se hizo.
 `v_precios_producto` que usaban `ri.tarifa` ahora usan `COALESCE(ri.tarifa,
 0)`, y la vista de reglas da tarifa 0 cuando no hay regla. La V34 es la
 migración.
+
+**La línea de venta guarda `NO_GRAVADO`.** `venta_items.tratamiento_iva` y
+`cotizacion_items.tratamiento_iva` solo admitían `GRAVADO`, `EXCLUIDO` y
+`EXENTO`, y la vista da `NO_GRAVADO` a quien no es responsable de IVA, que
+es justo quien ahora vende sin configurar nada. La V34 añade `NO_GRAVADO` a
+las dos columnas. Cuando la vista da tratamiento vacío —empresa responsable
+sin regla—, el punto de venta guarda `NO_GRAVADO` en la línea, porque no se
+cobró impuesto. Este ADR no escribe código de venta: lo dice para que quien
+lo escriba no copie un vacío a una columna que no lo admite.
 
 **El aviso se calla para quien no cobra impuestos.** Antes, toda empresa
 nueva veía «Sin impuesto configurado» en cada producto. Ahora lo ve solo

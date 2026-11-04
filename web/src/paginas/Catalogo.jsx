@@ -287,8 +287,11 @@ export default function Catalogo() {
                         tarde. Solo lo recibe la empresa que se declaró
                         responsable de IVA. Informa y no bloquea: sin regla
                         el producto se vende al precio (ADR-0024), y la
-                        leyenda de abajo lo dice con palabras. */}
-                    {p.tributacionSinConfigurar === 1 && (
+                        leyenda de abajo lo dice con palabras. Es del
+                        administrador, que es quien puede crear la regla:
+                        quien vende no puede atenderlo y le estorbaría
+                        delante del cliente. */}
+                    {esAdministrador && p.tributacionSinConfigurar === 1 && (
                       <> <span className="insignia critico">Impuestos sin configurar</span></>
                     )}
                     {/* El código va bajo el nombre, como en el diseño de la
@@ -377,7 +380,8 @@ export default function Catalogo() {
 
           {/* La insignia sola no dice qué pasa con el producto. Esto lo
               dice, y solo cuando hay alguno marcado. */}
-          {!cargando && productos.some((p) => p.tributacionSinConfigurar === 1) && (
+          {!cargando && esAdministrador
+            && productos.some((p) => p.tributacionSinConfigurar === 1) && (
             <p className="leyenda">
               «Impuestos sin configurar» marca un producto sin regla de IVA en una
               empresa responsable de IVA. Se vende al precio, sin impuesto, hasta que

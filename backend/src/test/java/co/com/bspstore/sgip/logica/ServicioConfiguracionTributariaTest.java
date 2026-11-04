@@ -18,6 +18,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
@@ -25,6 +26,7 @@ import org.mockito.quality.Strictness;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -36,12 +38,14 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -318,7 +322,35 @@ class ServicioConfiguracionTributariaTest {
                 .isEmpty());
     }
 
+    // ------------------------------------------------------ la carrera
+
+    @Test
+    void creaLaReglaConLaEmpresaBloqueadaAntesDeMirarNada() {
+        InOrder orden = inOrder(repositorio, categorias);
+
+        servicio.crearRegla(reglaNueva(4, null, ENERO, null));
+
+        // Sin el bloqueo, dos peticiones a la vez leerían «no hay solape» las
+        // dos y crearían dos reglas que se pisan. El bloqueo va antes de la
+        // primera lectura, y la comprobación de solape después de él.
+        orden.verify(repositorio).bloquearEmpresa(EMPRESA);
+        orden.verify(categorias).findByEmpresaIdAndId(EMPRESA, 4);
+        orden.verify(repositorio).haySolape(EMPRESA, 4, null, ENERO, null);
+        orden.verify(repositorio).insertarRegla(anyInt(), any(), any(), anyInt(), any(),
+                any(), any());
+    }
+
+    @Test
+    void elBloqueoSoloSirveDentroDeUnaTransaccion() throws Exception {
+        var metodo = ServicioConfiguracionTributaria.class
+                .getMethod("crearRegla", SolicitudReglaIva.class);
+
+        assertNotNull(metodo.getAnnotation(Transactional.class));
+    }
+
     // ------------------------------------------------- cerrar una regla
+
+    private static final LocalDate EN_CINCO_DIAS = HOY.plusDays(5);
 
     @Test
     void cerrarUnaReglaAjenaDevuelveVacio() {
@@ -327,13 +359,17 @@ class ServicioConfiguracionTributariaTest {
         assertTrue(servicio.cerrarRegla(77, AYER).isEmpty());
 
         verify(repositorio, never()).cerrarRegla(anyInt(), anyInt(), any());
+        verify(repositorio, never()).borrarRegla(anyInt(), anyInt());
     }
 
     @Test
     void cerrarSinFechaCierraAyer() {
-        servicio.cerrarRegla(50, null);
+        var resultado = servicio.cerrarRegla(50, null).orElseThrow();
 
         verify(repositorio).cerrarRegla(EMPRESA, 50, AYER);
+        verify(repositorio, never()).borrarRegla(anyInt(), anyInt());
+        assertFalse(resultado.retirada());
+        assertNotNull(resultado.regla());
     }
 
     @Test
@@ -344,17 +380,61 @@ class ServicioConfiguracionTributariaTest {
     }
 
     @Test
-    void noSePuedeCerrarUnaReglaAntesDeQueEmpiece() {
+    void unaReglaQueTodaviaNoEmpezoYSeCierraSinFechaSeRetira() {
+        // Una regla por estrenar nunca explicó una venta: retirarla no borra
+        // historia, corrige una equivocación.
+        when(repositorio.buscarRegla(EMPRESA, 50))
+                .thenReturn(Optional.of(regla(50, null, null, EN_CINCO_DIAS, null)));
+
+        var resultado = servicio.cerrarRegla(50, null).orElseThrow();
+
+        verify(repositorio).borrarRegla(EMPRESA, 50);
+        verify(repositorio, never()).cerrarRegla(anyInt(), anyInt(), any());
+        assertTrue(resultado.retirada());
+    }
+
+    @Test
+    void unaReglaFuturaConFechaSeCierraNormalmenteSinBorrarse() {
+        when(repositorio.buscarRegla(EMPRESA, 50))
+                .thenReturn(Optional.of(regla(50, null, null, EN_CINCO_DIAS, null)));
+
+        // El mismo día de inicio vale: la regla rige un día.
+        servicio.cerrarRegla(50, EN_CINCO_DIAS);
+        servicio.cerrarRegla(50, EN_CINCO_DIAS.plusDays(10));
+
+        verify(repositorio).cerrarRegla(EMPRESA, 50, EN_CINCO_DIAS);
+        verify(repositorio).cerrarRegla(EMPRESA, 50, EN_CINCO_DIAS.plusDays(10));
+        verify(repositorio, never()).borrarRegla(anyInt(), anyInt());
+    }
+
+    @Test
+    void unaReglaQueEmpiezaHoySinFechaSeRechazaDiciendoComoCerrarla() {
         when(repositorio.buscarRegla(EMPRESA, 50))
                 .thenReturn(Optional.of(regla(50, null, null, HOY, null)));
 
-        // Sin fecha cierra ayer, que es anterior al inicio de esta regla.
-        assertThrows(DatoTributarioInvalidoException.class,
+        var e = assertThrows(DatoTributarioInvalidoException.class,
                 () -> servicio.cerrarRegla(50, null));
-        assertThrows(DatoTributarioInvalidoException.class,
-                () -> servicio.cerrarRegla(50, AYER));
 
+        // Rige hoy: cerrarla ayer sería cerrarla antes de empezar, y borrarla
+        // sería borrar lo que ya está explicando precios.
+        assertTrue(e.getMessage().contains("hoy"), e.getMessage());
+        assertTrue(e.getMessage().contains(HOY.toString()), e.getMessage());
+        assertTrue(e.getMessage().contains("hasta"), e.getMessage());
         verify(repositorio, never()).cerrarRegla(anyInt(), anyInt(), any());
+        verify(repositorio, never()).borrarRegla(anyInt(), anyInt());
+    }
+
+    @Test
+    void noSePuedeCerrarUnaReglaAntesDeQueEmpiece() {
+        when(repositorio.buscarRegla(EMPRESA, 50))
+                .thenReturn(Optional.of(regla(50, null, null, EN_CINCO_DIAS, null)));
+
+        var e = assertThrows(DatoTributarioInvalidoException.class,
+                () -> servicio.cerrarRegla(50, HOY));
+
+        assertTrue(e.getMessage().contains(EN_CINCO_DIAS.toString()), e.getMessage());
+        verify(repositorio, never()).cerrarRegla(anyInt(), anyInt(), any());
+        verify(repositorio, never()).borrarRegla(anyInt(), anyInt());
     }
 
     @Test

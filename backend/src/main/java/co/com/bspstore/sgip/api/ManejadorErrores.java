@@ -178,9 +178,10 @@ public class ManejadorErrores {
 
     @ExceptionHandler(RegistroRepetidoException.class)
     public ProblemDetail registroRepetido(RegistroRepetidoException e) {
-        // 409 igual que el nombre repetido, pero con otro título: aquí la
-        // unicidad es de toda la plataforma y no de dentro de una empresa,
-        // y el detalle dice cuál de los dos datos del alta choca.
+        // 409 igual que el nombre repetido, pero con otro título: «dato ya
+        // registrado» sirve a la unicidad de toda la plataforma (el NIT, el
+        // correo) y también a dos reglas del mismo alcance a la vez dentro de
+        // una empresa; el detalle dice cuál es el dato que choca.
         ProblemDetail p = ProblemDetail.forStatus(HttpStatus.CONFLICT);
         p.setTitle("Dato ya registrado");
         p.setDetail(e.getMessage());
