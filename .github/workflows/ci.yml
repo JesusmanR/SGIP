@@ -359,6 +359,85 @@ jobs:
             && echo "MySQL la aceptó" \
             || echo "MySQL la rechazó: la invariante queda a cargo de la aplicación"
 
+  # Una empresa nueva nace sin datos de demostración, y el trabajo
+  # `esquema` los carga siempre (V8 va en su cadena). Nada probaba que los
+  # guiones funcionaran sin ellos: V9 y V10 migran las filas que carga la
+  # V8, y una migración que diera por hecho que existen solo reventaría el
+  # día que alguien montara la base de verdad.
+  #
+  # Aquí se ejecuta el guion real, `database/aplicar.sh`, con sus propios
+  # centinelas (41 tablas, 6 vistas, 4 funciones, las claves por empresa);
+  # no una copia de su lista. El servicio nace sin `MYSQL_DATABASE` porque
+  # el guion crea la base por su cuenta y se niega a aplicarse sobre una
+  # que ya tiene tablas.
+  #
+  # La credencial va en `~/.my.cnf` y no en la línea de órdenes, que es
+  # como la lee el guion sin `-p`. La clave es la desechable del
+  # contenedor, la misma que usan los demás trabajos.
+  esquema-sin-demo:
+    name: Esquema sin datos de demostración
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:9.7
+        env:
+          MYSQL_ROOT_PASSWORD: sgip_ci
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -psgip_ci"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Preparar la credencial del cliente
+        run: |
+          umask 077
+          printf '[client]\nuser=root\npassword=sgip_ci\n' > ~/.my.cnf
+
+      - name: Aplicar V1 a V31 con el guion, sin datos de demostración
+        run: bash database/aplicar.sh -u root -h 127.0.0.1
+
+      # El guion queda congelado en la V31 (ADR-0023); lo posterior lo
+      # aplica Flyway al arrancar el backend. Este trabajo no arranca el
+      # backend, y `verificar_sql_del_backend.py` necesita el esquema
+      # final, así que las migraciones nuevas se aplican aquí con el
+      # cliente, igual que en el trabajo `esquema`.
+      - name: Aplicar las migraciones nuevas (V32 en adelante)
+        run: |
+          set -e
+          mapfile -t nuevas < <(find backend/src/main/resources/db/migration -maxdepth 1 -name 'V*.sql' | sort -V)
+          echo "migraciones nuevas: ${#nuevas[@]}"
+          for ruta in "${nuevas[@]}"; do
+            f=$(basename "$ruta")
+            echo "→ $f"
+            if ! salida=$(mysql -h 127.0.0.1 sgip < "$ruta" 2>&1); then
+              echo "$salida"
+              echo "::error file=$ruta::$f falló · $(printf '%s' "$salida" | grep -m1 -i '^ERROR' || printf '%s' "$salida" | head -1)"
+              exit 1
+            fi
+            if printf '%s' "$salida" | grep -qi '^ERROR'; then
+              echo "$salida"
+              echo "::error file=$ruta::$f dejó un error · $(printf '%s' "$salida" | grep -m1 -i '^ERROR')"
+              exit 1
+            fi
+          done
+
+      # Que la base esté de verdad sin demostración: si la V8 se hubiera
+      # colado, este trabajo estaría probando lo mismo que `esquema`.
+      - name: Verificar que no hay datos de demostración
+        run: |
+          n=$(mysql -h 127.0.0.1 -N -B sgip -e \
+            "SELECT (SELECT COUNT(*) FROM usuarios)
+                  + (SELECT COUNT(*) FROM productos)
+                  + (SELECT COUNT(*) FROM clientes)
+                  + (SELECT COUNT(*) FROM proveedores);")
+          echo "filas de demostración: $n"
+          test "$n" -eq 0 || {
+            echo "::error::la base tiene datos de demostración"; exit 1; }
+
+      - name: Analizar el SQL escrito a mano del backend
+        run: python3 database/verificar_sql_del_backend.py -h 127.0.0.1 -u root
+
   backend:
     name: Compilación y pruebas del backend
     runs-on: ubuntu-latest

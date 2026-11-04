@@ -70,13 +70,14 @@ public class ServicioPlataforma {
     /**
      * Da de alta una empresa con su administrador inicial (RF-01).
      *
-     * Las cinco escrituras —empresa, suscripción, configuración, usuario
-     * y bitácora— van en una sola transacción, y no es celo: a medias
-     * queda una empresa en la que nadie puede entrar, y nadie de fuera
-     * puede crearle el primer usuario, porque crear usuarios es cosa de
-     * su propio administrador (RF-12). El estado irrecuperable no sería
-     * un dato perdido, sería un comercio inservible que además ocupa su
-     * identificación tributaria.
+     * Las seis escrituras —empresa, suscripción, configuración, medios
+     * de pago, usuario y bitácora— van en una sola transacción, y no es
+     * celo: a medias queda una empresa en la que nadie puede entrar, o
+     * que no puede cobrar, y nadie de fuera puede crearle el primer
+     * usuario, porque crear usuarios es cosa de su propio administrador
+     * (RF-12). El estado irrecuperable no sería un dato perdido, sería
+     * un comercio inservible que además ocupa su identificación
+     * tributaria.
      *
      * Los dos choques posibles se comprueban antes de escribir para
      * poder decir cuál es. La clave única de la base sigue ahí debajo por
@@ -118,6 +119,14 @@ public class ServicioPlataforma {
                 hoy.plusMonths(plataforma.mesesDePrueba()));
 
         plataforma.insertarConfiguracion(empresaId);
+
+        // Los medios de pago son lo único que se siembra, porque sin ellos
+        // no se puede registrar ninguna venta. Los márgenes NO: los decide
+        // el comercio producto por producto. Los impuestos tampoco: son
+        // opcionales, y una empresa sin reglas de IVA vende al precio
+        // (ADR-0024). Sembrar «valores por omisión» aquí le impondría al
+        // comercio un cobro que nadie le pidió.
+        plataforma.sembrarMediosDePago(empresaId);
 
         Rol rolAdministrador = roles.findByNombre(ROL_ADMINISTRADOR)
                 .orElseThrow(() -> new IllegalStateException(
