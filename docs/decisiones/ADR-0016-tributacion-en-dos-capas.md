@@ -110,3 +110,11 @@ es `NOT NULL`, de modo que vivía como un ajuste de la empresa 1. La
 V22 lo resuelve con la misma figura que esta decisión aplicó a los
 impuestos: `parametros_plataforma` para lo que decide la plataforma,
 `parametros` para lo que decide cada comercio. Ver ADR-0020.
+
+## Nota posterior · los impuestos son opcionales
+
+La consecuencia «la RN-25 impide vender hasta que alguien elija» ya no
+rige. El ADR-0024 la retira: una empresa que no configuró nada vende sin
+impuesto, y `tributacion_sin_configurar` avisa solo a quien se declaró
+responsable de IVA y dejó un producto sin regla. La separación en dos
+capas, que es lo que esta decisión establece, no cambia.

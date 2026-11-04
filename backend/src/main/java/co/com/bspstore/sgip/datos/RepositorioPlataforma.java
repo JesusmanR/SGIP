@@ -218,11 +218,15 @@ public class RepositorioPlataforma {
      * las ventas, sin exclusión por umbral y sin retenciones.
      *
      * La fila se crea vacía en lugar de dejarla sin crear porque las
-     * vistas de precios la enlazan, y una empresa sin ella saldría con
-     * {@code tributacion_sin_configurar} por una fila que falta y no por
-     * una decisión pendiente. Con la fila presente y
-     * {@code configuracion_completa} en falso, la pantalla puede decir
-     * «falta configurar» en lugar de no encontrar nada.
+     * vistas de precios la enlazan (con {@code JOIN}), y una empresa sin
+     * ella no tendría ninguna regla de IVA que resolver para sus
+     * productos. Con la fila presente y {@code configuracion_completa} en
+     * falso, la pantalla puede decir «falta configurar» en lugar de no
+     * encontrar nada.
+     *
+     * Nacer con {@code responsable_iva} en falso no impide vender: sin
+     * reglas de IVA los productos salen {@code NO_GRAVADO}, al precio
+     * (ADR-0024).
      */
     public void insertarConfiguracion(Integer empresaId) {
         jdbc.sql("INSERT INTO empresa_config (empresa_id) VALUES (:empresa)")

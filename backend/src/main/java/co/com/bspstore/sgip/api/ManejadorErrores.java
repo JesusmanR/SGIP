@@ -9,6 +9,7 @@ import co.com.bspstore.sgip.logica.EstadoDeCargaInvalidoException;
 import co.com.bspstore.sgip.logica.RecursoNoEncontradoException;
 import co.com.bspstore.sgip.logica.CredencialesInvalidasException;
 import co.com.bspstore.sgip.logica.FiltroInvalidoException;
+import co.com.bspstore.sgip.logica.ImpuestoNoDisponibleException;
 import co.com.bspstore.sgip.logica.AlmacenArchivos;
 import co.com.bspstore.sgip.logica.ArchivoInvalidoException;
 import co.com.bspstore.sgip.logica.MovimientoInvalidoException;
@@ -192,6 +193,17 @@ public class ManejadorErrores {
         // existir; lo que no es válido es usarlo desde esta empresa.
         ProblemDetail p = ProblemDetail.forStatus(HttpStatus.UNPROCESSABLE_ENTITY);
         p.setTitle("Referencia de otra empresa");
+        p.setDetail(e.getMessage());
+        return p;
+    }
+
+    @ExceptionHandler(ImpuestoNoDisponibleException.class)
+    public ProblemDetail impuestoNoDisponible(ImpuestoNoDisponibleException e) {
+        // 422 como la referencia ajena, y con su propio título: el catálogo
+        // de impuestos no es de ninguna empresa, de modo que «otra empresa»
+        // sería mentir sobre dónde está el problema.
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.UNPROCESSABLE_ENTITY);
+        p.setTitle("Impuesto no disponible");
         p.setDetail(e.getMessage());
         return p;
     }

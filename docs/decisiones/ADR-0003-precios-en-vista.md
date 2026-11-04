@@ -73,3 +73,10 @@ La vista expone además `base_contado` y `base_credito`, que es lo que el
 RF-32 pide que la interfaz indique. Dos productos con el mismo precio
 pueden venir de reglas distintas y la pantalla no tiene cómo saberlo
 mirando el número.
+
+## Nota posterior · el aviso de tributación ya no impide calcular el precio
+
+`tributacion_sin_configurar` dejó de significar «el precio al cliente no
+se puede calcular». Desde la V34 una empresa sin reglas de IVA vende al
+precio, y el aviso es solo para la que se declaró responsable de IVA y
+dejó un producto sin regla. Ver ADR-0024.
