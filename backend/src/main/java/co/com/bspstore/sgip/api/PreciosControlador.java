@@ -27,11 +27,12 @@ import java.util.List;
  * que alcanza, de modo que es de las pantallas que más cuesta deshacer
  * si alguien se equivoca.
  *
- * No hay ningún endpoint que escriba un precio, y no es un olvido: el
- * RF-31 pide que «el precio de venta no admita captura manual en
- * ninguna interfaz». El precio sale de `v_precios_producto`, que aplica
- * la regla vigente al costo en cada lectura. Se cambia el costo o se
- * cambia la regla; el precio es consecuencia.
+ * Aquí se administran las reglas de ámbito: general, categoría y proveedor.
+ * La prohibición de capturar el precio del RF-31 la retiró el ADR-0025: el
+ * porcentaje o el precio de un producto se escriben al registrarlo o editarlo
+ * (`ProductoControlador`), y esas reglas propias no se listan ni se tocan
+ * desde aquí. En los dos casos el precio sale de `v_precios_producto`, que
+ * aplica la regla vigente en cada lectura.
  */
 @RestController
 @RequestMapping("/api/v1/precios/reglas")
@@ -64,7 +65,8 @@ public class PreciosControlador {
     /**
      * Cuántas referencias alcanzaría una regla de este ámbito, para
      * poder decirlo antes de guardar. Un cambio de margen se hace en un
-     * segundo y se nota en la factura de cada cliente.
+     * segundo y se nota en la factura de cada cliente. No cuenta los productos
+     * con regla propia, que esa regla no movería.
      */
     @GetMapping("/alcance")
     public Alcance alcance(@RequestParam(required = false) Integer categoria,

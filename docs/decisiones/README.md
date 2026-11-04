@@ -40,6 +40,7 @@ nueva. La decisión original se deja tal como se escribió.
 | 0022 | El mes de prueba es un mes de calendario, no treinta días | vigente |
 | 0023 | Flyway gobierna las migraciones desde la V32 | vigente |
 | 0024 | Los impuestos son opcionales: una empresa vende sin configurarlos | vigente |
+| 0025 | El precio de venta y el porcentaje se escriben por producto | vigente |
 | 0027 | Versiones seguras: LTS en Java y Node, último parche estable en las librerías | vigente |
 
 ## Las cuatro que conviene leer antes de escribir código

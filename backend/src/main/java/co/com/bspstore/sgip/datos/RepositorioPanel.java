@@ -164,10 +164,14 @@ public class RepositorioPanel {
      * costo nuevo sobre la regla actual, y ahora el costo anterior sobre
      * la regla actual— y lo único común es el álgebra, que es
      * exactamente lo que se habría duplicado por tercera vez.
+     *
+     * Con un precio fijo el costo no movió el precio (ADR-0025), de modo que el
+     * precio de antes es el mismo: el factor es nulo y hace falta el COALESCE.
      */
-    private static final String PRECIO_CON_COSTO_ANTERIOR =
+    private static final String PRECIO_CON_COSTO_ANTERIOR = """
+            COALESCE(v.precio_fijo_contado, %1$s)""".formatted(
             RepositorioPrecios.PRECIO.formatted(
-                    "h.costo", "v.factor_contado", "v.base_contado");
+                    "h.costo", "v.factor_contado", "v.base_contado"));
 
     /**
      * Qué referencias cambiaron de tratamiento tributario por culpa de

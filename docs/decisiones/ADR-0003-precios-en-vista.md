@@ -83,3 +83,10 @@ dejó un producto sin regla. Ver ADR-0024.
 
 Desde la V35 también avisa de un producto excluido hasta el umbral si falta
 la UVT del año en curso. Ver la nota final del ADR-0024.
+
+## Nota posterior · el precio también se puede escribir
+
+Desde la V36 un producto puede tener su propio porcentaje o su propia cifra,
+y `productos` sigue sin guardar precios: lo escrito es una fila de
+`reglas_margen` y lo resuelve esta misma vista. Sigue habiendo un solo sitio
+donde se calcula el precio que se vende. Ver ADR-0025.

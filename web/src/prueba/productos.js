@@ -9,6 +9,10 @@
  *   PC-001   excluido al contado y gravado a crédito, y cerca del umbral
  *   CEL-002  excluido en las dos modalidades: sin ninguna anotación
  *   MON-001  gravado en las dos, con margen sobre el precio de venta
+ *
+ * Las columnas de margen y precio escrito son de la V36: se dedujeron de
+ * las mismas cifras, no se volvieron a pedir a la base. Las tres venden
+ * por porcentaje; el caso del precio escrito lo arma cada prueba.
  */
 export const PC = {
   productoId: 1, codigo: 'PC-001', sku: 'PC-001', nombre: 'Portátil Lenovo V15',
@@ -23,6 +27,8 @@ export const PC = {
   baseContado: 'SOBRE_COSTO', baseCredito: 'SOBRE_COSTO',
   tributacionSinConfigurar: 0, cercaUmbral: 1, cercaUmbralCredito: 0,
   cruzaUmbralEnCredito: 1, imagenPrincipalId: null, tieneImagen: 0,
+  margenContado: 20, margenCredito: 25, precioFijoContado: null, precioFijoCredito: null,
+  porcentajeContado: 20, porcentajeCredito: 25,
 }
 
 export const CEL = {
@@ -37,6 +43,8 @@ export const CEL = {
   baseContado: 'SOBRE_COSTO', baseCredito: 'SOBRE_COSTO',
   tributacionSinConfigurar: 0, cercaUmbral: 0, cercaUmbralCredito: 0,
   cruzaUmbralEnCredito: 0, imagenPrincipalId: null, tieneImagen: 0,
+  margenContado: 20, margenCredito: 25, precioFijoContado: null, precioFijoCredito: null,
+  porcentajeContado: 20, porcentajeCredito: 25,
 }
 
 export const MON = {
@@ -51,6 +59,8 @@ export const MON = {
   baseContado: 'SOBRE_PRECIO', baseCredito: 'SOBRE_PRECIO',
   tributacionSinConfigurar: 0, cercaUmbral: 0, cercaUmbralCredito: 0,
   cruzaUmbralEnCredito: 0, imagenPrincipalId: null, tieneImagen: 0,
+  margenContado: 25, margenCredito: 30, precioFijoContado: null, precioFijoCredito: null,
+  porcentajeContado: 25, porcentajeCredito: 30,
 }
 
 export const CATEGORIAS = [

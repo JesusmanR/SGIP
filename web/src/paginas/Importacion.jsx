@@ -308,7 +308,8 @@ export default function Importacion() {
               <div className="aviso exito" role="status">
                 <strong>{carga.aceptados} referencias actualizadas</strong>
                 <span className="sub-linea">
-                  Los precios de venta ya salen del costo nuevo.
+                  Los precios por porcentaje ya salen del costo nuevo. Los precios
+                  escritos se conservan y cambia su margen.
                 </span>
               </div>
             )}

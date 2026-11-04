@@ -346,10 +346,17 @@ public class RepositorioImportacion {
      * simula una regla nueva sobre el costo actual, y esta un costo
      * nuevo sobre la regla actual— de modo que lo que se comparte es la
      * fórmula, que es lo que se habría duplicado por tercera vez.
+     *
+     * Un precio fijo se conserva al aplicar la lista (ADR-0025): lo que cambia
+     * es su margen. Su factor es nulo, de modo que sin el COALESCE el precio
+     * de después saldría vacío y la comparación contra el umbral no lo vería.
+     * Un producto con porcentaje propio sí cambia de precio, por la misma
+     * fórmula que cualquier otro.
      */
-    private static final String PRECIO_CON_COSTO_NUEVO =
+    private static final String PRECIO_CON_COSTO_NUEVO = """
+            COALESCE(v.precio_fijo_contado, %1$s)""".formatted(
             RepositorioPrecios.PRECIO.formatted(
-                    "d.costo", "v.factor_contado", "v.base_contado");
+                    "d.costo", "v.factor_contado", "v.base_contado"));
 
     /**
      * Qué referencias de la carga cambiarían de tratamiento tributario

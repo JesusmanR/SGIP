@@ -107,7 +107,9 @@ class AutorizacionPorRolTest {
                 "7701", 4, "Granos", 3, "Distribuidora", new BigDecimal("3100.00"), 12, 5,
                 "ACTIVO", new BigDecimal("3720.00"), new BigDecimal("3875.00"), "EXCLUIDO",
                 BigDecimal.ZERO, new BigDecimal("3720.00"), new BigDecimal("3875.00"),
-                "SOBRE_COSTO", "SOBRE_PRECIO", 0, 0, 0, 0, null, 0);
+                "SOBRE_COSTO", "SOBRE_PRECIO", 0, 0, 0, 0, null, 0,
+                new BigDecimal("20.00"), new BigDecimal("25.00"), new BigDecimal("3720"), null,
+                null, new BigDecimal("25.00"));
     }
 
     /** El 403 de la API: ProblemDetail con texto fijo, no el cuerpo vacío del contenedor. */
@@ -140,7 +142,13 @@ class AutorizacionPorRolTest {
                 .andExpect(jsonPath("$[0].baseContado").exists())
                 .andExpect(jsonPath("$[0].costo").doesNotExist())
                 .andExpect(jsonPath("$[0].proveedor").doesNotExist())
-                .andExpect(jsonPath("$[0].proveedorId").doesNotExist());
+                .andExpect(jsonPath("$[0].proveedorId").doesNotExist())
+                .andExpect(jsonPath("$[0].margenContado").doesNotExist())
+                .andExpect(jsonPath("$[0].margenCredito").doesNotExist())
+                .andExpect(jsonPath("$[0].precioFijoContado").doesNotExist())
+                .andExpect(jsonPath("$[0].precioFijoCredito").doesNotExist())
+                .andExpect(jsonPath("$[0].porcentajeContado").doesNotExist())
+                .andExpect(jsonPath("$[0].porcentajeCredito").doesNotExist());
     }
 
     @ParameterizedTest
@@ -156,7 +164,13 @@ class AutorizacionPorRolTest {
                 .andExpect(jsonPath("$.baseContado").exists())
                 .andExpect(jsonPath("$.costo").doesNotExist())
                 .andExpect(jsonPath("$.proveedor").doesNotExist())
-                .andExpect(jsonPath("$.proveedorId").doesNotExist());
+                .andExpect(jsonPath("$.proveedorId").doesNotExist())
+                .andExpect(jsonPath("$.margenContado").doesNotExist())
+                .andExpect(jsonPath("$.margenCredito").doesNotExist())
+                .andExpect(jsonPath("$.precioFijoContado").doesNotExist())
+                .andExpect(jsonPath("$.precioFijoCredito").doesNotExist())
+                .andExpect(jsonPath("$.porcentajeContado").doesNotExist())
+                .andExpect(jsonPath("$.porcentajeCredito").doesNotExist());
     }
 
     @ParameterizedTest
@@ -172,7 +186,13 @@ class AutorizacionPorRolTest {
                 .andExpect(jsonPath("$.baseContado").exists())
                 .andExpect(jsonPath("$.costo").doesNotExist())
                 .andExpect(jsonPath("$.proveedor").doesNotExist())
-                .andExpect(jsonPath("$.proveedorId").doesNotExist());
+                .andExpect(jsonPath("$.proveedorId").doesNotExist())
+                .andExpect(jsonPath("$.margenContado").doesNotExist())
+                .andExpect(jsonPath("$.margenCredito").doesNotExist())
+                .andExpect(jsonPath("$.precioFijoContado").doesNotExist())
+                .andExpect(jsonPath("$.precioFijoCredito").doesNotExist())
+                .andExpect(jsonPath("$.porcentajeContado").doesNotExist())
+                .andExpect(jsonPath("$.porcentajeCredito").doesNotExist());
     }
 
     // ---- lo que se les niega -----------------------------------------
@@ -227,7 +247,10 @@ class AutorizacionPorRolTest {
                     .andExpect(jsonPath(raiz + ".costo").value(3100.00))
                     .andExpect(jsonPath(raiz + ".proveedor").value("Distribuidora"))
                     .andExpect(jsonPath(raiz + ".proveedorId").value(3))
-                    .andExpect(jsonPath(raiz + ".baseContado").exists());
+                    .andExpect(jsonPath(raiz + ".baseContado").exists())
+                    .andExpect(jsonPath(raiz + ".margenContado").value(20.00))
+                    .andExpect(jsonPath(raiz + ".precioFijoContado").value(3720))
+                    .andExpect(jsonPath(raiz + ".porcentajeCredito").value(25.00));
         }
     }
 

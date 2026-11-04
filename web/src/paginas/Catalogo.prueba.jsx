@@ -294,9 +294,65 @@ describe('catálogo de productos', () => {
       await conFilas()
       expect(api.proveedores).toHaveBeenCalled()
       expect(screen.getByRole('columnheader', { name: 'Costo' })).toBeInTheDocument()
-      expect(screen.getAllByRole('columnheader')).toHaveLength(9)
+      expect(screen.getAllByRole('columnheader')).toHaveLength(10)
       expect(screen.getByLabelText(/proveedor/i)).toBeInTheDocument()
       expect(fila(screen, 'PC-001')).toHaveTextContent('2.100.000')
+    })
+
+    it('un vendedor no ve la columna de margen', async () => {
+      montar()
+      await conFilas()
+      expect(screen.queryByRole('columnheader', { name: 'Margen' })).not.toBeInTheDocument()
+      expect(screen.queryByText(/falta el precio de venta/i)).not.toBeInTheDocument()
+      expect(fila(screen, 'PC-001')).not.toHaveTextContent('20,00')
+    })
+
+    it('un administrador ve el margen de contado y el de crédito si difiere', async () => {
+      guardarSesion({ token: 't', nombre: 'Jesús Manuel', rol: 'ADMINISTRADOR' })
+      api.catalogo.mockResolvedValue([PC, { ...CEL, margenCredito: 20 }])
+      api.proveedores.mockResolvedValue(PROVEEDORES)
+      montar()
+      await conFilas()
+      expect(screen.getByRole('columnheader', { name: 'Margen' })).toBeInTheDocument()
+      expect(fila(screen, 'PC-001')).toHaveTextContent('20,00 %')
+      expect(fila(screen, 'PC-001')).toHaveTextContent('a crédito 25,00 %')
+      expect(fila(screen, 'CEL-002')).toHaveTextContent('20,00 %')
+      expect(fila(screen, 'CEL-002')).not.toHaveTextContent('a crédito')
+    })
+
+    it('un margen negativo se ve negativo', async () => {
+      guardarSesion({ token: 't', nombre: 'Jesús Manuel', rol: 'ADMINISTRADOR' })
+      api.catalogo.mockResolvedValue([{ ...PC, margenContado: -10 }])
+      api.proveedores.mockResolvedValue(PROVEEDORES)
+      montar()
+      await conFilas()
+      expect(fila(screen, 'PC-001')).toHaveTextContent('-10,00 %')
+    })
+
+    it('sin precio dice que falta, en vez de un margen de cero', async () => {
+      guardarSesion({ token: 't', nombre: 'Jesús Manuel', rol: 'ADMINISTRADOR' })
+      api.catalogo.mockResolvedValue([{
+        ...PC, precioContado: null, precioCredito: null, totalContado: null, totalCredito: null,
+        margenContado: null, margenCredito: null, cruzaUmbralEnCredito: 0, cercaUmbral: 0,
+        baseContado: null, baseCredito: null,
+      }])
+      api.proveedores.mockResolvedValue(PROVEEDORES)
+      montar()
+      await conFilas()
+      expect(fila(screen, 'PC-001')).toHaveTextContent('Falta el precio de venta')
+      expect(fila(screen, 'PC-001')).not.toHaveTextContent('0,00 %')
+      // Sin precio tampoco hay nada «escrito».
+      expect(fila(screen, 'PC-001')).not.toHaveTextContent('precio escrito')
+    })
+
+    it('un precio escrito se anota, y la leyenda dice qué significa', async () => {
+      api.catalogo.mockResolvedValue([
+        { ...PC, baseContado: null, precioFijoContado: 2500000, precioContado: 2500000 },
+      ])
+      montar()
+      await conFilas()
+      expect(fila(screen, 'PC-001')).toHaveTextContent('precio escrito')
+      expect(screen.getByText(/se venden a esa cifra aunque cambie el costo/i)).toBeInTheDocument()
     })
 
     it('si los proveedores fallan, el administrador conserva las categorías', async () => {

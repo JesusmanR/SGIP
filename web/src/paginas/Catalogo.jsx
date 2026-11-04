@@ -8,7 +8,7 @@ import { api } from '../servicios/api.js'
 import { subirImagenes } from '../servicios/subidas.js'
 import { leerSesion } from '../servicios/sesion.js'
 
-import { PESOS } from '../servicios/formato.js'
+import { PESOS, porcentajeConDecimales } from '../servicios/formato.js'
 
 /**
  * Si el total con impuesto dice algo que el precio no diga ya.
@@ -39,13 +39,17 @@ function conImpuesto(precio, total) {
  *     todas las filas repetiría la misma palabra doscientas veces: lo
  *     que se señala es la minoritaria, y la leyenda bajo la tabla dice
  *     qué significa su ausencia. Por eso la leyenda no es decorativa:
- *     sin ella la anotación no se puede interpretar.
+ *     sin ella la anotación no se puede interpretar;
+ *   · que el precio está escrito a mano y no sale de un porcentaje. Sin
+ *     esto, la leyenda diría de él que se calcula sobre el costo. La vista
+ *     lo deja sin base, y un producto sin regla no tiene ni base ni precio.
  */
 function anotaciones(precio, total, cerca, base) {
   const partes = []
   if (conImpuesto(precio, total)) partes.push(`con IVA ${PESOS.format(total)}`)
   if (cerca === 1) partes.push('cerca del umbral')
   if (base === 'SOBRE_PRECIO') partes.push('sobre el precio')
+  if (precio != null && base == null) partes.push('precio escrito')
   return partes
 }
 
@@ -218,7 +222,7 @@ export default function Catalogo() {
         {error && <div className="aviso error" role="alert">{error}</div>}
 
         <div className="tarjeta">
-          {/* La tabla tiene hasta nueve columnas y en un teléfono no cabe. Sin
+          {/* La tabla tiene hasta diez columnas y en un teléfono no cabe. Sin
               este contenedor no se recortaba: se derramaba fuera de la
               tarjeta y arrastraba la página entera hacia la derecha, de
               modo que el precio quedaba sobre el fondo y no sobre la
@@ -231,6 +235,7 @@ export default function Catalogo() {
                 <th>Producto</th>
                 <th>Categoría</th>
                 {esAdministrador && <th className="numero">Costo</th>}
+                {esAdministrador && <th className="numero">Margen</th>}
                 <th className="numero">Contado</th>
                 <th className="numero">Crédito</th>
                 <th className="numero">Exist.</th>
@@ -317,6 +322,22 @@ export default function Catalogo() {
                   </td>
                   <td>{p.categoria}</td>
                   {esAdministrador && <td className="numero">{PESOS.format(p.costo)}</td>}
+                  {/* El margen, como el costo del que sale, es del
+                      administrador. Sin precio no hay margen de cero: hay
+                      un precio que falta, y eso es lo que se dice. */}
+                  {esAdministrador && (
+                    <td className="numero">
+                      {p.precioContado == null
+                        ? 'Falta el precio de venta'
+                        : porcentajeConDecimales(p.margenContado)}
+                      {p.margenCredito != null
+                        && Number(p.margenCredito) !== Number(p.margenContado) && (
+                        <span className="sub-linea">
+                          a crédito {porcentajeConDecimales(p.margenCredito)}
+                        </span>
+                      )}
+                    </td>
+                  )}
                   {/* Bajo cada precio va su total con impuesto, y solo
                       cuando difiere: si el producto está excluido, el
                       total es el precio y repetirlo sería ruido. El
@@ -374,7 +395,8 @@ export default function Catalogo() {
               Los precios sin anotación se calculan como recargo sobre el costo.
               Los marcados «sobre el precio» aplican el margen sobre el precio de
               venta, de modo que un 20 % da 1.250 y no 1.200 sobre un costo de
-              1.000.
+              1.000. Los marcados «precio escrito» se venden a esa cifra aunque
+              cambie el costo.
             </p>
           )}
 

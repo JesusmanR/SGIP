@@ -2,6 +2,7 @@ package co.com.bspstore.sgip.logica;
 
 import co.com.bspstore.sgip.api.dto.CruceDeUmbral;
 import co.com.bspstore.sgip.api.dto.ReglaDeMargen;
+import co.com.bspstore.sgip.api.dto.SolicitudPrecio;
 import co.com.bspstore.sgip.api.dto.SolicitudReglaMargen;
 import co.com.bspstore.sgip.config.ContextoEmpresa;
 import co.com.bspstore.sgip.datos.RepositorioPrecios;
@@ -15,15 +16,15 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Las reglas de ganancia (RF-30, RF-32).
+ * Las reglas de ganancia (RF-30, RF-32) y lo que se escribe para un producto
+ * (ADR-0025).
  *
- * Esta clase no calcula ni un precio. El cálculo vive en
- * `v_precios_producto`, que aplica la fórmula que cada regla declara, y
- * eso no es un detalle de implementación: es lo que hace cierto el
- * criterio del RF-30 —«la modificación surte efecto en el cálculo
- * siguiente sin desplegar»— y lo que impide que el RF-31 se incumpla por
- * descuido, porque no hay ningún sitio donde un precio se pueda escribir
- * a mano.
+ * Esta clase no decide el precio de nadie. El cálculo vive en
+ * `v_precios_producto`, que aplica la regla vigente en cada lectura, y eso no
+ * es un detalle de implementación: es lo que hace cierto el criterio del RF-30
+ * —«la modificación surte efecto en el cálculo siguiente sin desplegar»—. El
+ * ADR-0025 retiró la prohibición de escribir el precio del RF-31, pero lo
+ * escrito sigue siendo una regla con vigencia, no una columna del producto.
  *
  * Lo que sí hace es impedir que se configuren reglas que después nadie
  * sabría interpretar.
@@ -43,6 +44,16 @@ public class ServicioPrecios {
      * como un 400 con su motivo en lugar de como un error de integridad.
      */
     private static final BigDecimal TOPE_SOBRE_PRECIO = new BigDecimal("2");
+
+    private static final String CONTADO = "CONTADO";
+    private static final String CREDITO = "CREDITO";
+    private static final String SOBRE_COSTO = "SOBRE_COSTO";
+
+    /** El mayor que cabe en `reglas_margen.factor`, DECIMAL(6,4). */
+    private static final BigDecimal TOPE_PORCENTAJE = new BigDecimal("9899.99");
+
+    /** Los dígitos de `reglas_margen.precio_fijo`, DECIMAL(14,0). */
+    private static final int DIGITOS_DEL_PRECIO = 14;
 
     private final RepositorioPrecios precios;
     private final Clock reloj;
@@ -172,6 +183,158 @@ public class ServicioPrecios {
         }
         precios.cerrar(empresa, reglaId, fin);
         return precios.buscar(empresa, reglaId);
+    }
+
+    // ------------------------------------------- lo escrito para un producto
+
+    /** El alta exige el precio de contado; la edición, no. */
+    public void exigirPrecioDeAlta(BigDecimal costo, SolicitudPrecio contado, SolicitudPrecio credito) {
+        if (contado == null) {
+            throw new ReglaInvalidaException(
+                    "Escribe el porcentaje de ganancia o el precio de venta de contado.");
+        }
+        comprobarPrecios(costo, contado, credito, null);
+    }
+
+    /**
+     * Rechaza lo escrito antes de tocar nada, para que un precio inválido no
+     * deje a medias el resto del producto.
+     */
+    public void comprobarPrecios(BigDecimal costo, SolicitudPrecio contado, SolicitudPrecio credito,
+                                 Boolean creditoIgualAlContado) {
+        if (credito != null && Boolean.TRUE.equals(creditoIgualAlContado)) {
+            throw new ReglaInvalidaException(
+                    "Si el crédito va igual que el contado, no escribas otro precio a crédito.");
+        }
+        reglaEscrita(costo, contado, "de contado");
+        reglaEscrita(costo, credito, "a crédito");
+    }
+
+    /**
+     * Convierte lo escrito en reglas propias del producto (ADR-0025).
+     *
+     * El crédito sin escribir se guarda igual que el contado, que es lo que ve
+     * quien no marcó «Usar otro precio a crédito». Esa igualdad no es un enlace
+     * guardado: son dos reglas con los mismos datos, y lo que hace que el
+     * crédito siga al contado es que el formulario la vuelva a pedir mientras la
+     * casilla esté sin marcar. {@code creditoIgualAlContado} en falso es la
+     * casilla marcada, y entonces el crédito no se mueve.
+     */
+    @Transactional
+    public void escribirPrecios(Integer empresa, Integer productoId, BigDecimal costo,
+                                SolicitudPrecio contado, SolicitudPrecio credito,
+                                Boolean creditoIgualAlContado) {
+        comprobarPrecios(costo, contado, credito, creditoIgualAlContado);
+        boolean igualar = Boolean.TRUE.equals(creditoIgualAlContado)
+                || (creditoIgualAlContado == null && contado != null && credito == null);
+        if (contado == null && credito == null && !igualar) {
+            return;
+        }
+
+        precios.bloquearProducto(empresa, productoId);
+        ReglaDePrecio reglaContado = reglaEscrita(costo, contado, "de contado");
+        if (reglaContado != null) {
+            fijarReglaPropia(empresa, productoId, CONTADO, reglaContado);
+        }
+        if (credito != null) {
+            fijarReglaPropia(empresa, productoId, CREDITO, reglaEscrita(costo, credito, "a crédito"));
+        } else if (igualar) {
+            fijarReglaPropia(empresa, productoId, CREDITO,
+                    reglaContado != null ? reglaContado : reglaVigenteDeContado(empresa, productoId));
+        }
+    }
+
+    /**
+     * El contado que rige hoy, aunque venga de la regla general: volver a «igual
+     * que el contado» sin tocar el contado no tiene otra cosa que copiar.
+     */
+    private ReglaDePrecio reglaVigenteDeContado(Integer empresa, Integer productoId) {
+        return precios.reglaVigente(empresa, productoId, CONTADO)
+                .orElseThrow(() -> new ReglaInvalidaException(
+                        "Este producto no tiene precio de contado que copiar. "
+                                + "Escribe el porcentaje o el precio de contado."));
+    }
+
+    /**
+     * Abre, corrige o deja como está la regla propia.
+     *
+     * Cambiar el precio cierra la regla vigente ayer y abre otra desde hoy, para
+     * conservar la historia; lo que ya se había cambiado hoy se corrige en su
+     * fila. Volver a escribir lo mismo no es un cambio: el formulario manda lo
+     * que alguien tocó, y tocar un campo sin cambiarlo no merece una fila.
+     */
+    private void fijarReglaPropia(Integer empresa, Integer productoId, String formaPago,
+                                  ReglaDePrecio regla) {
+        boolean igual = precios.reglaPropiaVigente(empresa, productoId, formaPago)
+                .filter(actual -> dicenLoMismo(actual, regla))
+                .isPresent();
+        if (igual || precios.corregirReglaPropiaDeHoy(empresa, productoId, formaPago, regla) > 0) {
+            return;
+        }
+        precios.cerrarReglaPropiaAyer(empresa, productoId, formaPago);
+        precios.abrirReglaPropia(empresa, productoId, formaPago, regla);
+    }
+
+    private static boolean dicenLoMismo(ReglaDePrecio a, ReglaDePrecio b) {
+        return a.formaCalculo().equals(b.formaCalculo())
+                && mismaCifra(a.factor(), b.factor())
+                && mismaCifra(a.precioFijo(), b.precioFijo());
+    }
+
+    private static boolean mismaCifra(BigDecimal a, BigDecimal b) {
+        return a == null || b == null ? a == b : a.compareTo(b) == 0;
+    }
+
+    /** Nulo si no se escribió nada para esta forma de pago. */
+    private static ReglaDePrecio reglaEscrita(BigDecimal costo, SolicitudPrecio escrito, String forma) {
+        if (escrito == null) {
+            return null;
+        }
+        if (escrito.porcentaje() == null && escrito.precio() == null) {
+            throw new ReglaInvalidaException(
+                    "Escribe el porcentaje de ganancia o el precio de venta " + forma + ".");
+        }
+        if (escrito.porcentaje() != null && escrito.precio() != null) {
+            throw new ReglaInvalidaException(
+                    "Escribe el porcentaje o el precio de venta " + forma + ", no los dos.");
+        }
+        return escrito.porcentaje() != null
+                ? reglaDePorcentaje(costo, escrito.porcentaje())
+                : reglaDeCifra(escrito.precio());
+    }
+
+    private static ReglaDePrecio reglaDePorcentaje(BigDecimal costo, BigDecimal porcentaje) {
+        if (porcentaje.signum() <= 0) {
+            throw new ReglaInvalidaException(
+                    "El porcentaje de ganancia debe ser mayor que cero. Para vender sin "
+                            + "ganancia o con pérdida, escribe el precio de venta.");
+        }
+        if (porcentaje.stripTrailingZeros().scale() > 2) {
+            throw new ReglaInvalidaException("El porcentaje admite hasta dos decimales.");
+        }
+        if (porcentaje.compareTo(TOPE_PORCENTAJE) > 0) {
+            throw new ReglaInvalidaException("El porcentaje no puede pasar de 9.899,99 %.");
+        }
+        if (costo != null && CalculoDePrecio.precioDesdePorcentaje(costo, porcentaje).signum() == 0) {
+            throw new ReglaInvalidaException(
+                    "Con ese costo y ese porcentaje el precio queda en cero pesos. "
+                            + "Escribe el precio de venta.");
+        }
+        return new ReglaDePrecio(CalculoDePrecio.factorDesdePorcentaje(porcentaje), null, SOBRE_COSTO);
+    }
+
+    private static ReglaDePrecio reglaDeCifra(BigDecimal precio) {
+        if (precio.signum() <= 0) {
+            throw new ReglaInvalidaException("El precio de venta debe ser mayor que cero.");
+        }
+        BigDecimal limpio = precio.stripTrailingZeros();
+        if (limpio.scale() > 0) {
+            throw new ReglaInvalidaException("El precio de venta va en pesos enteros, sin centavos.");
+        }
+        if (limpio.precision() - limpio.scale() > DIGITOS_DEL_PRECIO) {
+            throw new ReglaInvalidaException("El precio de venta es demasiado grande.");
+        }
+        return new ReglaDePrecio(null, limpio.setScale(0), SOBRE_COSTO);
     }
 
     private void exigirAmbitoPropio(Integer empresa, Integer categoriaId, Integer proveedorId) {
