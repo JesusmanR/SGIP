@@ -1,5 +1,6 @@
 package co.com.bspstore.sgip.logica;
 
+import co.com.bspstore.sgip.api.dto.AlertaUvt;
 import co.com.bspstore.sgip.api.dto.SolicitudTipoImpuesto;
 import co.com.bspstore.sgip.api.dto.SolicitudValorUvt;
 import co.com.bspstore.sgip.api.dto.TipoImpuestoNacional;
@@ -21,11 +22,14 @@ import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -48,11 +52,29 @@ class ServicioTributarioTest {
 
     @BeforeEach
     void preparar() {
-        servicio = new ServicioTributario(tributario, plataforma);
+        servicio = servicioConHoy("2026-06-15");
         var u = new UsuarioAutenticado(SUPER_ADMIN, "plataforma@bsp.co", "SUPER_ADMIN", null);
         SecurityContext c = SecurityContextHolder.createEmptyContext();
         c.setAuthentication(new UsernamePasswordAuthenticationToken(u, null, List.of()));
         SecurityContextHolder.setContext(c);
+    }
+
+    /**
+     * Un reloj fijo y no uno simulado: un mock devolvería nulo en
+     * {@code instant()} y el servicio fallaría por una razón que no es la
+     * que se prueba.
+     */
+    private ServicioTributario servicioConHoy(String fecha) {
+        ZoneId zona = ZoneId.of("America/Bogota");
+        Clock reloj = Clock.fixed(LocalDate.parse(fecha).atTime(12, 0).atZone(zona).toInstant(), zona);
+        return new ServicioTributario(tributario, plataforma, reloj);
+    }
+
+    private void cargadosLosAnios(Integer... anios) {
+        for (Integer anio : anios) {
+            when(tributario.buscarUvt(anio)).thenReturn(
+                    Optional.of(new ValorUvt(anio, new BigDecimal("52374.00"), "Resolución de prueba")));
+        }
     }
 
     @AfterEach
@@ -99,6 +121,79 @@ class ServicioTributarioTest {
         verify(tributario, never()).insertarUvt(any(), any(), any());
         verify(plataforma).registrar(eq(SUPER_ADMIN), isNull(), eq(AccionPlataforma.UVT_CAMBIO),
                 eq("uvt_anual"), eq("2026"), eq("52374.00"), eq("53000.00"), any());
+    }
+
+    // ----------------------------------------------- aviso de un año sin UVT
+
+    @Test
+    void faltandoMasDeDosMesesParaElAnioNuevoNoHayAviso() {
+        cargadosLosAnios(2026);
+
+        AlertaUvt alerta = servicioConHoy("2026-10-31").alertaUvt();
+
+        assertFalse(alerta.activa());
+    }
+
+    @Test
+    void aDosMesesDelAnioNuevoSinSuUvtAvisaConLosDiasQueFaltan() {
+        cargadosLosAnios(2026);
+
+        AlertaUvt alerta = servicioConHoy("2026-11-01").alertaUvt();
+
+        assertEquals(new AlertaUvt(true, 2027, 61), alerta);
+    }
+
+    @Test
+    void conLaUvtDelAnioNuevoYaCargadaNoHayAviso() {
+        cargadosLosAnios(2026, 2027);
+
+        assertFalse(servicioConHoy("2026-11-01").alertaUvt().activa());
+    }
+
+    @Test
+    void elPrimerDiaDelAnioNuevoSinSuUvtAvisaConCeroDias() {
+        cargadosLosAnios(2026);
+
+        assertEquals(new AlertaUvt(true, 2027, 0), servicioConHoy("2027-01-01").alertaUvt());
+    }
+
+    @Test
+    void elUltimoDiaDelAnioFaltaUnDia() {
+        cargadosLosAnios(2026);
+
+        assertEquals(new AlertaUvt(true, 2027, 1), servicioConHoy("2026-12-31").alertaUvt());
+    }
+
+    @Test
+    void pasadoElPrimeroDeEneroSinUvtLosDiasNoSeVuelvenNegativos() {
+        cargadosLosAnios(2026);
+
+        assertEquals(new AlertaUvt(true, 2027, 0), servicioConHoy("2027-03-01").alertaUvt());
+    }
+
+    @Test
+    void enEneroConLaUvtDelAnioCargadaNoPideLaDelSiguiente() {
+        // Cambio de año: 2027 está cargado y 2028 no. Todavía faltan casi
+        // doce meses para 2028, así que no hay nada de qué avisar.
+        cargadosLosAnios(2026, 2027);
+
+        assertFalse(servicioConHoy("2027-01-01").alertaUvt().activa());
+    }
+
+    @Test
+    void sinLaUvtDelAnioEnCursoAvisaDeEseAnioAunqueFalteLejosElSiguiente() {
+        cargadosLosAnios(2025);
+
+        assertEquals(new AlertaUvt(true, 2026, 0), servicioConHoy("2026-06-15").alertaUvt());
+    }
+
+    @Test
+    void elAvisoNoNecesitaUsuarioEnElContexto() {
+        // Lo lee el aviso del arranque, que corre sin sesión de nadie.
+        SecurityContextHolder.clearContext();
+        cargadosLosAnios(2026);
+
+        assertTrue(servicioConHoy("2026-11-15").alertaUvt().activa());
     }
 
     // --------------------------------------------------------- impuestos

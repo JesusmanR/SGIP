@@ -314,7 +314,9 @@ empresa sin reglas de IVA vende al precio. El interruptor sigue existiendo
 como marca para la pantalla. Lo que el esquema hace visible es otra cosa:
 un producto de una empresa que se declaró responsable de IVA y no tiene
 regla sale de `v_precios_producto` con `tributacion_sin_configurar = 1`,
-con el total igual al precio. Es un aviso, no un bloqueo.
+con el total igual al precio. Es un aviso, no un bloqueo. Desde la V35 el
+mismo aviso vale 1 para el producto `EXCLUIDO_HASTA_UMBRAL` mientras falte
+la UVT del año en curso; el cálculo no cambia (se cobra la tarifa).
 
 **La atomicidad entre tablas.** El descuento de existencias y el registro
 de la venta deben ocurrir en una sola transacción.
@@ -328,7 +330,11 @@ fija.
 **El valor de la UVT.** `uvt_anual` trae 2025 y 2026. Sin el año cargado,
 `fn_valor_uvt` devuelve nulo y la vista trata el producto como gravado,
 que es el comportamiento conservador: cobra el impuesto en lugar de
-omitirlo.
+omitirlo. La UVT es opcional y no tiene fecha límite: solo afecta a la
+empresa responsable de IVA que activó la exclusión por umbral. A quien
+opera la plataforma se le avisa, sin bloquear a nadie, por
+`GET /api/v1/plataforma/tributario/alerta-uvt` y con un `WARN` en el log
+al arrancar, desde el 1 de noviembre si falta la del año siguiente.
 
 `reglas_envio.costo_envio` viene en cero, lo que equivale a no cobrar
 envío en ningún caso: la regla queda inerte hasta que se fije una tarifa
