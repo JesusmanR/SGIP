@@ -41,9 +41,19 @@ limpiar () {
   local salida
   salida=$(
     {
+      # Las reglas y la configuración cuelgan de la empresa de prueba y
+      # van antes que ella; el tipo de impuesto de prueba, después de las
+      # reglas que lo usan (la clave hacia el catálogo es RESTRICT).
+      ejecutar "DELETE r FROM reglas_iva r JOIN empresas e ON e.empresa_id = r.empresa_id
+                 WHERE e.nit LIKE 'PAP-%';"
+      ejecutar "DELETE r FROM reglas_margen r JOIN empresas e ON e.empresa_id = r.empresa_id
+                 WHERE e.nit LIKE 'PAP-%';"
+      ejecutar "DELETE FROM tipos_impuesto WHERE codigo LIKE 'PAP-%';"
       ejecutar "DELETE FROM productos   WHERE codigo LIKE 'PAP-%';"
       ejecutar "DELETE FROM proveedores WHERE nit    LIKE 'PAP-%';"
       ejecutar "DELETE FROM categorias  WHERE nombre LIKE 'PAP-%';"
+      ejecutar "DELETE c FROM empresa_config c JOIN empresas e ON e.empresa_id = c.empresa_id
+                 WHERE e.nit LIKE 'PAP-%';"
       ejecutar "DELETE FROM empresas    WHERE nit    LIKE 'PAP-%';"
     }
   )
@@ -69,6 +79,11 @@ rechaza () {
   else
     ok "$1"
   fi
+}
+
+# $1 descripción · $2 esperado · $3 obtenido
+igual () {
+  [[ "$2" == "$3" ]] && ok "$1" || falla "$1 — esperaba '$2' y obtuve '${3:-(nada)}'"
 }
 
 # $1 descripción · $2 SQL
@@ -158,6 +173,94 @@ viejo=$(consulta "SELECT COUNT(*) FROM information_schema.statistics
   && ok "el índice simple ix_productos_barras ya no existe" \
   || falla "el índice simple ix_productos_barras sigue ahí"
 
+
+# ── Los impuestos son opcionales (V34) ─────────────────────────────────
+# Muchos comercios pequeños no están obligados a cobrar impuestos, así que
+# una empresa tiene que poder vender sin configurar ninguno. Hasta la V34,
+# un producto sin regla de IVA salía de la vista sin tratamiento ni
+# tarifa y con el total vacío: la RN-25 lo tomaba por «no se puede vender».
+# Ahora, sin regla, el total es el precio. Solo quien se declara
+# responsable de IVA y se olvida de una regla recibe el aviso.
+#
+# Cada caso lee todo lo que la venta mira del producto, y comprueba aparte
+# que el precio exista: un total nulo comparado con un precio nulo daría
+# «igual» sin haber calculado nada.
+echo
+echo "── los impuestos son opcionales (V34) ──"
+
+ejecutar "INSERT INTO empresa_config (empresa_id) VALUES ($AJENA);" >/dev/null
+igual "una empresa nueva nace sin ser responsable de IVA" "0"   "$(consulta "SELECT responsable_iva FROM empresa_config WHERE empresa_id = $AJENA;")"
+
+ejecutar "INSERT INTO reglas_margen (empresa_id, categoria_id, proveedor_id, forma_pago,
+                                     forma_calculo, factor, vigente_desde)
+          VALUES ($AJENA, NULL, NULL, 'CONTADO', 'SOBRE_COSTO', 1.5000, '2026-01-01'),
+                 ($AJENA, NULL, NULL, 'CREDITO', 'SOBRE_COSTO', 1.6000, '2026-01-01');" >/dev/null
+acepta "un producto de la empresa de prueba, a 1 000 de costo"   "$(producto "$AJENA" "$CAT2" "$PRV2" PAP-T1 NULL)"
+
+# $1 = columnas o expresiones sobre la vista
+fila () { consulta "SELECT $1 FROM v_precios_producto WHERE codigo = 'PAP-T1';"; }
+
+# Lo que la venta tiene que poder leer en cada caso.
+# $1 descripción · $2 tratamiento · $3 aviso · $4 total de contado en pesos,
+# o «precio» si ha de ser igual al precio · $5 total a crédito en pesos
+cobra () {
+  local d="$1" tratamiento="$2" aviso="$3" contado="$4" credito="$5"
+  igual "$d · el precio de contado existe" "1" "$(fila "precio_contado IS NOT NULL")"
+  igual "$d · tratamiento" "$tratamiento" "$(fila "tratamiento_iva")"
+  igual "$d · aviso de tributación sin configurar" "$aviso" "$(fila "tributacion_sin_configurar")"
+  if [[ "$contado" == "precio" ]]; then
+    igual "$d · el total de contado es el precio" "1" "$(fila "total_contado = precio_contado")"
+    igual "$d · el total a crédito es el precio" "1" "$(fila "total_credito = precio_credito")"
+  else
+    igual "$d · el total de contado" "1" "$(fila "total_contado = $contado")"
+    igual "$d · el total a crédito" "1" "$(fila "total_credito = $credito")"
+  fi
+}
+
+igual "el precio de contado es el costo por 1,5" "1" "$(fila "precio_contado = 1500")"
+
+# 1. No responsable de IVA y sin ninguna regla: vende sin impuesto y sin aviso.
+cobra "no responsable y sin reglas" NO_GRAVADO 0 precio precio
+igual "no responsable y sin reglas · la tarifa es cero" "1" "$(fila "tarifa_contado = 0")"
+
+# 2. Responsable y sin regla: vende al precio y avisa de que falta la regla.
+ejecutar "UPDATE empresa_config SET responsable_iva = TRUE WHERE empresa_id = $AJENA;" >/dev/null
+cobra "responsable y sin reglas" NULL 1 precio precio
+igual "responsable y sin reglas · la tarifa es cero, no nula" "1" "$(fila "tarifa_contado = 0")"
+
+# 3. Responsable con la regla general del IVA al 19 %.
+ejecutar "INSERT INTO reglas_iva (empresa_id, categoria_id, producto_id, tipo_impuesto_id, vigente_desde)
+          SELECT $AJENA, NULL, NULL, tipo_impuesto_id, '2026-01-01'
+            FROM tipos_impuesto WHERE codigo = 'IVA_19';" >/dev/null
+cobra "responsable con la regla general IVA_19" GRAVADO 0 1785 1904
+
+# 4. La regla de un producto manda sobre la general.
+PIDT=$(consulta "SELECT producto_id FROM productos WHERE codigo = 'PAP-T1';")
+ejecutar "INSERT INTO reglas_iva (empresa_id, categoria_id, producto_id, tipo_impuesto_id, vigente_desde)
+          SELECT $AJENA, NULL, $PIDT, tipo_impuesto_id, '2026-01-01'
+            FROM tipos_impuesto WHERE codigo = 'EXENTO';" >/dev/null
+cobra "la regla del producto manda sobre la general" EXENTO 0 precio precio
+
+# 5. Un tipo inactivo no cuenta: la regla del producto que lo usa se ignora
+#    y manda la general, en lugar de dejar al producto sin ninguna.
+ejecutar "INSERT INTO tipos_impuesto (codigo, nombre, tratamiento, tarifa, vigente_desde, activo)
+          VALUES ('PAP-INACTIVO', 'Tipo de prueba inactivo', 'EXCLUIDO', 0.0000, '2026-01-01', FALSE);" >/dev/null
+ejecutar "UPDATE reglas_iva SET tipo_impuesto_id =
+            (SELECT tipo_impuesto_id FROM tipos_impuesto WHERE codigo = 'PAP-INACTIVO')
+          WHERE empresa_id = $AJENA AND producto_id = $PIDT;" >/dev/null
+cobra "un tipo inactivo no tapa la regla general" GRAVADO 0 1785 1904
+
+# 6. Una regla vencida es como no tener regla.
+ejecutar "UPDATE reglas_iva SET vigente_hasta = CURDATE() - INTERVAL 1 DAY
+          WHERE empresa_id = $AJENA;" >/dev/null
+cobra "con todas las reglas vencidas" NULL 1 precio precio
+
+# La vista devuelve una fila por producto activo, también donde no hay regla,
+# y ninguna de más: un LEFT JOIN mal puesto duplicaría los productos.
+for e in 1 "$AJENA"; do
+  igual "la empresa $e: una fila por producto activo" "1"     "$(consulta "SELECT (SELECT COUNT(*) FROM v_precios_producto WHERE empresa_id = $e)
+                      = (SELECT COUNT(*) FROM productos WHERE empresa_id = $e AND activo = 1);")"
+done
 echo
 if [[ "$fallos" -eq 0 ]]; then
   echo "TODO EN VERDE"
