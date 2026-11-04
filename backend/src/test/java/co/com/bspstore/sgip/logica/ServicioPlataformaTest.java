@@ -41,7 +41,10 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mockingDetails;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -130,6 +133,66 @@ class ServicioPlataformaTest {
         // estaba escrita desde el código y no desde el criterio.
         verify(plataforma).insertarSuscripcion(12, "BASICO", HOY, HOY.plusMonths(1));
         verify(plataforma).insertarConfiguracion(12);
+    }
+
+    /**
+     * Una empresa nueva tiene que poder cobrar desde el primer día, y el
+     * punto de venta pide un medio de pago en cada venta. Sin estas cuatro
+     * filas el comercio abre su primera pantalla de venta con la lista
+     * vacía y nada que hacer.
+     */
+    @Test
+    void elAltaSiembraLosMediosDePago() {
+        altaViable(12, 1);
+
+        servicio.darDeAlta(solicitud());
+
+        verify(plataforma).sembrarMediosDePago(12);
+    }
+
+    /**
+     * Lo que el alta deliberadamente NO siembra. El margen lo decide el
+     * comercio producto por producto y el impuesto es opcional (ADR-0024):
+     * sembrar reglas «por omisión» pondría a la empresa nueva a cobrar un
+     * margen y un IVA que nadie le pidió. La configuración nace como fila
+     * vacía, una sola vez, y ninguna otra escritura de reglas ocurre.
+     */
+    @Test
+    void elAltaNoSiembraMargenesNiImpuestos() {
+        altaViable(12, 1);
+
+        servicio.darDeAlta(solicitud());
+
+        verify(plataforma, times(1)).insertarConfiguracion(12);
+        List<String> escrituras = mockingDetails(plataforma).getInvocations().stream()
+                .map(i -> i.getMethod().getName())
+                .filter(n -> n.startsWith("insertar") || n.startsWith("sembrar"))
+                .toList();
+        assertEquals(
+                List.of("insertarEmpresa", "insertarSuscripcion", "insertarConfiguracion",
+                        "sembrarMediosDePago"),
+                escrituras,
+                "el alta solo escribe la empresa, la suscripción, la configuración vacía "
+                        + "y los medios de pago; ni márgenes ni reglas de IVA");
+    }
+
+    /**
+     * La siembra va en la misma transacción que el resto del alta: si
+     * falla, la excepción sube sin que nadie la trague (y el
+     * {@code @Transactional} deshace la empresa entera), y la bitácora no
+     * anota un alta que no ocurrió.
+     */
+    @Test
+    void siLaSiembraFallaElAltaSePropagaYNoSeAudita() {
+        altaViable(12, 1);
+        doThrow(new IllegalStateException("siembra rota"))
+                .when(plataforma).sembrarMediosDePago(12);
+
+        IllegalStateException e = assertThrows(IllegalStateException.class,
+                () -> servicio.darDeAlta(solicitud()));
+
+        assertEquals("siembra rota", e.getMessage());
+        verify(plataforma, never()).registrar(any(), any(), any(), any(), any(), any(), any(), any());
     }
 
     /**
