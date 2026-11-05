@@ -1,7 +1,9 @@
-import { Route, Routes } from 'react-router-dom'
-import EncabezadoPagina from '../../componentes/comun/EncabezadoPagina.jsx'
+import { Link, Route, Routes } from 'react-router-dom'
 import EstadoVacio from '../../componentes/comun/EstadoVacio.jsx'
 import '../../estilos/proveedores.css'
+import DetalleProveedor from './DetalleProveedor.jsx'
+import ListaProveedores from './ListaProveedores.jsx'
+import NuevoProveedor from './NuevoProveedor.jsx'
 
 /**
  * Punto de entrada de la sección. App.jsx la registra una sola vez como
@@ -10,14 +12,16 @@ import '../../estilos/proveedores.css'
 export default function Seccion() {
   return (
     <Routes>
+      <Route index element={<ListaProveedores />} />
+      <Route path="nuevo" element={<NuevoProveedor />} />
+      <Route path=":proveedorId" element={<DetalleProveedor />} />
       <Route
         path="*"
         element={(
           <div className="contenido">
-            <EncabezadoPagina titulo="Proveedores" />
             <EstadoVacio
-              titulo="En construcción"
-              detalle="Esta sección todavía no está disponible."
+              titulo="Esta página no existe"
+              accion={<Link to="/proveedores">Volver a proveedores</Link>}
             />
           </div>
         )}

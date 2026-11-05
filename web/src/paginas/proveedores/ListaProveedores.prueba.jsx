@@ -20,7 +20,7 @@ describe('lista de proveedores', () => {
   })
 
   it('con datos muestra una fila por proveedor, con plazo en palabras y enlace al detalle', async () => {
-    listarProveedores.mockResolvedValue([PROVEEDOR, { ...PROVEEDOR, id: 5, razonSocial: 'Pinturas Sol', plazoDias: 0 }])
+    listarProveedores.mockResolvedValue([PROVEEDOR, { ...PROVEEDOR, id: 5, razonSocial: 'Pinturas Sol', nit: '800555111-2', plazoDias: 0 }])
     montar()
     const tabla = await screen.findByRole('table', { name: /proveedores/i })
     expect(within(tabla).getByRole('link', { name: 'Aceros del Valle S.A.S.' })).toHaveAttribute('href', '/proveedores/4')

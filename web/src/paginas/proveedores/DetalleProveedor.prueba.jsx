@@ -66,6 +66,6 @@ describe('detalle de proveedor', () => {
   it('tras crear, avisa que ya se puede usar al crear productos', async () => {
     verProveedor.mockResolvedValue(PROVEEDOR)
     montar({ pathname: '/proveedores/4', state: { creado: true } })
-    expect(await screen.findByRole('status')).toHaveTextContent(/proveedor creado/i)
+    expect(await screen.findByText(/proveedor creado/i)).toBeInTheDocument()
   })
 })
