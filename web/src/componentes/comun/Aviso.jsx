@@ -14,7 +14,7 @@ const TIPOS = {
 export default function Aviso({ tipo = 'info', children }) {
   const { rol, rotulo } = TIPOS[tipo] ?? TIPOS.info
   return (
-    <div className={`aviso-estado ${tipo}`} role={rol}>
+    <div className={`aviso-estado aviso-estado--${tipo}`} role={rol}>
       <strong>{rotulo}: </strong>{children}
     </div>
   )

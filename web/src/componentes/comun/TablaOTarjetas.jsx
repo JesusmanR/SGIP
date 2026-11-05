@@ -8,7 +8,8 @@ import '../../estilos/comun.css'
  * tarjetas, donde la cabecera de la tabla se oculta. Así el lector de
  * pantalla no oye el rótulo dos veces.
  *
- * columnas: { clave, titulo, render?, principal? }. La columna principal
+ * columnas: { clave, titulo, render?, principal?, numerica? }. numerica alinea
+ * a la derecha con cifras tabulares. La columna principal
  * es la cabecera de su fila (el nombre del dato).
  */
 export default function TablaOTarjetas({ columnas, filas, claveFila, etiqueta }) {
@@ -16,17 +17,20 @@ export default function TablaOTarjetas({ columnas, filas, claveFila, etiqueta })
     <table className="tabla-tarjetas" aria-label={etiqueta}>
       <thead>
         <tr>
-          {columnas.map((c) => <th key={c.clave} scope="col">{c.titulo}</th>)}
+          {columnas.map((c) => (
+            <th key={c.clave} scope="col" className={c.numerica ? 'numerica' : undefined}>{c.titulo}</th>
+          ))}
         </tr>
       </thead>
       <tbody>
         {filas.map((fila) => (
           <tr key={claveFila(fila)}>
             {columnas.map((c) => {
+              const clase = c.numerica ? 'numerica' : undefined
               const contenido = c.render ? c.render(fila) : fila[c.clave]
               return c.principal
-                ? <th key={c.clave} scope="row" data-etiqueta={c.titulo}>{contenido}</th>
-                : <td key={c.clave} data-etiqueta={c.titulo}>{contenido}</td>
+                ? <th key={c.clave} scope="row" className={clase} data-etiqueta={c.titulo}>{contenido}</th>
+                : <td key={c.clave} className={clase} data-etiqueta={c.titulo}>{contenido}</td>
             })}
           </tr>
         ))}

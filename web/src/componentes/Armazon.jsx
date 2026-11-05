@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { api } from '../servicios/api.js'
 import { borrarSesion, leerSesion } from '../servicios/sesion.js'
+import ErrorBoundary from './ErrorBoundary.jsx'
 import MenuLateral from './MenuLateral.jsx'
 import '../estilos/armazon.css'
 
@@ -61,7 +62,7 @@ export default function Armazon() {
       </header>
       <MenuLateral id="menu-principal" rol={sesion?.rol} abierto={abierto} nombre={sesion?.nombre} alSalir={salir} />
       <main id="contenido-principal" className="armazon-contenido" tabIndex={-1}>
-        <Outlet />
+        <ErrorBoundary><Outlet /></ErrorBoundary>
       </main>
     </div>
   )

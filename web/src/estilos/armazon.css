@@ -1,6 +1,9 @@
 /* Armazón: menú lateral en escritorio, barra superior con menú desplegable en celular.
    El color sale solo de tokens.css. */
 
+/* Alto real de la barra móvil: botón de 44 px más el relleno vertical. */
+:root { --alto-barra-movil: 3.75rem; }
+
 .armazon { min-height: 100vh; display: grid; grid-template-columns: 15rem minmax(0, 1fr); }
 .armazon-barra { display: none; }
 .armazon-contenido { grid-column: 2; min-width: 0; }
@@ -45,12 +48,19 @@
 @media (max-width: 48rem) {
   .armazon { display: block; }
   .armazon-barra {
-    display: flex; align-items: center; background: var(--chrome); color: var(--sobre-acento);
-    padding: var(--espacio-2) var(--espacio-4); position: sticky; top: 0; z-index: 20;
+    display: flex; align-items: center; box-sizing: border-box; height: var(--alto-barra-movil);
+    background: var(--chrome); color: var(--sobre-acento);
+    padding: 0 var(--espacio-4); position: sticky; top: 0; z-index: 20;
   }
   .armazon-barra .marca { font-weight: 700; }
-  /* Cerrado, el menú sale del árbol de accesibilidad: no se enfoca ni se lee. */
-  .menu-lateral { display: none; position: sticky; top: 3.5rem; height: auto; max-height: calc(100vh - 3.5rem); z-index: 20; }
-  .menu-lateral.abierto { display: flex; }
+  /* Cerrado, el menú sale del árbol de accesibilidad: no se enfoca ni se lee.
+     Abierto, cubre el resto de la pantalla y es lo único que se desplaza. */
+  .menu-lateral { display: none; }
+  .menu-lateral.abierto {
+    display: flex; position: fixed; z-index: 20; height: auto;
+    top: var(--alto-barra-movil); left: 0; right: 0; bottom: 0; overflow-y: auto;
+  }
+  /* Con el menú abierto la página de atrás no se desplaza: una sola barra. */
+  html:has(.menu-lateral.abierto) { overflow: hidden; }
   .menu-lateral a { min-height: var(--toque-minimo); display: flex; align-items: center; }
 }

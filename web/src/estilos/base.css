@@ -118,7 +118,7 @@ td.numero, th.numero { text-align: right; font-variant-numeric: tabular-nums; }
 
 /* ── Galería de imágenes ───────────────────────────────────────────── */
 .velo {
-  position: fixed; inset: 0; z-index: 10; padding: 1rem;
+  position: fixed; inset: 0; z-index: 40; padding: 1rem;
   background: var(--velo);
   display: grid; place-items: center;
 }

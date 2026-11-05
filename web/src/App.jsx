@@ -8,8 +8,8 @@ import Catalogo from './paginas/Catalogo.jsx'
 import Empresa from './paginas/Empresa.jsx'
 import Importacion from './paginas/Importacion.jsx'
 import Panel from './paginas/Panel.jsx'
-import { puedeVer } from './secciones.js'
-import { debeCambiarClave, haySesion, inicioSegunRol, leerSesion } from './servicios/sesion.js'
+import { puedeVer, seccionesDe } from './secciones.js'
+import { borrarSesion, debeCambiarClave, haySesion, inicioSegunRol, leerSesion } from './servicios/sesion.js'
 
 // Las secciones de la etapa 1 se cargan bajo demanda. Cada una es dueña de
 // su carpeta y de sus subrutas: aquí solo se registra una vez.
@@ -48,6 +48,22 @@ function desvioDeSesion() {
 }
 
 /**
+ * Dónde empieza quien tiene sesión. Un rol que la tabla no conoce no tiene
+ * dónde empezar: llevarlo a un inicio que tampoco puede ver sería un bucle
+ * de redirecciones, así que se cierra su sesión y va al acceso.
+ */
+function inicioDeSesion() {
+  if (!haySesion()) return '/acceso'
+  const sesion = leerSesion()
+  if (sesion.debeCambiarClave) return '/cambiar-clave'
+  if (seccionesDe(sesion.rol).length === 0) {
+    borrarSesion()
+    return '/acceso'
+  }
+  return inicioSegunRol(sesion)
+}
+
+/**
  * Esta guarda es comodidad, no seguridad: evita mostrar una pantalla a
  * quien no debe verla. Quien decide de verdad es el backend, que responde
  * 401 o 403. Un front nunca protege datos; solo evita pedirlos en vano.
@@ -57,7 +73,7 @@ function desvioDeSesion() {
 function RutaDeSeccion({ ruta, children }) {
   const desvio = desvioDeSesion()
   if (desvio) return <Navigate to={desvio} replace />
-  if (!puedeVer(ruta, leerSesion()?.rol)) return <Navigate to={inicioSegunRol()} replace />
+  if (!puedeVer(ruta, leerSesion()?.rol)) return <Navigate to={inicioDeSesion()} replace />
   return children
 }
 
@@ -90,7 +106,7 @@ export default function App() {
           />
         ))}
       </Route>
-      <Route path="*" element={<Navigate to={haySesion() ? inicioSegunRol() : '/acceso'} replace />} />
+      <Route path="*" element={<Navigate to={inicioDeSesion()} replace />} />
     </Routes>
   )
 }

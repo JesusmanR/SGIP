@@ -14,7 +14,7 @@ const comun = leer('comun')
 /** Cuerpo de la primera regla cuyo selector es exactamente `selector`. */
 function regla(css, selector) {
   const escapado = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const m = css.match(new RegExp(`(?:^|\\})\\s*${escapado}\\s*\\{([^}]*)\\}`))
+  const m = css.match(new RegExp(`(?<![\\w.#-])${escapado}\\s*\\{([^}]*)\\}`))
   if (!m) throw new Error(`Falta la regla ${selector}`)
   return m[1]
 }

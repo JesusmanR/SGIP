@@ -13,13 +13,17 @@
 .tabla-tarjetas { width: 100%; border-collapse: collapse; font-size: var(--t-cuerpo); }
 .tabla-tarjetas th, .tabla-tarjetas td {
   text-align: left; padding: var(--espacio-3); border-bottom: 1px solid var(--borde);
+  font-size: var(--t-cuerpo);
 }
 .tabla-tarjetas thead th {
   color: var(--tinta-2); font-size: var(--t-etiqueta); font-weight: 600;
 }
-.tabla-tarjetas tbody th { font-weight: 600; }
+/* El th global de base.css es más pequeño y gris: aquí el nombre del dato
+   manda sobre sus cifras, así que repite color y tamaño de la celda. */
+.tabla-tarjetas tbody th { font-weight: 600; font-size: var(--t-cuerpo); color: var(--tinta); }
+.tabla-tarjetas .numerica { text-align: right; font-variant-numeric: tabular-nums; }
 
-@media (max-width: 40rem) {
+@media (max-width: 48rem) {
   .tabla-tarjetas, .tabla-tarjetas tbody, .tabla-tarjetas tr,
   .tabla-tarjetas th, .tabla-tarjetas td { display: block; }
   /* La cabecera se oculta del todo: el rótulo de cada dato viaja en la celda. */
@@ -56,7 +60,7 @@
   border-radius: var(--radio-control); padding: var(--espacio-3) var(--espacio-4);
   font-size: var(--t-cuerpo); margin-bottom: var(--espacio-4);
 }
-.aviso-estado.exito   { background: var(--exito-fondo);   color: var(--exito); }
-.aviso-estado.aviso   { background: var(--aviso-fondo);   color: var(--aviso); }
-.aviso-estado.peligro { background: var(--peligro-fondo); color: var(--peligro); }
-.aviso-estado.info    { background: var(--info-fondo);    color: var(--info); }
+.aviso-estado--exito   { background: var(--exito-fondo);   color: var(--exito); }
+.aviso-estado--aviso   { background: var(--aviso-fondo);   color: var(--aviso); }
+.aviso-estado--peligro { background: var(--peligro-fondo); color: var(--peligro); }
+.aviso-estado--info    { background: var(--info-fondo);    color: var(--info); }
