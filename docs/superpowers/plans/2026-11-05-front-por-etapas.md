@@ -6,7 +6,7 @@
 
 **Arquitectura:** React 18, JavaScript y CSS propio. La etapa 0 deja una base en la que cada sección vive en sus propios archivos, para que varios agentes trabajen a la vez sin tocar lo mismo.
 
-**Diseño de referencia:** `C:/Users/sxepc/Downloads/Nueva carpeta (5)/public/artifacts/sgip-pantallas/{escritorio,movil}/NN-*.png`. Son imágenes de consulta: no se copia ni se ejecuta código de esa descarga.
+**Diseño de referencia:** `C:/Users/sxepc/Downloads/SGIP/public/artifacts/sgip-pantallas/{escritorio,movil}/NN-*.png`. Son imágenes de consulta: no se copia ni se ejecuta código de esa descarga.
 
 ## Restricciones globales
 
