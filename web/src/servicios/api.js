@@ -148,6 +148,7 @@ export const api = {
     pedir('/auth/clave', { method: 'POST', body: { claveActual, claveNueva } }),
   catalogo: ({ busqueda, categoria, proveedor, estado } = {}) =>
     pedir(`/productos${consulta({ busqueda, categoria, proveedor, estado })}`),
+  crearProducto: (datos) => pedir('/productos', { method: 'POST', body: datos }),
   editarProducto: (productoId, datos) =>
     pedir(`/productos/${productoId}`, { method: 'PUT', body: datos }),
   categorias: () => pedir('/categorias'),

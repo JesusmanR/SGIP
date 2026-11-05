@@ -454,20 +454,28 @@ public class RepositorioPrecios {
      * que se hacen sin mirar y se notan en la factura del cliente.
      *
      * No cuenta los productos con regla propia en las dos formas de pago, que
-     * la regla no movería (ADR-0025). Sale de la vista porque ella ya sabe qué
-     * regla propia está vigente hoy, y repetir aquí la condición de vigencia
-     * sería la segunda respuesta a la misma pregunta. El endpoint no recibe la
-     * forma de pago, de modo que un producto con regla propia en una sola de
-     * las dos sí cuenta: la otra le cambiaría.
+     * la regla no movería (ADR-0025). El endpoint no recibe la forma de pago, de
+     * modo que un producto con regla propia en una sola de las dos sí cuenta: la
+     * otra le cambiaría.
+     *
+     * No sale de `v_precios_producto`, que ya lo sabe, porque contar con ella
+     * resuelve el precio de toda la empresa para descartarlo: con 10.000 productos
+     * son cientos de veces más trabajo (ADR-0025). Lo cubre
+     * `PrecioDeProductoTest` contra la vigencia que usa la vista.
      */
     public int productosAlcanzados(Integer empresaId, Integer categoriaId,
                                    Integer proveedorId) {
         return jdbc.sql("""
-                        SELECT COUNT(*) FROM v_precios_producto
-                         WHERE empresa_id = :empresa
-                           AND NOT (regla_propia_contado = 1 AND regla_propia_credito = 1)
-                           AND (:categoria IS NULL OR categoria_id = :categoria)
-                           AND (:proveedor IS NULL OR proveedor_id = :proveedor)
+                        SELECT COUNT(*) FROM productos p
+                         WHERE p.empresa_id = :empresa AND p.activo = 1
+                           AND (:categoria IS NULL OR p.categoria_id = :categoria)
+                           AND (:proveedor IS NULL OR p.proveedor_id = :proveedor)
+                           AND (SELECT COUNT(DISTINCT r.forma_pago)
+                                  FROM reglas_margen r
+                                 WHERE r.empresa_id = p.empresa_id
+                                   AND r.producto_id = p.producto_id
+                                   AND r.vigente_desde <= CURDATE()
+                                   AND (r.vigente_hasta IS NULL OR r.vigente_hasta >= CURDATE())) < 2
                         """)
                 .param("empresa", empresaId)
                 .param("categoria", categoriaId)

@@ -156,7 +156,7 @@ jobs:
           test "$n" -eq 1
 
       # Veinte de la V11, cuatro de la V12, cinco de la V24, siete de
-      # la V28 y una de la V36.
+      # la V28, diez de la V31 y una de la V36.
       #
       # Este número se sube a mano al añadir claves, y a propósito: es un
       # centinela, no un conteo informativo. Una migración que quita una

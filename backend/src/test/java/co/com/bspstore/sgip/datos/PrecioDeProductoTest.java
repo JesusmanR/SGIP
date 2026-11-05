@@ -23,17 +23,24 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 /**
  * El porcentaje y el precio de un producto, de punta a punta contra la base
@@ -58,6 +65,7 @@ class PrecioDeProductoTest {
     @Autowired RepositorioInventario inventario;
     @Autowired RepositorioPlataforma plataforma;
     @Autowired JdbcClient jdbc;
+    @Autowired PlatformTransactionManager transacciones;
 
     private Integer empresaId;
     private Integer usuarioId;
@@ -434,6 +442,79 @@ class PrecioDeProductoTest {
 
         igualA("1250", leer(id).precioCredito());
         assertEquals(0, reglasPropias(id, "CONTADO"), "el contado sigue en la regla general");
+    }
+
+    // ------------------------------------------- dos personas a la vez
+
+    /**
+     * Quien iguala el crédito espera a quien tiene el producto, y copia lo que ese
+     * dejó, no lo que veía al empezar.
+     *
+     * Son dos hilos pero no hay carrera: el que tiene el producto no suelta hasta
+     * que la base dice que el otro está esperando, de modo que el orden es siempre
+     * este. Sin el `FOR UPDATE` el otro no llega a esperar y la prueba lo dice; con
+     * el contado leído de la vista, copia 1.200, que es la foto de antes.
+     */
+    @Test
+    void igualarElCreditoEsperaAlQueTieneElProductoYCopiaLoQueEseDejo() throws Exception {
+        Integer id = alta("1000.00", porcentaje("20"), precio("1500"), 0);
+        SecurityContext contexto = SecurityContextHolder.getContext();
+        ExecutorService otroHilo = Executors.newSingleThreadExecutor();
+        try {
+            Future<?> quienIguala = new TransactionTemplate(transacciones).execute(estado -> {
+                jdbc.sql("""
+                        SELECT producto_id FROM productos
+                         WHERE empresa_id = :e AND producto_id = :p FOR UPDATE
+                        """).param("e", empresaId).param("p", id).query(Integer.class).single();
+
+                Future<?> enEspera = otroHilo.submit(() -> {
+                    SecurityContextHolder.setContext(contexto);
+                    editar(id, "1000.00", null, null, true);
+                });
+                esperarAQueSeQuedeBloqueado(enEspera);
+
+                jdbc.sql("""
+                        UPDATE reglas_margen SET factor = 1.3000
+                         WHERE empresa_id = :e AND producto_id = :p AND forma_pago = 'CONTADO'
+                        """).param("e", empresaId).param("p", id).update();
+                return enEspera;
+            });
+            quienIguala.get(60, TimeUnit.SECONDS);
+        } finally {
+            otroHilo.shutdownNow();
+        }
+        igualA("1300", leer(id).precioCredito());
+    }
+
+    private void esperarAQueSeQuedeBloqueado(Future<?> enEspera) {
+        long limite = System.nanoTime() + TimeUnit.SECONDS.toNanos(20);
+        while (System.nanoTime() < limite) {
+            if (enEspera.isDone()) {
+                fail("Terminó sin esperar al que tiene el producto: " + comoTermino(enEspera));
+            }
+            int esperando = jdbc.sql(
+                            "SELECT COUNT(*) FROM performance_schema.data_lock_waits")
+                    .query(Integer.class).single();
+            if (esperando > 0) {
+                return;
+            }
+            try {
+                Thread.sleep(20);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException(e);
+            }
+        }
+        fail("Nadie se quedó esperando el producto: el FOR UPDATE no está poniendo en fila.");
+    }
+
+    private static String comoTermino(Future<?> f) {
+        try {
+            f.get();
+            return "sin error";
+        } catch (Exception e) {
+            return e.toString();
+        }
     }
 
     // ------------------------------------------- las reglas de ámbito no se enteran

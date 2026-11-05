@@ -10,12 +10,10 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
-import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -36,11 +34,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
-import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
-import static org.mockito.Mockito.clearInvocations;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -294,36 +288,5 @@ class ServicioPreciosTest {
 
         assertThrows(ReferenciaAjenaException.class, () -> servicio.alcance(99, null));
         verify(precios, never()).productosAlcanzados(anyInt(), any(), any());
-    }
-
-    /**
-     * Una regla general no alcanza a quien tiene regla propia: cambiar el margen
-     * de toda la empresa no le mueve el precio. Esto mira la consulta real con
-     * el cliente de JDBC simulado, de modo que solo prueba que la condición está;
-     * que excluya lo que debe lo prueba, contra una base,
-     * `PrecioDeProductoTest.laSimulacionYElAlcanceDeUnaReglaGeneralNoCuentanLosQueTienenReglaPropia`.
-     */
-    @Test
-    void laSimulacionYElAlcanceDeUnaReglaGeneralNoCuentanLosQueTienenReglaPropia() {
-        JdbcClient jdbc = mock(JdbcClient.class, RETURNS_DEEP_STUBS);
-        when(jdbc.sql(anyString()).param(anyString(), any()).param(anyString(), any())
-                .param(anyString(), any()).query(Integer.class).single()).thenReturn(0);
-        ArgumentCaptor<String> consultas = ArgumentCaptor.forClass(String.class);
-        ServicioPrecios real = new ServicioPrecios(new RepositorioPrecios(jdbc),
-                Clock.systemDefaultZone());
-        clearInvocations(jdbc);
-
-        real.alcance(null, null);
-        real.simular(solicitud("SOBRE_COSTO", "1.3000"));
-
-        verify(jdbc, times(2)).sql(consultas.capture());
-        assertTrue(consultas.getAllValues().get(0).contains("regla_propia_contado"),
-                "el alcance debe descontar la regla propia de contado");
-        assertTrue(consultas.getAllValues().get(0).contains("regla_propia_credito"),
-                "y la de crédito");
-        assertTrue(consultas.getAllValues().get(1).contains("regla_propia_contado"),
-                "la simulación debe descontar la regla propia de la forma simulada");
-        assertTrue(consultas.getAllValues().get(1).contains("regla_propia_credito"),
-                "también a crédito");
     }
 }

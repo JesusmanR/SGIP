@@ -22,16 +22,29 @@
 -- se recalcula y el porcentaje se queda; con precio fijo, el precio se queda
 -- y el margen cambia. No hay ninguna lógica adicional que lo decida.
 --
--- `precio_fijo` es DECIMAL(14,0): el precio de venta va en pesos enteros, el
--- mismo redondeo con el que la vista calcula los demás.
+-- `precio_fijo` es DECIMAL(12,0): el precio de venta va en pesos enteros, el
+-- mismo redondeo con el que la vista calcula los demás, y no pasa de 12 cifras
+-- porque `precio_unitario` de las ventas es DECIMAL(14,2) (V4): un precio más
+-- largo se guardaría bien y fallaría el día de cobrarlo.
 --
 -- ## Precedencia
 --
--- producto → categoría y proveedor → categoría → proveedor → general. El
--- `(r.producto_id IS NOT NULL) DESC` va delante en el ROW_NUMBER, pero lo que
--- impide que la regla de un producto gane en todos los productos de la
--- empresa es la condición del JOIN. La vigencia vale igual: una regla propia
--- vencida no decide nada y el precio vuelve a la regla que corresponda.
+-- Primero la regla del producto. Después, como desde la V12, la más específica:
+-- categoría y proveedor, luego una de las dos y luego la general. Entre una de
+-- categoría y una de proveedor, que son igual de específicas, decide la fecha.
+-- La vigencia vale igual: una regla propia vencida no decide nada y el precio
+-- vuelve a la regla que corresponda.
+--
+-- ## Por qué v_regla_margen es una unión
+--
+-- El alta exige el precio de contado y lo copia al crédito, de modo que dos
+-- reglas por producto son el régimen normal. Con una sola condición
+-- `(r.producto_id IS NULL OR r.producto_id = p.producto_id)`, ningún índice
+-- sirve y cada regla recorre todos los productos de su empresa: con 10.000
+-- productos, una página del catálogo tardaba 30 segundos. Separadas, las
+-- propias se buscan por igualdad y las generales siguen multiplicando por su
+-- número, que es pequeño. El ROW_NUMBER va sobre la unión, de modo que la
+-- precedencia es la misma. Las cifras están en el ADR-0025.
 --
 -- ## La clave única y la de empresa
 --
@@ -86,7 +99,7 @@ SET NAMES utf8mb4;
 ALTER TABLE reglas_margen
   MODIFY COLUMN factor DECIMAL(6,4) NULL,
   ADD COLUMN producto_id INT NULL AFTER proveedor_id,
-  ADD COLUMN precio_fijo DECIMAL(14,0) NULL AFTER factor;
+  ADD COLUMN precio_fijo DECIMAL(12,0) NULL AFTER factor;
 
 ALTER TABLE reglas_margen
   ADD CONSTRAINT uq_reglas_margen_producto
@@ -107,29 +120,55 @@ SELECT producto_id, empresa_id, forma_pago, factor, forma_calculo, regla_id,
        precio_fijo, es_propia
 FROM (
   SELECT
-    p.producto_id,
-    p.empresa_id,
-    r.forma_pago,
-    r.factor,
-    r.forma_calculo,
-    r.regla_id,
-    r.precio_fijo,
-    (r.producto_id IS NOT NULL) AS es_propia,
+    u.*,
     ROW_NUMBER() OVER (
-      PARTITION BY p.producto_id, r.forma_pago
-      ORDER BY (r.producto_id IS NOT NULL) DESC,
-               (r.categoria_id IS NOT NULL) + (r.proveedor_id IS NOT NULL) DESC,
-               r.vigente_desde DESC,
-               r.regla_id DESC
+      PARTITION BY u.producto_id, u.forma_pago
+      ORDER BY u.es_propia DESC,
+               u.especificidad DESC,
+               u.vigente_desde DESC,
+               u.regla_id DESC
     ) AS prioridad
-  FROM productos p
-  JOIN reglas_margen r
-    ON r.empresa_id = p.empresa_id
-   AND (r.producto_id  IS NULL OR r.producto_id  = p.producto_id)
-   AND (r.categoria_id IS NULL OR r.categoria_id = p.categoria_id)
-   AND (r.proveedor_id IS NULL OR r.proveedor_id = p.proveedor_id)
-   AND CURDATE() >= r.vigente_desde
-   AND (r.vigente_hasta IS NULL OR CURDATE() <= r.vigente_hasta)
+  FROM (
+    SELECT
+      p.producto_id,
+      p.empresa_id,
+      r.forma_pago,
+      r.factor,
+      r.forma_calculo,
+      r.regla_id,
+      r.precio_fijo,
+      r.vigente_desde,
+      1 AS es_propia,
+      (r.categoria_id IS NOT NULL) + (r.proveedor_id IS NOT NULL) AS especificidad
+    FROM reglas_margen r
+    JOIN productos p
+      ON p.empresa_id  = r.empresa_id
+     AND p.producto_id = r.producto_id
+    WHERE (r.categoria_id IS NULL OR r.categoria_id = p.categoria_id)
+      AND (r.proveedor_id IS NULL OR r.proveedor_id = p.proveedor_id)
+      AND CURDATE() >= r.vigente_desde
+      AND (r.vigente_hasta IS NULL OR CURDATE() <= r.vigente_hasta)
+    UNION ALL
+    SELECT
+      p.producto_id,
+      p.empresa_id,
+      r.forma_pago,
+      r.factor,
+      r.forma_calculo,
+      r.regla_id,
+      r.precio_fijo,
+      r.vigente_desde,
+      0 AS es_propia,
+      (r.categoria_id IS NOT NULL) + (r.proveedor_id IS NOT NULL) AS especificidad
+    FROM reglas_margen r
+    JOIN productos p
+      ON p.empresa_id = r.empresa_id
+     AND (r.categoria_id IS NULL OR r.categoria_id = p.categoria_id)
+     AND (r.proveedor_id IS NULL OR r.proveedor_id = p.proveedor_id)
+    WHERE r.producto_id IS NULL
+      AND CURDATE() >= r.vigente_desde
+      AND (r.vigente_hasta IS NULL OR CURDATE() <= r.vigente_hasta)
+  ) AS u
 ) AS ranking
 WHERE prioridad = 1;
 

@@ -97,9 +97,28 @@ queda igual al contado. En la edición nada es obligatorio.
 | — o sí | Sí | `true` | 400: se contradice |
 
 «Igual al contado» **no se guarda como vínculo**: son dos reglas con los mismos
-datos. Un vínculo obligaría a la vista a resolver una regla a partir de otra, y
-un cambio futuro del contado arrastraría un crédito que nadie volvió a mirar. El
-formulario marca «Usar otro precio a crédito» si las dos cifras difieren.
+datos. Un vínculo obligaría a la vista a resolver una regla a partir de otra. El
+crédito sí sigue al contado mientras la casilla esté sin marcar, y es a propósito:
+lo hace el formulario, al guardar, delante de quien edita, y queda en la historia
+como cualquier otro cambio. Lo que no ocurre es que el crédito cambie solo, sin
+que nadie haya abierto el producto.
+
+El formulario marca «Usar otro precio a crédito» si el crédito es otra regla: si
+difieren las cifras, o si coinciden por casualidad con distinta clase de regla.
+Un 20 % sobre 1.000 y 1.200 escritos a crédito dan la misma cifra y son dos
+decisiones: abrirlos como iguales borraría el precio escrito al cambiar el contado.
+
+### Crear un producto en pantalla
+
+`FormularioProducto` con `modo="crear"`, y el botón «Nuevo producto» del catálogo,
+solo para el administrador. Son obligatorios los que exige `SolicitudProducto`
+(nombre, categoría, proveedor, código y costo) y el contado, aunque nadie lo haya
+tocado. La casilla marcada exige también el crédito: sin él, el servidor lo
+igualaría al contado y no sería lo que se ve en pantalla. Por eso el alta no manda
+`creditoIgualAlContado`, que `SolicitudProducto` no tiene.
+
+La existencia inicial es opcional y solo existe al crear: el backend la convierte
+en un movimiento `INGRESO`. Al editar sigue sin haber campo de existencia.
 
 **Desviación consciente de lo pedido.** El requisito decía `contado` obligatorio
 en alta y edición. En edición no lo es: mandar el contado aunque nadie lo haya
@@ -114,6 +133,9 @@ y eso contradice «solo se envía lo que el usuario escribió».
 - Porcentaje que redondea a cero pesos, precio con centavos, porcentaje con más
   de dos decimales o por encima de 9.899,99 %: 400. Ninguno se redondea en
   silencio.
+- Precio de más de 12 cifras, escrito o resultado de un porcentaje: 400. `precio_fijo`
+  es DECIMAL(12,0) porque `precio_unitario` de las ventas es DECIMAL(14,2): un precio
+  más largo se guardaría bien y fallaría el día de cobrarlo.
 
 ### La historia
 
@@ -132,7 +154,11 @@ dirían cuál mandó. Guardar lo mismo no escribe nada.
   historia conserva la anterior si fue de otro día.
 - La simulación y el alcance de una regla general no cuentan los productos con
   regla propia: esa regla no los alcanza, y decir lo contrario haría creer que
-  una subida general los va a mover.
+  una subida general los va a mover. El alcance se pregunta a `reglas_margen` y no
+  a la vista, porque se cuenta al abrir la pantalla.
+- Igualar el crédito a un contado propio lee primero esa regla con bloqueo, y solo
+  si no hay va a la vista, que es una lectura normal: tras esperar el bloqueo,
+  vería la foto de antes y copiaría el contado viejo.
 
 ## Consecuencias
 
@@ -140,13 +166,47 @@ dirían cuál mandó. Guardar lo mismo no escribe nada.
   el catálogo anota «precio escrito» junto a la cifra.
 - La pantalla de carga masiva cambió una frase que dejó de ser cierta: «Los
   precios de venta ya salen del costo nuevo» no vale para un precio escrito.
-- La vista gana una condición y una clave de orden. Con 10.000 productos cuesta
-  entre un 5 y un 8 % más: unos 100 ms en el listado completo y unos 40 ms al
-  buscar uno. El dinero que devuelve es idéntico al de la V35 cuando no hay
-  reglas propias, comparado columna a columna. La lentitud de fondo, unos 600 ms
-  por producto a esa escala, viene de antes: la vista de reglas se materializa
-  para todas las empresas. Queda pendiente, y no se cachea: un precio debe
-  verse en cuanto cambia.
+- **Cuánto cuesta.** MySQL 9.7 en el equipo de desarrollo, base desechable con datos
+  generados para medir, en milisegundos. Sirve para comparar, no como promesa de tiempo.
+
+  Sin reglas propias, 10.000 productos en dos empresas y 10 reglas generales, misma
+  sentencia del catálogo, con las columnas nuevas en la V36. Base reconstruida en cada
+  una de tres rondas, cinco ejecuciones por ronda, mediana de las tres medianas:
+
+  | Consulta | V35 | V36 | Diferencia |
+  |---|---|---|---|
+  | Listado, 50 filas | 758 | 816 | +8 % |
+  | Búsqueda por texto | 328 | 341 | +4 % |
+  | Un producto por identificador | 321 | 328 | +2 % |
+
+  Con dos reglas propias por producto, que es el régimen normal porque el alta las
+  crea: la mitad con porcentaje y la mitad con precio escrito. Una empresa con 10.000
+  productos más los de demostración y 20.005 reglas. Mediana de tres ejecuciones:
+
+  | Consulta | Una sola condición con `OR` | Unión de la V36 |
+  |---|---|---|
+  | Listado, 50 filas | 30.395 | 2.127 |
+  | Búsqueda por texto | 29.087 | 1.244 |
+  | Un producto | 29.375 | 1.190 |
+  | `reglaVigente` | 35 | 34 |
+  | Vista previa de una carga de 500 líneas, sin ninguna que cruce el umbral | 29.738 | 2.018 |
+  | Alcance por la vista | 29.313 | 1.308 |
+  | Alcance por `reglas_margen`, el que queda | — | 89 |
+
+  Por eso la vista es una unión: con la condición única, cada regla recorría todos
+  los productos de su empresa, y duplicar el catálogo cuadruplicaba el trabajo. Lo
+  protege `EscalaDeReglasPropiasTest`, que lee las filas reales del plan y no un reloj.
+  Con 1.000 productos y las mismas reglas por producto, el listado pasó de 471 a 183.
+
+  El dinero no cambia: las columnas de `v_precios_producto`, `v_inventario_valorizado`
+  y `v_rotacion_inventario` (29.715 líneas) son idénticas a las de la V35 sin reglas
+  propias, y con 17.155 reglas propias de toda clase, a las de la condición única.
+
+  Sigue siendo lento: 2 segundos por página a esa escala, y 1 por producto. Las dos
+  vistas de reglas se materializan enteras para todas las empresas en cada consulta.
+  Esa forma viene de antes de la V36, pero las reglas propias le dan más filas que
+  materializar: sin ellas, la misma página tarda 0,8 segundos. Queda pendiente, y no
+  se cachea: un precio debe verse en cuanto cambia.
 - El `_emp` de CI sube de 46 a 47. `database/aplicar.sh` se queda en 46 porque
   se detiene en la V31: su número es el de la V31, y el de CI es el del esquema
   final.

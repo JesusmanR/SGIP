@@ -11,7 +11,7 @@
  * cubrían los servicios, y las páginas solo las revisaba una fotografía
  * tomada a mano antes de cada entrega.
  */
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -27,6 +27,7 @@ vi.mock('../servicios/api.js', () => ({
     categorias: vi.fn(),
     proveedores: vi.fn(),
     editarProducto: vi.fn(),
+    crearProducto: vi.fn(),
   },
   ErrorApi: class extends Error {},
   imagenAutenticada: vi.fn(async () => 'blob:simulada'),
@@ -297,6 +298,38 @@ describe('catálogo de productos', () => {
       expect(screen.getAllByRole('columnheader')).toHaveLength(10)
       expect(screen.getByLabelText(/proveedor/i)).toBeInTheDocument()
       expect(fila(screen, 'PC-001')).toHaveTextContent('2.100.000')
+    })
+
+    it('un vendedor no puede crear productos', async () => {
+      montar()
+      await conFilas()
+      expect(screen.queryByRole('button', { name: 'Nuevo producto' })).not.toBeInTheDocument()
+    })
+
+    it('un administrador crea un producto y su fila aparece en el catálogo', async () => {
+      vi.useRealTimers()
+      const teclado = userEvent.setup()
+      guardarSesion({ token: 't', nombre: 'Jesús Manuel', rol: 'ADMINISTRADOR' })
+      api.catalogo.mockResolvedValue([CEL])
+      api.proveedores.mockResolvedValue(PROVEEDORES)
+      api.crearProducto.mockResolvedValue(PC)
+      montar()
+      await screen.findByText(/CEL-002/)
+      await screen.findByRole('option', { name: PROVEEDORES[0].razonSocial })
+
+      await teclado.click(screen.getByRole('button', { name: 'Nuevo producto' }))
+      const panel = screen.getByRole('dialog', { name: 'Nuevo producto' })
+      await teclado.type(within(panel).getByLabelText('Nombre'), PC.nombre)
+      await teclado.selectOptions(within(panel).getByLabelText('Categoría'), '1')
+      await teclado.selectOptions(within(panel).getByLabelText('Proveedor'), '1')
+      await teclado.type(within(panel).getByLabelText('Código'), PC.codigo)
+      await teclado.type(within(panel).getByLabelText('Costo'), '2100000')
+      await teclado.type(within(panel).getByLabelText('% de ganancia de contado'), '20')
+      await teclado.click(within(panel).getByRole('button', { name: 'Crear producto' }))
+
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+      expect(fila(screen, 'PC-001')).toHaveTextContent('2.520.000')
+      expect(fila(screen, 'CEL-002')).toBeInTheDocument()
     })
 
     it('un vendedor no ve la columna de margen', async () => {

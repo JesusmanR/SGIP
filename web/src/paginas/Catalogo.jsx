@@ -70,6 +70,7 @@ export default function Catalogo() {
   const esAdministrador = leerSesion()?.rol === 'ADMINISTRADOR'
   const [galeria, setGaleria] = useState(null)
   const [editando, setEditando] = useState(null)
+  const [creando, setCreando] = useState(false)
   const [panelCategorias, setPanelCategorias] = useState(false)
 
   // Las listas de los selectores se piden una sola vez: no cambian
@@ -148,6 +149,21 @@ export default function Catalogo() {
           }}
         />
       )}
+      {creando && (
+        <FormularioProducto
+          modo="crear"
+          categorias={categorias}
+          proveedores={proveedores}
+          onCerrar={() => setCreando(false)}
+          onGuardado={(nuevo) => {
+            // Arriba y sin volver a consultar, aunque los filtros lo dejarían
+            // fuera: quien acaba de crearlo tiene que ver que quedó, y con
+            // qué precio. La próxima consulta lo pone en su sitio.
+            setProductos((filas) => [nuevo, ...filas])
+            setCreando(false)
+          }}
+        />
+      )}
       {panelCategorias && (
         <Categorias
           onCerrar={() => setPanelCategorias(false)}
@@ -165,9 +181,14 @@ export default function Catalogo() {
         <div className="titulo-fila">
           <h2>Catálogo</h2>
           {esAdministrador && (
-            <button className="boton secundario" onClick={() => setPanelCategorias(true)}>
-              Categorías
-            </button>
+            <>
+              <button className="boton secundario" onClick={() => setPanelCategorias(true)}>
+                Categorías
+              </button>
+              <button className="boton" onClick={() => setCreando(true)}>
+                Nuevo producto
+              </button>
+            </>
           )}
         </div>
 

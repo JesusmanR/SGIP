@@ -187,8 +187,8 @@ td.numero, th.numero { text-align: right; font-variant-numeric: tabular-nums; }
 }
 .campo select:focus-visible { outline: 3px solid var(--acento-sutil); border-color: var(--acento); }
 
-/* El título y el botón de categorías comparten línea. */
-.titulo-fila { display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem; }
+/* El título y sus botones comparten línea; en un teléfono, los botones bajan. */
+.titulo-fila { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; margin-bottom: 1rem; }
 .titulo-fila h2 { margin: 0; flex: 1; }
 
 /* Columna de acciones: no se estira y no parte sus botones. */
@@ -202,6 +202,8 @@ td.acciones .boton { margin-left: .4rem; }
 /* El mensaje de un campo va pegado a él, y siempre dice con palabras qué
    pasa: el color acompaña, no informa. */
 .campo-mensaje { display: block; margin-top: .3rem; font-size: .78rem; line-height: 1.35; }
+/* La región existe siempre para que se anuncie; vacía no debe ocupar sitio. */
+.campo-mensaje:empty { margin-top: 0; }
 .campo-mensaje.error { color: var(--peligro); }
 .campo-mensaje.advertencia { color: var(--aviso); }
 .campo input[aria-invalid="true"] { border-color: var(--peligro); }

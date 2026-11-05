@@ -52,8 +52,12 @@ public class ServicioPrecios {
     /** El mayor que cabe en `reglas_margen.factor`, DECIMAL(6,4). */
     private static final BigDecimal TOPE_PORCENTAJE = new BigDecimal("9899.99");
 
-    /** Los dígitos de `reglas_margen.precio_fijo`, DECIMAL(14,0). */
-    private static final int DIGITOS_DEL_PRECIO = 14;
+    /**
+     * Los dígitos de `reglas_margen.precio_fijo`, DECIMAL(12,0). No son más
+     * porque `precio_unitario` de las ventas es DECIMAL(14,2): un precio más
+     * largo se guardaría bien y fallaría el día de cobrarlo.
+     */
+    private static final int DIGITOS_DEL_PRECIO = 12;
 
     private final RepositorioPrecios precios;
     private final Clock reloj;
@@ -249,7 +253,11 @@ public class ServicioPrecios {
      * que el contado» sin tocar el contado no tiene otra cosa que copiar.
      */
     private ReglaDePrecio reglaVigenteDeContado(Integer empresa, Integer productoId) {
-        return precios.reglaVigente(empresa, productoId, CONTADO)
+        // Primero la propia, que se lee con bloqueo. La vista es una lectura normal
+        // y ve la foto de cuando empezó la transacción: tras esperar a
+        // `bloquearProducto`, podría copiar el contado que otro acaba de cambiar.
+        return precios.reglaPropiaVigente(empresa, productoId, CONTADO)
+                .or(() -> precios.reglaVigente(empresa, productoId, CONTADO))
                 .orElseThrow(() -> new ReglaInvalidaException(
                         "Este producto no tiene precio de contado que copiar. "
                                 + "Escribe el porcentaje o el precio de contado."));
@@ -315,10 +323,18 @@ public class ServicioPrecios {
         if (porcentaje.compareTo(TOPE_PORCENTAJE) > 0) {
             throw new ReglaInvalidaException("El porcentaje no puede pasar de 9.899,99 %.");
         }
-        if (costo != null && CalculoDePrecio.precioDesdePorcentaje(costo, porcentaje).signum() == 0) {
-            throw new ReglaInvalidaException(
-                    "Con ese costo y ese porcentaje el precio queda en cero pesos. "
-                            + "Escribe el precio de venta.");
+        if (costo != null) {
+            BigDecimal precio = CalculoDePrecio.precioDesdePorcentaje(costo, porcentaje);
+            if (precio.signum() == 0) {
+                throw new ReglaInvalidaException(
+                        "Con ese costo y ese porcentaje el precio queda en cero pesos. "
+                                + "Escribe el precio de venta.");
+            }
+            if (precio.precision() - precio.scale() > DIGITOS_DEL_PRECIO) {
+                throw new ReglaInvalidaException(
+                        "Con ese costo y ese porcentaje el precio pasa de " + DIGITOS_DEL_PRECIO
+                                + " cifras y no se podría vender.");
+            }
         }
         return new ReglaDePrecio(CalculoDePrecio.factorDesdePorcentaje(porcentaje), null, SOBRE_COSTO);
     }
@@ -332,7 +348,8 @@ public class ServicioPrecios {
             throw new ReglaInvalidaException("El precio de venta va en pesos enteros, sin centavos.");
         }
         if (limpio.precision() - limpio.scale() > DIGITOS_DEL_PRECIO) {
-            throw new ReglaInvalidaException("El precio de venta es demasiado grande.");
+            throw new ReglaInvalidaException(
+                    "El precio de venta admite hasta " + DIGITOS_DEL_PRECIO + " cifras.");
         }
         return new ReglaDePrecio(null, limpio.setScale(0), SOBRE_COSTO);
     }

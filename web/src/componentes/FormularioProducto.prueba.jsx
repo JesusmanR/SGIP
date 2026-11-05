@@ -18,7 +18,7 @@ import { api } from '../servicios/api.js'
 import { CATEGORIAS, PC, PROVEEDORES } from '../prueba/productos.js'
 
 vi.mock('../servicios/api.js', () => ({
-  api: { editarProducto: vi.fn() },
+  api: { editarProducto: vi.fn(), crearProducto: vi.fn() },
   ErrorApi: class extends Error {},
 }))
 
@@ -128,8 +128,8 @@ describe('formulario de producto', () => {
 describe('el porcentaje y el precio de venta', () => {
   afterEach(() => vi.clearAllMocks())
 
-  const porcentaje = () => screen.getByLabelText('% de ganancia')
-  const precio = () => screen.getByLabelText('Precio de venta')
+  const porcentaje = () => screen.getByLabelText('% de ganancia de contado')
+  const precio = () => screen.getByLabelText('Precio de venta de contado')
   const porcentajeCredito = () => screen.getByLabelText('% de ganancia a crédito')
   const precioCredito = () => screen.getByLabelText('Precio de venta a crédito')
   const casilla = () => screen.getByLabelText('Usar otro precio a crédito')
@@ -152,6 +152,9 @@ describe('el porcentaje y el precio de venta', () => {
     await teclado.clear(campo)
     await teclado.type(campo, texto)
   }
+
+  /** Lo que las regiones de aviso están diciendo ahora. */
+  const avisos = () => screen.getAllByRole('status').filter((r) => r.textContent !== '')
 
   async function guardarYLeer(teclado) {
     api.editarProducto.mockResolvedValue(PC)
@@ -215,7 +218,8 @@ describe('el porcentaje y el precio de venta', () => {
     await reescribir(teclado, precio(), '1890000')
     expect(porcentaje()).toHaveValue(-10)
 
-    expect(screen.getByRole('status')).toHaveTextContent(/por debajo del costo/i)
+    expect(avisos()).toHaveLength(1)
+    expect(avisos()[0]).toHaveTextContent(/por debajo del costo/i)
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
 
     const datos = await guardarYLeer(teclado)
@@ -226,7 +230,7 @@ describe('el porcentaje y el precio de venta', () => {
     const teclado = userEvent.setup()
     montar()
     await reescribir(teclado, precio(), '2100000')
-    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    expect(avisos()).toHaveLength(0)
   })
 
   it('al editar se abre con lo guardado', () => {
@@ -267,6 +271,48 @@ describe('el porcentaje y el precio de venta', () => {
     montar(IGUALES)
     expect(casilla()).not.toBeChecked()
     expect(screen.queryByLabelText('Precio de venta a crédito')).not.toBeInTheDocument()
+  })
+
+  describe('la casilla compara la clase de regla, no solo la cifra', () => {
+    const MIL = { costo: 1000, precioContado: 1200, margenContado: 20, porcentajeContado: 20 }
+
+    it('un 20 % y una cifra escrita de 1.200 no son lo mismo aunque hoy coincidan', () => {
+      // Si abriera como «igual», cambiar el contado le borraría el precio
+      // escrito sin que nadie lo viera.
+      montar({
+        ...MIL, precioCredito: 1200, margenCredito: 20,
+        porcentajeCredito: null, precioFijoCredito: 1200,
+      })
+      expect(casilla()).toBeChecked()
+      expect(precioCredito()).toHaveValue(1200)
+    })
+
+    it('al revés, tampoco', () => {
+      montar({
+        costo: 1000, precioContado: 1200, margenContado: 20, porcentajeContado: null,
+        precioFijoContado: 1200, precioCredito: 1200, margenCredito: 20, porcentajeCredito: 20,
+        precioFijoCredito: null,
+      })
+      expect(casilla()).toBeChecked()
+    })
+
+    it('dos porcentajes que redondean a la misma cifra tampoco', () => {
+      montar({
+        ...MIL, precioCredito: 1200, margenCredito: 20,
+        porcentajeCredito: 20.01, precioFijoCredito: null,
+      })
+      expect(casilla()).toBeChecked()
+    })
+
+    it('el mismo porcentaje en los dos sí es lo mismo', () => {
+      montar({ ...MIL, precioCredito: 1200, margenCredito: 20, porcentajeCredito: 20 })
+      expect(casilla()).not.toBeChecked()
+    })
+
+    it('la misma cifra escrita en los dos sí es lo mismo', () => {
+      montar(ESCRITO)
+      expect(casilla()).not.toBeChecked()
+    })
   })
 
   it('solo se envía lo que se escribió: el porcentaje', async () => {
@@ -455,6 +501,51 @@ describe('el porcentaje y el precio de venta', () => {
       await noSeEnvia(teclado)
     })
 
+    it('un precio de 13 cifras no se podría vender', async () => {
+      const teclado = userEvent.setup()
+      montar()
+      await reescribir(teclado, precio(), '1234567890123')
+      expect(mensajeDe(precio())).toHaveTextContent(/12 cifras/)
+      await noSeEnvia(teclado)
+    })
+
+    it('un precio de 12 cifras sí', async () => {
+      const teclado = userEvent.setup()
+      montar()
+      await reescribir(teclado, precio(), '123456789012')
+      expect(precio()).toBeValid()
+      const datos = await guardarYLeer(teclado)
+      expect(datos.contado).toEqual({ precio: 123456789012 })
+    })
+
+    it('un porcentaje cuyo precio pasa de 12 cifras tampoco', async () => {
+      const teclado = userEvent.setup()
+      montar({ costo: 900000000000 })
+      await reescribir(teclado, porcentaje(), '200')
+      expect(mensajeDe(porcentaje())).toHaveTextContent(/12 cifras/)
+      await noSeEnvia(teclado)
+    })
+
+    it('el error se anuncia: está en una región viva que ya existía', async () => {
+      const teclado = userEvent.setup()
+      montar()
+      const antes = screen.getAllByRole('status')
+      await reescribir(teclado, porcentaje(), '0')
+      const region = mensajeDe(porcentaje())
+      expect(antes).toContain(region)
+      expect(region).toHaveTextContent(/mayor que cero/i)
+    })
+
+    it('el aviso bajo el costo se anuncia: su región ya existía', async () => {
+      // Una región viva que aparece junto con su texto no se lee en todos
+      // los lectores de pantalla: tiene que estar antes, vacía.
+      const teclado = userEvent.setup()
+      montar()
+      const antes = screen.getAllByRole('status')
+      await reescribir(teclado, precio(), '1890000')
+      expect(antes).toContain(avisos()[0])
+    })
+
     it('el error del crédito va en el crédito', async () => {
       const teclado = userEvent.setup()
       montar()
@@ -498,9 +589,221 @@ describe('el porcentaje y el precio de venta', () => {
   it('cada campo tiene su etiqueta visible', () => {
     montar()
     const formulario = screen.getByRole('dialog')
-    for (const texto of ['% de ganancia', 'Precio de venta', 'Usar otro precio a crédito',
+    for (const texto of ['% de ganancia de contado', 'Precio de venta de contado', 'Usar otro precio a crédito',
       '% de ganancia a crédito', 'Precio de venta a crédito']) {
       expect(within(formulario).getByText(texto)).toBeVisible()
     }
+  })
+})
+
+/**
+ * Crear un producto (P-05): el mismo formulario, con lo que cambia al nacer.
+ *
+ * `SolicitudProducto` exige categoría, proveedor, código, nombre y costo, y
+ * ServicioPrecios exige el contado. La existencia inicial es opcional y es
+ * lo único de la existencia que se escribe a mano: el backend la convierte en
+ * un movimiento de inventario.
+ */
+describe('crear un producto', () => {
+  afterEach(() => vi.clearAllMocks())
+
+  function montarAlta() {
+    const onGuardado = vi.fn()
+    render(
+      <FormularioProducto
+        modo="crear"
+        categorias={CATEGORIAS}
+        proveedores={PROVEEDORES}
+        onCerrar={vi.fn()}
+        onGuardado={onGuardado}
+      />)
+    return { onGuardado }
+  }
+
+  const crear = () => screen.getByRole('button', { name: /crear producto/i })
+  const campo = (nombre) => screen.getByLabelText(nombre)
+  function mensajeDe(control) {
+    const id = control.getAttribute('aria-describedby')
+    return id ? document.getElementById(id) : null
+  }
+
+  async function llenarLoObligatorio(teclado) {
+    await teclado.type(campo('Nombre'), 'Mouse óptico')
+    await teclado.selectOptions(campo('Categoría'), '2')
+    await teclado.selectOptions(campo('Proveedor'), '1')
+    await teclado.type(campo('Código'), 'MOU-1')
+    await teclado.type(campo('Costo'), '1000')
+    await teclado.type(campo('% de ganancia de contado'), '20')
+  }
+
+  it('se titula y se nombra por lo que hace', () => {
+    montarAlta()
+    expect(screen.getByRole('dialog', { name: 'Nuevo producto' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Nuevo producto' })).toBeInTheDocument()
+    expect(crear()).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /guardar cambios/i })).not.toBeInTheDocument()
+  })
+
+  it('al editar se titula como siempre', () => {
+    montar()
+    expect(screen.getByRole('dialog', { name: `Editar ${PC.nombre}` })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Editar producto' })).toBeInTheDocument()
+  })
+
+  it('abre vacío y sin ningún error', () => {
+    montarAlta()
+    expect(campo('Nombre')).toHaveValue('')
+    expect(campo('Costo')).toHaveValue(null)
+    expect(campo('% de ganancia de contado')).toHaveValue(null)
+    expect(campo('Precio de venta de contado')).toHaveValue(null)
+    expect(campo('Usar otro precio a crédito')).not.toBeChecked()
+    expect(screen.getAllByRole('status').filter((r) => r.textContent !== '')).toHaveLength(0)
+    expect(document.querySelector('[aria-invalid="true"]')).toBeNull()
+  })
+
+  it.each([
+    ['Nombre', /nombre/i],
+    ['Categoría', /categoría/i],
+    ['Proveedor', /proveedor/i],
+    ['Código', /código/i],
+    ['Costo', /costo/i],
+    ['% de ganancia de contado', /porcentaje o el precio/i],
+  ])('%s es obligatorio y lo dice con palabras al lado del campo', async (nombre, texto) => {
+    const teclado = userEvent.setup()
+    montarAlta()
+    await teclado.click(crear())
+    expect(api.crearProducto).not.toHaveBeenCalled()
+    expect(campo(nombre)).toHaveAttribute('aria-invalid', 'true')
+    expect(mensajeDe(campo(nombre))).toHaveTextContent(texto)
+    expect(mensajeDe(campo(nombre))).toHaveClass('error')
+  })
+
+  it('el contado es obligatorio aunque nadie lo haya tocado, con todo lo demás lleno', async () => {
+    const teclado = userEvent.setup()
+    montarAlta()
+    await teclado.type(campo('Nombre'), 'Mouse')
+    await teclado.selectOptions(campo('Categoría'), '2')
+    await teclado.selectOptions(campo('Proveedor'), '1')
+    await teclado.type(campo('Código'), 'MOU-1')
+    await teclado.type(campo('Costo'), '1000')
+    await teclado.click(crear())
+    expect(api.crearProducto).not.toHaveBeenCalled()
+    expect(mensajeDe(campo('% de ganancia de contado'))).toHaveTextContent(/porcentaje o el precio/i)
+    expect(campo('% de ganancia de contado')).toHaveFocus()
+  })
+
+  it('al intentar crear, el foco va al primer campo con problema', async () => {
+    const teclado = userEvent.setup()
+    montarAlta()
+    await teclado.click(crear())
+    expect(campo('Nombre')).toHaveFocus()
+  })
+
+  it('el mensaje se va al corregir', async () => {
+    const teclado = userEvent.setup()
+    montarAlta()
+    await teclado.click(crear())
+    await teclado.type(campo('Nombre'), 'Mouse')
+    expect(campo('Nombre')).not.toHaveAttribute('aria-invalid')
+    expect(mensajeDe(campo('Nombre'))).toBeNull()
+  })
+
+  it.each([['0'], ['-5'], ['1.234']])('un costo de %s se rechaza al lado del campo', async (costo) => {
+    const teclado = userEvent.setup()
+    montarAlta()
+    await teclado.type(campo('Costo'), costo)
+    await teclado.click(crear())
+    expect(mensajeDe(campo('Costo'))).toHaveTextContent(/costo/i)
+    expect(api.crearProducto).not.toHaveBeenCalled()
+  })
+
+  it.each([['-1'], ['2.5']])('una existencia inicial de %s se rechaza al lado del campo', async (valor) => {
+    const teclado = userEvent.setup()
+    montarAlta()
+    await llenarLoObligatorio(teclado)
+    await teclado.type(campo('Existencia inicial'), valor)
+    await teclado.click(crear())
+    expect(mensajeDe(campo('Existencia inicial'))).toHaveTextContent(/cantidad entera/i)
+    expect(api.crearProducto).not.toHaveBeenCalled()
+  })
+
+  it('manda exactamente lo que pide la API: números, lo escrito y sin la bandera de crédito', async () => {
+    const teclado = userEvent.setup()
+    api.crearProducto.mockResolvedValue(PC)
+    const { onGuardado } = montarAlta()
+    await llenarLoObligatorio(teclado)
+    expect(campo('Precio de venta de contado')).toHaveValue(1200)
+    await teclado.type(campo('Existencia inicial'), '7')
+    await teclado.click(crear())
+
+    await waitFor(() => expect(onGuardado).toHaveBeenCalledWith(PC))
+    expect(api.crearProducto.mock.calls[0][0]).toEqual({
+      categoriaId: 2, proveedorId: 1, codigo: 'MOU-1', sku: '', codigoBarras: '',
+      nombre: 'Mouse óptico', presentacion: '', descripcion: '', costo: '1000',
+      existencia: 7, existenciaMinima: null, contado: { porcentaje: 20 },
+    })
+    expect(api.editarProducto).not.toHaveBeenCalled()
+  })
+
+  it('sin existencia inicial viaja nula: el backend no escribe movimiento', async () => {
+    const teclado = userEvent.setup()
+    api.crearProducto.mockResolvedValue(PC)
+    montarAlta()
+    await llenarLoObligatorio(teclado)
+    await teclado.click(crear())
+    await waitFor(() => expect(api.crearProducto).toHaveBeenCalled())
+    expect(api.crearProducto.mock.calls[0][0].existencia).toBeNull()
+  })
+
+  it('con la casilla marcada el crédito es obligatorio: el servidor lo igualaría sin avisar', async () => {
+    const teclado = userEvent.setup()
+    montarAlta()
+    await llenarLoObligatorio(teclado)
+    await teclado.click(campo('Usar otro precio a crédito'))
+    await teclado.click(crear())
+    expect(api.crearProducto).not.toHaveBeenCalled()
+    expect(mensajeDe(campo('% de ganancia a crédito'))).toHaveTextContent(/porcentaje o el precio/i)
+  })
+
+  it('con la casilla marcada y el crédito escrito lo envía', async () => {
+    const teclado = userEvent.setup()
+    api.crearProducto.mockResolvedValue(PC)
+    montarAlta()
+    await llenarLoObligatorio(teclado)
+    await teclado.click(campo('Usar otro precio a crédito'))
+    await teclado.type(campo('Precio de venta a crédito'), '1300')
+    await teclado.click(crear())
+    await waitFor(() => expect(api.crearProducto).toHaveBeenCalled())
+    const datos = api.crearProducto.mock.calls[0][0]
+    expect(datos.credito).toEqual({ precio: 1300 })
+    expect(datos).not.toHaveProperty('creditoIgualAlContado')
+  })
+
+  it('el rechazo del servidor sale arriba y se puede reintentar', async () => {
+    const teclado = userEvent.setup()
+    api.crearProducto.mockRejectedValue(new Error('Ya existe un producto con el código MOU-1.'))
+    montarAlta()
+    await llenarLoObligatorio(teclado)
+    await teclado.click(crear())
+    expect(await screen.findByRole('alert')).toHaveTextContent('Ya existe un producto')
+    expect(crear()).toBeEnabled()
+    expect(campo('Nombre')).toHaveValue('Mouse óptico')
+  })
+
+  it('al editar no hay existencia inicial, ni se envía', async () => {
+    const teclado = userEvent.setup()
+    api.editarProducto.mockResolvedValue(PC)
+    montar()
+    expect(screen.queryByLabelText('Existencia inicial')).not.toBeInTheDocument()
+    await teclado.click(screen.getByRole('button', { name: /guardar/i }))
+    await waitFor(() => expect(api.editarProducto).toHaveBeenCalled())
+    expect(api.editarProducto.mock.calls[0][1]).not.toHaveProperty('existencia')
+  })
+
+  it('sin categorías dice por qué no hay de dónde elegir', () => {
+    render(
+      <FormularioProducto modo="crear" categorias={[]} proveedores={PROVEEDORES}
+        onCerrar={vi.fn()} onGuardado={vi.fn()} />)
+    expect(mensajeDe(campo('Categoría'))).toHaveTextContent(/no hay categorías/i)
   })
 })

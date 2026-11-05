@@ -668,7 +668,29 @@ class ServicioProductoTest {
 
     @Test
     void unPrecioQueNoCabeEnLaColumnaSeRechazaConSuMotivo() {
-        altaRechazada(alta("1000.00", precio("100000000000000"), null), "demasiado grande");
+        altaRechazada(alta("1000.00", precio("1234567890123"), null), "12 cifras");
+    }
+
+    @Test
+    void unPrecioDeDoceCifrasEsElMayorQueSePuedeVender() {
+        comoEmpresa(3);
+        referenciasPropias();
+        when(productos.save(any(Producto.class))).thenAnswer(i -> {
+            Producto p = i.getArgument(0);
+            ReflectionTestUtils.setField(p, "id", ID_GUARDADO);
+            return p;
+        });
+
+        servicio.crear(alta("1000.00", precio("123456789012"), null));
+
+        verify(precios).abrirReglaPropia(3, ID_GUARDADO, CONTADO, reglaDeCifra("123456789012"));
+    }
+
+    @Test
+    void unPorcentajeCuyoPrecioNoSePodriaVenderSeRechaza() {
+        // 900 mil millones al 200 % son 13 cifras: la regla cabe en su factor y
+        // la venta no cabría en `precio_unitario`.
+        altaRechazada(alta("900000000000.00", porcentaje("200"), null), "12 cifras");
     }
 
     @Test
@@ -855,6 +877,23 @@ class ServicioProductoTest {
         verify(precios).abrirReglaPropia(3, 11, CREDITO,
                 new ReglaDePrecio(new BigDecimal("1.2000"), null, "SOBRE_PRECIO"));
         verify(precios, never()).abrirReglaPropia(eq(3), eq(11), eq(CONTADO), any());
+    }
+
+    @Test
+    void volverAUsarElContadoCopiaLaReglaPropiaLeidaConBloqueoYNoLaDeLaVista() {
+        // La vista es una lectura normal: tras esperar el bloqueo del producto,
+        // aún ve la foto de antes y diría el contado viejo.
+        prepararEdicion();
+        ReglaDePrecio actual = new ReglaDePrecio(new BigDecimal("1.3000"), null, "SOBRE_COSTO");
+        when(precios.reglaPropiaVigente(3, 11, CONTADO)).thenReturn(Optional.of(actual));
+
+        servicio.actualizar(11, edicionDePrecio(null, null, true));
+
+        verify(precios).abrirReglaPropia(3, 11, CREDITO, actual);
+        verify(precios, never()).reglaVigente(anyInt(), anyInt(), any());
+        InOrder orden = inOrder(precios);
+        orden.verify(precios).bloquearProducto(3, 11);
+        orden.verify(precios).reglaPropiaVigente(3, 11, CONTADO);
     }
 
     @Test

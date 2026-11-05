@@ -457,6 +457,8 @@ rechaza "un precio fijo de cero se rechaza" "ck_reglas_margen_precio_fijo" \
         "$(insertar_regla "$ID_CK" NULL 0)"
 rechaza "un precio fijo negativo se rechaza" "ck_reglas_margen_precio_fijo" \
         "$(insertar_regla "$ID_CK" NULL -5)"
+rechaza "un precio fijo de 13 cifras no cabe: no se podría vender" "precio_fijo" \
+        "$(insertar_regla "$ID_CK" NULL 1234567890123)"
 rechaza "un porcentaje de cero, que es factor 1, se rechaza" "ck_reglas_margen_factor" \
         "$(insertar_regla "$ID_CK" 1.0000 NULL)"
 regla_propia PREC-PR-CK CONTADO 1.2000 NULL "$hoy" "$abierta" >/dev/null
