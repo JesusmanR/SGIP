@@ -202,8 +202,11 @@ dirían cuál mandó. Guardar lo mismo no escribe nada.
   y `v_rotacion_inventario` (29.715 líneas) son idénticas a las de la V35 sin reglas
   propias, y con 17.155 reglas propias de toda clase, a las de la condición única.
 
-  Sigue siendo lento: 2 segundos por página a esa escala, y 1 por producto. Las dos
-  vistas de reglas se materializan enteras para todas las empresas en cada consulta.
+  Sigue siendo lento: 2 segundos por página con 10.000 productos, y 1 por producto. Esa
+  cifra es el total de la base, no el de un cliente: las dos vistas de reglas se
+  materializan enteras para todas las empresas en cada consulta, de modo que diez tiendas
+  de 1.000 productos deberían pagar lo mismo que una de 10.000 (se deduce del plan; la
+  mezcla de empresas no se midió).
   Esa forma viene de antes de la V36, pero las reglas propias le dan más filas que
   materializar: en otra carga, con dos empresas y 10 reglas generales, una página tardó
   0,8 segundos. Antes del punto de pago hay que medirlo otra vez y resolverlo: leer un
