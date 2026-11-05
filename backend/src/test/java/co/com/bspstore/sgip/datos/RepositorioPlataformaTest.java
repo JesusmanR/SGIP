@@ -78,6 +78,9 @@ class RepositorioPlataformaTest {
                 () -> assertFalse(AccionPlataforma.UVT_CAMBIO.esDeEmpresa()),
                 () -> assertFalse(AccionPlataforma.IMPUESTO_ALTA.esDeEmpresa()),
                 () -> assertFalse(AccionPlataforma.IMPUESTO_CAMBIO.esDeEmpresa()),
+                // Desbloquear a un usuario recae sobre su empresa y cambia algo que ya existía.
+                () -> assertTrue(AccionPlataforma.USUARIO_DESBLOQUEO.esDeEmpresa()),
+                () -> assertTrue(AccionPlataforma.USUARIO_DESBLOQUEO.esCambio()),
                 // Un alta no tiene valor anterior; un cambio sí.
                 () -> assertFalse(AccionPlataforma.EMPRESA_ALTA.esCambio()),
                 () -> assertFalse(AccionPlataforma.UVT_ALTA.esCambio()),

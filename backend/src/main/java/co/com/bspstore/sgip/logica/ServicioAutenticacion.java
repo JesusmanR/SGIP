@@ -11,6 +11,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+import java.time.LocalDateTime;
 import java.util.Locale;
 
 @Service
@@ -21,14 +23,25 @@ public class ServicioAutenticacion {
 
     private final UsuarioRepositorio usuarios;
     private final AuditoriaAccesoRepositorio auditoria;
+    private final Clock reloj;
     private final int intentosMaximos;
+    private final int minutosDeBloqueo;
 
+    /**
+     * El instante del bloqueo y su vencimiento se miden con el reloj de la
+     * aplicación, el mismo en los dos lados: la columna solo guarda el instante
+     * y la base nunca decide si venció (ADR-0028).
+     */
     public ServicioAutenticacion(UsuarioRepositorio usuarios,
                                  AuditoriaAccesoRepositorio auditoria,
-                                 @Value("${sgip.seguridad.intentos-maximos:5}") int intentosMaximos) {
+                                 Clock reloj,
+                                 @Value("${sgip.seguridad.intentos-maximos:5}") int intentosMaximos,
+                                 @Value("${sgip.seguridad.minutos-de-bloqueo:15}") int minutosDeBloqueo) {
         this.usuarios = usuarios;
         this.auditoria = auditoria;
+        this.reloj = reloj;
         this.intentosMaximos = intentosMaximos;
+        this.minutosDeBloqueo = minutosDeBloqueo;
     }
 
     @Transactional(noRollbackFor = CredencialesInvalidasException.class)
@@ -42,11 +55,16 @@ public class ServicioAutenticacion {
         if (!usuario.isActivo()) {
             rechazar(usuario, normalizado, MotivoRechazo.CUENTA_INACTIVA, origen);
         }
+        // Al vencer el plazo la cuenta se limpia antes de mirar la clave: los
+        // intentos vuelven a cero y un error no la bloquea de inmediato otra vez.
+        if (usuario.bloqueoVencido(ahora(), minutosDeBloqueo)) {
+            usuario.desbloquear();
+        }
         if (usuario.isBloqueado()) {
             rechazar(usuario, normalizado, MotivoRechazo.CUENTA_BLOQUEADA, origen);
         }
         if (!Seguridad.verificar(clave, usuario.getClaveHash())) {
-            usuario.registrarIntentoFallido(intentosMaximos);
+            usuario.registrarIntentoFallido(intentosMaximos, ahora());
             rechazar(usuario, normalizado, MotivoRechazo.CLAVE_INCORRECTA, origen);
         }
 
@@ -106,12 +124,16 @@ public class ServicioAutenticacion {
      * nueva.
      */
     @Transactional(noRollbackFor = ClaveActualIncorrectaException.class)
-    public void cambiarClave(Integer usuarioId, String actual, String nueva) {
+    public void cambiarClave(Integer usuarioId, String actual, String nueva, String origen) {
         Usuario usuario = usuarios.findById(usuarioId)
                 .orElseThrow(() -> new RecursoNoEncontradoException("El usuario no existe."));
 
         if (!Seguridad.verificar(actual, usuario.getClaveHash())) {
-            usuario.registrarIntentoFallido(intentosMaximos);
+            usuario.registrarIntentoFallido(intentosMaximos, ahora());
+            // Queda en la misma auditoría que los fallos del ingreso: es la
+            // misma adivinanza, hecha desde una sesión abierta.
+            auditoria.save(AuditoriaAcceso.fallido(usuario, usuario.getCorreo(),
+                    MotivoRechazo.CLAVE_INCORRECTA, origen));
             throw new ClaveActualIncorrectaException();
         }
         if (nueva == null || nueva.length() < CLAVE_MINIMA) {
@@ -129,6 +151,10 @@ public class ServicioAutenticacion {
 
     private void rechazar(Usuario usuario, String correo, MotivoRechazo motivo, String origen) {
         auditoria.save(AuditoriaAcceso.fallido(usuario, correo, motivo, origen));
-        throw new CredencialesInvalidasException();
+        throw new CredencialesInvalidasException(minutosDeBloqueo);
+    }
+
+    private LocalDateTime ahora() {
+        return LocalDateTime.now(reloj);
     }
 }

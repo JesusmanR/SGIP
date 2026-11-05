@@ -25,6 +25,9 @@ sgip:
     # expiración por inactividad, que cada petición renueva.
     sesion-minutos: 30
     intentos-maximos: 5
+    # El bloqueo por intentos fallidos caduca (ADR-0028). El mensaje de
+    # ingreso dice este número de minutos.
+    minutos-de-bloqueo: 15
   archivos:
     # Carpeta donde se guardan las imágenes. Relativa a donde se arranca
     # la aplicación, o absoluta si se prefiere fuera del proyecto.

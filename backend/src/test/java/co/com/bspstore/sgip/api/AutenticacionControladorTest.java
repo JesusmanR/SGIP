@@ -12,6 +12,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -35,10 +36,12 @@ class AutenticacionControladorTest {
     @Mock ServicioSesion sesiones;
 
     AutenticacionControlador controlador;
+    MockHttpServletRequest peticion = new MockHttpServletRequest();
 
     @BeforeEach
     void preparar() {
         controlador = new AutenticacionControlador(servicio, sesiones);
+        peticion.setRemoteAddr("10.0.0.5");
         var u = new UsuarioAutenticado(7, "ana@tienda.co", "VENDEDOR", 4, true);
         SecurityContext c = SecurityContextHolder.createEmptyContext();
         c.setAuthentication(new UsernamePasswordAuthenticationToken(u, null, List.of()));
@@ -53,22 +56,22 @@ class AutenticacionControladorTest {
     @Test
     void cambiaLaClaveDeQuienPideYCierraLasDemasSesionesConservandoLaActual() {
         var respuesta = controlador.cambiarClave(
-                new SolicitudCambioClave("Inicial2026", "Nueva2026xyz"), "Bearer token-actual");
+                new SolicitudCambioClave("Inicial2026", "Nueva2026xyz"), "Bearer token-actual", peticion);
 
         assertEquals(204, respuesta.getStatusCode().value());
         // El identificador sale de la sesión autenticada, no de la solicitud.
         InOrder orden = inOrder(servicio, sesiones);
-        orden.verify(servicio).cambiarClave(7, "Inicial2026", "Nueva2026xyz");
+        orden.verify(servicio).cambiarClave(7, "Inicial2026", "Nueva2026xyz", "10.0.0.5");
         orden.verify(sesiones).cerrarLasDemasDe(7, "token-actual");
     }
 
     @Test
     void siLaClaveActualEstaMalNoSeCierraNingunaSesion() {
         doThrow(new ClaveActualIncorrectaException()).when(servicio)
-                .cambiarClave(7, "mala", "Nueva2026xyz");
+                .cambiarClave(7, "mala", "Nueva2026xyz", "10.0.0.5");
 
         assertThrows(ClaveActualIncorrectaException.class, () -> controlador.cambiarClave(
-                new SolicitudCambioClave("mala", "Nueva2026xyz"), "Bearer token-actual"));
+                new SolicitudCambioClave("mala", "Nueva2026xyz"), "Bearer token-actual", peticion));
 
         verify(sesiones, never()).cerrarLasDemasDe(any(), anyString());
     }

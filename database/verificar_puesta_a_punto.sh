@@ -49,6 +49,8 @@ limpiar () {
       ejecutar "DELETE r FROM reglas_margen r JOIN empresas e ON e.empresa_id = r.empresa_id
                  WHERE e.nit LIKE 'PAP-%';"
       ejecutar "DELETE FROM tipos_impuesto WHERE codigo LIKE 'PAP-%';"
+      # La bitácora de la plataforma apunta a la empresa con RESTRICT (V37).
+      ejecutar "DELETE FROM auditoria_plataforma WHERE referencia LIKE 'PAP-%';"
       # La UVT de prueba que la sección de la V35 pone solo si falta la del
       # año en curso (ver más abajo).
       ejecutar "DELETE FROM uvt_anual WHERE resolucion LIKE 'PAP-%';"
@@ -482,6 +484,43 @@ for e in 1 "$AJENA"; do
   igual "la empresa $e: una fila por producto activo" "1"     "$(consulta "SELECT (SELECT COUNT(*) FROM v_precios_producto WHERE empresa_id = $e)
                       = (SELECT COUNT(*) FROM productos WHERE empresa_id = $e AND activo = 1);")"
 done
+
+# ── El bloqueo de una cuenta caduca (V37) ──────────────────────────────
+# La columna guarda el instante que escribe la aplicación (nunca el motor), y
+# el super administrador puede desbloquear a un usuario: esa decisión entra en
+# la bitácora de la plataforma, cuyas dos restricciones estaban cerradas.
+echo "── el bloqueo de una cuenta caduca (V37) ──"
+
+igual "usuarios.bloqueado_en admite nulo y no tiene valor por omisión" "YES|NULL" \
+  "$(consulta "SELECT CONCAT(is_nullable, '|', IFNULL(column_default, 'NULL'))
+                 FROM information_schema.columns
+                WHERE table_schema = DATABASE() AND table_name = 'usuarios'
+                  AND column_name = 'bloqueado_en';")"
+
+USU=$(consulta "SELECT usuario_id FROM usuarios LIMIT 1;")
+if [[ -z "$USU" ]]; then
+  echo "No hay ningún usuario para firmar la bitácora. ¿Están los datos de demostración?"
+  exit 1
+fi
+
+bitacora () {
+  echo "INSERT INTO auditoria_plataforma
+          (usuario_id, empresa_id, accion, entidad, referencia, valor_anterior, valor_nuevo)
+        VALUES ($USU, $1, '$2', 'usuarios', '$3', $4, 'DESBLOQUEADO');"
+}
+
+acepta "desbloquear a un usuario de una empresa entra en la bitácora" \
+  "$(bitacora "$AJENA" USUARIO_DESBLOQUEO PAP-D1 "'BLOQUEADO'")"
+rechaza "un desbloqueo sin empresa" 3819 ck_auditoria_plataforma_ambito \
+  "$(bitacora NULL USUARIO_DESBLOQUEO PAP-D2 "'BLOQUEADO'")"
+rechaza "un desbloqueo sin el estado anterior" 3819 ck_auditoria_plataforma_cambio \
+  "$(bitacora "$AJENA" USUARIO_DESBLOQUEO PAP-D3 NULL)"
+# Las restricciones se volvieron a escribir: lo anterior tiene que seguir negado.
+rechaza "un cambio de UVT atribuido a una empresa sigue rechazado" 3819 ck_auditoria_plataforma_ambito \
+  "$(bitacora "$AJENA" UVT_CAMBIO PAP-D4 "'1'")"
+rechaza "una activación sin estado anterior sigue rechazada" 3819 ck_auditoria_plataforma_cambio \
+  "$(bitacora "$AJENA" EMPRESA_ACTIVACION PAP-D5 NULL)"
+
 echo
 if [[ "$fallos" -eq 0 ]]; then
   echo "TODO EN VERDE"

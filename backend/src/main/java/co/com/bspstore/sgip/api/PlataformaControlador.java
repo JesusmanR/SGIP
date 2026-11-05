@@ -89,6 +89,19 @@ public class PlataformaControlador {
                 .orElseThrow(() -> new RecursoNoEncontradoException("La empresa no existe."));
     }
 
+    /**
+     * Levanta el bloqueo de un usuario de esa empresa (ADR-0028). Es un POST
+     * sobre un recurso propio y no un DELETE, como el desbloqueo que hace el
+     * administrador de la empresa: nada se borra. 404 si el usuario no es de
+     * esa empresa, con el mismo texto que si no existiera.
+     */
+    @PostMapping("/{empresaId}/usuarios/{usuarioId}/desbloquear")
+    public ResponseEntity<Void> desbloquearUsuario(@PathVariable Integer empresaId,
+                                                   @PathVariable Integer usuarioId) {
+        servicio.desbloquearUsuario(empresaId, usuarioId);
+        return ResponseEntity.noContent().build();
+    }
+
     @PostMapping("/{empresaId}/desactivar")
     public ResponseEntity<EmpresaEnPlataforma> desactivar(
             @PathVariable Integer empresaId,

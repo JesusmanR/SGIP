@@ -53,6 +53,14 @@ public class Usuario {
     @Column(name = "bloqueado", nullable = false)
     private boolean bloqueado = false;
 
+    /**
+     * Cuándo se bloqueó, según el reloj de la aplicación y nunca el de la base
+     * (V37). Nulo si no está bloqueado, o si el bloqueo es anterior a la V37 y
+     * no se sabe desde cuándo: en ese caso se toma por vencido.
+     */
+    @Column(name = "bloqueado_en")
+    private LocalDateTime bloqueadoEn;
+
     @JdbcTypeCode(SqlTypes.TINYINT)
     @Column(name = "intentos_fallidos", nullable = false)
     private int intentosFallidos = 0;
@@ -81,11 +89,21 @@ public class Usuario {
         return activo && !bloqueado;
     }
 
-    public void registrarIntentoFallido(int maximoPermitido) {
+    public void registrarIntentoFallido(int maximoPermitido, LocalDateTime ahora) {
         intentosFallidos++;
         if (intentosFallidos >= maximoPermitido) {
             bloqueado = true;
+            bloqueadoEn = ahora;
         }
+    }
+
+    /**
+     * Si el bloqueo ya cumplió su plazo. Sin instante (un bloqueo anterior a
+     * la V37) no hay desde cuándo contar, y se toma por vencido.
+     */
+    public boolean bloqueoVencido(LocalDateTime ahora, int minutosDeBloqueo) {
+        return bloqueado
+                && (bloqueadoEn == null || !ahora.isBefore(bloqueadoEn.plusMinutes(minutosDeBloqueo)));
     }
 
     public void registrarIngresoExitoso() {
@@ -94,6 +112,7 @@ public class Usuario {
 
     public void desbloquear() {
         bloqueado = false;
+        bloqueadoEn = null;
         intentosFallidos = 0;
     }
 
@@ -144,6 +163,7 @@ public class Usuario {
     public String getClaveHash() { return claveHash; }
     public boolean isActivo() { return activo; }
     public boolean isBloqueado() { return bloqueado; }
+    public LocalDateTime getBloqueadoEn() { return bloqueadoEn; }
     public int getIntentosFallidos() { return intentosFallidos; }
     public boolean isCambioClaveRequerido() { return cambioClaveRequerido; }
     public LocalDateTime getCreadoEn() { return creadoEn; }

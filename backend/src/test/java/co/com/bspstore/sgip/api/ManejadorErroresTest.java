@@ -2,6 +2,7 @@ package co.com.bspstore.sgip.api;
 
 import co.com.bspstore.sgip.logica.ClaveActualIncorrectaException;
 import co.com.bspstore.sgip.logica.ClaveNuevaInvalidaException;
+import co.com.bspstore.sgip.logica.CredencialesInvalidasException;
 import co.com.bspstore.sgip.logica.EstadoDeCargaInvalidoException;
 import co.com.bspstore.sgip.logica.ImpuestoNoDisponibleException;
 import co.com.bspstore.sgip.logica.RecursoNoEncontradoException;
@@ -16,6 +17,7 @@ import java.sql.SQLIntegrityConstraintViolationException;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ManejadorErroresTest {
 
@@ -84,6 +86,24 @@ class ManejadorErroresTest {
 
         assertEquals(500, p.getStatus());
         sinTextoDelMotor(p, "tabla_secreta", "statement");
+    }
+
+    /** El 401 de ingreso orienta sin revelar: el plazo sale del valor configurado. */
+    @Test
+    void elRechazoDelIngresoDiceCuantoDuraElBloqueoSegunLoConfigurado() {
+        ProblemDetail p = manejador.credencialesInvalidas(new CredencialesInvalidasException(20));
+
+        assertEquals(401, p.getStatus());
+        assertEquals("Credenciales inválidas", p.getTitle());
+        assertEquals("El correo o la contraseña no son correctos. Si te equivocas varias veces, "
+                + "la cuenta se bloquea durante 20 minutos.", p.getDetail());
+    }
+
+    @Test
+    void elPlazoDeUnMinutoSeDiceEnSingular() {
+        ProblemDetail p = manejador.credencialesInvalidas(new CredencialesInvalidasException(1));
+
+        assertTrue(p.getDetail().endsWith("durante 1 minuto."), p.getDetail());
     }
 
     @Test

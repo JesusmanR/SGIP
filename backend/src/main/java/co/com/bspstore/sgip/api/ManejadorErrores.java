@@ -62,7 +62,10 @@ public class ManejadorErrores {
     public ProblemDetail credencialesInvalidas(CredencialesInvalidasException e) {
         ProblemDetail p = ProblemDetail.forStatus(HttpStatus.UNAUTHORIZED);
         p.setTitle("Credenciales inválidas");
-        p.setDetail("El correo o la contraseña no son correctos.");
+        int minutos = e.getMinutosDeBloqueo();
+        p.setDetail("El correo o la contraseña no son correctos. Si te equivocas varias veces, "
+                + "la cuenta se bloquea durante " + minutos
+                + (minutos == 1 ? " minuto." : " minutos."));
         return p;
     }
 
