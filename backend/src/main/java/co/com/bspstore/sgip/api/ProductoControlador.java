@@ -7,6 +7,7 @@ import co.com.bspstore.sgip.api.dto.SolicitudProducto;
 import co.com.bspstore.sgip.api.dto.VistaDeProducto;
 import co.com.bspstore.sgip.config.ContextoEmpresa;
 import co.com.bspstore.sgip.config.UsuarioAutenticado;
+import co.com.bspstore.sgip.logica.RecursoNoEncontradoException;
 import co.com.bspstore.sgip.logica.ServicioProducto;
 import co.com.bspstore.sgip.modelo.Producto;
 import jakarta.validation.Valid;
@@ -70,7 +71,7 @@ public class ProductoControlador {
         return servicio.buscar(productoId)
                 .map(p -> segunQuienPregunta(p, completa))
                 .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+                .orElseThrow(() -> new RecursoNoEncontradoException("El producto no existe."));
     }
 
     /** Pantalla P-10, tras leer el código de barras con la cámara. */
@@ -80,7 +81,7 @@ public class ProductoControlador {
         return servicio.porCodigoBarras(codigoBarras)
                 .map(p -> segunQuienPregunta(p, completa))
                 .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+                .orElseThrow(() -> new RecursoNoEncontradoException("No hay ningún producto con ese código de barras."));
     }
 
     /**
@@ -131,6 +132,6 @@ public class ProductoControlador {
         return servicio.actualizar(productoId, solicitud)
                 .flatMap(p -> servicio.buscar(p.getId()))
                 .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+                .orElseThrow(() -> new RecursoNoEncontradoException("El producto no existe."));
     }
 }

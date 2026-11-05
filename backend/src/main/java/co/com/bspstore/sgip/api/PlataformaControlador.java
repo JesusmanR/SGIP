@@ -3,6 +3,7 @@ package co.com.bspstore.sgip.api;
 import co.com.bspstore.sgip.api.dto.EmpresaEnPlataforma;
 import co.com.bspstore.sgip.api.dto.SolicitudAltaEmpresa;
 import co.com.bspstore.sgip.api.dto.SolicitudCambioEstado;
+import co.com.bspstore.sgip.logica.RecursoNoEncontradoException;
 import co.com.bspstore.sgip.logica.ServicioPlataforma;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -54,7 +55,7 @@ public class PlataformaControlador {
     public ResponseEntity<EmpresaEnPlataforma> ver(@PathVariable Integer empresaId) {
         return servicio.buscar(empresaId)
                 .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+                .orElseThrow(() -> new RecursoNoEncontradoException("La empresa no existe."));
     }
 
     /** RF-01. Devuelve 409 si la identificación tributaria ya está registrada. */
@@ -85,7 +86,7 @@ public class PlataformaControlador {
             @Valid @RequestBody(required = false) SolicitudCambioEstado solicitud) {
         return servicio.activar(empresaId, SolicitudCambioEstado.motivoDe(solicitud))
                 .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+                .orElseThrow(() -> new RecursoNoEncontradoException("La empresa no existe."));
     }
 
     @PostMapping("/{empresaId}/desactivar")
@@ -94,6 +95,6 @@ public class PlataformaControlador {
             @Valid @RequestBody(required = false) SolicitudCambioEstado solicitud) {
         return servicio.desactivar(empresaId, SolicitudCambioEstado.motivoDe(solicitud))
                 .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+                .orElseThrow(() -> new RecursoNoEncontradoException("La empresa no existe."));
     }
 }

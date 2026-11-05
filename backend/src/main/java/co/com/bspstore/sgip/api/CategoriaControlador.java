@@ -2,6 +2,7 @@ package co.com.bspstore.sgip.api;
 
 import co.com.bspstore.sgip.api.dto.CategoriaResumen;
 import co.com.bspstore.sgip.api.dto.SolicitudCategoria;
+import co.com.bspstore.sgip.logica.RecursoNoEncontradoException;
 import co.com.bspstore.sgip.logica.ServicioCategoria;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -43,7 +44,7 @@ public class CategoriaControlador {
         return servicio.buscar(categoriaId)
                 .map(CategoriaResumen::de)
                 .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+                .orElseThrow(() -> new RecursoNoEncontradoException("La categoría no existe."));
     }
 
     /**
@@ -67,7 +68,7 @@ public class CategoriaControlador {
         return servicio.actualizar(categoriaId, solicitud.nombre(), solicitud.descripcion())
                 .map(CategoriaResumen::de)
                 .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+                .orElseThrow(() -> new RecursoNoEncontradoException("La categoría no existe."));
     }
 
     /**
@@ -82,6 +83,6 @@ public class CategoriaControlador {
         return servicio.desactivar(categoriaId)
                 .map(CategoriaResumen::de)
                 .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+                .orElseThrow(() -> new RecursoNoEncontradoException("La categoría no existe."));
     }
 }

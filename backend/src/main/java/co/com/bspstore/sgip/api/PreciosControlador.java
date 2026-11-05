@@ -3,6 +3,7 @@ package co.com.bspstore.sgip.api;
 import co.com.bspstore.sgip.api.dto.CruceDeUmbral;
 import co.com.bspstore.sgip.api.dto.ReglaDeMargen;
 import co.com.bspstore.sgip.api.dto.SolicitudReglaMargen;
+import co.com.bspstore.sgip.logica.RecursoNoEncontradoException;
 import co.com.bspstore.sgip.logica.ServicioPrecios;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -59,7 +60,7 @@ public class PreciosControlador {
     public ResponseEntity<ReglaDeMargen> ver(@PathVariable Integer reglaId) {
         return servicio.buscar(reglaId)
                 .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+                .orElseThrow(() -> new RecursoNoEncontradoException("La regla de ganancia no existe."));
     }
 
     /**
@@ -111,7 +112,7 @@ public class PreciosControlador {
             @Valid @RequestBody SolicitudReglaMargen solicitud) {
         return servicio.actualizar(reglaId, solicitud)
                 .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+                .orElseThrow(() -> new RecursoNoEncontradoException("La regla de ganancia no existe."));
     }
 
     /**
@@ -125,7 +126,7 @@ public class PreciosControlador {
             @RequestParam(required = false) LocalDate hasta) {
         return servicio.cerrar(reglaId, hasta)
                 .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+                .orElseThrow(() -> new RecursoNoEncontradoException("La regla de ganancia no existe."));
     }
 
     /** Las referencias que una regla de este ámbito alcanzaría. */
