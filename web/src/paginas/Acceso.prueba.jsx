@@ -64,10 +64,11 @@ describe('pantalla de acceso', () => {
   it('al super administrador no, porque el panel es de una empresa', async () => {
     // El panel enseña el inventario y el capital de UNA empresa, y el
     // super administrador no pertenece a ninguna (ADR-0020). Llevarlo
-    // allí le mostraría un panel en cero que no significa nada.
+    // allí le mostraría un panel en cero que no significa nada. Tampoco
+    // el catálogo, que lee de la empresa de la sesión: va a la plataforma.
     api.entrar.mockResolvedValue({ token: 'abc', nombre: 'Raíz', rol: 'SUPER_ADMIN' })
     await entrar()
-    await waitFor(() => expect(navegar).toHaveBeenCalledWith('/catalogo', { replace: true }))
+    await waitFor(() => expect(navegar).toHaveBeenCalledWith('/plataforma/empresas', { replace: true }))
   })
 
   it('con la contraseña inicial pendiente, lo lleva a cambiarla antes que a trabajar', async () => {

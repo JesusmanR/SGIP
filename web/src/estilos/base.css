@@ -53,28 +53,6 @@ a      { color: var(--acento); }
 
 .acceso .acciones-formulario { display: flex; flex-wrap: wrap; gap: .6rem; }
 
-.barra {
-  display: flex; align-items: center; gap: 1rem;
-  background: var(--chrome); color: var(--sobre-acento); padding: .75rem 1.25rem;
-  /* Envuelve en pantalla estrecha. Sin esto, cada enlace que se añade
-     empuja el botón de salir fuera del borde y queda inalcanzable: el
-     enlace al panel lo destapó —medido con Playwright a 390px— pero el
-     problema ya estaba y lo habría causado el siguiente enlace igual.
-     Una barra de dos renglones es fea; una barra sin botón de salir es
-     una aplicación de la que no se puede salir. */
-  flex-wrap: wrap;
-}
-.barra .marca { font-weight: 700; }
-/* El empuje solo separa cuando la barra cabe en un renglón. Al
-   envolver, `margin-left: auto` dejaría el nombre solo en la segunda
-   línea pegado a la derecha, con un hueco delante que parece un error
-   de maquetación. */
-.barra .empuje { margin-left: auto; }
-@media (max-width: 40rem) {
-  .barra { gap: .6rem .9rem; }
-  .barra .empuje { margin-left: 0; }
-}
-
 .contenido { padding: 1.5rem; max-width: 1100px; margin: 0 auto; }
 
 table { width: 100%; border-collapse: collapse; }
@@ -135,15 +113,12 @@ td.numero, th.numero { text-align: right; font-variant-numeric: tabular-nums; }
 .casilla-imagen:disabled { cursor: default; border-style: solid; }
 .casilla-imagen:focus-visible { outline: 3px solid var(--acento-sutil); border-color: var(--acento); }
 
-.barra a { color: var(--sobre-acento); text-decoration: none; opacity: .85; }
-.barra a:hover, .barra a:focus-visible { opacity: 1; text-decoration: underline; }
-
 .fila-logo { display: flex; gap: 1.25rem; align-items: center; }
 .titulo-empresa { margin: 0 0 .25rem; font-size: 1.1rem; font-weight: 600; }
 
 /* ── Galería de imágenes ───────────────────────────────────────────── */
 .velo {
-  position: fixed; inset: 0; z-index: 10; padding: 1rem;
+  position: fixed; inset: 0; z-index: 40; padding: 1rem;
   background: var(--velo);
   display: grid; place-items: center;
 }

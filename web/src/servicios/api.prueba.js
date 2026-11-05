@@ -241,3 +241,10 @@ describe('imágenes protegidas', () => {
     expect(global.URL.createObjectURL).not.toHaveBeenCalled()
   })
 })
+
+describe('pedir exportado', () => {
+  it('se exporta para que cada sección arme su módulo sin tocar api.js', async () => {
+    const { pedir } = await import('./api.js')
+    expect(typeof pedir).toBe('function')
+  })
+})

@@ -1,0 +1,66 @@
+/* Armazón: menú lateral en escritorio, barra superior con menú desplegable en celular.
+   El color sale solo de tokens.css. */
+
+/* Alto real de la barra móvil: botón de 44 px más el relleno vertical. */
+:root { --alto-barra-movil: 3.75rem; }
+
+.armazon { min-height: 100vh; display: grid; grid-template-columns: 15rem minmax(0, 1fr); }
+.armazon-barra { display: none; }
+.armazon-contenido { grid-column: 2; min-width: 0; }
+.armazon-contenido:focus { outline: none; }
+
+.saltar {
+  position: absolute; left: var(--espacio-2); top: -4rem; z-index: 30;
+  background: var(--tarjeta); color: var(--tinta); padding: var(--espacio-2) var(--espacio-3);
+  border-radius: var(--radio-control);
+}
+.saltar:focus { top: var(--espacio-2); }
+
+.menu-lateral {
+  grid-column: 1; grid-row: 1; background: var(--chrome); color: var(--sobre-acento);
+  display: flex; flex-direction: column; gap: var(--espacio-4);
+  padding: var(--espacio-4) var(--espacio-3); position: sticky; top: 0; height: 100vh; overflow-y: auto;
+}
+.menu-grupo-titulo {
+  margin: 0 0 var(--espacio-1); padding: 0 var(--espacio-3);
+  font-size: var(--t-etiqueta); font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--salvia);
+}
+.menu-grupo ul { list-style: none; margin: 0; padding: 0; }
+.menu-lateral a {
+  display: block; padding: var(--espacio-2) var(--espacio-3); border-radius: var(--radio-control);
+  color: var(--sobre-acento); text-decoration: none; font-size: var(--t-cuerpo);
+}
+.menu-lateral a:hover { background: var(--chrome-activo); }
+.menu-lateral a[aria-current="page"] { background: var(--chrome-activo); font-weight: 600; }
+.menu-sesion {
+  margin-top: auto; display: flex; flex-direction: column; gap: var(--espacio-2);
+  padding: var(--espacio-3) var(--espacio-3) 0; border-top: 1px solid var(--chrome-activo);
+}
+.menu-nombre { font-size: var(--t-cuerpo); overflow-wrap: anywhere; }
+
+.armazon-boton-menu {
+  margin-left: auto; min-height: var(--toque-minimo); padding: 0 var(--espacio-4);
+  background: transparent; color: var(--sobre-acento); border: 1px solid var(--salvia);
+  border-radius: var(--radio-control); font-size: var(--t-cuerpo); font-weight: 600;
+}
+
+@media (max-width: 48rem) {
+  .armazon { display: block; }
+  .armazon-barra {
+    display: flex; align-items: center; box-sizing: border-box; height: var(--alto-barra-movil);
+    background: var(--chrome); color: var(--sobre-acento);
+    padding: 0 var(--espacio-4); position: sticky; top: 0; z-index: 20;
+  }
+  .armazon-barra .marca { font-weight: 700; }
+  /* Cerrado, el menú sale del árbol de accesibilidad: no se enfoca ni se lee.
+     Abierto, cubre el resto de la pantalla y es lo único que se desplaza. */
+  .menu-lateral { display: none; }
+  .menu-lateral.abierto {
+    display: flex; position: fixed; z-index: 20; height: auto;
+    top: var(--alto-barra-movil); left: 0; right: 0; bottom: 0; overflow-y: auto;
+  }
+  /* Con el menú abierto la página de atrás no se desplaza: una sola barra. */
+  html:has(.menu-lateral.abierto) { overflow: hidden; }
+  .menu-lateral a { min-height: var(--toque-minimo); display: flex; align-items: center; }
+}

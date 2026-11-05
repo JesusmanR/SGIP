@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import Barra from '../componentes/Barra.jsx'
 import GraficoMovimiento from '../componentes/GraficoMovimiento.jsx'
 import { api } from '../servicios/api.js'
 import { NUMERO, PESOS, fechaCorta, pesosAbreviados } from '../servicios/formato.js'
@@ -61,11 +60,10 @@ export default function Panel() {
   if (error) {
     return (
       <>
-        <Barra />
-        <main className="contenido">
+        <div className="contenido">
           <h1>Panel</h1>
           <p className="aviso error" role="alert">{error}</p>
-        </main>
+        </div>
       </>
     )
   }
@@ -75,8 +73,7 @@ export default function Panel() {
 
   return (
     <>
-      <Barra />
-      <main className="contenido">
+      <div className="contenido">
         <h1>Panel</h1>
         <p className="subtitulo">Resumen de operación</p>
 
@@ -237,7 +234,7 @@ export default function Panel() {
           </header>
           <GraficoMovimiento dias={movimientos} />
         </section>
-      </main>
+      </div>
     </>
   )
 }
@@ -321,8 +318,7 @@ function Cruces({ cruces }) {
 function Esqueleto() {
   return (
     <>
-      <Barra />
-      <main className="contenido" aria-busy="true">
+      <div className="contenido" aria-busy="true">
         <h1>Panel</h1>
         <p className="subtitulo">Resumen de operación</p>
         <p className="oculto-visualmente" role="status">Cargando los indicadores…</p>
@@ -350,7 +346,7 @@ function Esqueleto() {
             <span className="hueso hueso-fila" />
           </section>
         </div>
-      </main>
+      </div>
     </>
   )
 }

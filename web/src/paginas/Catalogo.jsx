@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import Barra from '../componentes/Barra.jsx'
 import Categorias from '../componentes/Categorias.jsx'
 import FormularioProducto from '../componentes/FormularioProducto.jsx'
 import Galeria from '../componentes/Galeria.jsx'
@@ -113,7 +112,6 @@ export default function Catalogo() {
 
   return (
     <>
-      <Barra />
       {galeria && (
         <Galeria
           productoId={galeria.id}
@@ -177,7 +175,7 @@ export default function Catalogo() {
           }}
         />
       )}
-      <main className="contenido">
+      <div className="contenido">
         <div className="titulo-fila">
           <h2>Catálogo</h2>
           {esAdministrador && (
@@ -440,7 +438,7 @@ export default function Catalogo() {
             </p>
           )}
         </div>
-      </main>
+      </div>
     </>
   )
 }

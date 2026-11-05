@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import Barra from '../componentes/Barra.jsx'
 import { api } from '../servicios/api.js'
 import { leerSesion } from '../servicios/sesion.js'
 
@@ -109,8 +108,7 @@ export default function Importacion() {
 
   return (
     <>
-      <Barra />
-      <main className="contenido">
+      <div className="contenido">
         <h2>Importar precios</h2>
 
         {/* El indicador de tres pasos. La P-07 lo pide y no es adorno:
@@ -375,7 +373,7 @@ export default function Importacion() {
             )}
           </>
         )}
-      </main>
+      </div>
     </>
   )
 }

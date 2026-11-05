@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import Barra from '../componentes/Barra.jsx'
 import SubirImagen from '../componentes/SubirImagen.jsx'
 import { api } from '../servicios/api.js'
 import { prepararImagen } from '../servicios/imagenes.js'
@@ -29,8 +28,7 @@ export default function Empresa() {
 
   return (
     <>
-      <Barra />
-      <main className="contenido">
+      <div className="contenido">
         <h2>Mi empresa</h2>
         {error && <div className="aviso error" role="alert">{error}</div>}
 
@@ -56,7 +54,7 @@ export default function Empresa() {
             </div>
           </div>
         </div>
-      </main>
+      </div>
     </>
   )
 }
