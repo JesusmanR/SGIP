@@ -1,0 +1,23 @@
+tipo,costo,entrada,esperado,nota
+precio_desde_porcentaje,1000,20,1200,el ejemplo del requisito
+precio_desde_porcentaje,999,20,1199,se redondea al peso
+precio_desde_porcentaje,1500,20,1800,sube el costo y se conserva el porcentaje
+precio_desde_porcentaje,7,20,8,el precio redondeado ya no devuelve el porcentaje
+precio_desde_porcentaje,1001.25,20,1202,justo en la mitad: en coma flotante da 1201
+precio_desde_porcentaje,1.25,20,2,justo en la mitad con un costo mínimo
+precio_desde_porcentaje,6.25,20,8,justo en la mitad con centavos exactos en binario
+precio_desde_porcentaje,0.40,20,0,tan barato que redondea a cero: el servicio lo rechaza y la vista no lo disimula
+precio_desde_porcentaje,999.99,33.33,1333,porcentaje con dos decimales
+precio_desde_porcentaje,1000,0.01,1000,el porcentaje más pequeño que se admite
+precio_desde_porcentaje,1000,9899.99,100000,el porcentaje más grande que cabe en el factor
+precio_desde_porcentaje,123456789012.34,12.34,138691356776,más allá de la precisión entera de un double
+porcentaje_desde_precio,1000,1250,25.00,precio escrito
+porcentaje_desde_precio,1100,1250,13.64,sube el costo y se conserva el precio
+porcentaje_desde_precio,1000,900,-10.00,por debajo del costo
+porcentaje_desde_precio,8000,8010,0.13,justo en la mitad hacia arriba
+porcentaje_desde_precio,8000,7990,-0.13,justo en la mitad hacia abajo: se aleja del cero
+porcentaje_desde_precio,1000,1000,0.00,sin ganancia
+porcentaje_desde_precio,1100.50,1250,13.58,costo con centavos
+porcentaje_desde_precio,100003,133339,33.33,apenas por debajo de la mitad: redondear dos veces da 33.34
+porcentaje_desde_precio,250007,339297,35.71,apenas por debajo de la mitad: redondear dos veces da otra cifra
+porcentaje_desde_precio,1000003,1333354,33.33,apenas por debajo de la mitad: redondear dos veces da otra cifra

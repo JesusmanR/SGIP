@@ -58,7 +58,10 @@ public class ConsultaCatalogo {
             tributacion_sin_configurar, cerca_umbral, cerca_umbral_credito,
             cruza_umbral_en_credito,
             %1$s AS imagen_principal_id,
-            %1$s IS NOT NULL AS tiene_imagen
+            %1$s IS NOT NULL AS tiene_imagen,
+            margen_contado, margen_credito,
+            precio_fijo_contado, precio_fijo_credito,
+            porcentaje_contado, porcentaje_credito
             """.formatted(IMAGEN_PRINCIPAL);
 
     private final JdbcClient jdbc;

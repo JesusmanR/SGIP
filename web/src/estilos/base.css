@@ -40,6 +40,8 @@ input  { font-family: inherit; }
    Mist son casi el mismo gris en escala de grises (ADR-0009). */
 .aviso { border-radius: 8px; padding: .7rem .9rem; font-size: .9rem; margin-bottom: 1rem; }
 .aviso.error { background: var(--peligro-fondo); color: var(--peligro); }
+/* El aviso de un rechazo recibe el foco por código: que se vea dónde quedó. */
+.aviso[tabindex="-1"]:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }
 
 /* ── Estructura ────────────────────────────────────────────────────── */
 .acceso { min-height: 100vh; display: grid; place-items: center; padding: 1rem; }
@@ -187,8 +189,8 @@ td.numero, th.numero { text-align: right; font-variant-numeric: tabular-nums; }
 }
 .campo select:focus-visible { outline: 3px solid var(--acento-sutil); border-color: var(--acento); }
 
-/* El título y el botón de categorías comparten línea. */
-.titulo-fila { display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem; }
+/* El título y sus botones comparten línea; en un teléfono, los botones bajan. */
+.titulo-fila { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; margin-bottom: 1rem; }
 .titulo-fila h2 { margin: 0; flex: 1; }
 
 /* Columna de acciones: no se estira y no parte sus botones. */
@@ -198,6 +200,21 @@ td.acciones .boton { margin-left: .4rem; }
 /* Dos campos por fila dentro de un panel, uno solo si no caben. */
 .rejilla { display: flex; flex-wrap: wrap; gap: 0 1rem; }
 .rejilla .campo { flex: 1 1 14rem; }
+
+/* El mensaje de un campo va pegado a él, y siempre dice con palabras qué
+   pasa: el color acompaña, no informa. */
+.campo-mensaje { display: block; margin-top: .3rem; font-size: .78rem; line-height: 1.35; }
+/* La región existe siempre para que se anuncie; vacía no debe ocupar sitio. */
+.campo-mensaje:empty { margin-top: 0; }
+.campo-mensaje.error { color: var(--peligro); }
+.campo-mensaje.advertencia { color: var(--aviso); }
+.campo input[aria-invalid="true"], .campo select[aria-invalid="true"] { border-color: var(--peligro); }
+.ayuda-precio { margin: -.5rem 0 .75rem; }
+
+.casilla { display: flex; align-items: center; gap: .5rem; margin-bottom: 1rem;
+  font-size: .9rem; color: var(--tinta); cursor: pointer; }
+.casilla input { width: 1.1rem; height: 1.1rem; margin: 0; flex: none; accent-color: var(--acento); }
+.casilla input:focus-visible { outline: 3px solid var(--acento-sutil); outline-offset: 1px; }
 
 /* Un botón de enlace deshabilitado no debe parecer pulsable. */
 .enlace:disabled { color: var(--bruma); text-decoration: none; cursor: not-allowed; }

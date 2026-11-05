@@ -664,6 +664,7 @@ Va ahora porque es barato: `tokens.css` es la única fuente de color, y así tod
 
 - El documento se llama «Recibo de venta» y aclara que no es una factura electrónica. Lleva el consecutivo de la venta y los datos de la empresa.
 - Se imprime desde el navegador, sin servicios externos.
+- **Antes de construir la caja:** las vistas de precios se calculan enteras para todas las empresas en cada consulta. Con 10.000 productos en total en la base (no por cliente) y reglas propias, una página tarda 2 s y un producto 1 s (ADR-0025). Medir con varias empresas, resolverlo y fijar un presupuesto como prueba: leer un código de barras no puede tardar un segundo.
 - Emitir el recibo no depende de `facturas_electronicas`. La emisión electrónica queda detrás de una interfaz sin implementación, fuera de la transacción de venta (ADR-0005).
 
 **Rediseño según Figma** (`Downloads/Nueva carpeta (5)`), proyecto aparte con su propio diseño y plan. El código de Figma Make es de referencia visual: un solo `App.tsx` de 2.658 líneas con datos de ejemplo, en React 19, TypeScript y Tailwind; el proyecto usa React 18, JavaScript y CSS propio. Decisiones que ya lo condicionan:

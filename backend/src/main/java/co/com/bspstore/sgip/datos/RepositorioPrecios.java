@@ -2,6 +2,7 @@ package co.com.bspstore.sgip.datos;
 
 import co.com.bspstore.sgip.api.dto.CruceDeUmbral;
 import co.com.bspstore.sgip.api.dto.ReglaDeMargen;
+import co.com.bspstore.sgip.logica.ReglaDePrecio;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
@@ -19,6 +20,13 @@ import java.util.Optional;
  * que hace cierto el criterio del requisito —«la modificación surte
  * efecto en el cálculo siguiente sin desplegar»—: cambiar una fila
  * cambia el precio porque la vista recalcula en cada lectura.
+ *
+ * Hay dos clases de regla y no se mezclan. Las de ámbito (general, categoría,
+ * proveedor) las administra la pantalla de reglas; las de un producto
+ * (`producto_id`, ADR-0025) nacen y cambian solo desde el alta y la edición del
+ * producto. Por eso toda consulta de la primera clase lleva
+ * `producto_id IS NULL`: categoría y proveedor nulos significan «general», y
+ * sin esa condición la regla de un producto pasaría por una regla general.
  */
 @Repository
 public class RepositorioPrecios {
@@ -33,6 +41,10 @@ public class RepositorioPrecios {
      * El ADR-0021 aceptó esa duplicación y la condicionó a que estuviera
      * vigilada, y el guardián de `verificar_precios.sh` la vigila
      * comparando precio contra precio en todas las referencias.
+     *
+     * Con el ADR-0025 esta fórmula ya no contesta sola cuando la referencia
+     * tiene un precio fijo: el factor es nulo. Quien la use sobre la regla
+     * vigente va envuelto en {@code COALESCE(v.precio_fijo_contado, …)}.
      *
      * Lo que no se podía aceptar eran tres copias. Esta constante nació
      * al ir a escribir la tercera, para el aviso de umbral de la
@@ -81,6 +93,7 @@ public class RepositorioPrecios {
               LEFT JOIN proveedores p ON p.proveedor_id  = r.proveedor_id
                                      AND p.empresa_id    = r.empresa_id
              WHERE r.empresa_id = :empresa
+               AND r.producto_id IS NULL
             """;
 
     public List<ReglaDeMargen> listar(Integer empresaId) {
@@ -129,6 +142,7 @@ public class RepositorioPrecios {
         return jdbc.sql("""
                         SELECT COUNT(*) FROM reglas_margen
                          WHERE empresa_id = :empresa
+                           AND producto_id IS NULL
                            AND forma_pago = :forma
                            AND (:excluir IS NULL OR regla_id <> :excluir)
                            AND ((categoria_id IS NULL AND :categoria IS NULL)
@@ -208,6 +222,145 @@ public class RepositorioPrecios {
                 .update();
     }
 
+    // ------------------------------------------------- la regla de un producto
+
+    /**
+     * Pone en fila a quienes cambian el precio de un mismo producto.
+     *
+     * Sin esto, dos personas guardando a la vez ven las dos que no hay regla de
+     * hoy y las dos intentan abrirla: `uq_reglas_margen_producto` deja entrar a
+     * una y la otra recibe un error en vez de corregir la misma fila.
+     */
+    public void bloquearProducto(Integer empresaId, Integer productoId) {
+        jdbc.sql("""
+                        SELECT producto_id FROM productos
+                         WHERE empresa_id = :empresa AND producto_id = :producto
+                           FOR UPDATE
+                        """)
+                .param("empresa", empresaId)
+                .param("producto", productoId)
+                .query(Integer.class)
+                .optional();
+    }
+
+    /**
+     * La regla propia que rige hoy, para saber si lo escrito cambia algo.
+     *
+     * Lectura con bloqueo a propósito: una lectura normal vería la foto de
+     * cuando empezó la transacción, y tras esperar a {@link #bloquearProducto}
+     * esa foto ya no es la verdad.
+     */
+    public Optional<ReglaDePrecio> reglaPropiaVigente(Integer empresaId, Integer productoId,
+                                                      String formaPago) {
+        return jdbc.sql("""
+                        SELECT factor, precio_fijo, forma_calculo
+                          FROM reglas_margen
+                         WHERE empresa_id = :empresa AND producto_id = :producto
+                           AND forma_pago = :forma
+                           AND vigente_desde <= CURDATE()
+                           AND (vigente_hasta IS NULL OR vigente_hasta >= CURDATE())
+                         ORDER BY vigente_desde DESC
+                         LIMIT 1
+                           FOR UPDATE
+                        """)
+                .param("empresa", empresaId)
+                .param("producto", productoId)
+                .param("forma", formaPago)
+                .query(ReglaDePrecio.class)
+                .optional();
+    }
+
+    /** La regla que decide hoy el precio, sea propia o de un ámbito mayor. */
+    public Optional<ReglaDePrecio> reglaVigente(Integer empresaId, Integer productoId,
+                                                String formaPago) {
+        return jdbc.sql("""
+                        SELECT factor, precio_fijo, forma_calculo
+                          FROM v_regla_margen
+                         WHERE empresa_id = :empresa AND producto_id = :producto
+                           AND forma_pago = :forma
+                        """)
+                .param("empresa", empresaId)
+                .param("producto", productoId)
+                .param("forma", formaPago)
+                .query(ReglaDePrecio.class)
+                .optional();
+    }
+
+    /**
+     * Corrige la regla propia que empezó hoy. Devuelve cuántas filas encontró.
+     *
+     * Dos cambios el mismo día corrigen la misma fila: una vigencia de cero
+     * días no explica ninguna venta, y dos filas con la misma fecha de comienzo
+     * las prohíbe `uq_reglas_margen_producto`.
+     *
+     * «Hoy» es siempre el `CURDATE()` del motor, en esta sentencia y en las dos
+     * siguientes, y nunca el reloj de la aplicación. Es el mismo con el que la
+     * vista decide qué regla rige: si la aplicación y la base no están en la
+     * misma zona horaria, una regla fechada con el otro reloj no regiría hasta
+     * la madrugada siguiente y el producto se quedaría sin precio.
+     */
+    public int corregirReglaPropiaDeHoy(Integer empresaId, Integer productoId, String formaPago,
+                                        ReglaDePrecio regla) {
+        return jdbc.sql("""
+                        UPDATE reglas_margen
+                           SET forma_calculo = :calculo,
+                               factor        = :factor,
+                               precio_fijo   = :fijo
+                         WHERE empresa_id = :empresa AND producto_id = :producto
+                           AND forma_pago = :forma
+                           AND vigente_desde = CURDATE()
+                        """)
+                .param("calculo", regla.formaCalculo())
+                .param("factor", regla.factor())
+                .param("fijo", regla.precioFijo())
+                .param("empresa", empresaId)
+                .param("producto", productoId)
+                .param("forma", formaPago)
+                .update();
+    }
+
+    /**
+     * Cierra ayer la regla propia que venía rigiendo.
+     *
+     * Solo las que empezaron antes de hoy: `ck_reglas_margen_rango` no admite
+     * que una regla termine antes de empezar, y la que empezó hoy ya la corrigió
+     * {@link #corregirReglaPropiaDeHoy}. Es el mismo cuidado que pone
+     * `RepositorioImportacion.cerrarCostoVigente`.
+     */
+    public int cerrarReglaPropiaAyer(Integer empresaId, Integer productoId, String formaPago) {
+        return jdbc.sql("""
+                        UPDATE reglas_margen
+                           SET vigente_hasta = CURDATE() - INTERVAL 1 DAY
+                         WHERE empresa_id = :empresa AND producto_id = :producto
+                           AND forma_pago = :forma
+                           AND vigente_desde < CURDATE()
+                           AND (vigente_hasta IS NULL OR vigente_hasta >= CURDATE())
+                        """)
+                .param("empresa", empresaId)
+                .param("producto", productoId)
+                .param("forma", formaPago)
+                .update();
+    }
+
+    /** Abre desde hoy la regla propia nueva. */
+    public void abrirReglaPropia(Integer empresaId, Integer productoId, String formaPago,
+                                 ReglaDePrecio regla) {
+        jdbc.sql("""
+                        INSERT INTO reglas_margen
+                               (empresa_id, producto_id, forma_pago, forma_calculo,
+                                factor, precio_fijo, vigente_desde)
+                        VALUES (:empresa, :producto, :forma, :calculo,
+                                :factor, :fijo, CURDATE())
+                        """)
+                .param("empresa", empresaId)
+                .param("producto", productoId)
+                .param("forma", formaPago)
+                .param("calculo", regla.formaCalculo())
+                .param("factor", regla.factor())
+                .param("fijo", regla.precioFijo())
+                .update();
+    }
+
     /** Si la categoría es de esta empresa. Nulo cuenta como válido: es «todas». */
     public boolean categoriaPropia(Integer empresaId, Integer categoriaId) {
         if (categoriaId == null) {
@@ -252,6 +405,9 @@ public class RepositorioPrecios {
      * las demás `umbral_pesos` es nulo, la comparación da nulo y la fila
      * no entra. Una lista vacía significa que nadie cruza, que es lo que
      * el requisito pide que ocurra en lugar de un error.
+     *
+     * Un producto con regla propia para esa forma de pago no entra: la regla
+     * que se simula no le cambiaría el precio (ADR-0025).
      */
     public List<CruceDeUmbral> simularCruces(Integer empresaId, Integer categoriaId,
                                              Integer proveedorId, String formaPago,
@@ -270,6 +426,8 @@ public class RepositorioPrecios {
                           FROM v_precios_producto v
                          WHERE v.empresa_id = :empresa
                            AND v.tratamiento_iva = 'EXCLUIDO_HASTA_UMBRAL'
+                           AND (CASE WHEN :forma = 'CREDITO' THEN v.regla_propia_credito
+                                     ELSE v.regla_propia_contado END) = 0
                            AND (:categoria IS NULL OR v.categoria_id = :categoria)
                            AND (:proveedor IS NULL OR v.proveedor_id = :proveedor)
                            AND ((CASE WHEN :forma = 'CREDITO' THEN v.tarifa_credito
@@ -294,14 +452,30 @@ public class RepositorioPrecios {
      * Se expone para que la pantalla pueda decir «esto cambia el precio
      * de 34 productos» antes de guardar. Un cambio de margen es de los
      * que se hacen sin mirar y se notan en la factura del cliente.
+     *
+     * No cuenta los productos con regla propia en las dos formas de pago, que
+     * la regla no movería (ADR-0025). El endpoint no recibe la forma de pago, de
+     * modo que un producto con regla propia en una sola de las dos sí cuenta: la
+     * otra le cambiaría.
+     *
+     * No sale de `v_precios_producto`, que ya lo sabe, porque contar con ella
+     * resuelve el precio de toda la empresa para descartarlo: con 10.000 productos
+     * son cientos de veces más trabajo (ADR-0025). Lo cubre
+     * `PrecioDeProductoTest` contra la vigencia que usa la vista.
      */
     public int productosAlcanzados(Integer empresaId, Integer categoriaId,
                                    Integer proveedorId) {
         return jdbc.sql("""
-                        SELECT COUNT(*) FROM productos
-                         WHERE empresa_id = :empresa AND activo = 1
-                           AND (:categoria IS NULL OR categoria_id = :categoria)
-                           AND (:proveedor IS NULL OR proveedor_id = :proveedor)
+                        SELECT COUNT(*) FROM productos p
+                         WHERE p.empresa_id = :empresa AND p.activo = 1
+                           AND (:categoria IS NULL OR p.categoria_id = :categoria)
+                           AND (:proveedor IS NULL OR p.proveedor_id = :proveedor)
+                           AND (SELECT COUNT(DISTINCT r.forma_pago)
+                                  FROM reglas_margen r
+                                 WHERE r.empresa_id = p.empresa_id
+                                   AND r.producto_id = p.producto_id
+                                   AND r.vigente_desde <= CURDATE()
+                                   AND (r.vigente_hasta IS NULL OR r.vigente_hasta >= CURDATE())) < 2
                         """)
                 .param("empresa", empresaId)
                 .param("categoria", categoriaId)

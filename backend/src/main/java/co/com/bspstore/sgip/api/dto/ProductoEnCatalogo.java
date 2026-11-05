@@ -52,6 +52,18 @@ import java.math.BigDecimal;
  * tieneImagen · lo mismo en forma de sí o no, que es lo que la tabla
  * necesita para decidir si ofrece «ver» o «añadir» imágenes.
  *
+ * margenContado y margenCredito · la ganancia real sobre el costo, medida
+ * contra el precio ya redondeado. La calcula la vista para que los reportes la
+ * lean de un solo sitio. Sin precio, nula.
+ *
+ * precioFijoContado y precioFijoCredito · la cifra, cuando lo que se escribió
+ * para el producto fue el precio: sube el costo y ese precio se conserva.
+ *
+ * porcentajeContado y porcentajeCredito · el porcentaje sobre el costo que
+ * declara la regla vigente, nulo con un precio fijo. No es el margen: con
+ * costo 7 al 20 % el precio es 8 y el margen 14,29 %, pero lo guardado es 20.
+ * Es lo que abre el formulario.
+ *
  * Esta es la forma completa, con costo y proveedor, y solo la recibe el
  * administrador. Quien vende recibe {@link ProductoParaVenta}.
  */
@@ -84,5 +96,11 @@ public record ProductoEnCatalogo(
         Integer cercaUmbralCredito,
         Integer cruzaUmbralEnCredito,
         Integer imagenPrincipalId,
-        Integer tieneImagen
+        Integer tieneImagen,
+        BigDecimal margenContado,
+        BigDecimal margenCredito,
+        BigDecimal precioFijoContado,
+        BigDecimal precioFijoCredito,
+        BigDecimal porcentajeContado,
+        BigDecimal porcentajeCredito
 ) implements VistaDeProducto {}

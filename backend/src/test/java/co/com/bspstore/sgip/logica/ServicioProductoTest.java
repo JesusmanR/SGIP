@@ -2,6 +2,7 @@ package co.com.bspstore.sgip.logica;
 
 import co.com.bspstore.sgip.api.dto.MovimientoDeInventario;
 import co.com.bspstore.sgip.api.dto.SolicitudEdicionProducto;
+import co.com.bspstore.sgip.api.dto.SolicitudPrecio;
 import co.com.bspstore.sgip.api.dto.SolicitudProducto;
 import co.com.bspstore.sgip.config.SinEmpresaException;
 import co.com.bspstore.sgip.config.UsuarioAutenticado;
@@ -9,6 +10,7 @@ import co.com.bspstore.sgip.datos.CategoriaRepositorio;
 import co.com.bspstore.sgip.datos.ConsultaCatalogo;
 import co.com.bspstore.sgip.datos.ProductoRepositorio;
 import co.com.bspstore.sgip.datos.ProveedorRepositorio;
+import co.com.bspstore.sgip.datos.RepositorioPrecios;
 import co.com.bspstore.sgip.modelo.Categoria;
 import co.com.bspstore.sgip.modelo.Producto;
 import co.com.bspstore.sgip.modelo.Proveedor;
@@ -17,7 +19,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -26,6 +28,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -37,9 +40,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -50,12 +55,18 @@ class ServicioProductoTest {
     @Mock ProveedorRepositorio proveedores;
     @Mock ConsultaCatalogo catalogo;
     @Mock ServicioInventario inventario;
-    @InjectMocks ServicioProducto servicio;
+    @Mock RepositorioPrecios precios;
+
+    /** Con el ServicioPrecios de verdad: la regla de qué se escribe y cuándo vive allí. */
+    private ServicioProducto servicio;
 
     private static final int ID_GUARDADO = 55;
+    private static final SolicitudPrecio VEINTE = new SolicitudPrecio(new BigDecimal("20"), null);
 
     @BeforeEach
     void elInventarioAceptaElSaldoInicial() {
+        servicio = new ServicioProducto(productos, categorias, proveedores, catalogo, inventario,
+                new ServicioPrecios(precios, Clock.systemDefaultZone()));
         // Tolerante porque solo las pruebas de alta con existencia llegan
         // a pedirlo; las de edición y las de rechazo no lo tocan.
         lenient().when(inventario.registrarSaldoInicial(any(), anyInt())).thenReturn(
@@ -78,7 +89,7 @@ class ServicioProductoTest {
 
     private SolicitudProducto solicitud(String codigo, String sku) {
         return new SolicitudProducto(4, 9, codigo, sku, "7701234567890",
-                "Arroz Diana", "500 g", null, new BigDecimal("3100.00"), 120, 20);
+                "Arroz Diana", "500 g", null, new BigDecimal("3100.00"), 120, 20, VEINTE, null);
     }
 
     /** Categoría y proveedor que sí pertenecen a la empresa 3. */
@@ -155,7 +166,7 @@ class ServicioProductoTest {
         elGuardadoAsignaElIdentificador();
 
         servicio.crear(new SolicitudProducto(4, 9, "ARZ-500", "ARZ-500", null,
-                "Arroz Diana", "500 g", null, new BigDecimal("3100.00"), 0, 20));
+                "Arroz Diana", "500 g", null, new BigDecimal("3100.00"), 0, 20, VEINTE, null));
 
         verify(inventario, never()).registrarSaldoInicial(anyInt(), anyInt());
     }
@@ -167,7 +178,7 @@ class ServicioProductoTest {
         elGuardadoAsignaElIdentificador();
 
         servicio.crear(new SolicitudProducto(4, 9, "ARZ-500", "ARZ-500", null,
-                "Arroz Diana", "500 g", null, new BigDecimal("3100.00"), null, null));
+                "Arroz Diana", "500 g", null, new BigDecimal("3100.00"), null, null, VEINTE, null));
 
         verify(inventario, never()).registrarSaldoInicial(anyInt(), anyInt());
     }
@@ -321,7 +332,7 @@ class ServicioProductoTest {
     // ── Edición (RF-15) ──────────────────────────────────────────────
     private SolicitudEdicionProducto edicion(String codigo, String sku) {
         return new SolicitudEdicionProducto(4, 9, codigo, sku, "7701234567890",
-                "Arroz Diana", "500 g", null, new BigDecimal("3400.00"), 20);
+                "Arroz Diana", "500 g", null, new BigDecimal("3400.00"), 20, null, null, null);
     }
 
     private Producto productoGuardado() {
@@ -426,12 +437,12 @@ class ServicioProductoTest {
     // ── Un código de barras por empresa (V33) ───────────────────────
     private SolicitudProducto conBarras(String barras) {
         return new SolicitudProducto(4, 9, "ARZ-500", "ARZ-500", barras,
-                "Arroz Diana", "500 g", null, new BigDecimal("3100.00"), 120, 20);
+                "Arroz Diana", "500 g", null, new BigDecimal("3100.00"), 120, 20, VEINTE, null);
     }
 
     private SolicitudEdicionProducto edicionConBarras(String barras) {
         return new SolicitudEdicionProducto(4, 9, "ARZ-500", "ARZ-500", barras,
-                "Arroz Diana", "500 g", null, new BigDecimal("3400.00"), 20);
+                "Arroz Diana", "500 g", null, new BigDecimal("3400.00"), 20, null, null, null);
     }
 
     @Test
@@ -538,5 +549,383 @@ class ServicioProductoTest {
 
         assertEquals("7709999999999", guardado.getCodigoBarras());
         verify(productos).existsByEmpresaIdAndCodigoBarrasAndIdNot(3, "7709999999999", 11);
+    }
+
+    // ── El porcentaje y el precio de venta (ADR-0025) ───────────────
+    private static final String CONTADO = "CONTADO";
+    private static final String CREDITO = "CREDITO";
+
+    private static SolicitudPrecio porcentaje(String valor) {
+        return new SolicitudPrecio(new BigDecimal(valor), null);
+    }
+
+    private static SolicitudPrecio precio(String valor) {
+        return new SolicitudPrecio(null, new BigDecimal(valor));
+    }
+
+    private static ReglaDePrecio reglaDeFactor(String factor) {
+        return new ReglaDePrecio(new BigDecimal(factor), null, "SOBRE_COSTO");
+    }
+
+    private static ReglaDePrecio reglaDeCifra(String cifra) {
+        return new ReglaDePrecio(null, new BigDecimal(cifra), "SOBRE_COSTO");
+    }
+
+    private SolicitudProducto alta(String costo, SolicitudPrecio contado, SolicitudPrecio credito) {
+        return new SolicitudProducto(4, 9, "ARZ-500", "ARZ-500", null, "Arroz Diana", "500 g", null,
+                new BigDecimal(costo), 0, 20, contado, credito);
+    }
+
+    private SolicitudEdicionProducto edicionDePrecio(SolicitudPrecio contado, SolicitudPrecio credito,
+                                                     Boolean creditoIgualAlContado) {
+        return new SolicitudEdicionProducto(4, 9, "ARZ-500", "ARZ-500", null, "Arroz Diana", "500 g",
+                null, new BigDecimal("1000.00"), 20, contado, credito, creditoIgualAlContado);
+    }
+
+    private void prepararAlta() {
+        comoEmpresa(3);
+        referenciasPropias();
+        elGuardadoAsignaElIdentificador();
+    }
+
+    private void prepararEdicion() {
+        comoEmpresa(3);
+        Producto guardado = productoGuardado();
+        ReflectionTestUtils.setField(guardado, "id", 11);
+        when(productos.findByEmpresaIdAndId(3, 11)).thenReturn(Optional.of(guardado));
+        referenciasPropias();
+        when(productos.save(any())).thenAnswer(i -> i.getArgument(0));
+    }
+
+    private void altaRechazada(SolicitudProducto solicitud, String pedazoDelMotivo) {
+        comoEmpresa(3);
+        referenciasPropias();
+        ReglaInvalidaException e = assertThrows(ReglaInvalidaException.class,
+                () -> servicio.crear(solicitud));
+        assertTrue(e.getMessage().contains(pedazoDelMotivo), e.getMessage());
+        verify(productos, never()).save(any());
+        verifyNoInteractions(precios);
+    }
+
+    @Test
+    void elAltaExigePorcentajeOPrecioDeContado() {
+        altaRechazada(alta("1000.00", null, null), "de contado");
+    }
+
+    @Test
+    void unPrecioDeContadoSinNingunValorTambienSeRechaza() {
+        altaRechazada(alta("1000.00", new SolicitudPrecio(null, null), null), "de contado");
+    }
+
+    @Test
+    void mandarPorcentajeYPrecioALaVezSeRechaza() {
+        altaRechazada(alta("1000.00",
+                new SolicitudPrecio(new BigDecimal("20"), new BigDecimal("1200")), null), "no los dos");
+    }
+
+    @Test
+    void mandarPorcentajeYPrecioALaVezEnElCreditoTambienSeRechaza() {
+        altaRechazada(alta("1000.00", porcentaje("20"),
+                new SolicitudPrecio(new BigDecimal("20"), new BigDecimal("1200"))), "a crédito");
+    }
+
+    @Test
+    void unPorcentajeDeCeroSeRechazaYSeDiceComoHacerlo() {
+        altaRechazada(alta("1000.00", porcentaje("0"), null), "escribe el precio");
+    }
+
+    @Test
+    void unPorcentajeNegativoSeRechaza() {
+        altaRechazada(alta("1000.00", porcentaje("-5"), null), "escribe el precio");
+    }
+
+    @Test
+    void unPrecioDeCeroSeRechaza() {
+        altaRechazada(alta("1000.00", precio("0"), null), "mayor que cero");
+    }
+
+    @Test
+    void unPrecioNegativoSeRechaza() {
+        altaRechazada(alta("1000.00", precio("-1"), null), "mayor que cero");
+    }
+
+    @Test
+    void unPrecioConCentavosSeRechazaEnVezDeRedondearloEnSilencio() {
+        altaRechazada(alta("1000.00", precio("1250.50"), null), "pesos enteros");
+    }
+
+    @Test
+    void unPorcentajeConMasDeDosDecimalesSeRechaza() {
+        altaRechazada(alta("1000.00", porcentaje("13.645"), null), "dos decimales");
+    }
+
+    @Test
+    void unPorcentajeQueNoCabeEnElFactorSeRechazaConSuMotivo() {
+        // Con 9900 el factor sería 100,0000 y la columna es DECIMAL(6,4): sin
+        // esto, el error sería del motor y no le diría nada a la tienda.
+        altaRechazada(alta("1000.00", porcentaje("9900"), null), "9.899,99");
+    }
+
+    @Test
+    void unPrecioQueNoCabeEnLaColumnaSeRechazaConSuMotivo() {
+        altaRechazada(alta("1000.00", precio("1234567890123"), null), "12 cifras");
+    }
+
+    @Test
+    void unPrecioDeDoceCifrasEsElMayorQueSePuedeVender() {
+        comoEmpresa(3);
+        referenciasPropias();
+        when(productos.save(any(Producto.class))).thenAnswer(i -> {
+            Producto p = i.getArgument(0);
+            ReflectionTestUtils.setField(p, "id", ID_GUARDADO);
+            return p;
+        });
+
+        servicio.crear(alta("1000.00", precio("123456789012"), null));
+
+        verify(precios).abrirReglaPropia(3, ID_GUARDADO, CONTADO, reglaDeCifra("123456789012"));
+    }
+
+    @Test
+    void unPorcentajeCuyoPrecioNoSePodriaVenderSeRechaza() {
+        // 900 mil millones al 200 % son 13 cifras: la regla cabe en su factor y
+        // la venta no cabría en `precio_unitario`.
+        altaRechazada(alta("900000000000.00", porcentaje("200"), null), "12 cifras");
+    }
+
+    @Test
+    void unPorcentajeQueDejaElPrecioEnCeroPesosSeRechaza() {
+        // Costo 0,40 al 20 % son 0,48, que redondea a cero. La regla sería
+        // válida y el producto se vendería regalado.
+        altaRechazada(alta("0.40", porcentaje("20"), null), "cero pesos");
+    }
+
+    @Test
+    void elPorcentajeSeGuardaComoFactorSobreElCosto() {
+        prepararAlta();
+
+        servicio.crear(alta("1000.00", porcentaje("20"), null));
+
+        verify(precios).abrirReglaPropia(3, ID_GUARDADO, CONTADO, reglaDeFactor("1.2000"));
+    }
+
+    @Test
+    void elPrecioSeGuardaComoCifraSinFactor() {
+        prepararAlta();
+
+        servicio.crear(alta("1000.00", precio("1250"), null));
+
+        verify(precios).abrirReglaPropia(3, ID_GUARDADO, CONTADO, reglaDeCifra("1250"));
+    }
+
+    @Test
+    void unPrecioEscritoConCerosDecimalesEsUnPrecioEntero() {
+        prepararAlta();
+
+        servicio.crear(alta("1000.00", precio("1250.00"), null));
+
+        verify(precios).abrirReglaPropia(3, ID_GUARDADO, CONTADO, reglaDeCifra("1250"));
+    }
+
+    @Test
+    void unPrecioPorDebajoDelCostoSeAdmite() {
+        prepararAlta();
+
+        servicio.crear(alta("1000.00", precio("900"), null));
+
+        verify(precios).abrirReglaPropia(3, ID_GUARDADO, CONTADO, reglaDeCifra("900"));
+    }
+
+    @Test
+    void sinCreditoSeGuardaIgualAlContado() {
+        prepararAlta();
+
+        servicio.crear(alta("1000.00", precio("1200"), null));
+
+        verify(precios).abrirReglaPropia(3, ID_GUARDADO, CREDITO, reglaDeCifra("1200"));
+    }
+
+    @Test
+    void unCreditoEscritoSeGuardaAparte() {
+        prepararAlta();
+
+        servicio.crear(alta("1000.00", porcentaje("20"), porcentaje("25")));
+
+        verify(precios).abrirReglaPropia(3, ID_GUARDADO, CONTADO, reglaDeFactor("1.2000"));
+        verify(precios).abrirReglaPropia(3, ID_GUARDADO, CREDITO, reglaDeFactor("1.2500"));
+    }
+
+    @Test
+    void elAltaConPrecioYExistenciaSigueEscribiendoElMovimientoInicial() {
+        prepararAlta();
+
+        servicio.crear(new SolicitudProducto(4, 9, "ARZ-500", "ARZ-500", null, "Arroz Diana", "500 g",
+                null, new BigDecimal("1000.00"), 120, 20, porcentaje("20"), null));
+
+        verify(inventario).registrarSaldoInicial(ID_GUARDADO, 120);
+    }
+
+    @Test
+    void cambiarElPrecioCierraLaReglaAnteriorYAbreOtra() {
+        prepararEdicion();
+        when(precios.reglaPropiaVigente(3, 11, CONTADO)).thenReturn(Optional.of(reglaDeCifra("1250")));
+
+        servicio.actualizar(11, edicionDePrecio(precio("1300"), null, false));
+
+        InOrder orden = inOrder(precios);
+        orden.verify(precios).corregirReglaPropiaDeHoy(3, 11, CONTADO, reglaDeCifra("1300"));
+        orden.verify(precios).cerrarReglaPropiaAyer(3, 11, CONTADO);
+        orden.verify(precios).abrirReglaPropia(3, 11, CONTADO, reglaDeCifra("1300"));
+    }
+
+    @Test
+    void dosCambiosElMismoDiaCorrigenLaMismaRegla() {
+        prepararEdicion();
+        when(precios.reglaPropiaVigente(3, 11, CONTADO)).thenReturn(Optional.of(reglaDeCifra("1250")));
+        when(precios.corregirReglaPropiaDeHoy(3, 11, CONTADO, reglaDeCifra("1300"))).thenReturn(1);
+
+        servicio.actualizar(11, edicionDePrecio(precio("1300"), null, false));
+
+        verify(precios, never()).cerrarReglaPropiaAyer(anyInt(), anyInt(), any());
+        verify(precios, never()).abrirReglaPropia(anyInt(), anyInt(), any(), any());
+    }
+
+    @Test
+    void volverAEscribirLaMismaCifraNoDejaHistoria() {
+        prepararEdicion();
+        when(precios.reglaPropiaVigente(3, 11, CONTADO)).thenReturn(Optional.of(reglaDeFactor("1.2000")));
+
+        servicio.actualizar(11, edicionDePrecio(porcentaje("20.00"), null, false));
+
+        verify(precios, never()).corregirReglaPropiaDeHoy(anyInt(), anyInt(), any(), any());
+        verify(precios, never()).cerrarReglaPropiaAyer(anyInt(), anyInt(), any());
+        verify(precios, never()).abrirReglaPropia(anyInt(), anyInt(), any(), any());
+    }
+
+    @Test
+    void pasarDePorcentajeAPrecioEsUnCambioAunqueDeLaMismaCifra() {
+        prepararEdicion();
+        when(precios.reglaPropiaVigente(3, 11, CONTADO)).thenReturn(Optional.of(reglaDeFactor("1.2000")));
+
+        servicio.actualizar(11, edicionDePrecio(precio("1200"), null, false));
+
+        verify(precios).abrirReglaPropia(3, 11, CONTADO, reglaDeCifra("1200"));
+    }
+
+    @Test
+    void editarSinEscribirElPrecioNoTocaNingunaRegla() {
+        prepararEdicion();
+
+        servicio.actualizar(11, edicionDePrecio(null, null, null));
+
+        // Un producto que sigue la regla general no se queda con una regla
+        // propia porque alguien le corrigió el nombre.
+        verifyNoInteractions(precios);
+    }
+
+    @Test
+    void unProductoDeOtraEmpresaNoRecibeRegla() {
+        comoEmpresa(3);
+        when(productos.findByEmpresaIdAndId(3, 11)).thenReturn(Optional.empty());
+
+        assertTrue(servicio.actualizar(11, edicionDePrecio(precio("1300"), null, null)).isEmpty());
+
+        verifyNoInteractions(precios);
+    }
+
+    @Test
+    void unPrecioRechazadoAlEditarNoGuardaNada() {
+        comoEmpresa(3);
+        when(productos.findByEmpresaIdAndId(3, 11)).thenReturn(Optional.of(productoGuardado()));
+        referenciasPropias();
+
+        assertThrows(ReglaInvalidaException.class,
+                () -> servicio.actualizar(11, edicionDePrecio(precio("0"), null, null)));
+
+        verify(productos, never()).save(any());
+        verifyNoInteractions(precios);
+    }
+
+    @Test
+    void alCambiarElContadoElCreditoQueEraIgualLoSigue() {
+        prepararEdicion();
+
+        servicio.actualizar(11, edicionDePrecio(precio("1300"), null, null));
+
+        verify(precios).abrirReglaPropia(3, 11, CONTADO, reglaDeCifra("1300"));
+        verify(precios).abrirReglaPropia(3, 11, CREDITO, reglaDeCifra("1300"));
+    }
+
+    @Test
+    void unCreditoQueEsOtroPrecioNoSigueAlContado() {
+        prepararEdicion();
+
+        servicio.actualizar(11, edicionDePrecio(precio("1300"), null, false));
+
+        verify(precios).abrirReglaPropia(3, 11, CONTADO, reglaDeCifra("1300"));
+        verify(precios, never()).abrirReglaPropia(eq(3), eq(11), eq(CREDITO), any());
+    }
+
+    @Test
+    void volverAUsarElPrecioDeContadoCopiaLaReglaVigente() {
+        prepararEdicion();
+        when(precios.reglaVigente(3, 11, CONTADO))
+                .thenReturn(Optional.of(new ReglaDePrecio(new BigDecimal("1.2000"), null, "SOBRE_PRECIO")));
+
+        servicio.actualizar(11, edicionDePrecio(null, null, true));
+
+        verify(precios).abrirReglaPropia(3, 11, CREDITO,
+                new ReglaDePrecio(new BigDecimal("1.2000"), null, "SOBRE_PRECIO"));
+        verify(precios, never()).abrirReglaPropia(eq(3), eq(11), eq(CONTADO), any());
+    }
+
+    @Test
+    void volverAUsarElContadoCopiaLaReglaPropiaLeidaConBloqueoYNoLaDeLaVista() {
+        // La vista es una lectura normal: tras esperar el bloqueo del producto,
+        // aún ve la foto de antes y diría el contado viejo.
+        prepararEdicion();
+        ReglaDePrecio actual = new ReglaDePrecio(new BigDecimal("1.3000"), null, "SOBRE_COSTO");
+        when(precios.reglaPropiaVigente(3, 11, CONTADO)).thenReturn(Optional.of(actual));
+
+        servicio.actualizar(11, edicionDePrecio(null, null, true));
+
+        verify(precios).abrirReglaPropia(3, 11, CREDITO, actual);
+        verify(precios, never()).reglaVigente(anyInt(), anyInt(), any());
+        InOrder orden = inOrder(precios);
+        orden.verify(precios).bloquearProducto(3, 11);
+        orden.verify(precios).reglaPropiaVigente(3, 11, CONTADO);
+    }
+
+    @Test
+    void noSePuedeIgualarElCreditoAUnContadoQueNoExiste() {
+        prepararEdicion();
+
+        ReglaInvalidaException e = assertThrows(ReglaInvalidaException.class,
+                () -> servicio.actualizar(11, edicionDePrecio(null, null, true)));
+
+        assertTrue(e.getMessage().contains("de contado"), e.getMessage());
+        verify(precios, never()).abrirReglaPropia(anyInt(), anyInt(), any(), any());
+    }
+
+    @Test
+    void decirQueElCreditoEsIgualYMandarOtroEsContradictorio() {
+        comoEmpresa(3);
+        when(productos.findByEmpresaIdAndId(3, 11)).thenReturn(Optional.of(productoGuardado()));
+        referenciasPropias();
+
+        assertThrows(ReglaInvalidaException.class,
+                () -> servicio.actualizar(11, edicionDePrecio(precio("1300"), precio("1400"), true)));
+
+        verify(productos, never()).save(any());
+    }
+
+    @Test
+    void cambiarSoloElCreditoNoTocaElContado() {
+        prepararEdicion();
+
+        servicio.actualizar(11, edicionDePrecio(null, precio("1400"), null));
+
+        verify(precios).abrirReglaPropia(3, 11, CREDITO, reglaDeCifra("1400"));
+        verify(precios, never()).abrirReglaPropia(eq(3), eq(11), eq(CONTADO), any());
     }
 }

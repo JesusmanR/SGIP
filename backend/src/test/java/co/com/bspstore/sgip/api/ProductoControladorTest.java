@@ -1,6 +1,7 @@
 package co.com.bspstore.sgip.api;
 
 import co.com.bspstore.sgip.api.dto.ProductoEnCatalogo;
+import co.com.bspstore.sgip.api.dto.SolicitudPrecio;
 import co.com.bspstore.sgip.api.dto.SolicitudProducto;
 import co.com.bspstore.sgip.logica.ServicioProducto;
 import co.com.bspstore.sgip.modelo.Producto;
@@ -23,7 +24,8 @@ class ProductoControladorTest {
     private static ProductoEnCatalogo enLaVista(int existencia) {
         return new ProductoEnCatalogo(55, "ARZ-500", "ARZ-500", "Arroz Diana", "500 g", null,
                 null, 4, "Granos", 9, "Distribuidora", new BigDecimal("3100.00"), existencia, 20,
-                "ACTIVO", null, null, null, null, null, null, null, null, 0, 0, 0, 0, null, 0);
+                "ACTIVO", null, null, null, null, null, null, null, null, 0, 0, 0, 0, null, 0,
+                null, null, null, null, null, null);
     }
 
     /**
@@ -42,7 +44,8 @@ class ProductoControladorTest {
 
         ResponseEntity<ProductoEnCatalogo> respuesta = controlador.crear(new SolicitudProducto(
                 4, 9, "ARZ-500", "ARZ-500", null, "Arroz Diana", "500 g", null,
-                new BigDecimal("3100.00"), 120, 20));
+                new BigDecimal("3100.00"), 120, 20,
+                new SolicitudPrecio(new BigDecimal("20"), null), null));
 
         assertEquals(201, respuesta.getStatusCode().value());
         assertEquals(0, guardado.getExistencia(), "la entidad en memoria sigue en cero");

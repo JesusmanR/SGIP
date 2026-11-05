@@ -318,6 +318,11 @@ con el total igual al precio. Es un aviso, no un bloqueo. Desde la V35 el
 mismo aviso vale 1 para el producto `EXCLUIDO_HASTA_UMBRAL` mientras falte
 la UVT del año en curso; el cálculo no cambia (se cobra la tarifa).
 
+**El precio escrito.** Desde la V36 `reglas_margen` admite una regla de un
+solo producto, con porcentaje o con cifra (ADR-0025). Gana a las reglas
+generales. `database/muestras/casos_de_precio.csv` es la tabla de casos que
+la vista, Java y el navegador tienen que dar igual.
+
 **La atomicidad entre tablas.** El descuento de existencias y el registro
 de la venta deben ocurrir en una sola transacción.
 

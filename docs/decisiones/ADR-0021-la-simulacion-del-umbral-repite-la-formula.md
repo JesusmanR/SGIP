@@ -122,3 +122,11 @@ con datos de demostración tiene **cero** ventas. Una comprobación que
 buscaba una venta existente para probar la facturación estaba midiendo
 el rastro de un guion anterior, no el esquema. Las comprobaciones
 nuevas crean lo que necesitan.
+
+## Nota posterior · el RF-31 ya no prohíbe capturar el precio
+
+Desde el ADR-0025 un producto puede tener un precio escrito, de modo que ya no
+es cierto que «el precio no se captura a mano». Lo que sigue cierto es lo que
+importa aquí: el precio se calcula en la vista y la simulación repite su
+fórmula para reglas generales. Esas reglas no alcanzan a un producto con regla
+propia, y por eso la simulación y el alcance desde la V36 no los cuentan.

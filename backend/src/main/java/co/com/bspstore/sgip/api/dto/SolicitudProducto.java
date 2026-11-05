@@ -46,5 +46,12 @@ public record SolicitudProducto(
         Integer existencia,
 
         @PositiveOrZero(message = "La existencia mínima no puede ser negativa")
-        Integer existenciaMinima
+        Integer existenciaMinima,
+
+        // Obligatorio, y lo exige ServicioPrecios con el mismo mensaje con el
+        // que rechaza el resto de lo que se escribe en el precio.
+        SolicitudPrecio contado,
+
+        // Vacío se guarda igual que el de contado (ADR-0025).
+        SolicitudPrecio credito
 ) {}

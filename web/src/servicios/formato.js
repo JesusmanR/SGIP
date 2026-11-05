@@ -77,6 +77,19 @@ export function pesosAbreviados(valor) {
   return PESOS.format(n)
 }
 
+const DOS_DECIMALES = new Intl.NumberFormat('es-CO', {
+  minimumFractionDigits: 2, maximumFractionDigits: 2,
+})
+
+/**
+ * Un margen: `20,00 %`, o `—` si no hay. Nunca convierte «no hay» en cero:
+ * un margen de cero es un dato, y uno ausente es un precio que falta.
+ */
+export function porcentajeConDecimales(valor) {
+  if (valor === null || valor === undefined || !Number.isFinite(Number(valor))) return '—'
+  return `${DOS_DECIMALES.format(Number(valor))}${DURO}%`
+}
+
 /** Una cantidad de unidades: `1.248`. */
 export const NUMERO = new Intl.NumberFormat('es-CO')
 

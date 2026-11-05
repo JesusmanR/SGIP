@@ -28,17 +28,20 @@ public class ServicioProducto {
     private final ProveedorRepositorio proveedores;
     private final ConsultaCatalogo catalogo;
     private final ServicioInventario inventario;
+    private final ServicioPrecios precios;
 
     public ServicioProducto(ProductoRepositorio productos,
                             CategoriaRepositorio categorias,
                             ProveedorRepositorio proveedores,
                             ConsultaCatalogo catalogo,
-                            ServicioInventario inventario) {
+                            ServicioInventario inventario,
+                            ServicioPrecios precios) {
         this.productos = productos;
         this.categorias = categorias;
         this.proveedores = proveedores;
         this.catalogo = catalogo;
         this.inventario = inventario;
+        this.precios = precios;
     }
 
     /** Los estados que la columna generada estado_stock puede tomar. */
@@ -124,12 +127,14 @@ public class ServicioProducto {
             throw new NombreRepetidoException(
                     "Ya existe un producto con el código de barras " + barras + ".");
         }
+        precios.exigirPrecioDeAlta(s.costo(), s.contado(), s.credito());
 
         Producto p = new Producto(empresa, s.categoriaId(), s.proveedorId(),
                 codigo, sku, s.nombre(), s.costo());
         p.describir(s.presentacion(), s.descripcion(), barras);
         p.fijarExistenciaMinima(s.existenciaMinima() == null ? 5 : s.existenciaMinima());
         Producto guardado = productos.save(p);
+        precios.escribirPrecios(empresa, guardado.getId(), s.costo(), s.contado(), s.credito(), null);
 
         // El producto nace en cero y el kárdex lo sube, dentro de esta misma
         // transacción: si el movimiento falla, el alta se deshace entera
@@ -155,6 +160,10 @@ public class ServicioProducto {
      *
      * La existencia no se toca: la solicitud de edición ni siquiera la
      * trae, y el motivo está en Producto.reemplazarDatos.
+     *
+     * El precio solo cambia si alguien lo escribió. Cambiar el costo no escribe
+     * ninguna regla, y por eso se conserva lo que se escribió en su día: con un
+     * porcentaje cambia el precio y con un precio cambia el margen (ADR-0025).
      */
     @Transactional
     public Optional<Producto> actualizar(Integer productoId, SolicitudEdicionProducto s) {
@@ -188,11 +197,17 @@ public class ServicioProducto {
             throw new NombreRepetidoException(
                     "Ya existe un producto con el código de barras " + barras + ".");
         }
+        precios.comprobarPrecios(s.costo(), s.contado(), s.credito(), s.creditoIgualAlContado());
 
         p.reemplazarDatos(s.categoriaId(), s.proveedorId(), codigo, sku, s.nombre(),
                 s.presentacion(), s.descripcion(), barras, s.costo(),
                 s.existenciaMinima() == null ? p.getExistenciaMinima() : s.existenciaMinima());
-        return Optional.of(productos.save(p));
+        Producto guardado = productos.save(p);
+        // Sin tocar `version`: la regla es una fila aparte, y un cambio solo de
+        // precio no le quita a nadie los datos del producto que tenía abiertos.
+        precios.escribirPrecios(empresa, productoId, s.costo(), s.contado(), s.credito(),
+                s.creditoIgualAlContado());
+        return Optional.of(guardado);
     }
 
     /**

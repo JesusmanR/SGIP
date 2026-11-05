@@ -11,7 +11,7 @@
  * cubrían los servicios, y las páginas solo las revisaba una fotografía
  * tomada a mano antes de cada entrega.
  */
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -27,6 +27,7 @@ vi.mock('../servicios/api.js', () => ({
     categorias: vi.fn(),
     proveedores: vi.fn(),
     editarProducto: vi.fn(),
+    crearProducto: vi.fn(),
   },
   ErrorApi: class extends Error {},
   imagenAutenticada: vi.fn(async () => 'blob:simulada'),
@@ -294,9 +295,97 @@ describe('catálogo de productos', () => {
       await conFilas()
       expect(api.proveedores).toHaveBeenCalled()
       expect(screen.getByRole('columnheader', { name: 'Costo' })).toBeInTheDocument()
-      expect(screen.getAllByRole('columnheader')).toHaveLength(9)
+      expect(screen.getAllByRole('columnheader')).toHaveLength(10)
       expect(screen.getByLabelText(/proveedor/i)).toBeInTheDocument()
       expect(fila(screen, 'PC-001')).toHaveTextContent('2.100.000')
+    })
+
+    it('un vendedor no puede crear productos', async () => {
+      montar()
+      await conFilas()
+      expect(screen.queryByRole('button', { name: 'Nuevo producto' })).not.toBeInTheDocument()
+    })
+
+    it('un administrador crea un producto y su fila aparece en el catálogo', async () => {
+      vi.useRealTimers()
+      const teclado = userEvent.setup()
+      guardarSesion({ token: 't', nombre: 'Jesús Manuel', rol: 'ADMINISTRADOR' })
+      api.catalogo.mockResolvedValue([CEL])
+      api.proveedores.mockResolvedValue(PROVEEDORES)
+      api.crearProducto.mockResolvedValue(PC)
+      montar()
+      await screen.findByText(/CEL-002/)
+      await screen.findByRole('option', { name: PROVEEDORES[0].razonSocial })
+
+      await teclado.click(screen.getByRole('button', { name: 'Nuevo producto' }))
+      const panel = screen.getByRole('dialog', { name: 'Nuevo producto' })
+      await teclado.type(within(panel).getByLabelText('Nombre'), PC.nombre)
+      await teclado.selectOptions(within(panel).getByLabelText('Categoría'), '1')
+      await teclado.selectOptions(within(panel).getByLabelText('Proveedor'), '1')
+      await teclado.type(within(panel).getByLabelText('Código'), PC.codigo)
+      await teclado.type(within(panel).getByLabelText('Costo'), '2100000')
+      await teclado.type(within(panel).getByLabelText('% de ganancia de contado'), '20')
+      await teclado.click(within(panel).getByRole('button', { name: 'Crear producto' }))
+
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+      expect(fila(screen, 'PC-001')).toHaveTextContent('2.520.000')
+      expect(fila(screen, 'CEL-002')).toBeInTheDocument()
+    })
+
+    it('un vendedor no ve la columna de margen', async () => {
+      montar()
+      await conFilas()
+      expect(screen.queryByRole('columnheader', { name: 'Margen' })).not.toBeInTheDocument()
+      expect(screen.queryByText(/falta el precio de venta/i)).not.toBeInTheDocument()
+      expect(fila(screen, 'PC-001')).not.toHaveTextContent('20,00')
+    })
+
+    it('un administrador ve el margen de contado y el de crédito si difiere', async () => {
+      guardarSesion({ token: 't', nombre: 'Jesús Manuel', rol: 'ADMINISTRADOR' })
+      api.catalogo.mockResolvedValue([PC, { ...CEL, margenCredito: 20 }])
+      api.proveedores.mockResolvedValue(PROVEEDORES)
+      montar()
+      await conFilas()
+      expect(screen.getByRole('columnheader', { name: 'Margen' })).toBeInTheDocument()
+      expect(fila(screen, 'PC-001')).toHaveTextContent('20,00 %')
+      expect(fila(screen, 'PC-001')).toHaveTextContent('a crédito 25,00 %')
+      expect(fila(screen, 'CEL-002')).toHaveTextContent('20,00 %')
+      expect(fila(screen, 'CEL-002')).not.toHaveTextContent('a crédito')
+    })
+
+    it('un margen negativo se ve negativo', async () => {
+      guardarSesion({ token: 't', nombre: 'Jesús Manuel', rol: 'ADMINISTRADOR' })
+      api.catalogo.mockResolvedValue([{ ...PC, margenContado: -10 }])
+      api.proveedores.mockResolvedValue(PROVEEDORES)
+      montar()
+      await conFilas()
+      expect(fila(screen, 'PC-001')).toHaveTextContent('-10,00 %')
+    })
+
+    it('sin precio dice que falta, en vez de un margen de cero', async () => {
+      guardarSesion({ token: 't', nombre: 'Jesús Manuel', rol: 'ADMINISTRADOR' })
+      api.catalogo.mockResolvedValue([{
+        ...PC, precioContado: null, precioCredito: null, totalContado: null, totalCredito: null,
+        margenContado: null, margenCredito: null, cruzaUmbralEnCredito: 0, cercaUmbral: 0,
+        baseContado: null, baseCredito: null,
+      }])
+      api.proveedores.mockResolvedValue(PROVEEDORES)
+      montar()
+      await conFilas()
+      expect(fila(screen, 'PC-001')).toHaveTextContent('Falta el precio de venta')
+      expect(fila(screen, 'PC-001')).not.toHaveTextContent('0,00 %')
+      // Sin precio tampoco hay nada «escrito».
+      expect(fila(screen, 'PC-001')).not.toHaveTextContent('precio escrito')
+    })
+
+    it('un precio escrito se anota, y la leyenda dice qué significa', async () => {
+      api.catalogo.mockResolvedValue([
+        { ...PC, baseContado: null, precioFijoContado: 2500000, precioContado: 2500000 },
+      ])
+      montar()
+      await conFilas()
+      expect(fila(screen, 'PC-001')).toHaveTextContent('precio escrito')
+      expect(screen.getByText(/se venden a esa cifra aunque cambie el costo/i)).toBeInTheDocument()
     })
 
     it('si los proveedores fallan, el administrador conserva las categorías', async () => {

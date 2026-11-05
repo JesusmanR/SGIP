@@ -155,8 +155,8 @@ jobs:
                AND column_name='sin_existencia';")
           test "$n" -eq 1
 
-      # Veinte de la V11, cuatro de la V12, cinco de la V24 y siete de
-      # la V28.
+      # Veinte de la V11, cuatro de la V12, cinco de la V24, siete de
+      # la V28, diez de la V31 y una de la V36.
       #
       # Este número se sube a mano al añadir claves, y a propósito: es un
       # centinela, no un conteo informativo. Una migración que quita una
@@ -165,11 +165,11 @@ jobs:
       # subir de 29 a 36, que era la señal correcta.
       # Dos centinelas, y miden cosas distintas a propósito.
       #
-      # El conteo ve una clave que desaparece. Su número está también en
-      # `database/aplicar.sh`, porque este trabajo aplica las migraciones
-      # con su propio bucle y no a través de ese guion; al subirlo hay
-      # que subirlo en los dos sitios. La V31 lo comprobó por las malas:
-      # se subió aquí y no allí, y este paso dejó el trabajo en rojo.
+      # El conteo ve una clave que desaparece. `database/aplicar.sh` tiene
+      # otro número, y no son el mismo: ese guion se detiene en la V31 y
+      # cuenta las claves de la V31, que ya no cambian; este trabajo aplica
+      # todas las migraciones con su propio bucle y cuenta las del esquema
+      # final. Una migración nueva sube solo este.
       #
       # El segundo no tiene número que mantener: toda clave foránea que
       # apunte a una tabla con `empresa_id` debe incluir `empresa_id`.
@@ -186,7 +186,7 @@ jobs:
             "SELECT COUNT(*) FROM information_schema.referential_constraints
              WHERE constraint_schema='sgip' AND constraint_name LIKE '%\\_emp';")
           echo "claves foráneas por empresa: $n"
-          test "$n" -eq 46
+          test "$n" -eq 47
 
           descuidadas=$(mysql -h 127.0.0.1 -u root -psgip_ci -N -B -e \
             "SELECT GROUP_CONCAT(x.table_name, '.', x.constraint_name SEPARATOR ', ')

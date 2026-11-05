@@ -1,6 +1,7 @@
 package co.com.bspstore.sgip.datos;
 
 import co.com.bspstore.sgip.api.dto.FilaDeCarga;
+import co.com.bspstore.sgip.api.dto.SolicitudPrecio;
 import co.com.bspstore.sgip.api.dto.SolicitudProducto;
 import co.com.bspstore.sgip.config.UsuarioAutenticado;
 import co.com.bspstore.sgip.logica.ServicioProducto;
@@ -177,7 +178,8 @@ class ProductoConcurrenciaTest {
 
         assertThrows(FalloDelMovimiento.class, () -> servicioProducto.crear(new SolicitudProducto(
                 categoriaId, proveedorId, codigo, codigo, null, "Producto con saldo inicial",
-                null, null, new BigDecimal("100.00"), 120, 5)));
+                null, null, new BigDecimal("100.00"), 120, 5,
+                new SolicitudPrecio(new BigDecimal("20"), null), null)));
 
         assertFalse(productos.existsByEmpresaIdAndCodigo(empresaId, codigo),
                 "el alta se deshace entera: sin movimiento no hay producto");
@@ -190,7 +192,8 @@ class ProductoConcurrenciaTest {
 
         Integer nuevoId = servicioProducto.crear(new SolicitudProducto(
                 categoriaId, proveedorId, codigo, codigo, null, "Producto con saldo inicial",
-                null, null, new BigDecimal("100.00"), 120, 5)).getId();
+                null, null, new BigDecimal("100.00"), 120, 5,
+                new SolicitudPrecio(new BigDecimal("20"), null), null)).getId();
 
         var kardex = inventario.kardex(empresaId, nuevoId, 10);
         assertEquals(1, kardex.size());
