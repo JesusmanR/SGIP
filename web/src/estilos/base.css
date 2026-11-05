@@ -13,6 +13,7 @@ body {
 
 button { font-family: inherit; cursor: pointer; }
 input  { font-family: inherit; }
+a      { color: var(--acento); }
 
 /* ── Controles ─────────────────────────────────────────────────────── */
 .campo { display: block; margin-bottom: 1rem; }
@@ -164,7 +165,6 @@ td.numero, th.numero { text-align: right; font-variant-numeric: tabular-nums; }
 .boton.menudo { padding: .3rem .6rem; font-size: .78rem; width: 100%; }
 
 /* Los enlaces de texto toman el acento; sin esto salen en el azul del navegador. */
-a { color: var(--acento); }
 
 .enlace {
   background: none; border: 0; padding: 0; font: inherit;

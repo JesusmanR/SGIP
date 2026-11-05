@@ -19,7 +19,7 @@ de color.
 |---|---|---|
 | `--acento` | `#15707F` | `#6C54DF` (valor del diseño, exacto) |
 | `--acento-claro` | `#5EB6C6` | `#9B88F5` (del diseño) |
-| `--acento-sutil` | `#E3EFF1` | `#EEEAFF` (del diseño) |
+| `--acento-sutil` | `#E3EFF1` | `#F2EFFF` |
 | `--lienzo` | `#F4F7F6` | `#F7F7F9` (del diseño) |
 | `--chrome` / `--chrome-activo` | `#203959` / `#2C4A66` | `#2B2250` / `#3D3270` |
 | `--tinta`, `--tinta-2`, `--tinta-3` | azul y verde oscuros | `#1E1B2E`, `#4A4270`, `#625C74` |
@@ -47,10 +47,9 @@ Además fija `--acento` en `#6C54DF`. Medido: blanco sobre `--acento`
 5,29:1. Con esto la prueba manda sobre el valor de partida: si un token
 nuevo no llega, se ajusta el valor y se anota aquí.
 
-Un límite conocido: `--acento` sobre `--acento-sutil` da 4,49:1, apenas
-por debajo de 4,5. No es un par de texto de la interfaz (el sutil solo
-pinta el halo del foco), pero quien lo use como fondo de texto debe
-oscurecer el texto.
+`--acento-sutil` se aclaró respecto al `#EEEAFF` del diseño: la zona de
+arrastre de la carga masiva escribe `--acento` sobre él, y con ese valor
+daba 4,49:1. Con `#F2EFFF` da 4,68:1.
 
 ## Qué sigue vigente del ADR-0009
 

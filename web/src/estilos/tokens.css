@@ -22,7 +22,7 @@
   /* ── Acento ─────────────────────────────────────────────────────── */
   --acento:          #6C54DF;
   --acento-claro:    #9B88F5;
-  --acento-sutil:    #EEEAFF;   /* halo de foco */
+  --acento-sutil:    #F2EFFF;   /* halo de foco y fondo de la zona de arrastre */
   --sobre-acento:    #FFFFFF;   /* texto sobre acento, chrome y peligro */
   --velo:            rgba(30, 27, 46, .45);   /* fondo tras un diálogo */
 

@@ -31,12 +31,16 @@ const texto = [
   ['sobre-acento', 'acento'],
   ['sobre-acento', 'chrome'],
   ['sobre-acento', 'peligro'],
-  ['acento', 'tarjeta'],
+  ['acento', 'tarjeta'], ['acento', 'lienzo'],
+  ['acento', 'acento-sutil'], // .zona-archivo al pasar el cursor o arrastrar
+  ['acento', 'aviso-fondo'], // enlaces dentro de un aviso del panel
   ['tinta', 'tarjeta'], ['tinta', 'lienzo'],
   ['tinta-2', 'tarjeta'], ['tinta-2', 'lienzo'],
   ['tinta-3', 'tarjeta'], ['tinta-3', 'lienzo'],
   ['exito', 'exito-fondo'], ['aviso', 'aviso-fondo'],
   ['peligro', 'peligro-fondo'], ['info', 'info-fondo'],
+  ['tinta-3', 'exito-fondo'], ['tinta-3', 'aviso-fondo'],
+  ['tinta-3', 'peligro-fondo'], ['tinta-3', 'info-fondo'], ['tinta-3', 'borde'],
 ]
 
 describe('tokens de color', () => {
@@ -48,7 +52,7 @@ describe('tokens de color', () => {
     expect(contraste(token(frente), token(fondo))).toBeGreaterThanOrEqual(4.5)
   })
 
-  it('el borde de un control llega a 3:1 sobre la tarjeta', () => {
-    expect(contraste(token('borde-control'), token('tarjeta'))).toBeGreaterThanOrEqual(3)
+  it.each(['tarjeta', 'lienzo'])('el borde de un control llega a 3:1 sobre %s', (fondo) => {
+    expect(contraste(token('borde-control'), token(fondo))).toBeGreaterThanOrEqual(3)
   })
 })

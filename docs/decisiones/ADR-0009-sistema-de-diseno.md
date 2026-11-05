@@ -73,3 +73,6 @@ La paleta Aurora Mist y los tokens derivados están en
 `../../web/src/estilos/tokens.css`, que es la única fuente de color del
 front. Allí queda registrado, con las luminancias medidas, por qué una
 insignia de estado nunca puede ser solo un punto de color.
+
+El ADR-0026 reemplazó la paleta Aurora Mist por el morado. El resto de
+esta decisión sigue vigente.
