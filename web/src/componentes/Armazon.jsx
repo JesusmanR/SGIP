@@ -62,7 +62,7 @@ export default function Armazon() {
       </header>
       <MenuLateral id="menu-principal" rol={sesion?.rol} abierto={abierto} nombre={sesion?.nombre} alSalir={salir} />
       <main id="contenido-principal" className="armazon-contenido" tabIndex={-1}>
-        <ErrorBoundary><Outlet /></ErrorBoundary>
+        <ErrorBoundary reinicio={pathname}><Outlet /></ErrorBoundary>
       </main>
     </div>
   )
