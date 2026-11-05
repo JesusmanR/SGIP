@@ -40,7 +40,7 @@ describe('lista de órdenes de compra', () => {
     expect(within(tabla).getByText('Recibida en parte')).toBeInTheDocument()
     expect(within(tabla).getByText('Recibida')).toBeInTheDocument()
     expect(within(tabla).getByText('Anulada')).toBeInTheDocument()
-    expect(within(tabla).getByText(/73\.200/)).toBeInTheDocument()
+    expect(within(tabla).getAllByText(/73.200/)).toHaveLength(3)
     expect(within(tabla).getByText(/5\.000/)).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /nueva orden/i })).toHaveAttribute('href', '/compras/nueva')
   })

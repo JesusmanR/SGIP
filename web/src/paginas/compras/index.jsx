@@ -1,7 +1,9 @@
-import { Route, Routes } from 'react-router-dom'
-import EncabezadoPagina from '../../componentes/comun/EncabezadoPagina.jsx'
+import { Link, Route, Routes } from 'react-router-dom'
 import EstadoVacio from '../../componentes/comun/EstadoVacio.jsx'
 import '../../estilos/compras.css'
+import DetalleOrden from './DetalleOrden.jsx'
+import ListaOrdenes from './ListaOrdenes.jsx'
+import NuevaOrden from './NuevaOrden.jsx'
 
 /**
  * Punto de entrada de la sección. App.jsx la registra una sola vez como
@@ -10,14 +12,16 @@ import '../../estilos/compras.css'
 export default function Seccion() {
   return (
     <Routes>
+      <Route index element={<ListaOrdenes />} />
+      <Route path="nueva" element={<NuevaOrden />} />
+      <Route path=":ordenId" element={<DetalleOrden />} />
       <Route
         path="*"
         element={(
           <div className="contenido">
-            <EncabezadoPagina titulo="Órdenes de compra" />
             <EstadoVacio
-              titulo="En construcción"
-              detalle="Esta sección todavía no está disponible."
+              titulo="Esta página no existe"
+              accion={<Link to="/compras">Volver a órdenes de compra</Link>}
             />
           </div>
         )}

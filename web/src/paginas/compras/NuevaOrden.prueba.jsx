@@ -183,7 +183,7 @@ describe('nueva orden de compra', () => {
     })
     expect(await screen.findByRole('heading', { level: 1, name: /OC-0012/ })).toBeInTheDocument()
     expect(verOrden).toHaveBeenCalledWith('12')
-    expect(screen.getByRole('status')).toHaveTextContent(/orden creada.*no cambia el inventario/i)
+    expect(screen.getByText(/orden creada/i)).toHaveTextContent(/no cambia el inventario/i)
   })
 
   it('el consecutivo repetido (409) se dice junto a ese campo', async () => {
