@@ -9,13 +9,22 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import org.hibernate.annotations.DynamicUpdate;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
 import java.util.Locale;
 
+/**
+ * {@code @DynamicUpdate}: el UPDATE lleva solo las columnas que cambiaron. Por
+ * omisión Hibernate escribe todas las de la fila que leyó, y un ingreso fallido
+ * que llega mientras se cambia la contraseña devolvía {@code clave_hash} y
+ * {@code cambio_clave_req} a su valor anterior: quien conociera la clave vieja
+ * recuperaba el acceso (M2).
+ */
 @Entity
+@DynamicUpdate
 @Table(name = "usuarios")
 public class Usuario {
 
