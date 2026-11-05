@@ -151,7 +151,7 @@ class PrecioDeProductoTest {
         ProductoEnCatalogo p = leer(id);
         productos.actualizar(id, new SolicitudEdicionProducto(categoriaId, proveedorId, p.codigo(),
                 p.sku(), null, p.nombre(), null, null, new BigDecimal(costo), 0,
-                contado, credito, creditoIgual));
+                contado, credito, creditoIgual, p.version()));
     }
 
     private ProductoEnCatalogo leer(Integer id) {

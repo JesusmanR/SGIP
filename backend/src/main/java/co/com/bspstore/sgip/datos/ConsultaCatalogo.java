@@ -48,6 +48,19 @@ public class ConsultaCatalogo {
                 AND i.principal = TRUE)
             """;
 
+    /**
+     * La versión del producto, para que la edición pueda detectar datos viejos
+     * (I1). Está en `productos` y no en la vista, y rehacer `v_precios_producto`
+     * para sumarla tocaría un plan que `EscalaDeReglasPropiasTest` vigila. Es una
+     * subconsulta por clave primaria, de una fila por cada fila que se devuelve,
+     * y repite el filtro de empresa por la misma razón que la de arriba.
+     */
+    private static final String VERSION = """
+            (SELECT p.version FROM productos p
+              WHERE p.empresa_id = v.empresa_id
+                AND p.producto_id = v.producto_id)
+            """;
+
     private static final String COLUMNAS = """
             producto_id, codigo, sku, nombre, presentacion,
             descripcion, codigo_barras,
@@ -61,8 +74,9 @@ public class ConsultaCatalogo {
             %1$s IS NOT NULL AS tiene_imagen,
             margen_contado, margen_credito,
             precio_fijo_contado, precio_fijo_credito,
-            porcentaje_contado, porcentaje_credito
-            """.formatted(IMAGEN_PRINCIPAL);
+            porcentaje_contado, porcentaje_credito,
+            %2$s AS version
+            """.formatted(IMAGEN_PRINCIPAL, VERSION);
 
     private final JdbcClient jdbc;
 

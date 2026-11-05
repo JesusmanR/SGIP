@@ -198,6 +198,7 @@ public class Producto {
     public int getExistencia() { return existencia; }
     public int getExistenciaMinima() { return existenciaMinima; }
     public boolean isActivo() { return activo; }
+    public int getVersion() { return version; }
     public LocalDateTime getCreadoEn() { return creadoEn; }
     public LocalDateTime getActualizadoEn() { return actualizadoEn; }
 }

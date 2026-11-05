@@ -332,7 +332,7 @@ class ServicioProductoTest {
     // ── Edición (RF-15) ──────────────────────────────────────────────
     private SolicitudEdicionProducto edicion(String codigo, String sku) {
         return new SolicitudEdicionProducto(4, 9, codigo, sku, "7701234567890",
-                "Arroz Diana", "500 g", null, new BigDecimal("3400.00"), 20, null, null, null);
+                "Arroz Diana", "500 g", null, new BigDecimal("3400.00"), 20, null, null, null, 0);
     }
 
     private Producto productoGuardado() {
@@ -442,7 +442,7 @@ class ServicioProductoTest {
 
     private SolicitudEdicionProducto edicionConBarras(String barras) {
         return new SolicitudEdicionProducto(4, 9, "ARZ-500", "ARZ-500", barras,
-                "Arroz Diana", "500 g", null, new BigDecimal("3400.00"), 20, null, null, null);
+                "Arroz Diana", "500 g", null, new BigDecimal("3400.00"), 20, null, null, null, 0);
     }
 
     @Test
@@ -579,7 +579,7 @@ class ServicioProductoTest {
     private SolicitudEdicionProducto edicionDePrecio(SolicitudPrecio contado, SolicitudPrecio credito,
                                                      Boolean creditoIgualAlContado) {
         return new SolicitudEdicionProducto(4, 9, "ARZ-500", "ARZ-500", null, "Arroz Diana", "500 g",
-                null, new BigDecimal("1000.00"), 20, contado, credito, creditoIgualAlContado);
+                null, new BigDecimal("1000.00"), 20, contado, credito, creditoIgualAlContado, 0);
     }
 
     private void prepararAlta() {

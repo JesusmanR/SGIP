@@ -32,6 +32,13 @@ import java.math.BigDecimal;
  *   false                         el crédito no cambia aunque cambie el contado
  *
  * Con {@code credito} escrito se usa ese y la marca no puede venir en true.
+ *
+ * {@code version} es la que traía el producto al abrir el formulario. Es
+ * obligatoria y es un {@code Integer} a propósito: con un {@code int} una
+ * petición sin ella llegaría como 0 y se tomaría por una versión vieja, un 409
+ * donde toca un 400. Si el producto ya cambió, la edición se rechaza: guardar
+ * con los datos de antes, costo incluido, desharía sin aviso una carga de
+ * precios (I1).
  */
 public record SolicitudEdicionProducto(
 
@@ -72,5 +79,8 @@ public record SolicitudEdicionProducto(
 
         SolicitudPrecio credito,
 
-        Boolean creditoIgualAlContado
+        Boolean creditoIgualAlContado,
+
+        @NotNull(message = "La versión del producto es obligatoria (version)")
+        Integer version
 ) {}

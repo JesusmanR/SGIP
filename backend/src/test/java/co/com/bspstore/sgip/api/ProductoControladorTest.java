@@ -25,7 +25,7 @@ class ProductoControladorTest {
         return new ProductoEnCatalogo(55, "ARZ-500", "ARZ-500", "Arroz Diana", "500 g", null,
                 null, 4, "Granos", 9, "Distribuidora", new BigDecimal("3100.00"), existencia, 20,
                 "ACTIVO", null, null, null, null, null, null, null, null, 0, 0, 0, 0, null, 0,
-                null, null, null, null, null, null);
+                null, null, null, null, null, null, 1);
     }
 
     /**
