@@ -77,6 +77,18 @@ class RepositorioConfiguracionTributariaTest {
         }
     }
 
+    /**
+     * Mueve el inicio de una regla respecto del día de la base, calculado en SQL
+     * y no con el reloj de la prueba: así no depende de la medianoche ni de que
+     * aplicación y base estén en zonas horarias distintas.
+     */
+    private void empiezaEn(Integer reglaId, String expresionSql) {
+        jdbc.sql("UPDATE reglas_iva SET vigente_desde = " + expresionSql
+                        + " WHERE regla_iva_id = :id")
+                .param("id", reglaId)
+                .update();
+    }
+
     private Integer regla(Integer e, Integer cat, Integer prod, LocalDate desde, LocalDate hasta) {
         return repositorio.insertarRegla(e, cat, prod, tipoIva19, desde, hasta, null);
     }
@@ -182,8 +194,11 @@ class RepositorioConfiguracionTributariaTest {
 
     @Test
     void retirarBorraLaFilaDeLaEmpresaYNoLaDeOtra() {
+        // Solo se borra lo que todavía no empezó: mañana, según la base.
         Integer propia = regla(empresa, null, null, ENERO, null);
+        empiezaEn(propia, "CURDATE() + INTERVAL 1 DAY");
         Integer ajena = regla(otra, null, null, ENERO, null);
+        empiezaEn(ajena, "CURDATE() + INTERVAL 1 DAY");
 
         // Con el identificador de la otra empresa no borra nada.
         assertEquals(0, repositorio.borrarRegla(empresa, ajena));
@@ -192,6 +207,25 @@ class RepositorioConfiguracionTributariaTest {
         assertEquals(1, repositorio.borrarRegla(empresa, propia));
         assertTrue(repositorio.buscarRegla(empresa, propia).isEmpty());
         assertTrue(repositorio.buscarRegla(otra, ajena).isPresent());
+    }
+
+    /**
+     * El servicio decide con su reloj que una regla «aún no empieza»; si la base
+     * ya está en el día en que rige, el DELETE no puede borrarla: una regla que
+     * rige explica ventas.
+     */
+    @Test
+    void retirarNoBorraUnaReglaQueLaBaseYaTieneVigente() {
+        Integer queRigeHoy = regla(empresa, null, null, ENERO, null);
+        empiezaEn(queRigeHoy, "CURDATE()");
+        Integer queRigeDesdeAyer = regla(empresa, categoria, null, ENERO, null);
+        empiezaEn(queRigeDesdeAyer, "CURDATE() - INTERVAL 1 DAY");
+
+        assertEquals(0, repositorio.borrarRegla(empresa, queRigeHoy));
+        assertEquals(0, repositorio.borrarRegla(empresa, queRigeDesdeAyer));
+
+        assertTrue(repositorio.buscarRegla(empresa, queRigeHoy).isPresent());
+        assertTrue(repositorio.buscarRegla(empresa, queRigeDesdeAyer).isPresent());
     }
 
     @Test
