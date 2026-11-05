@@ -34,6 +34,8 @@ const texto = [
   ['acento', 'tarjeta'], ['acento', 'lienzo'],
   ['acento', 'acento-sutil'], // .zona-archivo al pasar el cursor o arrastrar
   ['acento', 'aviso-fondo'], // enlaces dentro de un aviso del panel
+  ['salvia', 'chrome'], // rótulos de grupo del menú lateral
+  ['sobre-acento', 'chrome-activo'], // enlace activo del menú lateral
   ['tinta', 'tarjeta'], ['tinta', 'lienzo'],
   ['tinta-2', 'tarjeta'], ['tinta-2', 'lienzo'],
   ['tinta-3', 'tarjeta'], ['tinta-3', 'lienzo'],
