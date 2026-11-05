@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import Aviso from '../../componentes/comun/Aviso.jsx'
 import EncabezadoPagina from '../../componentes/comun/EncabezadoPagina.jsx'
@@ -8,7 +8,7 @@ import EstadoSinPermiso from '../../componentes/comun/EstadoSinPermiso.jsx'
 import EstadoVacio from '../../componentes/comun/EstadoVacio.jsx'
 import TablaOTarjetas from '../../componentes/comun/TablaOTarjetas.jsx'
 import { useDatos } from '../../hooks/useDatos.js'
-import { buscarProductos, crearOrden } from '../../servicios/api/compras.js'
+import { PRODUCTOS_POR_BUSQUEDA, buscarProductos, crearOrden } from '../../servicios/api/compras.js'
 import { listarProveedores } from '../../servicios/api/proveedores.js'
 import Campo from './Campo.jsx'
 import { pesos } from './EstadoOrden.jsx'
@@ -93,6 +93,9 @@ function BuscadorDeProductos({ agregados, alAgregar, motivo, referencia }) {
       </button>
       {fallo && <p className="peligro-texto" role="alert">{fallo}</p>}
       {resultados && resultados.length === 0 && <p className="leyenda">No encontramos productos con ese texto.</p>}
+      {resultados && resultados.length >= PRODUCTOS_POR_BUSQUEDA && (
+        <p className="leyenda">Puede haber más productos con ese texto. Afina la búsqueda para verlos.</p>
+      )}
       {resultados && resultados.length > 0 && (
         <ul className="resultados-producto">
           {resultados.map((p) => {
@@ -279,7 +282,8 @@ function Formulario({ proveedores }) {
 
 /** Un campo dentro de una fila: su motivo va debajo y enlazado al campo. */
 function CeldaDeLinea({ etiqueta, valor, motivo, alCambiar }) {
-  const idMotivo = `${etiqueta.replace(/\s+/g, '-')}-motivo`
+  // useId y no el nombre del producto: dos productos pueden llamarse igual.
+  const idMotivo = `${useId()}-motivo`
   return (
     <>
       <input
@@ -310,7 +314,7 @@ export default function NuevaOrden() {
   } else cuerpo = <Formulario proveedores={datos} />
 
   return (
-    <div className="contenido">
+    <div className="contenido seccion-compras">
       <EncabezadoPagina titulo="Nueva orden de compra" descripcion="Pide mercancía a un proveedor. Aún no entra al inventario." />
       {cuerpo}
     </div>

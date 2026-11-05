@@ -22,8 +22,8 @@ function validar(v) {
   if (correo && !CORREO.test(correo)) e.correo = 'Revisa el correo: debe verse como nombre@empresa.co.'
   else if (correo.length > 120) e.correo = 'El correo no puede pasar de 120 caracteres.'
   if (v.telefono.trim().length > 20) e.telefono = 'El teléfono no puede pasar de 20 caracteres.'
-  if (!/^\d+$/.test(v.plazoDias.trim())) {
-    e.plazoDias = 'Escribe los días como un número entero de cero o más. Cero es de contado.'
+  if (!/^\d+$/.test(v.plazoDias.trim()) || Number(v.plazoDias.trim()) > 365) {
+    e.plazoDias = 'Escribe los días como un número entero de 0 a 365. Cero es de contado.'
   }
   return e
 }
@@ -83,7 +83,7 @@ export default function NuevoProveedor() {
   }
 
   return (
-    <div className="contenido">
+    <div className="contenido seccion-proveedores">
       <EncabezadoPagina titulo="Nuevo proveedor" descripcion="Con él podrás crear productos y órdenes de compra." />
       <form ref={formulario} className="tarjeta formulario-angosto" onSubmit={enviar} noValidate>
         {errorServidor && (

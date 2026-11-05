@@ -13,9 +13,13 @@ const ENTERO = /^\d+$/
  * los calcula el servidor; aquí solo se comparan las cantidades escritas con
  * el pendiente que él mandó, para avisar antes de enviar.
  */
-export default function FormularioRecepcion({ orden, alRecibir }) {
+export default function FormularioRecepcion({ orden, alRecibir, alRechazar }) {
   const formulario = useRef(null)
   const aviso = useRef(null)
+  const tituloRevision = useRef(null)
+  const tituloFormulario = useRef(null)
+  // Solo al volver de la revisión el foco va al formulario; al montar no.
+  const volvio = useRef(false)
   const [paso, setPaso] = useState('editar')
   const [cantidades, setCantidades] = useState({})
   const [documento, setDocumento] = useState('')
@@ -36,6 +40,11 @@ export default function FormularioRecepcion({ orden, alRecibir }) {
     if (intentos > 0) formulario.current?.querySelector('[aria-invalid="true"]')?.focus()
   }, [intentos])
   useEffect(() => { if (errorServidor) aviso.current?.focus() }, [errorServidor])
+  // El botón que tenía el foco se desmonta al cambiar de paso: el foco se lleva al encabezado nuevo.
+  useEffect(() => {
+    if (paso === 'revisar') tituloRevision.current?.focus()
+    else if (volvio.current) { volvio.current = false; tituloFormulario.current?.focus() }
+  }, [paso])
 
   function revisar(evento) {
     evento.preventDefault()
@@ -77,6 +86,7 @@ export default function FormularioRecepcion({ orden, alRecibir }) {
       alRecibir(actualizada)
     } catch (error) {
       setPaso('editar')
+      if (error.estado === 400 || error.estado === 409) alRechazar?.()
       setErrorServidor(
         error.estado === 404
           ? 'Esa orden ya no existe. Vuelve a la lista de órdenes de compra.'
@@ -90,7 +100,7 @@ export default function FormularioRecepcion({ orden, alRecibir }) {
   if (paso === 'revisar') {
     return (
       <section className="recepcion tarjeta" aria-labelledby="titulo-confirmar">
-        <h2 id="titulo-confirmar" className="subtitulo-seccion">Confirma la recepción</h2>
+        <h2 id="titulo-confirmar" ref={tituloRevision} tabIndex={-1} className="subtitulo-seccion">Confirma la recepción</h2>
         <ul className="lista-recepcion">
           {entregadas.map((l) => {
             const n = llegaAhora(l)
@@ -102,7 +112,7 @@ export default function FormularioRecepcion({ orden, alRecibir }) {
         <p>El costo de los productos no cambia con la recepción. Para cambiar costos usa «Importar precios».</p>
         <p>Esto no se puede deshacer aquí. Si te equivocas, corrígelo con un ajuste de inventario.</p>
         <div className="acciones-pie">
-          <button type="button" className="boton secundario" onClick={() => setPaso('editar')} disabled={enviando}>
+          <button type="button" className="boton secundario" onClick={() => { volvio.current = true; setPaso('editar') }} disabled={enviando}>
             Volver a editar
           </button>
           <button type="button" className="boton" onClick={confirmar} disabled={enviando}>
@@ -115,7 +125,7 @@ export default function FormularioRecepcion({ orden, alRecibir }) {
 
   return (
     <form ref={formulario} className="recepcion tarjeta" onSubmit={revisar} noValidate>
-      <h2 className="subtitulo-seccion">Registrar una recepción</h2>
+      <h2 ref={tituloFormulario} tabIndex={-1} className="subtitulo-seccion">Registrar una recepción</h2>
       <p className="leyenda">
         Escribe solo lo que llegó. Lo que falte seguirá pendiente para otra entrega.
       </p>

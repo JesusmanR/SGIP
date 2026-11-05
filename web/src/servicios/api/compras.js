@@ -1,7 +1,7 @@
 import { pedir } from '../api.js'
 
 /** Cuántos resultados trae la búsqueda de productos al armar una orden. */
-const PRODUCTOS_POR_BUSQUEDA = 8
+export const PRODUCTOS_POR_BUSQUEDA = 8
 
 /**
  * Llamadas de la sección «Órdenes de compra». El servidor no pagina por

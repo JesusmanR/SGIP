@@ -20,19 +20,19 @@ export default function DetalleProveedor() {
     () => verProveedor(proveedorId), [proveedorId],
   )
 
-  if (sinPermiso) return <div className="contenido"><EstadoSinPermiso /></div>
+  if (sinPermiso) return <div className="contenido seccion-proveedores"><EstadoSinPermiso /></div>
   if (error?.estado === 404) {
     return (
-      <div className="contenido">
+      <div className="contenido seccion-proveedores">
         <EstadoVacio titulo="Ese proveedor no existe" detalle="Quizá el enlace está mal escrito." accion={volver} />
       </div>
     )
   }
-  if (error) return <div className="contenido"><EstadoError error={error} alReintentar={recargar} /></div>
-  if (cargando && !datos) return <div className="contenido"><EstadoCarga mensaje="Cargando proveedor…" /></div>
+  if (error) return <div className="contenido seccion-proveedores"><EstadoError error={error} alReintentar={recargar} /></div>
+  if (cargando && !datos) return <div className="contenido seccion-proveedores"><EstadoCarga mensaje="Cargando proveedor…" /></div>
 
   return (
-    <div className="contenido">
+    <div className="contenido seccion-proveedores">
       <EncabezadoPagina titulo={datos.razonSocial} acciones={volver} />
       {state?.creado && (
         <Aviso tipo="exito">Proveedor creado. Ya puedes elegirlo al crear productos y órdenes de compra.</Aviso>

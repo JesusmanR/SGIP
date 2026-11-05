@@ -49,7 +49,7 @@ export default function ListaProveedores() {
   }
 
   return (
-    <div className="contenido">
+    <div className="contenido seccion-proveedores">
       <EncabezadoPagina
         titulo="Proveedores"
         descripcion="A quién le compras. Cada producto nuevo necesita un proveedor."

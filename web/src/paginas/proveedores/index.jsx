@@ -18,7 +18,7 @@ export default function Seccion() {
       <Route
         path="*"
         element={(
-          <div className="contenido">
+          <div className="contenido seccion-proveedores">
             <EstadoVacio
               titulo="Esta página no existe"
               accion={<Link to="/proveedores">Volver a proveedores</Link>}

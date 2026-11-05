@@ -88,7 +88,7 @@ export default function ListaOrdenes() {
   }
 
   return (
-    <div className="contenido">
+    <div className="contenido seccion-compras">
       <EncabezadoPagina
         titulo="Órdenes de compra"
         descripcion="Lo que le pides a tus proveedores y lo que ya te entregaron."

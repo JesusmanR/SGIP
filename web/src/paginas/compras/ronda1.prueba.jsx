@@ -44,8 +44,10 @@ async function abrirNueva() {
 async function agregar(...productos) {
   buscarProductos.mockResolvedValue(productos)
   await userEvent.type(screen.getByLabelText(/buscar producto/i), 'algo{Enter}')
-  for (const p of productos) {
-    await userEvent.click(await screen.findByRole('button', { name: `Agregar ${p.nombre}` }))
+  for (const [i, p] of productos.entries()) {
+    const botones = await screen.findAllByRole('button', { name: `Agregar ${p.nombre}` })
+    // Con nombres repetidos, el de este producto es el que sigue habilitado.
+    await userEvent.click(botones.filter((b) => !b.disabled)[0] ?? botones[i])
   }
 }
 
@@ -102,7 +104,7 @@ describe('costo con centavos', () => {
     await userEvent.type(screen.getByLabelText('Costo unitario de Tornillo M6'), '1500,10')
     const total = screen.getByText(/total de la vista previa/i).closest('p')
     expect(total).toHaveTextContent(/4\.500,30/)
-    expect(total).not.toHaveTextContent(/4\.500,2|4\.500,3\d/)
+    expect(total).toHaveTextContent(/4\.500,30\s*$/)
     expect(screen.getByRole('cell', { name: /4\.500,30/ })).toBeInTheDocument()
   })
 
@@ -151,8 +153,9 @@ describe('búsqueda de productos', () => {
 })
 
 describe('recepción rechazada por el servidor', () => {
-  async function intentar() {
+  async function intentar(recarga) {
     await abrirOrden()
+    if (recarga) verOrden.mockResolvedValue(recarga)
     await userEvent.type(llegan('Tornillo M6'), '8')
     await userEvent.click(screen.getByRole('button', { name: /revisar recepción/i }))
     await userEvent.click(screen.getByRole('button', { name: /confirmar recepción/i }))
@@ -161,8 +164,7 @@ describe('recepción rechazada por el servidor', () => {
   it.each([400, 409])('ante un %i recarga la orden y conserva el mensaje del servidor', async (estado) => {
     recibirOrden.mockRejectedValue(new ErrorApi(estado, 'La orden ya cambió.'))
     const alRecargar = { ...ORDEN, estado: 'PARCIAL', items: [{ ...ORDEN.items[0], cantidadRecibida: 5, pendiente: 15 }] }
-    await intentar()
-    verOrden.mockResolvedValue(alRecargar)
+    await intentar(alRecargar)
     expect(await screen.findByRole('alert')).toHaveTextContent('La orden ya cambió.')
     await waitFor(() => expect(verOrden).toHaveBeenCalledTimes(2))
     expect(await screen.findByText(/pendiente: 15/i)).toBeInTheDocument()

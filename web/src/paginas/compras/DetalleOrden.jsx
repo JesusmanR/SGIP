@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router-dom'
 import Aviso from '../../componentes/comun/Aviso.jsx'
 import EncabezadoPagina from '../../componentes/comun/EncabezadoPagina.jsx'
@@ -30,20 +30,33 @@ const COLUMNAS = [
 /** La orden ya cargada. Se separa para que cada orden tenga su propio estado. */
 function Orden({ inicial, creada }) {
   const [orden, setOrden] = useState(inicial)
+  // Un objeto nuevo por recepción: dos mensajes iguales seguidos también llevan el foco.
   const [mensaje, setMensaje] = useState(null)
+  const aviso = useRef(null)
+  useEffect(() => { if (mensaje) aviso.current?.focus() }, [mensaje])
 
   const alRecibir = (actualizada) => {
     setOrden(actualizada)
-    setMensaje(`Recepción registrada. La orden quedó: ${nombreDeEstado(actualizada.estado)}.`)
+    setMensaje({ texto: `Recepción registrada. La orden quedó: ${nombreDeEstado(actualizada.estado)}.` })
+  }
+
+  // Si el servidor rechazó la entrega, lo más probable es que la orden cambiara:
+  // se vuelve a pedir para no seguir mostrando pendientes viejos.
+  const alRechazar = async () => {
+    try {
+      setOrden(await verOrden(orden.ordenId))
+    } catch {
+      // Queda lo que había y el mensaje del servidor; recargar la página lo corrige.
+    }
   }
 
   return (
-    <div className="contenido">
+    <div className="contenido seccion-compras">
       <EncabezadoPagina titulo={`Orden ${orden.consecutivo}`} acciones={volver} />
       {creada && !mensaje && (
         <Aviso tipo="exito">Orden creada. Todavía no cambia el inventario: eso ocurre al registrar la recepción.</Aviso>
       )}
-      {mensaje && <Aviso tipo="exito">{mensaje}</Aviso>}
+      {mensaje && <div ref={aviso} tabIndex={-1}><Aviso tipo="exito">{mensaje.texto}</Aviso></div>}
       <dl className="ficha">
         <div><dt>Proveedor</dt><dd>{orden.proveedor}</dd></div>
         <div><dt>Estado</dt><dd><InsigniaEstado estado={orden.estado} /></dd></div>
@@ -61,7 +74,7 @@ function Orden({ inicial, creada }) {
       <p className="total-vista"><span>Total de la orden</span> <strong>{pesos(orden.total)}</strong></p>
 
       {(orden.estado === 'ABIERTA' || orden.estado === 'PARCIAL') && (
-        <FormularioRecepcion orden={orden} alRecibir={alRecibir} />
+        <FormularioRecepcion orden={orden} alRecibir={alRecibir} alRechazar={alRechazar} />
       )}
       {orden.estado === 'RECIBIDA' && <p className="leyenda">Esta orden ya se recibió completa.</p>}
       {orden.estado === 'ANULADA' && <p className="leyenda">Esta orden está anulada y no admite recepciones.</p>}
@@ -74,16 +87,16 @@ export default function DetalleOrden() {
   const { state } = useLocation()
   const { datos, cargando, error, sinPermiso, recargar } = useDatos(() => verOrden(ordenId), [ordenId])
 
-  if (sinPermiso) return <div className="contenido"><EstadoSinPermiso /></div>
+  if (sinPermiso) return <div className="contenido seccion-compras"><EstadoSinPermiso /></div>
   if (error?.estado === 404) {
     return (
-      <div className="contenido">
+      <div className="contenido seccion-compras">
         <EstadoVacio titulo="Esa orden no existe" detalle="Quizá el enlace está mal escrito." accion={volver} />
       </div>
     )
   }
-  if (error) return <div className="contenido"><EstadoError error={error} alReintentar={recargar} /></div>
-  if (cargando && !datos) return <div className="contenido"><EstadoCarga mensaje="Cargando orden…" /></div>
+  if (error) return <div className="contenido seccion-compras"><EstadoError error={error} alReintentar={recargar} /></div>
+  if (cargando && !datos) return <div className="contenido seccion-compras"><EstadoCarga mensaje="Cargando orden…" /></div>
 
   return <Orden key={datos.ordenId} inicial={datos} creada={state?.creada} />
 }

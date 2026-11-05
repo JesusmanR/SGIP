@@ -15,5 +15,16 @@ export function InsigniaEstado({ estado }) {
   return <span className={`insignia estado-${String(estado).toLowerCase()}`}>{nombreDeEstado(estado)}</span>
 }
 
-/** Un importe que llegó del servidor, en pesos. */
-export const pesos = (valor) => PESOS.format(Number(valor))
+const CON_CENTAVOS = new Intl.NumberFormat('es-CO', {
+  style: 'currency', currency: 'COP', minimumFractionDigits: 2, maximumFractionDigits: 2,
+})
+
+/**
+ * Un importe de compras, en pesos. El costo de una compra admite centavos
+ * (el servidor guarda dos decimales), así que uno entero se escribe sin
+ * decimales y uno con centavos los conserva en lugar de redondearlos.
+ */
+export function pesos(valor) {
+  const n = Number(valor)
+  return Number.isInteger(n) ? PESOS.format(n) : CON_CENTAVOS.format(n)
+}
