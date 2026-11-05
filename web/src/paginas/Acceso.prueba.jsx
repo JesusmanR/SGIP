@@ -99,11 +99,17 @@ describe('pantalla de acceso', () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: false,
       status: 401,
-      json: async () => ({ detail: 'El correo o la contraseña no son correctos.' }),
+      json: async () => ({
+        detail: 'El correo o la contraseña no son correctos. Si te equivocas varias veces, '
+          + 'la cuenta se bloquea durante 15 minutos.',
+      }),
     })
     await entrar()
     const aviso = await screen.findByRole('alert')
+    // El servidor dice siempre cuánto dura el bloqueo (ADR-0028): la pantalla
+    // muestra su texto tal cual, para que quien no entra sepa que esperar sirve.
     expect(aviso).toHaveTextContent('El correo o la contraseña no son correctos.')
+    expect(aviso).toHaveTextContent('se bloquea durante 15 minutos')
     expect(aviso.textContent).not.toMatch(/sesión expiró/i)
   })
 

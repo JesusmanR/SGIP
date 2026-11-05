@@ -11,7 +11,8 @@
  *   MON-001  gravado en las dos, con margen sobre el precio de venta
  *
  * Las columnas de margen y precio escrito son de la V36: se dedujeron de
- * las mismas cifras, no se volvieron a pedir a la base. Las tres venden
+ * las mismas cifras, no se volvieron a pedir a la base. `version` es la de
+ * la ficha del producto (I1); aquí vale 3 en las tres, sin más significado. Las tres venden
  * por porcentaje; el caso del precio escrito lo arma cada prueba.
  */
 export const PC = {
@@ -29,6 +30,7 @@ export const PC = {
   cruzaUmbralEnCredito: 1, imagenPrincipalId: null, tieneImagen: 0,
   margenContado: 20, margenCredito: 25, precioFijoContado: null, precioFijoCredito: null,
   porcentajeContado: 20, porcentajeCredito: 25,
+  version: 3,
 }
 
 export const CEL = {
@@ -45,6 +47,7 @@ export const CEL = {
   cruzaUmbralEnCredito: 0, imagenPrincipalId: null, tieneImagen: 0,
   margenContado: 20, margenCredito: 25, precioFijoContado: null, precioFijoCredito: null,
   porcentajeContado: 20, porcentajeCredito: 25,
+  version: 3,
 }
 
 export const MON = {
@@ -61,6 +64,7 @@ export const MON = {
   cruzaUmbralEnCredito: 0, imagenPrincipalId: null, tieneImagen: 0,
   margenContado: 25, margenCredito: 30, precioFijoContado: null, precioFijoCredito: null,
   porcentajeContado: 25, porcentajeCredito: 30,
+  version: 3,
 }
 
 export const CATEGORIAS = [

@@ -397,6 +397,24 @@ describe('catálogo de productos', () => {
     })
   })
 
+  it('tras guardar una edición, la fila guarda la versión nueva y la siguiente edición la manda', async () => {
+    const teclado = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    api.editarProducto.mockResolvedValue({ ...PC, nombre: 'Portátil editado', version: 4 })
+    montar()
+    await conFilas()
+
+    await teclado.click(within(fila(screen, 'PC-001')).getByRole('button', { name: /editar/i }))
+    await teclado.click(screen.getByRole('button', { name: /guardar/i }))
+    await waitFor(() => expect(api.editarProducto).toHaveBeenCalledTimes(1))
+    expect(api.editarProducto.mock.calls[0][1].version).toBe(3)
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+
+    await teclado.click(within(fila(screen, 'PC-001')).getByRole('button', { name: /editar/i }))
+    await teclado.click(screen.getByRole('button', { name: /guardar/i }))
+    await waitFor(() => expect(api.editarProducto).toHaveBeenCalledTimes(2))
+    expect(api.editarProducto.mock.calls[1][1].version).toBe(4)
+  })
+
   it('un fallo del servidor se dice, no se queda en una tabla vacía', async () => {
     api.catalogo.mockRejectedValue(new Error('El servidor no respondió.'))
     montar()

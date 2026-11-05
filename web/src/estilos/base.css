@@ -42,6 +42,8 @@ a      { color: var(--acento); }
    Mist son casi el mismo gris en escala de grises (ADR-0009). */
 .aviso { border-radius: 8px; padding: .7rem .9rem; font-size: .9rem; margin-bottom: 1rem; }
 .aviso.error { background: var(--peligro-fondo); color: var(--peligro); }
+/* La salida que ofrece un aviso (p. ej. traer los datos actuales): bajo el texto. */
+.aviso .aviso-accion { margin-top: .6rem; }
 /* El aviso de un rechazo recibe el foco por código: que se vea dónde quedó. */
 .aviso[tabindex="-1"]:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }
 
