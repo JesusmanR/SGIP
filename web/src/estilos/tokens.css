@@ -9,32 +9,35 @@
    y elegir uno a ojo rompe ese cálculo sin que se note en pantalla.
 
    Decisiones en ../../../docs/decisiones/ADR-0009-sistema-de-diseno.md
+   y, para el acento morado, ADR-0026-el-acento-pasa-a-morado.md
    ===================================================================== */
 
 :root {
   /* ── Superficie ─────────────────────────────────────────────────── */
-  --lienzo:          #F4F7F6;
+  --lienzo:          #F7F7F9;
   --tarjeta:         #FFFFFF;
-  --chrome:          #203959;   /* barra lateral y cabecera */
-  --chrome-activo:   #2C4A66;
+  --chrome:          #2B2250;   /* barra lateral y cabecera */
+  --chrome-activo:   #3D3270;
 
   /* ── Acento ─────────────────────────────────────────────────────── */
-  --acento:          #15707F;
-  --acento-claro:    #5EB6C6;
-  --acento-sutil:    #E3EFF1;   /* halo de foco */
+  --acento:          #6C54DF;
+  --acento-claro:    #9B88F5;
+  --acento-sutil:    #F2EFFF;   /* halo de foco y fondo de la zona de arrastre */
+  --sobre-acento:    #FFFFFF;   /* texto sobre acento, chrome y peligro */
+  --velo:            rgba(30, 27, 46, .45);   /* fondo tras un diálogo */
 
   /* ── Texto ──────────────────────────────────────────────────────── */
-  --tinta:           #16283E;   /* texto principal */
-  --tinta-2:         #416772;   /* etiquetas */
-  --tinta-3:         #5C6866;   /* auxiliar, solo lectura */
+  --tinta:           #1E1B2E;   /* texto principal */
+  --tinta-2:         #4A4270;   /* etiquetas */
+  --tinta-3:         #625C74;   /* auxiliar, solo lectura */
 
   /* ── Línea ──────────────────────────────────────────────────────── */
-  --borde:           #D5DEDB;   /* separación entre superficies */
-  --borde-control:   #839492;   /* perímetro de un control: exige 3:1 */
+  --borde:           #DEDCE6;   /* separación entre superficies */
+  --borde-control:   #8A869A;   /* perímetro de un control: exige 3:1 */
 
   /* ── Neutros de marca ───────────────────────────────────────────── */
-  --salvia:          #96ADA5;
-  --bruma:           #ABB7B3;   /* control deshabilitado */
+  --salvia:          #A39DB8;
+  --bruma:           #B8B4C6;   /* control deshabilitado */
 
   /* ── Estado ─────────────────────────────────────────────────────────
      Cada estado es un par: el color del texto y el de su fondo. Usarlos

@@ -13,6 +13,8 @@ body {
 
 button { font-family: inherit; cursor: pointer; }
 input  { font-family: inherit; }
+/* Los enlaces de texto toman el acento; sin esto salen en el azul del navegador. */
+a      { color: var(--acento); }
 
 /* ── Controles ─────────────────────────────────────────────────────── */
 .campo { display: block; margin-bottom: 1rem; }
@@ -26,7 +28,7 @@ input  { font-family: inherit; }
 
 .boton {
   padding: .65rem 1.1rem; font-size: .95rem; font-weight: 600;
-  border: 0; border-radius: 6px; background: var(--acento); color: #fff;
+  border: 0; border-radius: 6px; background: var(--acento); color: var(--sobre-acento);
 }
 .boton:disabled { background: var(--bruma); cursor: not-allowed; }
 .boton.secundario { background: var(--tarjeta); color: var(--tinta); border: 1px solid var(--borde-control); }
@@ -53,7 +55,7 @@ input  { font-family: inherit; }
 
 .barra {
   display: flex; align-items: center; gap: 1rem;
-  background: var(--chrome); color: #fff; padding: .75rem 1.25rem;
+  background: var(--chrome); color: var(--sobre-acento); padding: .75rem 1.25rem;
   /* Envuelve en pantalla estrecha. Sin esto, cada enlace que se añade
      empuja el botón de salir fuera del borde y queda inalcanzable: el
      enlace al panel lo destapó —medido con Playwright a 390px— pero el
@@ -133,7 +135,7 @@ td.numero, th.numero { text-align: right; font-variant-numeric: tabular-nums; }
 .casilla-imagen:disabled { cursor: default; border-style: solid; }
 .casilla-imagen:focus-visible { outline: 3px solid var(--acento-sutil); border-color: var(--acento); }
 
-.barra a { color: #fff; text-decoration: none; opacity: .85; }
+.barra a { color: var(--sobre-acento); text-decoration: none; opacity: .85; }
 .barra a:hover, .barra a:focus-visible { opacity: 1; text-decoration: underline; }
 
 .fila-logo { display: flex; gap: 1.25rem; align-items: center; }
@@ -142,7 +144,7 @@ td.numero, th.numero { text-align: right; font-variant-numeric: tabular-nums; }
 /* ── Galería de imágenes ───────────────────────────────────────────── */
 .velo {
   position: fixed; inset: 0; z-index: 10; padding: 1rem;
-  background: rgba(22, 40, 62, .45);
+  background: var(--velo);
   display: grid; place-items: center;
 }
 .panel { max-width: 640px; width: 100%; max-height: 90vh; overflow: auto; }
@@ -162,6 +164,7 @@ td.numero, th.numero { text-align: right; font-variant-numeric: tabular-nums; }
 .casilla-imagen.grande { width: 120px; height: 120px; }
 
 .boton.menudo { padding: .3rem .6rem; font-size: .78rem; width: 100%; }
+
 
 .enlace {
   background: none; border: 0; padding: 0; font: inherit;
@@ -254,7 +257,7 @@ td.acciones .boton { margin-left: .4rem; }
 .pasos .hecho  { color: var(--exito); }
 .pasos .hecho  .pasos-numero { background: var(--exito-fondo); color: var(--exito); }
 .pasos .actual { color: var(--tinta); font-weight: 600; }
-.pasos .actual .pasos-numero { background: var(--acento); color: #fff; }
+.pasos .actual .pasos-numero { background: var(--acento); color: var(--sobre-acento); }
 /* El estado va al final de la fila y sin raya detrás: no es un paso
    más, es en cuál está la carga. */
 .pasos-estado {
@@ -303,7 +306,7 @@ td.numero { white-space: nowrap; }
 }
 /* Aplicar al catálogo cambia todos los precios de venta de la empresa.
    El botón lo dice con su color. */
-.boton.peligro { background: var(--peligro); color: #fff; }
+.boton.peligro { background: var(--peligro); color: var(--sobre-acento); }
 .boton:disabled { background: var(--bruma); cursor: not-allowed; }
 
 /* La zona de arrastre de la P-07. La etiqueta envuelve un control de
