@@ -205,8 +205,10 @@ dirían cuál mandó. Guardar lo mismo no escribe nada.
   Sigue siendo lento: 2 segundos por página a esa escala, y 1 por producto. Las dos
   vistas de reglas se materializan enteras para todas las empresas en cada consulta.
   Esa forma viene de antes de la V36, pero las reglas propias le dan más filas que
-  materializar: sin ellas, la misma página tarda 0,8 segundos. Queda pendiente, y no
-  se cachea: un precio debe verse en cuanto cambia.
+  materializar: en otra carga, con dos empresas y 10 reglas generales, una página tardó
+  0,8 segundos. Antes del punto de pago hay que medirlo otra vez y resolverlo: leer un
+  código de barras no puede tardar un segundo. No se cachea: un precio debe verse en
+  cuanto cambia.
 - El `_emp` de CI sube de 46 a 47. `database/aplicar.sh` se queda en 46 porque
   se detiene en la V31: su número es el de la V31, y el de CI es el del esquema
   final.
