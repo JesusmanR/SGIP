@@ -535,8 +535,30 @@ class PrecioDeProductoTest {
                     .param("c", new BigDecimal(costo)).param("e", empresaId).param("p", id).update();
         }
 
-        assertEquals(2, precios.alcance(null, null),
-                "el que tiene regla propia en las dos formas no cuenta; el de una sola, sí");
+        // Una regla propia vencida o que aún no empieza no decide hoy: la general sí
+        // los alcanza, en las dos formas de pago. Sin esto, la prueba pasaría aunque
+        // el conteo ignorara las fechas.
+        Integer conReglaVencida = alta("1000.00", porcentaje("5"), null, 0);
+        Integer conReglaFutura = alta("1000.00", porcentaje("5"), null, 0);
+        jdbc.sql("""
+                UPDATE reglas_margen
+                   SET vigente_desde = CURDATE() - INTERVAL 5 DAY,
+                       vigente_hasta = CURDATE() - INTERVAL 1 DAY
+                 WHERE empresa_id = :e AND producto_id = :p
+                """).param("e", empresaId).param("p", conReglaVencida).update();
+        jdbc.sql("""
+                UPDATE reglas_margen
+                   SET vigente_desde = CURDATE() + INTERVAL 3 DAY
+                 WHERE empresa_id = :e AND producto_id = :p
+                """).param("e", empresaId).param("p", conReglaFutura).update();
+        assertEquals(2, reglasPropias(conReglaVencida, "CONTADO") + reglasPropias(conReglaVencida, "CREDITO"),
+                "el producto vencido tiene su regla propia en las dos formas");
+        assertEquals(2, reglasPropias(conReglaFutura, "CONTADO") + reglasPropias(conReglaFutura, "CREDITO"),
+                "el producto con regla futura la tiene en las dos formas");
+
+        assertEquals(4, precios.alcance(null, null),
+                "el que tiene regla propia vigente en las dos formas no cuenta; el de una sola, "
+                        + "el de regla vencida y el de regla futura, sí");
 
         List<CruceDeUmbral> contado = precios.simular(new SolicitudReglaMargen(null, null, "CONTADO",
                 "SOBRE_COSTO", new BigDecimal("1.2000"), LocalDate.now(), null));

@@ -790,6 +790,25 @@ describe('crear un producto', () => {
     expect(campo('Nombre')).toHaveValue('Mouse óptico')
   })
 
+  it('el rechazo del servidor se trae a la vista y recibe el foco: el botón queda lejos del aviso', async () => {
+    // jsdom no tiene scrollIntoView; se pone aquí para comprobar que se pide.
+    const desplazar = vi.fn()
+    Element.prototype.scrollIntoView = desplazar
+    try {
+      const teclado = userEvent.setup()
+      api.crearProducto.mockRejectedValue(new Error('Ya existe un producto con el código MOU-1.'))
+      montarAlta()
+      await llenarLoObligatorio(teclado)
+      await teclado.click(crear())
+      const aviso = await screen.findByRole('alert')
+      await waitFor(() => expect(aviso).toHaveFocus())
+      expect(desplazar).toHaveBeenCalled()
+      expect(campo('Nombre')).toHaveValue('Mouse óptico')
+    } finally {
+      delete Element.prototype.scrollIntoView
+    }
+  })
+
   it('al editar no hay existencia inicial, ni se envía', async () => {
     const teclado = userEvent.setup()
     api.editarProducto.mockResolvedValue(PC)

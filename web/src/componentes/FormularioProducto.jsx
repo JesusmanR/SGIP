@@ -277,10 +277,19 @@ export default function FormularioProducto({
   // muestran antes, y el foco salta al primero cada vez que se intenta.
   const [intentos, setIntentos] = useState(0)
   const formulario = useRef(null)
+  const aviso = useRef(null)
 
   useEffect(() => {
     if (intentos > 0) formulario.current?.querySelector('[aria-invalid="true"]')?.focus()
   }, [intentos])
+
+  // El aviso va arriba y el botón abajo, en un panel que se desplaza: sin esto un
+  // rechazo del servidor (código repetido) podría quedar fuera de la vista.
+  useEffect(() => {
+    if (!error) return
+    aviso.current?.focus()
+    aviso.current?.scrollIntoView?.({ block: 'nearest' })
+  }, [error])
 
   const intentado = intentos > 0
   const motivosCampos = esAlta
@@ -367,7 +376,7 @@ export default function FormularioProducto({
           <button type="button" className="boton secundario" onClick={onCerrar}>Cancelar</button>
         </div>
 
-        {error && <div className="aviso error" role="alert">{error}</div>}
+        {error && <div className="aviso error" role="alert" tabIndex={-1} ref={aviso}>{error}</div>}
 
         <Campo etiqueta="Nombre" motivo={motivo('nombre')}>
           <input value={datos.nombre} onChange={cambiar('nombre')} required maxLength={160} />
