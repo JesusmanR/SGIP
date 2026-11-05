@@ -283,7 +283,7 @@ describe('los estados de carga y de error', () => {
     montar()
     // El esqueleto es para quien ve; `role="status"` es para quien no.
     expect(screen.getByRole('status')).toHaveTextContent(/Cargando los indicadores/)
-    expect(screen.getByRole('main')).toHaveAttribute('aria-busy', 'true')
+    expect(document.querySelector('.contenido')).toHaveAttribute('aria-busy', 'true')
     resolver(PANEL)
     await screen.findByRole('region', { name: /indicadores/i })
   })

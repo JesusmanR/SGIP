@@ -57,6 +57,8 @@ export function inicioSegunRol(sesion = leerSesion()) {
   // pantalla de siempre evita que lo primero que vea sea un muro. La
   // bandera llega en la respuesta del ingreso, que se guarda tal cual.
   if (sesion?.debeCambiarClave) return '/cambiar-clave'
+  // SUPER_ADMIN no pertenece a una empresa: el catálogo no le sirve datos.
+  if (sesion?.rol === 'SUPER_ADMIN') return '/plataforma/empresas'
   return sesion?.rol === 'ADMINISTRADOR' ? '/panel' : '/catalogo'
 }
 

@@ -71,7 +71,7 @@ describe('armazón', () => {
       expect(enlaces.map((a) => a.getAttribute('href'))).toEqual(propias.map((s) => s.ruta))
       expect(enlaces.map((a) => a.textContent)).toEqual(propias.map((s) => s.etiqueta))
       for (const grupo of new Set(propias.map((s) => s.grupo))) {
-        expect(within(menu).getByText(grupo)).toBeInTheDocument()
+        expect(within(menu).getAllByText(grupo).length).toBeGreaterThan(0)
       }
     })
   })

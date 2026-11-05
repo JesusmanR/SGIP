@@ -69,3 +69,16 @@ segunda implementación de la regla que divergirá de la primera.
 El flujo de integración continua tiene el trabajo de compilación
 desactivado con `if: false` hasta que exista `package.json` con código
 real.
+
+## Añadir una sección
+
+La base común (`feature/web-base`) deja cada sección con su propio sitio. Quien construye una sección solo escribe en **sus** archivos:
+
+- `src/paginas/<seccion>/` (su `index.jsx` es el único punto de entrada; las subrutas se declaran dentro, con su propio `<Routes>`).
+- `src/servicios/api/<seccion>.js` (sus llamadas, con `pedir` de `servicios/api.js`).
+- `src/estilos/<seccion>.css` (importado desde su `index.jsx`; el color solo sale de `tokens.css`).
+- Sus pruebas, junto a sus archivos.
+
+**No se tocan** `App.jsx`, `secciones.js`, `componentes/Armazon.jsx`, `componentes/MenuLateral.jsx`, `estilos/base.css`, `estilos/comun.css`, `estilos/armazon.css`, `servicios/api.js` ni `componentes/comun/`. Si una sección necesita algo de ahí, se informa en vez de cambiarlo.
+
+Para el encabezado, las tablas que pasan a tarjetas, los estados (carga, vacío, error, sin permiso), el aviso y la carga de datos, usa `componentes/comun/` y `hooks/useDatos.js`.

@@ -74,7 +74,7 @@ export async function imagenAutenticada(ruta) {
   return URL.createObjectURL(await respuesta.blob())
 }
 
-async function pedir(ruta, opciones = {}) {
+export async function pedir(ruta, opciones = {}) {
   const sesion = leerSesion()
   const cabeceras = { ...opciones.headers }
   if (opciones.body !== undefined) cabeceras['Content-Type'] = 'application/json'
