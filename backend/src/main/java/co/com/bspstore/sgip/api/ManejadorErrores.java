@@ -284,9 +284,11 @@ public class ManejadorErrores {
     }
 
     /**
-     * Alguien guardó el producto después de que esta persona lo abriera
-     * (o se aplicó una carga de precios). 409: la petición es válida y es
-     * el estado actual lo que impide atenderla. El mensaje de la
+     * Alguien guardó el producto después de que esta persona abriera el
+     * formulario (otra edición, o se aplicó una carga de precios): la versión
+     * que trae la edición ya no es la del producto. También salta si dos
+     * escrituras se pisan dentro de una misma transacción. 409: la petición es
+     * válida y es el estado actual lo que impide atenderla. El mensaje de la
      * excepción nombra la clase y el identificador, así que no se
      * reenvía; el cliente recibe un texto fijo.
      */

@@ -301,8 +301,11 @@ public class RepositorioImportacion {
      * transacción.
      *
      * Suma uno a {@code version} porque esta sentencia cambia el costo por
-     * fuera de JPA. Sin eso, una edición abierta antes de aplicar la carga
-     * guardaría después con el costo viejo y lo desharía sin avisar.
+     * fuera de JPA. Es lo que permite que una edición abierta antes de aplicar la
+     * carga se rechace: el formulario devuelve la versión que traía al abrirse
+     * y {@code ServicioProducto.actualizar} la compara con la de ahora (I1). La
+     * versión sola no bastaba, porque {@code @Version} solo protege los
+     * milisegundos entre la lectura y la escritura de una misma transacción.
      *
      * El enlace va por empresa y producto, que es la pareja que la V28
      * convirtió en clave: una carga no puede alcanzar el catálogo de

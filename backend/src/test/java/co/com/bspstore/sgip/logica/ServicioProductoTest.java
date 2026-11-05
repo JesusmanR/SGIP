@@ -351,7 +351,7 @@ class ServicioProductoTest {
         Producto guardado = productoGuardado();
         when(productos.findByEmpresaIdAndId(3, 11)).thenReturn(Optional.of(guardado));
         referenciasPropias();
-        when(productos.save(any())).thenAnswer(i -> i.getArgument(0));
+        when(productos.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
 
         servicio.actualizar(11, edicion("ARZ-500", "ARZ-500"));
 
@@ -403,7 +403,7 @@ class ServicioProductoTest {
         // guardar sin tocar el código fallaría contra sí mismo.
         when(productos.existsByEmpresaIdAndCodigoAndIdNot(3, "ARZ-500", 11)).thenReturn(false);
         when(productos.existsByEmpresaIdAndSkuAndIdNot(3, "ARZ-500", 11)).thenReturn(false);
-        when(productos.save(any())).thenAnswer(i -> i.getArgument(0));
+        when(productos.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
 
         assertTrue(servicio.actualizar(11, edicion("ARZ-500", "ARZ-500")).isPresent());
     }
@@ -426,12 +426,89 @@ class ServicioProductoTest {
         Producto guardado = productoGuardado();
         when(productos.findByEmpresaIdAndId(3, 11)).thenReturn(Optional.of(guardado));
         referenciasPropias();
-        when(productos.save(any())).thenAnswer(i -> i.getArgument(0));
+        when(productos.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
 
         servicio.actualizar(11, edicion("  arz-700  ", "   "));
 
         assertEquals("ARZ-700", guardado.getCodigo());
         assertEquals("ARZ-700", guardado.getSku());
+    }
+
+    // ── Datos viejos (I1) ────────────────────────────────────────────
+
+    private SolicitudEdicionProducto edicionConVersion(Integer version) {
+        return new SolicitudEdicionProducto(4, 9, "ARZ-500", "ARZ-500", "7701234567890",
+                "Arroz Diana", "500 g", null, new BigDecimal("3400.00"), 20, null, null, null,
+                version);
+    }
+
+    private Producto productoEnLaVersion(int version) {
+        Producto p = productoGuardado();
+        ReflectionTestUtils.setField(p, "version", version);
+        return p;
+    }
+
+    /**
+     * La edición lleva la versión que traía el formulario al abrirse. Si el
+     * producto ya cambió (una carga de precios, otra edición) se rechaza antes de
+     * escribir nada: guardar lo de antes deshacía el cambio sin aviso.
+     */
+    @Test
+    void editarConLaVersionDeAntesDeUnCambioSeRechazaSinEscribirNada() {
+        comoEmpresa(3);
+        when(productos.findByEmpresaIdAndId(3, 11)).thenReturn(Optional.of(productoEnLaVersion(3)));
+
+        assertThrows(org.springframework.orm.ObjectOptimisticLockingFailureException.class,
+                () -> servicio.actualizar(11, edicionConVersion(2)));
+
+        verify(productos, never()).save(any());
+        verify(productos, never()).saveAndFlush(any());
+        verifyNoInteractions(precios);
+    }
+
+    @Test
+    void unaVersionDeUnProductoMasNuevoQueElDelFormularioTambienSeRechaza() {
+        comoEmpresa(3);
+        when(productos.findByEmpresaIdAndId(3, 11)).thenReturn(Optional.of(productoEnLaVersion(3)));
+
+        assertThrows(org.springframework.orm.ObjectOptimisticLockingFailureException.class,
+                () -> servicio.actualizar(11, edicionConVersion(4)));
+    }
+
+    @Test
+    void editarConLaVersionActualGuarda() {
+        comoEmpresa(3);
+        when(productos.findByEmpresaIdAndId(3, 11)).thenReturn(Optional.of(productoEnLaVersion(3)));
+        referenciasPropias();
+        when(productos.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
+
+        assertTrue(servicio.actualizar(11, edicionConVersion(3)).isPresent());
+
+        verify(productos).saveAndFlush(any());
+    }
+
+    // ── Cambio de categoría (M3) ─────────────────────────────────────
+
+    /**
+     * Los precios se escriben leyendo la vista, que junta el producto con la
+     * regla de su categoría. Con el cambio sin vaciar a la base, la vista aún ve
+     * la categoría vieja.
+     */
+    @Test
+    void elCambioSeVaciaALaBaseAntesDeEscribirLosPrecios() {
+        comoEmpresa(3);
+        when(productos.findByEmpresaIdAndId(3, 11)).thenReturn(Optional.of(productoGuardado()));
+        referenciasPropias();
+        when(productos.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
+        var conPrecio = new SolicitudEdicionProducto(4, 9, "ARZ-500", "ARZ-500", null,
+                "Arroz Diana", "500 g", null, new BigDecimal("3400.00"), 20,
+                new SolicitudPrecio(new BigDecimal("20"), null), null, null, 0);
+
+        servicio.actualizar(11, conPrecio);
+
+        InOrder orden = inOrder(productos, precios);
+        orden.verify(productos).saveAndFlush(any());
+        orden.verify(precios).bloquearProducto(3, 11);
     }
 
     // ── Un código de barras por empresa (V33) ───────────────────────
@@ -485,7 +562,7 @@ class ServicioProductoTest {
                 .thenReturn(true);
         when(productos.existsByEmpresaIdAndCodigoBarrasAndIdNot(3, "7701234567890", 11))
                 .thenReturn(false);
-        when(productos.save(any())).thenAnswer(i -> i.getArgument(0));
+        when(productos.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
 
         assertTrue(servicio.actualizar(11, edicionConBarras("7701234567890")).isPresent());
         verify(productos).existsByEmpresaIdAndCodigoBarrasAndIdNot(3, "7701234567890", 11);
@@ -513,7 +590,7 @@ class ServicioProductoTest {
         Producto guardado = productoGuardado();
         when(productos.findByEmpresaIdAndId(3, 11)).thenReturn(Optional.of(guardado));
         referenciasPropias();
-        when(productos.save(any())).thenAnswer(i -> i.getArgument(0));
+        when(productos.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
 
         servicio.actualizar(11, edicionConBarras(""));
 
@@ -543,7 +620,7 @@ class ServicioProductoTest {
         Producto guardado = productoGuardado();
         when(productos.findByEmpresaIdAndId(3, 11)).thenReturn(Optional.of(guardado));
         referenciasPropias();
-        when(productos.save(any())).thenAnswer(i -> i.getArgument(0));
+        when(productos.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
 
         servicio.actualizar(11, edicionConBarras(" 7709999999999 "));
 
@@ -594,7 +671,7 @@ class ServicioProductoTest {
         ReflectionTestUtils.setField(guardado, "id", 11);
         when(productos.findByEmpresaIdAndId(3, 11)).thenReturn(Optional.of(guardado));
         referenciasPropias();
-        when(productos.save(any())).thenAnswer(i -> i.getArgument(0));
+        when(productos.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
     }
 
     private void altaRechazada(SolicitudProducto solicitud, String pedazoDelMotivo) {

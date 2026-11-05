@@ -215,4 +215,15 @@ dirían cuál mandó. Guardar lo mismo no escribe nada.
 - El `_emp` de CI sube de 46 a 47. `database/aplicar.sh` se queda en 46 porque
   se detiene en la V31: su número es el de la V31, y el de CI es el del esquema
   final.
+- **Nota posterior (revisión final, I1).** El costo vive en la ficha, y una edición con el
+  formulario abierto antes de una carga de precios devolvía el costo viejo sin avisar:
+  `@Version` solo protege los milisegundos de una misma transacción, no el tiempo que el
+  formulario estuvo abierto. Ahora `ProductoEnCatalogo` expone `version` (no
+  `ProductoParaVenta`; la lee `ConsultaCatalogo` de `productos` por clave primaria con una
+  subconsulta, sin tocar el plan de las vistas), la edición la devuelve en
+  `SolicitudEdicionProducto.version` (obligatoria: sin ella, 400) y `ServicioProducto.actualizar`
+  responde el 409 de siempre si ya no es la del producto. Un cambio solo de precio sigue sin
+  subirla, a propósito: la regla es otra fila. El comentario de la cabecera de la V32 prometía
+  esa comprobación y no existía; la V32 no se edita porque ya está aplicada, y esta nota es
+  la corrección.
 - Los diagramas de `docs/diagramas/fuente` no se actualizaron.
