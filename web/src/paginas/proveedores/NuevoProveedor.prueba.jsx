@@ -44,7 +44,7 @@ describe('crear proveedor', () => {
     await guardar()
     expect(crearProveedor).not.toHaveBeenCalled()
     expect(campo(/correo/i)).toHaveAccessibleDescription(/correo/i)
-    expect(campo(/plazo de pago/i)).toHaveAccessibleDescription(/cero o más/i)
+    expect(campo(/plazo de pago/i)).toHaveAccessibleDescription(/de 0 a 365/i)
   })
 
   it('con datos válidos envía lo escrito (vacíos como nulo, plazo como número) y va al detalle', async () => {

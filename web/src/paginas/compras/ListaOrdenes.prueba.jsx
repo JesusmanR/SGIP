@@ -8,7 +8,7 @@ import { ORDEN, montar } from './ayuda.jsx'
 
 vi.mock('../../servicios/api/compras.js', () => ({
   listarOrdenes: vi.fn(), verOrden: vi.fn(), crearOrden: vi.fn(),
-  recibirOrden: vi.fn(), buscarProductos: vi.fn(),
+  recibirOrden: vi.fn(), buscarProductos: vi.fn(), PRODUCTOS_POR_BUSQUEDA: 8,
 }))
 vi.mock('../../servicios/api/proveedores.js', () => ({ listarProveedores: vi.fn(async () => []) }))
 

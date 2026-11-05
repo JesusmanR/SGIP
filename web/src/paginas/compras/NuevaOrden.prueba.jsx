@@ -9,7 +9,7 @@ import { ORDEN, PRODUCTO_A, PRODUCTO_B, PROVEEDORES, montar } from './ayuda.jsx'
 
 vi.mock('../../servicios/api/compras.js', () => ({
   listarOrdenes: vi.fn(async () => []), verOrden: vi.fn(), crearOrden: vi.fn(),
-  recibirOrden: vi.fn(), buscarProductos: vi.fn(),
+  recibirOrden: vi.fn(), buscarProductos: vi.fn(), PRODUCTOS_POR_BUSQUEDA: 8,
 }))
 vi.mock('../../servicios/api/proveedores.js', () => ({ listarProveedores: vi.fn() }))
 
