@@ -59,6 +59,31 @@ describe('useDatos', () => {
     expect(result.current.cargando).toBe(false)
   })
 
+  it('al cambiar las dependencias los datos viejos desaparecen mientras llega lo nuevo', async () => {
+    const segunda = diferida()
+    const { result, rerender } = renderHook(
+      ({ id }) => useDatos(() => (id === 5 ? Promise.resolve('detalle 5') : segunda.promesa), [id]),
+      { initialProps: { id: 5 } },
+    )
+    await waitFor(() => expect(result.current.datos).toBe('detalle 5'))
+    rerender({ id: 6 })
+    expect(result.current.cargando).toBe(true)
+    expect(result.current.datos).toBeNull()
+    await act(async () => { segunda.resolver('detalle 6') })
+    expect(result.current.datos).toBe('detalle 6')
+  })
+
+  it('recargar sí conserva los datos mientras llegan los nuevos', async () => {
+    const segunda = diferida()
+    const cargar = vi.fn().mockResolvedValueOnce('a').mockReturnValueOnce(segunda.promesa)
+    const { result } = renderHook(() => useDatos(cargar, []))
+    await waitFor(() => expect(result.current.datos).toBe('a'))
+    act(() => result.current.recargar())
+    expect(result.current.cargando).toBe(true)
+    expect(result.current.datos).toBe('a')
+    await act(async () => { segunda.resolver('b') })
+  })
+
   it('un error viejo tampoco pisa los datos nuevos', async () => {
     const primera = diferida()
     const segunda = diferida()

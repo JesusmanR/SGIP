@@ -55,6 +55,22 @@ describe('armazón', () => {
     expect(screen.getAllByRole('main')).toHaveLength(1)
   })
 
+  it('si el contenido falla, el menú sigue y se ve el error', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    function Roto() { throw new Error('no cargó la sección') }
+    render(
+      <MemoryRouter>
+        <Routes>
+          <Route element={<Armazon />}>
+            <Route path="*" element={<Roto />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    )
+    expect(screen.getByRole('alert')).toHaveTextContent('no cargó la sección')
+    expect(screen.getByRole('navigation', { name: /principal/i })).toBeInTheDocument()
+  })
+
   it('muestra el nombre real de quien entró', () => {
     montar()
     expect(screen.getByText('Jesús Manuel')).toBeInTheDocument()

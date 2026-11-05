@@ -93,6 +93,34 @@ describe('guardas', () => {
     expect(await screen.findByText('pagina:/compras')).toBeInTheDocument()
   })
 
+  it('un rol fuera de la tabla termina en /acceso con la sesión borrada, sin bucle', async () => {
+    guardarSesion({ token: 't', nombre: 'N', rol: 'FANTASMA' })
+    ir('/panel')
+    expect(await screen.findByText('pagina:/acceso')).toBeInTheDocument()
+    expect(sessionStorage.getItem('sgip.sesion')).toBeNull()
+  })
+
+  it('un rol fuera de la tabla en una ruta desconocida también termina en /acceso', async () => {
+    guardarSesion({ token: 't', nombre: 'N', rol: 'FANTASMA' })
+    ir('/nada')
+    expect(await screen.findByText('pagina:/acceso')).toBeInTheDocument()
+    expect(sessionStorage.getItem('sgip.sesion')).toBeNull()
+  })
+
+  it('/COMPRAS no esquiva la guarda: el vendedor termina en su inicio', async () => {
+    guardarSesion({ token: 't', nombre: 'Luis', rol: 'VENDEDOR' })
+    ir('/COMPRAS')
+    expect(await screen.findByText('pagina:/catalogo')).toBeInTheDocument()
+    expect(screen.queryByText('pagina:/compras')).not.toBeInTheDocument()
+  })
+
+  it('/compras-x no es una sección: el administrador va a su inicio', async () => {
+    guardarSesion({ token: 't', nombre: 'Ana', rol: 'ADMINISTRADOR' })
+    ir('/compras-x')
+    expect(await screen.findByText('pagina:/panel')).toBeInTheDocument()
+    expect(screen.queryByText('pagina:/compras')).not.toBeInTheDocument()
+  })
+
   it('una ruta desconocida lleva al inicio del rol, o al acceso sin sesión', async () => {
     ir('/nada')
     expect(await screen.findByText('pagina:/acceso')).toBeInTheDocument()

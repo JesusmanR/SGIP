@@ -46,6 +46,23 @@ describe('TablaOTarjetas', () => {
     expect(within(tabla).getByRole('cell', { name: '$ 20' })).toBeInTheDocument()
   })
 
+  it('una columna numérica se alinea a la derecha con cifras tabulares', () => {
+    render(
+      <TablaOTarjetas
+        columnas={[
+          { clave: 'n', titulo: 'Nombre', principal: true },
+          { clave: 'c', titulo: 'Cantidad', numerica: true },
+        ]}
+        filas={[{ id: 1, n: 'Mouse', c: 3 }]}
+        claveFila={(f) => f.id}
+        etiqueta="Stock"
+      />,
+    )
+    expect(screen.getByRole('columnheader', { name: 'Cantidad' })).toHaveClass('numerica')
+    expect(screen.getByRole('cell', { name: '3' })).toHaveClass('numerica')
+    expect(screen.getByRole('rowheader', { name: 'Mouse' })).not.toHaveClass('numerica')
+  })
+
   it('cada dato lleva su etiqueta para la tarjeta de celular, solo por CSS', () => {
     montar()
     expect(screen.getByRole('cell', { name: '$ 10' })).toHaveAttribute('data-etiqueta', 'Precio')
@@ -105,5 +122,8 @@ describe('Aviso', () => {
     const aviso = screen.getByRole(rol)
     expect(aviso).toHaveTextContent('Pasó algo')
     expect(aviso).toHaveTextContent(rotulo)
+    // No reutiliza la clase global .aviso, que tiene otras reglas.
+    expect(aviso).toHaveClass(`aviso-estado--${tipo}`)
+    expect(aviso).not.toHaveClass('aviso')
   })
 })
