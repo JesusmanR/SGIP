@@ -48,6 +48,29 @@ describe('armazón', () => {
   })
   afterEach(() => vi.clearAllMocks())
 
+  it('un error en una sección no se queda al navegar a otra, y dentro de la sección no se pierde el estado', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    function Roto() {
+      throw new Error('falló el módulo')
+    }
+    render(
+      <MemoryRouter initialEntries={['/compras']}>
+        <Routes>
+          <Route element={<Armazon />}>
+            <Route path="/compras" element={<Roto />} />
+            <Route path="/inventario" element={<h1>Inventario listo</h1>} />
+            <Route path="*" element={<h1>Otra</h1>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    )
+    expect(screen.getByRole('alert')).toHaveTextContent('falló el módulo')
+    await userEvent.click(screen.getByRole('link', { name: 'Inventario' }))
+    expect(await screen.findByRole('heading', { name: 'Inventario listo' })).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    vi.restoreAllMocks()
+  })
+
   it('pone el contenido de la ruta dentro de un único main', () => {
     montar()
     const main = screen.getByRole('main')

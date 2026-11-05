@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -17,6 +18,17 @@ describe('ErrorBoundary', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('falló el módulo')
     await userEvent.click(screen.getByRole('button', { name: /reintentar/i }))
     expect(alReintentar).toHaveBeenCalledOnce()
+  })
+
+  it('conserva a los hijos sanos cuando cambia la clave de reinicio', () => {
+    function Contador() {
+      const [montajes] = useState(() => ++vecesMontado)
+      return <p>montajes {montajes}</p>
+    }
+    let vecesMontado = 0
+    const { rerender } = render(<ErrorBoundary reinicio="/compras"><Contador /></ErrorBoundary>)
+    rerender(<ErrorBoundary reinicio="/compras/ordenes/5"><Contador /></ErrorBoundary>)
+    expect(screen.getByText('montajes 1')).toBeInTheDocument()
   })
 
   it('sin error deja pasar a los hijos', () => {
