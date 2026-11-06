@@ -5,6 +5,7 @@ import EstadoError from '../../componentes/comun/EstadoError.jsx'
 import EstadoSinPermiso from '../../componentes/comun/EstadoSinPermiso.jsx'
 import { useDatos } from '../../hooks/useDatos.js'
 import { apiInventario } from '../../servicios/api/inventario.js'
+import { idValido } from './movimientos.js'
 import FlujoMovimiento from './FlujoMovimiento.jsx'
 import ProductoNoEncontrado from './ProductoNoEncontrado.jsx'
 
@@ -36,6 +37,15 @@ function Cargado({ tipo, productoId }) {
 export default function ConProductoInicial({ tipo }) {
   const [params] = useSearchParams()
   const productoId = params.get('producto')
-  if (!productoId) return <FlujoMovimiento tipo={tipo} />
+  if (productoId === null) return <FlujoMovimiento tipo={tipo} />
+  if (!idValido(productoId)) {
+    return (
+      <div className="contenido inventario">
+        <p className="volver"><Link to="/inventario">Volver a movimientos</Link></p>
+        <EncabezadoPagina titulo={tipo === 'ajuste' ? 'Ajustar existencia' : 'Registrar ingreso'} />
+        <ProductoNoEncontrado />
+      </div>
+    )
+  }
   return <Cargado key={productoId} tipo={tipo} productoId={productoId} />
 }

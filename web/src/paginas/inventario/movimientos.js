@@ -41,3 +41,8 @@ export const NOTA_SIN_BORRAR =
 
 /** Cuántos resultados pide la búsqueda de producto; es el tope de `buscarProductos`. */
 export const TOPE_BUSQUEDA = 10
+
+/** Un identificador de producto válido: entero positivo de hasta 9 cifras, sin ceros a la izquierda. */
+export function idValido(texto) {
+  return /^[1-9]\d{0,8}$/.test(texto ?? '')
+}

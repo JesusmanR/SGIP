@@ -58,7 +58,7 @@ function motivos(tipo, d) {
     producto: d.producto ? null : 'Elige el producto: búscalo por nombre o código.',
     documento: d.documento.trim().length > 60 ? 'El documento no puede pasar de 60 caracteres.' : null,
   }
-  const noEntero = !ENTERO.test(n) ? 'Escribe un número entero, sin decimales ni signos.' : null
+  const noEntero = !ENTERO.test(n) ? 'Escribe un número entero, sin puntos, comas ni signos.' : null
   const grande = n.length > 9 ? 'Ese número es demasiado grande.' : null
   if (tipo === 'ajuste') {
     m.numero = n === '' ? 'Escribe cuántas unidades cuentas ahora.' : noEntero ?? grande
@@ -105,6 +105,7 @@ export default function FlujoMovimiento({ tipo, productoInicial = null }) {
   const [enviando, setEnviando] = useState(false)
   const [error, setError] = useState(null)
   const [resultado, setResultado] = useState(null)
+  const [foco, setFoco] = useState(0)
   const formulario = useRef(null)
   const aviso = useRef(null)
   const titulo = useRef(null)
@@ -118,6 +119,12 @@ export default function FlujoMovimiento({ tipo, productoInicial = null }) {
       formulario.current?.querySelector('[aria-invalid="true"]')?.focus()
     }
   }, [intentos, paso])
+
+  // Al volver al formulario, al elegir o cambiar de producto, el botón pulsado
+  // desaparece: el foco va al primer campo del paso nuevo.
+  useEffect(() => {
+    if (foco > 0 && paso === 'formulario') formulario.current?.querySelector('input')?.focus()
+  }, [foco, paso])
 
   useEffect(() => {
     if (error) aviso.current?.focus()
@@ -178,6 +185,7 @@ export default function FlujoMovimiento({ tipo, productoInicial = null }) {
     setResultado(null)
     setError(null)
     setPaso('formulario')
+    setFoco((n) => n + 1)
   }
 
   return (
@@ -201,7 +209,7 @@ export default function FlujoMovimiento({ tipo, productoInicial = null }) {
               <button
                 type="button"
                 className="boton secundario"
-                onClick={() => setDatos((d) => ({ ...d, producto: null }))}
+                onClick={() => { setDatos((d) => ({ ...d, producto: null })); setFoco((n) => n + 1) }}
               >
                 Cambiar producto
               </button>
@@ -210,7 +218,7 @@ export default function FlujoMovimiento({ tipo, productoInicial = null }) {
             <ElegirProducto
               etiqueta="Producto"
               error={ver('producto')}
-              alElegir={(p) => setDatos((d) => ({ ...d, producto: p }))}
+              alElegir={(p) => { setDatos((d) => ({ ...d, producto: p })); setFoco((n) => n + 1) }}
             />
           )}
 
@@ -280,7 +288,7 @@ export default function FlujoMovimiento({ tipo, productoInicial = null }) {
                 {enviando ? 'Registrando…' : cfg.confirmar}
               </button>
             )}
-            <button type="button" className="boton secundario" disabled={enviando} onClick={() => setPaso('formulario')}>
+            <button type="button" className="boton secundario" disabled={enviando} onClick={() => { setPaso('formulario'); setFoco((n) => n + 1) }}>
               Corregir
             </button>
           </div>

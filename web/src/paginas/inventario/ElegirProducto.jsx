@@ -37,7 +37,8 @@ export default function ElegirProducto({ etiqueta, alElegir, error: errorDelForm
   const idMensaje = `${id}-mensaje`
 
   let resultados = null
-  if (buscado) {
+  // Los resultados son del texto buscado: si se editó sin buscar, no se muestran.
+  if (buscado && buscado === texto.trim()) {
     if (error) {
       resultados = (
         <div className="busqueda-error">
