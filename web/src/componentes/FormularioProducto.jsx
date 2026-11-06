@@ -278,12 +278,17 @@ const PRODUCTO_CAMBIO = 'Este producto cambió mientras lo editabas: otra person
  * para que quien edita sepa cuál es sin poder tocarlo. La existencia inicial
  * del alta no contradice esto: el backend la convierte en ese primer movimiento.
  *
+ * `onActualizado(actual)` es opcional: avisa a quien abrió el formulario de la
+ * ficha vigente que se trajo con «Ver los datos actuales», aunque después se
+ * cancele.
+ *
  * El precio sí se escribe (ADR-0025), con el porcentaje al lado. Lo que se
  * calcula aquí es solo vista previa: se envía lo que el usuario escribió, y
  * el catálogo se refresca con lo que devuelve el servidor.
  */
 export default function FormularioProducto({
   modo = 'editar', producto = SIN_PRODUCTO, categorias, proveedores, onCerrar, onGuardado,
+  onActualizado,
 }) {
   const esAlta = modo === 'crear'
   // La ficha con la que se abrió, y la que queda si se piden los datos actuales
@@ -304,12 +309,23 @@ export default function FormularioProducto({
   // Las que se intentaron guardar: los errores de un campo sin tocar no se
   // muestran antes, y el foco salta al primero cada vez que se intenta.
   const [intentos, setIntentos] = useState(0)
+  // Cuántas veces se trajeron los datos actuales: cada una lleva el foco al
+  // primer campo (ver el efecto de abajo).
+  const [recargas, setRecargas] = useState(0)
   const formulario = useRef(null)
   const aviso = useRef(null)
 
   useEffect(() => {
     if (intentos > 0) formulario.current?.querySelector('[aria-invalid="true"]')?.focus()
   }, [intentos])
+
+  // El botón «Ver los datos actuales» vive dentro del aviso, y al traerlos el
+  // aviso desaparece: sin esto el foco caería a <body> y quien usa teclado o
+  // lector de pantalla quedaría fuera del diálogo, sin señal de que los campos
+  // cambiaron.
+  useEffect(() => {
+    if (recargas > 0) formulario.current?.querySelector('input, select')?.focus()
+  }, [recargas])
 
   // El aviso va arriba y el botón abajo, en un panel que se desplaza: sin esto un
   // rechazo del servidor (código repetido) podría quedar fuera de la vista.
@@ -404,6 +420,10 @@ export default function FormularioProducto({
       setIntentos(0)
       setConflicto(false)
       setError(null)
+      setRecargas((n) => n + 1)
+      // Quien abrió el formulario se entera: si luego se cancela, su lista no
+      // debe seguir mostrando los datos viejos.
+      onActualizado?.(actual)
     } catch (e) {
       // Se conserva lo escrito: el aviso pasa a decir por qué no se pudo.
       setConflicto(false)
