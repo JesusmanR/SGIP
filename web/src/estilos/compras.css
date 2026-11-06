@@ -1,1 +1,68 @@
-/* Estilos de la sección compras: solo esta sección escribe aquí. */
+/* Estilos de la sección compras: solo esta sección escribe aquí.
+   Esta hoja queda cargada en toda la aplicación, así que sus reglas genéricas
+   cuelgan de `.seccion-compras` y no cambian otras pantallas. */
+
+.seccion-compras a.boton { display: inline-block; text-decoration: none; text-align: center; }
+
+.seccion-compras .ficha {
+  display: grid; gap: var(--espacio-3) var(--espacio-5); margin: 0 0 var(--espacio-5);
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  background: var(--tarjeta); border: 1px solid var(--borde);
+  border-radius: var(--radio-tarjeta); padding: var(--espacio-4);
+}
+.seccion-compras .ficha dt { color: var(--tinta-2); font-size: var(--t-etiqueta); font-weight: 600; }
+.seccion-compras .ficha dd { margin: var(--espacio-1) 0 0; overflow-wrap: anywhere; }
+
+/* Estados de la orden: siempre con texto; el color acompaña. */
+.insignia.estado-abierta  { background: var(--info-fondo);    color: var(--info); }
+.insignia.estado-parcial  { background: var(--aviso-fondo);   color: var(--aviso); }
+.insignia.estado-recibida { background: var(--exito-fondo);   color: var(--exito); }
+.insignia.estado-anulada  { background: var(--borde);         color: var(--tinta-2); }
+
+.seccion-compras .subtitulo-seccion {
+  margin: var(--espacio-5) 0 var(--espacio-3); font-size: var(--t-titulo-tarjeta); line-height: 20px;
+}
+.seccion-compras .subtitulo-seccion:focus-visible { outline: 3px solid var(--acento-sutil); outline-offset: 2px; }
+
+.seccion-compras .total-vista {
+  display: flex; justify-content: space-between; align-items: baseline; gap: var(--espacio-3);
+  margin: var(--espacio-3) 0 0; padding: var(--espacio-3) var(--espacio-4);
+  background: var(--lienzo); border: 1px solid var(--borde); border-radius: var(--radio-control);
+}
+.seccion-compras .total-vista strong { font-variant-numeric: tabular-nums; }
+
+/* El aviso que recibe el foco por código: que se vea dónde quedó. */
+.seccion-compras [tabindex="-1"]:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }
+
+/* Buscador de productos de la orden. */
+.busqueda-producto { margin-bottom: var(--espacio-4); }
+.busqueda-producto .campo { margin-bottom: var(--espacio-2); }
+.resultados-producto { list-style: none; margin: var(--espacio-3) 0 0; padding: 0; }
+.resultados-producto li {
+  display: flex; align-items: center; gap: var(--espacio-3);
+  padding: var(--espacio-2) 0; border-bottom: 1px solid var(--borde);
+}
+.resultados-producto li > span:first-child { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+
+/* Un campo dentro de una fila de la tabla. */
+.entrada-celda {
+  width: 100%; min-width: 5rem; padding: var(--espacio-2) var(--espacio-3); font-size: var(--t-cuerpo);
+  border: 1px solid var(--borde-control); border-radius: var(--radio-control);
+  background: var(--tarjeta); color: var(--tinta); text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.entrada-celda:focus-visible { outline: 3px solid var(--acento-sutil); border-color: var(--acento); }
+.entrada-celda[aria-invalid="true"] { border-color: var(--peligro); }
+
+/* Recepción. */
+.recepcion { margin-top: var(--espacio-5); max-width: 40rem; }
+.recepcion > .boton { margin-bottom: var(--espacio-4); }
+.lista-recepcion { margin: 0 0 var(--espacio-4); padding-left: var(--espacio-5); }
+
+/* La ayuda de un campo es una pista, no una advertencia. */
+.campo-mensaje.ayuda { color: var(--tinta-3); }
+
+@media (max-width: 48rem) {
+  .resultados-producto li { flex-wrap: wrap; }
+  .entrada-celda { text-align: left; }
+}

@@ -1,1 +1,20 @@
-/* Estilos de la sección proveedores: solo esta sección escribe aquí. */
+/* Estilos de la sección proveedores: solo esta sección escribe aquí.
+   Esta hoja queda cargada en toda la aplicación, así que sus reglas genéricas
+   cuelgan de `.seccion-proveedores` y no cambian otras pantallas. */
+
+.seccion-proveedores .formulario-angosto { max-width: 34rem; }
+
+/* Un enlace con aspecto de botón no lleva el subrayado del enlace de texto. */
+.seccion-proveedores a.boton { display: inline-block; text-decoration: none; text-align: center; }
+
+.seccion-proveedores .ficha {
+  display: grid; gap: var(--espacio-3) var(--espacio-5); margin: 0;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  background: var(--tarjeta); border: 1px solid var(--borde);
+  border-radius: var(--radio-tarjeta); padding: var(--espacio-4);
+}
+.seccion-proveedores .ficha dt { color: var(--tinta-2); font-size: var(--t-etiqueta); font-weight: 600; }
+.seccion-proveedores .ficha dd { margin: var(--espacio-1) 0 0; overflow-wrap: anywhere; }
+
+/* La ayuda de un campo es una pista, no una advertencia. */
+.campo-mensaje.ayuda { color: var(--tinta-3); }
