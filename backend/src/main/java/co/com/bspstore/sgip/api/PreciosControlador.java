@@ -3,6 +3,7 @@ package co.com.bspstore.sgip.api;
 import co.com.bspstore.sgip.api.dto.CruceDeUmbral;
 import co.com.bspstore.sgip.api.dto.ReglaDeMargen;
 import co.com.bspstore.sgip.api.dto.SolicitudReglaMargen;
+import co.com.bspstore.sgip.logica.RecursoNoEncontradoException;
 import co.com.bspstore.sgip.logica.ServicioPrecios;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -112,6 +113,24 @@ public class PreciosControlador {
         return servicio.actualizar(reglaId, solicitud)
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    /**
+     * Reemplaza una regla que rige: cierra la vieja el día antes de que empiece
+     * la nueva y crea la nueva, todo en una transacción. 404 si la regla es
+     * ajena, no existe o es de un producto; 400 si ya terminó o la nueva
+     * empieza antes que ella; 409 si se solaparía con otra.
+     */
+    @PostMapping("/{reglaId}/reemplazar")
+    public ResponseEntity<ReglaDeMargen> reemplazar(
+            @PathVariable Integer reglaId,
+            @Valid @RequestBody SolicitudReglaMargen solicitud) {
+        ReglaDeMargen nueva = servicio.reemplazar(reglaId, solicitud)
+                .orElseThrow(() -> new RecursoNoEncontradoException(
+                        "La regla " + reglaId + " no existe en esta empresa."));
+        return ResponseEntity
+                .created(URI.create("/api/v1/precios/reglas/" + nueva.reglaId()))
+                .body(nueva);
     }
 
     /**

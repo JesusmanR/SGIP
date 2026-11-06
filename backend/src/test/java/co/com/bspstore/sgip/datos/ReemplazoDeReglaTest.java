@@ -20,7 +20,6 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 
-import java.lang.reflect.InvocationTargetException;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
@@ -122,20 +121,8 @@ class ReemplazoDeReglaTest {
                 new BigDecimal(factor), desde, null);
     }
 
-    /**
-     * Llama a {@code ServicioPrecios.reemplazar(reglaId, solicitud)} por su
-     * nombre: así esta prueba compila, y falla por la razón correcta, antes
-     * de que el método exista.
-     */
-    @SuppressWarnings("unchecked")
-    private Optional<ReglaDeMargen> reemplazar(Integer reglaId, SolicitudReglaMargen s) throws Throwable {
-        try {
-            var metodo = ServicioPrecios.class.getMethod("reemplazar", Integer.class,
-                    SolicitudReglaMargen.class);
-            return (Optional<ReglaDeMargen>) metodo.invoke(precios, reglaId, s);
-        } catch (InvocationTargetException e) {
-            throw e.getCause();
-        }
+    private Optional<ReglaDeMargen> reemplazar(Integer reglaId, SolicitudReglaMargen s) {
+        return precios.reemplazar(reglaId, s);
     }
 
     private LocalDate hasta(Integer reglaId) {
@@ -159,7 +146,7 @@ class ReemplazoDeReglaTest {
     // ----------------------------------------------------------------- pruebas
 
     @Test
-    void reemplazarCierraLaViejaElDiaAntesYAbreLaNueva() throws Throwable {
+    void reemplazarCierraLaViejaElDiaAntesYAbreLaNueva() {
         Integer vieja = reglaGeneral("CONTADO", "1.2000", DESDE_VIEJA, null);
 
         ReglaDeMargen creada = reemplazar(vieja, nueva("1.5000", DESDE_NUEVA)).orElseThrow();
@@ -185,7 +172,7 @@ class ReemplazoDeReglaTest {
     }
 
     @Test
-    void elCambioDePrecioSeVeEnLaVista() throws Throwable {
+    void elCambioDePrecioSeVeEnLaVista() {
         Integer vieja = reglaGeneral("CONTADO", "1.2000", DESDE_VIEJA, null);
         reglaGeneral("CREDITO", "1.2000", DESDE_VIEJA, null);
         Integer id = producto("1000");
@@ -198,7 +185,7 @@ class ReemplazoDeReglaTest {
     }
 
     @Test
-    void unaReglaAjenaOInexistenteNoSeReemplaza() throws Throwable {
+    void unaReglaAjenaOInexistenteNoSeReemplaza() {
         assertTrue(reemplazar(987654321, nueva("1.5000", DESDE_NUEVA)).isEmpty());
         assertEquals(0, cuantas());
     }

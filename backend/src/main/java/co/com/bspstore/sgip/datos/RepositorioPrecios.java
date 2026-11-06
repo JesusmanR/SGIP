@@ -210,6 +210,33 @@ public class RepositorioPrecios {
                 .update();
     }
 
+    /** Lo que hace falta saber de una regla de ámbito para reemplazarla. */
+    public record ReglaBloqueada(Integer reglaId, Integer categoriaId, Integer proveedorId,
+                                 String formaPago, LocalDate vigenteDesde, LocalDate vigenteHasta) {}
+
+    /**
+     * Lee la regla bloqueándola, acotada por empresa y solo de ámbito
+     * (`producto_id IS NULL`).
+     *
+     * Lectura con bloqueo a propósito: dos reemplazos a la vez de la misma
+     * regla se ponen en fila, y el segundo ve el cierre del primero en lugar
+     * de la foto de cuando empezó su transacción.
+     */
+    public Optional<ReglaBloqueada> bloquear(Integer empresaId, Integer reglaId) {
+        return jdbc.sql("""
+                        SELECT regla_id, categoria_id, proveedor_id, forma_pago,
+                               vigente_desde, vigente_hasta
+                          FROM reglas_margen
+                         WHERE empresa_id = :empresa AND regla_id = :regla
+                           AND producto_id IS NULL
+                           FOR UPDATE
+                        """)
+                .param("empresa", empresaId)
+                .param("regla", reglaId)
+                .query(ReglaBloqueada.class)
+                .optional();
+    }
+
     /** Cierra la vigencia sin borrar la fila: el histórico de precios la necesita. */
     public int cerrar(Integer empresaId, Integer reglaId, LocalDate hasta) {
         return jdbc.sql("""
