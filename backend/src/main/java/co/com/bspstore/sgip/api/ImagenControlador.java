@@ -81,7 +81,7 @@ public class ImagenControlador {
         var principal = imagenes.findByEmpresaIdAndProductoIdAndPrincipalTrue(
                 ContextoEmpresa.empresaActual(), productoId);
         if (principal.isEmpty()) {
-            return ResponseEntity.notFound().build();
+            throw new RecursoNoEncontradoException("El producto no tiene imagen.");
         }
         try {
             // Vigente y no inmutable: cuál es la principal cambia.
@@ -90,7 +90,7 @@ public class ImagenControlador {
             // La fila existe pero el archivo no: el disco y la base se
             // desincronizaron. Para el cliente es un 404; para quien
             // administra, un problema que merece mirarse.
-            return ResponseEntity.notFound().build();
+            throw new RecursoNoEncontradoException("La imagen no está disponible.");
         }
     }
 
@@ -143,7 +143,7 @@ public class ImagenControlador {
     public ResponseEntity<InputStreamResource> verLogo() throws IOException {
         Empresa e = servicio.empresaActual();
         if (e.getLogoRuta() == null) {
-            return ResponseEntity.notFound().build();
+            throw new RecursoNoEncontradoException("La empresa no tiene logo.");
         }
         // El logo se reemplaza sin que cambie esta dirección.
         return archivoVigente(e.getLogoRuta());

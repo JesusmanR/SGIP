@@ -30,12 +30,14 @@ public enum AccionPlataforma {
     UVT_ALTA,
     UVT_CAMBIO,
     IMPUESTO_ALTA,
-    IMPUESTO_CAMBIO;
+    IMPUESTO_CAMBIO,
+    USUARIO_DESBLOQUEO;
 
     /** Si la acción recae sobre una empresa concreta. */
     public boolean esDeEmpresa() {
         return switch (this) {
-            case EMPRESA_ALTA, EMPRESA_ACTIVACION, EMPRESA_DESACTIVACION -> true;
+            case EMPRESA_ALTA, EMPRESA_ACTIVACION, EMPRESA_DESACTIVACION,
+                 USUARIO_DESBLOQUEO -> true;
             case UVT_ALTA, UVT_CAMBIO, IMPUESTO_ALTA, IMPUESTO_CAMBIO -> false;
         };
     }
@@ -43,7 +45,8 @@ public enum AccionPlataforma {
     /** Si la acción modifica algo que ya existía, y por tanto tiene valor anterior. */
     public boolean esCambio() {
         return switch (this) {
-            case EMPRESA_ACTIVACION, EMPRESA_DESACTIVACION, UVT_CAMBIO, IMPUESTO_CAMBIO -> true;
+            case EMPRESA_ACTIVACION, EMPRESA_DESACTIVACION, UVT_CAMBIO, IMPUESTO_CAMBIO,
+                 USUARIO_DESBLOQUEO -> true;
             case EMPRESA_ALTA, UVT_ALTA, IMPUESTO_ALTA -> false;
         };
     }

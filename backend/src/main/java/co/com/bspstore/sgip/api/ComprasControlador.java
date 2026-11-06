@@ -3,6 +3,7 @@ package co.com.bspstore.sgip.api;
 import co.com.bspstore.sgip.api.dto.OrdenDeCompra;
 import co.com.bspstore.sgip.api.dto.SolicitudOrdenCompra;
 import co.com.bspstore.sgip.api.dto.SolicitudRecepcion;
+import co.com.bspstore.sgip.logica.RecursoNoEncontradoException;
 import co.com.bspstore.sgip.logica.ServicioCompras;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -66,7 +67,7 @@ public class ComprasControlador {
     public ResponseEntity<OrdenDeCompra> ver(@PathVariable Long ordenId) {
         return servicio.buscar(ordenId)
                 .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+                .orElseThrow(() -> new RecursoNoEncontradoException("La orden de compra no existe."));
     }
 
     /**
@@ -97,7 +98,7 @@ public class ComprasControlador {
             @Valid @RequestBody SolicitudRecepcion solicitud) {
         return servicio.recibir(ordenId, solicitud)
                 .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+                .orElseThrow(() -> new RecursoNoEncontradoException("La orden de compra no existe."));
     }
 
     private static int acotar(Integer limite) {

@@ -18,13 +18,14 @@ import { api } from '../servicios/api.js'
 import { CATEGORIAS, PC, PROVEEDORES } from '../prueba/productos.js'
 
 vi.mock('../servicios/api.js', () => ({
-  api: { editarProducto: vi.fn(), crearProducto: vi.fn() },
+  api: { editarProducto: vi.fn(), crearProducto: vi.fn(), producto: vi.fn() },
   ErrorApi: class extends Error {},
 }))
 
 function montar(extra = {}) {
   const onGuardado = vi.fn()
   const onCerrar = vi.fn()
+  const onActualizado = vi.fn()
   render(
     <FormularioProducto
       producto={{ ...PC, ...extra }}
@@ -32,8 +33,9 @@ function montar(extra = {}) {
       proveedores={PROVEEDORES}
       onCerrar={onCerrar}
       onGuardado={onGuardado}
+      onActualizado={onActualizado}
     />)
-  return { onGuardado, onCerrar }
+  return { onGuardado, onCerrar, onActualizado }
 }
 
 describe('formulario de producto', () => {
@@ -106,6 +108,147 @@ describe('formulario de producto', () => {
     // Si el botón se quedara inhabilitado, el único camino sería cerrar
     // el panel y perder lo escrito.
     expect(screen.getByRole('button', { name: /guardar/i })).toBeEnabled()
+  })
+
+  describe('si el producto cambió mientras se editaba (I1)', () => {
+    /** Lo que `pedir` lanza ante un 409: el mensaje del servidor y el estado. */
+    const conflicto = () => Object.assign(
+      new Error('Otra persona o un proceso modificó este producto antes de que guardaras.'),
+      { estado: 409, tipo: 'urn:sgip:producto-cambio' })
+
+    it('manda la versión de la ficha que se abrió', async () => {
+      const teclado = userEvent.setup()
+      api.editarProducto.mockResolvedValue(PC)
+      montar({ version: 7 })
+
+      await teclado.click(screen.getByRole('button', { name: /guardar/i }))
+
+      await waitFor(() => expect(api.editarProducto).toHaveBeenCalled())
+      expect(api.editarProducto.mock.calls[0][1].version).toBe(7)
+    })
+
+    it('lo explica con palabras sencillas y no pierde lo escrito', async () => {
+      const teclado = userEvent.setup()
+      api.editarProducto.mockRejectedValue(conflicto())
+      const { onGuardado } = montar()
+      const nombre = screen.getByLabelText(/nombre/i)
+      await teclado.clear(nombre)
+      await teclado.type(nombre, 'Portátil corregido')
+
+      await teclado.click(screen.getByRole('button', { name: /guardar/i }))
+
+      const aviso = await screen.findByRole('alert')
+      expect(aviso).toHaveTextContent(/cambió mientras lo editabas/i)
+      expect(aviso).toHaveTextContent(/lo que escribiste sigue aquí/i)
+      expect(screen.getByLabelText(/nombre/i)).toHaveValue('Portátil corregido')
+      expect(onGuardado).not.toHaveBeenCalled()
+      expect(screen.getByRole('button', { name: /guardar/i })).toBeEnabled()
+    })
+
+    it('ofrece ver los datos actuales y, al hacerlo, el formulario los muestra y guarda con su versión', async () => {
+      const teclado = userEvent.setup()
+      api.editarProducto.mockRejectedValueOnce(conflicto())
+      api.producto.mockResolvedValue({ ...PC, nombre: 'Portátil del servidor', costo: 2500000, version: 4 })
+      montar()
+      await teclado.click(screen.getByRole('button', { name: /guardar/i }))
+      await screen.findByRole('alert')
+
+      await teclado.click(screen.getByRole('button', { name: /ver los datos actuales/i }))
+
+      await waitFor(() => expect(screen.getByLabelText(/nombre/i)).toHaveValue('Portátil del servidor'))
+      expect(api.producto).toHaveBeenCalledWith(PC.productoId)
+      expect(screen.getByLabelText(/costo/i)).toHaveValue(2500000)
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+
+      api.editarProducto.mockResolvedValueOnce(PC)
+      await teclado.click(screen.getByRole('button', { name: /guardar/i }))
+      await waitFor(() => expect(api.editarProducto).toHaveBeenCalledTimes(2))
+      expect(api.editarProducto.mock.calls[1][1].version).toBe(4)
+    })
+
+    it('tras traer los datos actuales el foco queda en el formulario y no se pierde en la página', async () => {
+      const teclado = userEvent.setup()
+      api.editarProducto.mockRejectedValueOnce(conflicto())
+      api.producto.mockResolvedValue({ ...PC, nombre: 'Portátil del servidor', version: 4 })
+      montar()
+      await teclado.click(screen.getByRole('button', { name: /guardar/i }))
+      await screen.findByRole('alert')
+
+      await teclado.click(screen.getByRole('button', { name: /ver los datos actuales/i }))
+
+      // El botón vivía dentro del aviso: al desaparecer el aviso, el foco caía a <body>.
+      await waitFor(() => expect(screen.getByLabelText(/nombre/i)).toHaveFocus())
+    })
+
+    it('avisa de los datos actuales a quien lo abrió, para que el catálogo no muestre los viejos', async () => {
+      const teclado = userEvent.setup()
+      api.editarProducto.mockRejectedValueOnce(conflicto())
+      const actual = { ...PC, nombre: 'Portátil del servidor', version: 4 }
+      api.producto.mockResolvedValue(actual)
+      const { onActualizado } = montar()
+      await teclado.click(screen.getByRole('button', { name: /guardar/i }))
+      await screen.findByRole('alert')
+
+      await teclado.click(screen.getByRole('button', { name: /ver los datos actuales/i }))
+
+      await waitFor(() => expect(onActualizado).toHaveBeenCalledWith(actual))
+    })
+
+    it('si no se pueden traer los datos actuales, no avisa de nada', async () => {
+      const teclado = userEvent.setup()
+      api.editarProducto.mockRejectedValue(conflicto())
+      api.producto.mockRejectedValue(new Error('El producto no existe.'))
+      const { onActualizado } = montar()
+      await teclado.click(screen.getByRole('button', { name: /guardar/i }))
+      await screen.findByRole('alert')
+
+      await teclado.click(screen.getByRole('button', { name: /ver los datos actuales/i }))
+
+      await screen.findByText(/el producto no existe/i)
+      expect(onActualizado).not.toHaveBeenCalled()
+    })
+
+    it('un 409 por un código repetido dice el motivo del servidor y no habla de cambios', async () => {
+      const teclado = userEvent.setup()
+      api.editarProducto.mockRejectedValue(Object.assign(
+        new Error('Ya existe un producto con el código PC-002.'), { estado: 409, tipo: 'about:blank' }))
+      montar()
+
+      await teclado.click(screen.getByRole('button', { name: /guardar/i }))
+
+      const aviso = await screen.findByRole('alert')
+      expect(aviso).toHaveTextContent('Ya existe un producto con el código PC-002.')
+      expect(aviso).not.toHaveTextContent(/cambió mientras lo editabas/i)
+      expect(screen.queryByRole('button', { name: /ver los datos actuales/i })).not.toBeInTheDocument()
+    })
+
+    it('un rechazo que no es de versión no ofrece recargar', async () => {
+      const teclado = userEvent.setup()
+      api.editarProducto.mockRejectedValue(new Error('Código repetido.'))
+      montar()
+
+      await teclado.click(screen.getByRole('button', { name: /guardar/i }))
+      await screen.findByRole('alert')
+
+      expect(screen.queryByRole('button', { name: /ver los datos actuales/i })).not.toBeInTheDocument()
+    })
+
+    it('si no se pueden traer los datos actuales lo dice y conserva lo escrito', async () => {
+      const teclado = userEvent.setup()
+      api.editarProducto.mockRejectedValue(conflicto())
+      api.producto.mockRejectedValue(new Error('El producto no existe.'))
+      montar()
+      const nombre = screen.getByLabelText(/nombre/i)
+      await teclado.clear(nombre)
+      await teclado.type(nombre, 'Lo que escribí')
+      await teclado.click(screen.getByRole('button', { name: /guardar/i }))
+      await screen.findByRole('alert')
+
+      await teclado.click(screen.getByRole('button', { name: /ver los datos actuales/i }))
+
+      expect(await screen.findByText(/el producto no existe/i)).toBeInTheDocument()
+      expect(screen.getByLabelText(/nombre/i)).toHaveValue('Lo que escribí')
+    })
   })
 
   it('cancelar no guarda nada', async () => {

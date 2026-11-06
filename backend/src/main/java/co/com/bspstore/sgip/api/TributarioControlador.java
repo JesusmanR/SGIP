@@ -5,6 +5,7 @@ import co.com.bspstore.sgip.api.dto.SolicitudTipoImpuesto;
 import co.com.bspstore.sgip.api.dto.SolicitudValorUvt;
 import co.com.bspstore.sgip.api.dto.TipoImpuestoNacional;
 import co.com.bspstore.sgip.api.dto.ValorUvt;
+import co.com.bspstore.sgip.logica.RecursoNoEncontradoException;
 import co.com.bspstore.sgip.logica.ServicioTributario;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -95,6 +96,6 @@ public class TributarioControlador {
             @Valid @RequestBody SolicitudTipoImpuesto solicitud) {
         return servicio.cambiarImpuesto(codigo, solicitud)
                 .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+                .orElseThrow(() -> new RecursoNoEncontradoException("El tipo de impuesto no existe."));
     }
 }

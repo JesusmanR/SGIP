@@ -3,6 +3,7 @@ package co.com.bspstore.sgip.api;
 import co.com.bspstore.sgip.api.dto.SolicitudEdicionUsuario;
 import co.com.bspstore.sgip.api.dto.SolicitudUsuario;
 import co.com.bspstore.sgip.api.dto.UsuarioDeEmpresa;
+import co.com.bspstore.sgip.logica.RecursoNoEncontradoException;
 import co.com.bspstore.sgip.logica.ServicioAutenticacion;
 import co.com.bspstore.sgip.logica.ServicioUsuarios;
 import jakarta.validation.Valid;
@@ -61,7 +62,7 @@ public class UsuarioControlador {
         return servicio.buscar(usuarioId)
                 .map(UsuarioDeEmpresa::de)
                 .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+                .orElseThrow(() -> new RecursoNoEncontradoException("El usuario no existe."));
     }
 
     /** 409 si el correo ya está en la plataforma; 403 si el rol no le toca repartirlo. */
@@ -80,7 +81,7 @@ public class UsuarioControlador {
         return servicio.actualizar(usuarioId, solicitud)
                 .map(UsuarioDeEmpresa::de)
                 .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+                .orElseThrow(() -> new RecursoNoEncontradoException("El usuario no existe."));
     }
 
     /**
@@ -94,7 +95,7 @@ public class UsuarioControlador {
         return servicio.desactivar(usuarioId)
                 .map(UsuarioDeEmpresa::de)
                 .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+                .orElseThrow(() -> new RecursoNoEncontradoException("El usuario no existe."));
     }
 
     @PostMapping("/{usuarioId}/activar")
@@ -102,7 +103,7 @@ public class UsuarioControlador {
         return servicio.activar(usuarioId)
                 .map(UsuarioDeEmpresa::de)
                 .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+                .orElseThrow(() -> new RecursoNoEncontradoException("El usuario no existe."));
     }
 
     /**
@@ -122,8 +123,9 @@ public class UsuarioControlador {
      */
     @PostMapping("/{usuarioId}/desbloquear")
     public ResponseEntity<Void> desbloquear(@PathVariable Integer usuarioId) {
-        return autenticacion.desbloquear(usuarioId)
-                ? ResponseEntity.noContent().build()
-                : ResponseEntity.notFound().build();
+        if (!autenticacion.desbloquear(usuarioId)) {
+            throw new RecursoNoEncontradoException("El usuario no existe.");
+        }
+        return ResponseEntity.noContent().build();
     }
 }

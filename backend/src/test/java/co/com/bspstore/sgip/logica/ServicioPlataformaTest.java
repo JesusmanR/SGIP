@@ -394,4 +394,63 @@ class ServicioPlataformaTest {
                 motivo.capture());
         assertNull(motivo.getValue());
     }
+
+    // ------------------------------------------- desbloqueo de un usuario (I2)
+
+    private Usuario usuarioBloqueado() {
+        Usuario u = new Usuario(new Rol("ADMINISTRADOR", "Operación del negocio"),
+                "Ana Pérez", "ana@tornillo.co", "hash");
+        u.registrarIntentoFallido(1, java.time.LocalDateTime.of(2026, 10, 17, 9, 50));
+        assertTrue(u.isBloqueado(), "el usuario llega bloqueado");
+        return u;
+    }
+
+    @Test
+    void desbloqueaAUnUsuarioDeLaEmpresaIndicadaYLoDejaEnLaBitacora() {
+        Usuario u = usuarioBloqueado();
+        when(usuarios.findByIdAndEmpresaId(20, 4)).thenReturn(Optional.of(u));
+
+        servicio.desbloquearUsuario(4, 20);
+
+        assertTrue(!u.isBloqueado());
+        assertEquals(0, u.getIntentosFallidos());
+        assertNull(u.getBloqueadoEn());
+        verify(plataforma).registrar(USUARIO_SUPER_ADMIN, 4, AccionPlataforma.USUARIO_DESBLOQUEO,
+                "usuarios", "20", "BLOQUEADO", "DESBLOQUEADO", null);
+    }
+
+    /** La referencia es el identificador: el correo mide hasta 120 y la columna admite 60. */
+    @Test
+    void laBitacoraNombraAlUsuarioPorSuIdentificadorYNoPorSuCorreo() {
+        when(usuarios.findByIdAndEmpresaId(20, 4)).thenReturn(Optional.of(usuarioBloqueado()));
+
+        servicio.desbloquearUsuario(4, 20);
+
+        verify(plataforma).registrar(anyInt(), anyInt(), any(), anyString(), eq("20"),
+                anyString(), anyString(), any());
+    }
+
+    @Test
+    void unUsuarioDeOtraEmpresaSeTrataComoUnoInexistente() {
+        when(usuarios.findByIdAndEmpresaId(20, 4)).thenReturn(Optional.empty());
+
+        assertThrows(RecursoNoEncontradoException.class, () -> servicio.desbloquearUsuario(4, 20));
+
+        verify(usuarios, never()).findById(any());
+        verify(plataforma, never()).registrar(anyInt(), any(), any(), anyString(), anyString(),
+                any(), any(), any());
+    }
+
+    /** Como activar una empresa que ya está activa: no cambia nada y no ensucia la bitácora. */
+    @Test
+    void desbloquearAQuienNoEstaBloqueadoNoDejaRastro() {
+        Usuario u = new Usuario(new Rol("ADMINISTRADOR", "Operación del negocio"),
+                "Ana Pérez", "ana@tornillo.co", "hash");
+        when(usuarios.findByIdAndEmpresaId(20, 4)).thenReturn(Optional.of(u));
+
+        servicio.desbloquearUsuario(4, 20);
+
+        verify(plataforma, never()).registrar(anyInt(), any(), any(), anyString(), anyString(),
+                any(), any(), any());
+    }
 }

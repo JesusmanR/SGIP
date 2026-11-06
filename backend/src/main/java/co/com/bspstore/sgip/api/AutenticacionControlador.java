@@ -74,10 +74,12 @@ public class AutenticacionControlador {
     @PostMapping("/clave")
     public ResponseEntity<Void> cambiarClave(
             @Valid @RequestBody SolicitudCambioClave solicitud,
-            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String cabecera) {
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String cabecera,
+            HttpServletRequest peticion) {
         UsuarioAutenticado quien = ContextoEmpresa.actual().orElseThrow(() ->
                 new IllegalStateException("No hay usuario autenticado en el contexto."));
-        servicio.cambiarClave(quien.usuarioId(), solicitud.claveActual(), solicitud.claveNueva());
+        servicio.cambiarClave(quien.usuarioId(), solicitud.claveActual(), solicitud.claveNueva(),
+                peticion.getRemoteAddr());
         String token = (cabecera != null && cabecera.startsWith(PREFIJO))
                 ? cabecera.substring(PREFIJO.length()).trim()
                 : null;

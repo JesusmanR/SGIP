@@ -246,14 +246,20 @@ public class RepositorioConfiguracionTributaria {
     }
 
     /**
-     * Borra una regla. Solo se llama para una que todavía no empezó a regir:
-     * nunca explicó una venta, de modo que retirarla corrige una equivocación
-     * y no borra historia. Ninguna tabla apunta a {@code reglas_iva}.
+     * Borra una regla que todavía no empezó a regir: nunca explicó una venta,
+     * de modo que retirarla corrige una equivocación y no borra historia.
+     * Ninguna tabla apunta a {@code reglas_iva}.
+     *
+     * Que «aún no empieza» se vuelve a comprobar en la sentencia, contra el día
+     * de la base. El servicio lo decide con su propio reloj, y si aplicación y
+     * base difieren de día, el DELETE sin esa condición borraba una regla que ya
+     * regía y con la que se explican ventas (M4). Devuelve 0 si no borró nada.
      */
     public int borrarRegla(Integer empresaId, Integer reglaId) {
         return jdbc.sql("""
                         DELETE FROM reglas_iva
                          WHERE empresa_id = :empresa AND regla_iva_id = :regla
+                           AND vigente_desde > CURDATE()
                         """)
                 .param("empresa", empresaId)
                 .param("regla", reglaId)

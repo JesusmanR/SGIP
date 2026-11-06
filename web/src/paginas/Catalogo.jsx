@@ -137,6 +137,13 @@ export default function Catalogo() {
           categorias={categorias}
           proveedores={proveedores}
           onCerrar={() => setEditando(null)}
+          onActualizado={(actual) => {
+            // Se trajeron los datos vigentes tras un conflicto: la fila los
+            // muestra aunque luego se cancele, y la próxima edición parte de
+            // la versión nueva en lugar de dar otro conflicto.
+            setProductos((filas) => filas.map((f) =>
+              f.productoId === actual.productoId ? actual : f))
+          }}
           onGuardado={(fresco) => {
             // Se reemplaza la fila con lo que devolvió el servidor, no
             // con lo que se envió: cambiar el costo cambia el precio de

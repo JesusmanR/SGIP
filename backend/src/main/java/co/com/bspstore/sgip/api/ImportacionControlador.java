@@ -1,6 +1,7 @@
 package co.com.bspstore.sgip.api;
 
 import co.com.bspstore.sgip.api.dto.ResumenCarga;
+import co.com.bspstore.sgip.logica.RecursoNoEncontradoException;
 import co.com.bspstore.sgip.logica.ServicioImportacion;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -58,7 +59,7 @@ public class ImportacionControlador {
     public ResponseEntity<ResumenCarga> ver(@PathVariable Long cargaId) {
         return servicio.buscar(cargaId)
                 .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+                .orElseThrow(() -> new RecursoNoEncontradoException("La carga no existe."));
     }
 
     /**
@@ -73,7 +74,7 @@ public class ImportacionControlador {
     public ResponseEntity<ResumenCarga> rechazar(@PathVariable Long cargaId) {
         return servicio.rechazar(cargaId)
                 .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+                .orElseThrow(() -> new RecursoNoEncontradoException("La carga no existe."));
     }
 
     /** Aplica los costos aceptados de una carga ya validada (RF-27). */
@@ -81,6 +82,6 @@ public class ImportacionControlador {
     public ResponseEntity<ResumenCarga> aplicar(@PathVariable Long cargaId) {
         return servicio.aplicar(cargaId)
                 .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+                .orElseThrow(() -> new RecursoNoEncontradoException("La carga no existe."));
     }
 }

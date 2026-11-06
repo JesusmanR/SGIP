@@ -66,4 +66,5 @@ public class AuditoriaAcceso {
     public String getCorreo() { return correo; }
     public boolean isExitoso() { return exitoso; }
     public String getMotivo() { return motivo; }
+    public String getOrigen() { return origen; }
 }

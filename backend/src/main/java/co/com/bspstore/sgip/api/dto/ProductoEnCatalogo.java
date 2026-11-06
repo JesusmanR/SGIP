@@ -64,6 +64,13 @@ import java.math.BigDecimal;
  * costo 7 al 20 % el precio es 8 y el margen 14,29 %, pero lo guardado es 20.
  * Es lo que abre el formulario.
  *
+ * version · la versión del producto, tal como la guarda `productos.version`.
+ * Quien edita la devuelve en el `PUT`, y si el producto cambió entretanto (una
+ * carga de precios, otra edición) el servidor lo rechaza con un 409 en lugar de
+ * pisar el cambio. No sale de la vista, que no la lleva: la lee `ConsultaCatalogo`
+ * de la fila del producto por su clave primaria. Un cambio solo de precio no la
+ * sube (ADR-0025). Es del administrador: quien vende no edita.
+ *
  * Esta es la forma completa, con costo y proveedor, y solo la recibe el
  * administrador. Quien vende recibe {@link ProductoParaVenta}.
  */
@@ -102,5 +109,6 @@ public record ProductoEnCatalogo(
         BigDecimal precioFijoContado,
         BigDecimal precioFijoCredito,
         BigDecimal porcentajeContado,
-        BigDecimal porcentajeCredito
+        BigDecimal porcentajeCredito,
+        Integer version
 ) implements VistaDeProducto {}

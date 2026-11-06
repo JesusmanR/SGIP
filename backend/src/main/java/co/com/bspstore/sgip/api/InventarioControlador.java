@@ -4,6 +4,7 @@ import co.com.bspstore.sgip.api.dto.CuadreDeInventario;
 import co.com.bspstore.sgip.api.dto.MovimientoDeInventario;
 import co.com.bspstore.sgip.api.dto.SolicitudAjuste;
 import co.com.bspstore.sgip.api.dto.SolicitudIngreso;
+import co.com.bspstore.sgip.logica.RecursoNoEncontradoException;
 import co.com.bspstore.sgip.logica.ServicioInventario;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -76,7 +77,7 @@ public class InventarioControlador {
         // esté en cero y sin movimientos, tiene cuadre.
         return servicio.cuadre(productoId)
                 .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+                .orElseThrow(() -> new RecursoNoEncontradoException("El producto no existe."));
     }
 
     /** RF-48. Una cantidad menor o igual a cero la rechaza la validación con 400. */
@@ -85,7 +86,7 @@ public class InventarioControlador {
             @Valid @RequestBody SolicitudIngreso solicitud) {
         return servicio.ingresar(solicitud)
                 .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+                .orElseThrow(() -> new RecursoNoEncontradoException("El producto no existe."));
     }
 
     /**
@@ -100,7 +101,7 @@ public class InventarioControlador {
             @Valid @RequestBody SolicitudAjuste solicitud) {
         var resultado = servicio.ajustar(solicitud);
         if (!resultado.existe()) {
-            return ResponseEntity.notFound().build();
+            throw new RecursoNoEncontradoException("El producto no existe.");
         }
         return resultado.huboCambio()
                 ? ResponseEntity.ok(resultado.movimiento())

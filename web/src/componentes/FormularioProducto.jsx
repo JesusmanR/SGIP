@@ -228,6 +228,45 @@ function FilaDePrecio({ fila, costo, sufijo, exigido, intentado, onCambio }) {
 
 const SIN_PRODUCTO = {}
 
+/** Los campos de texto del formulario, tal como los trae la ficha. */
+function datosDe(producto) {
+  return {
+    categoriaId: producto.categoriaId ?? '',
+    proveedorId: producto.proveedorId ?? '',
+    codigo: producto.codigo ?? '',
+    sku: producto.sku ?? '',
+    codigoBarras: producto.codigoBarras ?? '',
+    nombre: producto.nombre ?? '',
+    presentacion: producto.presentacion ?? '',
+    descripcion: producto.descripcion ?? '',
+    costo: producto.costo ?? '',
+    existenciaMinima: producto.existenciaMinima ?? '',
+  }
+}
+
+const filaContadoDe = (producto) => filaInicial({
+  porcentaje: producto.porcentajeContado, margen: producto.margenContado,
+  precio: producto.precioContado, precioFijo: producto.precioFijoContado,
+})
+
+const filaCreditoDe = (producto) => filaInicial({
+  porcentaje: producto.porcentajeCredito, margen: producto.margenCredito,
+  precio: producto.precioCredito, precioFijo: producto.precioFijoCredito,
+})
+
+/** El `type` con que el servidor marca «el producto cambió desde que lo abriste». */
+const TIPO_PRODUCTO_CAMBIO = 'urn:sgip:producto-cambio'
+
+/**
+ * Lo que se le dice a quien guarda con datos de antes (I1). El servidor ya
+ * contesta algo parecido, pero habla de volver a abrir el producto; aquí hay un
+ * botón que lo hace sin cerrar el formulario, y el texto dice qué pasa con lo
+ * escrito.
+ */
+const PRODUCTO_CAMBIO = 'Este producto cambió mientras lo editabas: otra persona lo guardó o '
+  + 'se aplicó una lista de precios. Lo que escribiste sigue aquí. Para guardar, primero mira '
+  + 'los datos actuales; al verlos se reemplaza lo que escribiste.'
+
 /**
  * Alta (P-05) y edición (RF-15) de un producto del catálogo.
  *
@@ -239,49 +278,54 @@ const SIN_PRODUCTO = {}
  * para que quien edita sepa cuál es sin poder tocarlo. La existencia inicial
  * del alta no contradice esto: el backend la convierte en ese primer movimiento.
  *
+ * `onActualizado(actual)` es opcional: avisa a quien abrió el formulario de la
+ * ficha vigente que se trajo con «Ver los datos actuales», aunque después se
+ * cancele.
+ *
  * El precio sí se escribe (ADR-0025), con el porcentaje al lado. Lo que se
  * calcula aquí es solo vista previa: se envía lo que el usuario escribió, y
  * el catálogo se refresca con lo que devuelve el servidor.
  */
 export default function FormularioProducto({
   modo = 'editar', producto = SIN_PRODUCTO, categorias, proveedores, onCerrar, onGuardado,
+  onActualizado,
 }) {
   const esAlta = modo === 'crear'
-  const [datos, setDatos] = useState({
-    categoriaId: producto.categoriaId ?? '',
-    proveedorId: producto.proveedorId ?? '',
-    codigo: producto.codigo ?? '',
-    sku: producto.sku ?? '',
-    codigoBarras: producto.codigoBarras ?? '',
-    nombre: producto.nombre ?? '',
-    presentacion: producto.presentacion ?? '',
-    descripcion: producto.descripcion ?? '',
-    costo: producto.costo ?? '',
-    existenciaMinima: producto.existenciaMinima ?? '',
-  })
+  // La ficha con la que se abrió, y la que queda si se piden los datos actuales
+  // tras un conflicto: de ella salen la versión, la existencia que se muestra y
+  // el punto de partida de los demás campos.
+  const [ficha, setFicha] = useState(producto)
+  const [datos, setDatos] = useState(() => datosDe(producto))
   // Aparte de `datos`, que viaja entero al editar: la edición no debe llevarla.
   const [existenciaInicial, setExistenciaInicial] = useState('')
-  const [contado, setContado] = useState(() => filaInicial({
-    porcentaje: producto.porcentajeContado, margen: producto.margenContado,
-    precio: producto.precioContado, precioFijo: producto.precioFijoContado,
-  }))
-  const [credito, setCredito] = useState(() => filaInicial({
-    porcentaje: producto.porcentajeCredito, margen: producto.margenCredito,
-    precio: producto.precioCredito, precioFijo: producto.precioFijoCredito,
-  }))
-  const teniaCreditoPropio = creditoEsOtraRegla(producto)
+  const [contado, setContado] = useState(() => filaContadoDe(producto))
+  const [credito, setCredito] = useState(() => filaCreditoDe(producto))
+  const [teniaCreditoPropio, setTeniaCreditoPropio] = useState(() => creditoEsOtraRegla(producto))
   const [otroCredito, setOtroCredito] = useState(teniaCreditoPropio)
   const [error, setError] = useState(null)
+  const [conflicto, setConflicto] = useState(false)
+  const [recargando, setRecargando] = useState(false)
   const [guardando, setGuardando] = useState(false)
   // Las que se intentaron guardar: los errores de un campo sin tocar no se
   // muestran antes, y el foco salta al primero cada vez que se intenta.
   const [intentos, setIntentos] = useState(0)
+  // Cuántas veces se trajeron los datos actuales: cada una lleva el foco al
+  // primer campo (ver el efecto de abajo).
+  const [recargas, setRecargas] = useState(0)
   const formulario = useRef(null)
   const aviso = useRef(null)
 
   useEffect(() => {
     if (intentos > 0) formulario.current?.querySelector('[aria-invalid="true"]')?.focus()
   }, [intentos])
+
+  // El botón «Ver los datos actuales» vive dentro del aviso, y al traerlos el
+  // aviso desaparece: sin esto el foco caería a <body> y quien usa teclado o
+  // lector de pantalla quedaría fuera del diálogo, sin señal de que los campos
+  // cambiaron.
+  useEffect(() => {
+    if (recargas > 0) formulario.current?.querySelector('input, select')?.focus()
+  }, [recargas])
 
   // El aviso va arriba y el botón abajo, en un panel que se desplaza: sin esto un
   // rechazo del servidor (código repetido) podría quedar fuera de la vista.
@@ -318,6 +362,7 @@ export default function FormularioProducto({
     }
     setGuardando(true)
     setError(null)
+    setConflicto(false)
     // Los selectores devuelven cadenas; el backend espera números.
     const comunes = {
       ...datos,
@@ -335,13 +380,56 @@ export default function FormularioProducto({
         : await api.editarProducto(producto.productoId, {
           ...comunes,
           ...preciosAlEditar(contado, credito, otroCredito, teniaCreditoPropio),
+          // La versión de la ficha que se tiene delante: si el producto cambió
+          // desde entonces, el servidor no pisa ese cambio (I1).
+          version: ficha.version,
         })
       onGuardado(fresco)
     } catch (e2) {
-      // El mensaje del backend es el que sirve: dice qué código está
-      // repetido o qué referencia es de otra empresa.
-      setError(e2.message)
+      if (e2.tipo === TIPO_PRODUCTO_CAMBIO) {
+        // Un 409 también es un código repetido, y ese se dice con el texto del
+        // servidor: solo este tipo es «el producto cambió».
+        // Lo escrito se queda: el aviso explica y ofrece traer lo actual.
+        setConflicto(true)
+        setError(PRODUCTO_CAMBIO)
+      } else {
+        // El mensaje del backend es el que sirve: dice qué código está
+        // repetido o qué referencia es de otra empresa.
+        setError(e2.message)
+      }
       setGuardando(false)
+    }
+  }
+
+  /**
+   * Trae el producto como está ahora y reemplaza todo lo del formulario por
+   * ello: campos, precios, versión y la existencia que se muestra. Es la única
+   * vez que se descarta lo escrito, y solo porque quien edita lo pidió.
+   */
+  async function verDatosActuales() {
+    setRecargando(true)
+    try {
+      const actual = await api.producto(producto.productoId)
+      setFicha(actual)
+      setDatos(datosDe(actual))
+      setContado(filaContadoDe(actual))
+      setCredito(filaCreditoDe(actual))
+      const propio = creditoEsOtraRegla(actual)
+      setTeniaCreditoPropio(propio)
+      setOtroCredito(propio)
+      setIntentos(0)
+      setConflicto(false)
+      setError(null)
+      setRecargas((n) => n + 1)
+      // Quien abrió el formulario se entera: si luego se cancela, su lista no
+      // debe seguir mostrando los datos viejos.
+      onActualizado?.(actual)
+    } catch (e) {
+      // Se conserva lo escrito: el aviso pasa a decir por qué no se pudo.
+      setConflicto(false)
+      setError(e.message)
+    } finally {
+      setRecargando(false)
     }
   }
 
@@ -366,7 +454,7 @@ export default function FormularioProducto({
   return (
     <div
       className="velo" role="dialog" aria-modal="true"
-      aria-label={esAlta ? titulo : `Editar ${producto.nombre}`}
+      aria-label={esAlta ? titulo : `Editar ${ficha.nombre}`}
     >
       {/* Al crear, los errores los dice cada campo con palabras: el globo del
           navegador muestra uno solo y desaparece. */}
@@ -376,7 +464,21 @@ export default function FormularioProducto({
           <button type="button" className="boton secundario" onClick={onCerrar}>Cancelar</button>
         </div>
 
-        {error && <div className="aviso error" role="alert" tabIndex={-1} ref={aviso}>{error}</div>}
+        {error && (
+          <div className="aviso error" role="alert" tabIndex={-1} ref={aviso}>
+            {error}
+            {conflicto && (
+              <div className="aviso-accion">
+                <button
+                  type="button" className="boton secundario"
+                  onClick={verDatosActuales} disabled={recargando}
+                >
+                  {recargando ? 'Trayendo…' : 'Ver los datos actuales'}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         <Campo etiqueta="Nombre" motivo={motivo('nombre')}>
           <input value={datos.nombre} onChange={cambiar('nombre')} required maxLength={160} />
@@ -482,7 +584,7 @@ export default function FormularioProducto({
           {esAlta
             ? `La existencia inicial queda registrada como el primer movimiento de
                inventario. Si dejas vacía la mínima, se usa 5.`
-            : `Existencia actual: ${producto.existencia}. Se cambia con movimientos de
+            : `Existencia actual: ${ficha.existencia}. Se cambia con movimientos de
                inventario, no desde aquí, para que todo cambio quede registrado con su
                valor anterior y posterior.`}
         </p>

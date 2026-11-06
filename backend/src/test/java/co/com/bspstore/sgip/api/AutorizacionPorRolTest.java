@@ -36,6 +36,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -109,7 +110,7 @@ class AutorizacionPorRolTest {
                 BigDecimal.ZERO, new BigDecimal("3720.00"), new BigDecimal("3875.00"),
                 "SOBRE_COSTO", "SOBRE_PRECIO", 0, 0, 0, 0, null, 0,
                 new BigDecimal("20.00"), new BigDecimal("25.00"), new BigDecimal("3720"), null,
-                null, new BigDecimal("25.00"));
+                null, new BigDecimal("25.00"), 3);
     }
 
     /** El 403 de la API: ProblemDetail con texto fijo, no el cuerpo vacío del contenedor. */
@@ -148,7 +149,8 @@ class AutorizacionPorRolTest {
                 .andExpect(jsonPath("$[0].precioFijoContado").doesNotExist())
                 .andExpect(jsonPath("$[0].precioFijoCredito").doesNotExist())
                 .andExpect(jsonPath("$[0].porcentajeContado").doesNotExist())
-                .andExpect(jsonPath("$[0].porcentajeCredito").doesNotExist());
+                .andExpect(jsonPath("$[0].porcentajeCredito").doesNotExist())
+                .andExpect(jsonPath("$[0].version").doesNotExist());
     }
 
     @ParameterizedTest
@@ -170,7 +172,8 @@ class AutorizacionPorRolTest {
                 .andExpect(jsonPath("$.precioFijoContado").doesNotExist())
                 .andExpect(jsonPath("$.precioFijoCredito").doesNotExist())
                 .andExpect(jsonPath("$.porcentajeContado").doesNotExist())
-                .andExpect(jsonPath("$.porcentajeCredito").doesNotExist());
+                .andExpect(jsonPath("$.porcentajeCredito").doesNotExist())
+                .andExpect(jsonPath("$.version").doesNotExist());
     }
 
     @ParameterizedTest
@@ -192,7 +195,8 @@ class AutorizacionPorRolTest {
                 .andExpect(jsonPath("$.precioFijoContado").doesNotExist())
                 .andExpect(jsonPath("$.precioFijoCredito").doesNotExist())
                 .andExpect(jsonPath("$.porcentajeContado").doesNotExist())
-                .andExpect(jsonPath("$.porcentajeCredito").doesNotExist());
+                .andExpect(jsonPath("$.porcentajeCredito").doesNotExist())
+                .andExpect(jsonPath("$.version").doesNotExist());
     }
 
     // ---- lo que se les niega -----------------------------------------
@@ -250,7 +254,8 @@ class AutorizacionPorRolTest {
                     .andExpect(jsonPath(raiz + ".baseContado").exists())
                     .andExpect(jsonPath(raiz + ".margenContado").value(20.00))
                     .andExpect(jsonPath(raiz + ".precioFijoContado").value(3720))
-                    .andExpect(jsonPath(raiz + ".porcentajeCredito").value(25.00));
+                    .andExpect(jsonPath(raiz + ".porcentajeCredito").value(25.00))
+                    .andExpect(jsonPath(raiz + ".version").value(3));
         }
     }
 
@@ -284,12 +289,46 @@ class AutorizacionPorRolTest {
         verifyNoInteractions(productos);
     }
 
+    private static final String CUERPO_EDICION =
+            CUERPO_PRODUCTO.replace("\"costo\"", "\"version\":3,\"costo\"");
+
     @Test
     void sinPermisoNoSePuedeEditarUnProducto() throws Exception {
+        // Con un cuerpo válido: la validación del cuerpo corre antes que la anotación de rol.
         esDenegado(mvc.perform(put("/api/v1/productos/9").with(como("VENDEDOR"))
-                .contentType(MediaType.APPLICATION_JSON).content(CUERPO_PRODUCTO)));
+                .contentType(MediaType.APPLICATION_JSON).content(CUERPO_EDICION)));
 
         verifyNoInteractions(productos);
+    }
+
+    /**
+     * Sin la versión del producto leído no hay forma de saber si quien edita
+     * partió de datos viejos, así que la edición la exige (I1). Un número
+     * primitivo se rellenaría con 0 al faltar y daría un 409 donde toca un 400.
+     */
+    @Test
+    void editarUnProductoSinSuVersionEsUn400() throws Exception {
+        mvc.perform(put("/api/v1/productos/9").with(como("ADMINISTRADOR"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(CUERPO_PRODUCTO))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.containsString("version")));
+
+        verifyNoInteractions(productos);
+    }
+
+    @Test
+    void editarUnProductoConSuVersionLlegaAlServicio() throws Exception {
+        var editado = mock(Producto.class);
+        when(editado.getId()).thenReturn(9);
+        when(productos.actualizar(eq(9), any())).thenReturn(Optional.of(editado));
+        when(productos.buscar(9)).thenReturn(Optional.of(producto()));
+
+        mvc.perform(put("/api/v1/productos/9").with(como("ADMINISTRADOR"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(CUERPO_EDICION))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.version").value(3));
     }
 
     @Test

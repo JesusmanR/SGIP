@@ -1,6 +1,7 @@
 package co.com.bspstore.sgip.api;
 
 import co.com.bspstore.sgip.api.dto.CuadreDeInventario;
+import co.com.bspstore.sgip.logica.RecursoNoEncontradoException;
 import co.com.bspstore.sgip.logica.ServicioInventario;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.ResponseEntity;
@@ -8,6 +9,7 @@ import org.springframework.http.ResponseEntity;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -28,10 +30,11 @@ class InventarioControladorTest {
     }
 
     @Test
-    void elCuadreDeUnProductoAjenoEsUn404() {
+    void elCuadreDeUnProductoAjenoEsUn404ConMotivo() {
         when(servicio.cuadre(42)).thenReturn(Optional.empty());
 
-        assertEquals(404, controlador.cuadre(42).getStatusCode().value());
+        // El ProblemDetail del 404 lo escribe ManejadorErrores a partir de esta excepción.
+        assertThrows(RecursoNoEncontradoException.class, () -> controlador.cuadre(42));
     }
 
     /**

@@ -187,7 +187,13 @@ public class ServicioConfiguracionTributaria {
         LocalDate hoy = LocalDate.now(reloj);
 
         if (hasta == null && regla.vigenteDesde().isAfter(hoy)) {
-            repositorio.borrarRegla(empresa, reglaId);
+            if (repositorio.borrarRegla(empresa, reglaId) == 0) {
+                // La base ya tiene vigente la regla que este reloj cree por
+                // empezar: no se borró y no se puede decir que se retiró.
+                throw new DatoTributarioInvalidoException(
+                        "La regla ya empezó a regir y no se puede retirar. "
+                                + "Para cerrarla, indica «hasta» con una fecha.");
+            }
             return Optional.of(new ResultadoCierre(regla, true));
         }
 
