@@ -6,9 +6,10 @@
  */
 export default function AlertaUvt({ alerta }) {
   if (!alerta?.activa) return null
-  const cuando = alerta.diasRestantes > 0
-    ? `faltan ${alerta.diasRestantes} días para que empiece`
-    : 'ese año ya empezó'
+  const dias = alerta.diasRestantes
+  let cuando = 'ese año ya empezó'
+  if (dias === 1) cuando = 'falta 1 día para que empiece'
+  else if (dias > 1) cuando = `faltan ${dias} días para que empiece`
   return (
     <div
       className="aviso-estado aviso-estado--info alerta-uvt"

@@ -6,19 +6,38 @@ import EstadoSinPermiso from '../../componentes/comun/EstadoSinPermiso.jsx'
 import EstadoVacio from '../../componentes/comun/EstadoVacio.jsx'
 import TablaOTarjetas from '../../componentes/comun/TablaOTarjetas.jsx'
 import { apiPlataformaTributario } from '../../servicios/api/plataforma-tributario.js'
-import { PESOS } from '../../servicios/formato.js'
+import { erroresPorCampo, numeroEscrito, sinCampo } from './campos.js'
 import Campo from './Campo.jsx'
+import { UVT_PESOS } from './formato.js'
 
 const VACIO = { anio: '', valor: '', resolucion: '', motivo: '' }
+const CAMPOS_DEL_SERVIDOR = ['valor', 'resolucion', 'motivo']
+
+// Los mismos límites que el servidor: el año, el rango que acepta; el valor, SolicitudValorUvt.
+const ANIO_MINIMO = 2006
+const ANIO_MAXIMO = 2100
+
+function motivoDelAnio(texto) {
+  const anio = Number(texto)
+  if (texto === '' || !Number.isInteger(anio)) return 'Escribe el año, por ejemplo 2027.'
+  if (anio < ANIO_MINIMO || anio > ANIO_MAXIMO) return `El año va de ${ANIO_MINIMO} a ${ANIO_MAXIMO}.`
+  return null
+}
+
+function motivoDelValor(texto) {
+  if (String(texto).trim() === '') return 'Escribe el valor de la UVT en pesos.'
+  const numero = numeroEscrito(texto)
+  if (!numero) return 'Escribe el valor solo con cifras, por ejemplo 52374 o 52374,5.'
+  if (numero.valor < 1) return 'El valor tiene que ser de al menos 1 peso.'
+  if (numero.decimales > 2) return 'El valor admite como máximo 2 decimales.'
+  if (numero.enteros > 10) return 'El valor admite hasta 10 cifras enteras.'
+  return null
+}
 
 function motivos(d) {
-  const anio = Number(d.anio)
-  const valor = Number(d.valor)
   return {
-    anio: d.anio === '' || !Number.isInteger(anio) || anio < 2000 || anio > 2100
-      ? 'Escribe el año, por ejemplo 2027.' : null,
-    valor: d.valor === '' ? 'Escribe el valor de la UVT en pesos.'
-      : !(valor > 0) ? 'El valor tiene que ser mayor que cero.' : null,
+    anio: motivoDelAnio(d.anio),
+    valor: motivoDelValor(d.valor),
     resolucion: d.resolucion.length > 60 ? 'La resolución no puede pasar de 60 caracteres.' : null,
     motivo: d.motivo.length > 200 ? 'El motivo no puede pasar de 200 caracteres.' : null,
   }
@@ -35,12 +54,14 @@ export default function SeccionUvt({ uvt, alGuardar }) {
   const [intentos, setIntentos] = useState(0)
   const [enviando, setEnviando] = useState(false)
   const [errorServidor, setErrorServidor] = useState(null)
+  const [camposServidor, setCamposServidor] = useState({})
   const [exito, setExito] = useState(null)
   const formulario = useRef(null)
   const enCurso = useRef(false)
 
   const fallos = motivos(form)
-  const ver = (campo) => (intentos > 0 ? fallos[campo] : null)
+  // Lo que dijo el servidor de un campo va primero y se quita al editar ese campo.
+  const ver = (campo) => camposServidor[campo] ?? (intentos > 0 ? fallos[campo] : null)
 
   useEffect(() => {
     if (intentos > 0) formulario.current?.querySelector('[aria-invalid="true"]')?.focus()
@@ -49,6 +70,7 @@ export default function SeccionUvt({ uvt, alGuardar }) {
   const cambiar = (campo) => (e) => {
     const valor = e.target.value
     setForm((f) => ({ ...f, [campo]: valor }))
+    setCamposServidor((previos) => sinCampo(previos, campo))
   }
 
   const precargar = (fila) => {
@@ -56,6 +78,7 @@ export default function SeccionUvt({ uvt, alGuardar }) {
     setIntentos(0)
     setExito(null)
     setErrorServidor(null)
+    setCamposServidor({})
     formulario.current?.querySelector('input')?.focus()
   }
 
@@ -64,6 +87,7 @@ export default function SeccionUvt({ uvt, alGuardar }) {
     if (enCurso.current) return
     setIntentos((n) => n + 1)
     setErrorServidor(null)
+    setCamposServidor({})
     setExito(null)
     if (Object.values(fallos).some(Boolean)) return
 
@@ -79,7 +103,13 @@ export default function SeccionUvt({ uvt, alGuardar }) {
       setIntentos(0)
       alGuardar()
     } catch (err) {
-      setErrorServidor(err.message || 'No se pudo completar la operación.')
+      const delCampo = err.estado === 400 ? erroresPorCampo(err.message, CAMPOS_DEL_SERVIDOR) : null
+      if (delCampo) {
+        setCamposServidor(delCampo)
+        setIntentos((n) => n + 1)
+      } else {
+        setErrorServidor(err.message || 'No se pudo completar la operación.')
+      }
     } finally {
       enCurso.current = false
       setEnviando(false)
@@ -88,7 +118,7 @@ export default function SeccionUvt({ uvt, alGuardar }) {
 
   const columnas = [
     { clave: 'anio', titulo: 'Año', principal: true },
-    { clave: 'valor', titulo: 'Valor', numerica: true, render: (f) => PESOS.format(f.valor) },
+    { clave: 'valor', titulo: 'Valor', numerica: true, render: (f) => UVT_PESOS.format(f.valor) },
     { clave: 'resolucion', titulo: 'Resolución', render: (f) => f.resolucion || '—' },
     {
       clave: 'acciones', titulo: 'Acciones',
