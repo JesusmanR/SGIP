@@ -10,8 +10,8 @@ const opcional = (texto) => {
 
 /**
  * Llamadas de la sección Empresas de la plataforma (RF-01 a RF-03 y ADR-0028).
- * No hay ruta para listar los usuarios de una empresa ni para restablecer
- * contraseñas, y por eso aquí tampoco.
+ * Los usuarios de una empresa se listan para desbloquear a una persona; no hay
+ * ruta para restablecer contraseñas, y por eso aquí tampoco.
  *
  * El alta no manda estado ni plan: el estado inicial lo fija el servidor.
  */
@@ -35,6 +35,8 @@ export const apiPlataformaEmpresas = {
     pedir(`${RAIZ}/${empresaId}/activar`, { method: 'POST', body: { motivo: opcional(motivo) } }),
   desactivar: (empresaId, motivo) =>
     pedir(`${RAIZ}/${empresaId}/desactivar`, { method: 'POST', body: { motivo: opcional(motivo) } }),
+  /** Id, nombre, correo, rol, activo y bloqueado (hoy no puede entrar). Nunca la clave. */
+  listarUsuarios: (empresaId) => pedir(`${RAIZ}/${empresaId}/usuarios`),
   desbloquearUsuario: (empresaId, usuarioId) =>
     pedir(`${RAIZ}/${empresaId}/usuarios/${usuarioId}/desbloquear`, { method: 'POST' }),
 }

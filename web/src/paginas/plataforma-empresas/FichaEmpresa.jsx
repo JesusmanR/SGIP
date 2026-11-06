@@ -11,17 +11,30 @@ import { apiPlataformaEmpresas } from '../../servicios/api/plataforma-empresas.j
 import { fechaCorta, NUMERO } from '../../servicios/formato.js'
 import Campo from './Campo.jsx'
 import EstadoEmpresa from './EstadoEmpresa.jsx'
+import UsuariosEmpresa from './UsuariosEmpresa.jsx'
 
 const VOLVER = <Link to="/plataforma/empresas">Volver a empresas</Link>
 
+/**
+ * Quién podrá entrar y solo consultar. Cuenta a quienes tienen la cuenta activa,
+ * que es a quienes les cambia algo; el total de la empresa incluye cuentas
+ * desactivadas. Sin la lista (cargando o fallida) no hay cifra que dar, y se
+ * dice sin ella antes que con una que no es.
+ */
+function sujetoDe(activos) {
+  if (activos === null) return 'Sus usuarios podrán'
+  if (activos === 0) return 'Hoy no tiene usuarios activos; quien se active después podrá'
+  if (activos === 1) return 'Su único usuario activo podrá'
+  return `Sus ${NUMERO.format(activos)} usuarios activos podrán`
+}
+
 /** Lo que cada cambio de estado le dice a quien lo va a hacer. */
-function confirmacionDe(accion, e) {
+function confirmacionDe(accion, e, activos) {
   if (accion === 'desactivar') {
-    const usuarios = e.usuarios === 1 ? 'Su único usuario' : `Sus ${NUMERO.format(e.usuarios)} usuarios`
     return {
       pregunta: `¿Desactivar a ${e.razonSocial}?`,
-      detalle: `${usuarios} podrán entrar y solo consultar: dejan de poder registrar ventas, compras, `
-        + 'movimientos o cambios. No se borra nada: todo lo registrado se conserva y puedes volver a '
+      detalle: `${sujetoDe(activos)} entrar, pero solo consultar: no se podrán registrar ventas, compras, `
+        + 'movimientos ni cambios. No se borra nada: todo lo registrado se conserva y puedes volver a '
         + 'activar la empresa cuando quieras.',
       boton: 'Sí, desactivar',
       exito: 'Empresa desactivada.',
@@ -35,105 +48,32 @@ function confirmacionDe(accion, e) {
   }
 }
 
-/**
- * Pantallas 74 y 75, «Accesos»: la única acción de acceso que existe en el
- * servidor es desbloquear. No hay ruta para ver ni cambiar contraseñas, y
- * tampoco para listar los usuarios de una empresa: por eso se pide el número
- * del usuario, que el administrador de la empresa ve en su ficha.
- */
-function Desbloqueo({ empresaId, alExito }) {
-  const [numero, setNumero] = useState('')
-  const [motivo, setMotivo] = useState(null)
-  const [confirmando, setConfirmando] = useState(null)
-  const [enviando, setEnviando] = useState(false)
-  const [error, setError] = useState(null)
-  const campo = useRef(null)
-  const caja = useRef(null)
-  const enCurso = useRef(false)
-
-  useEffect(() => {
-    if (confirmando !== null) caja.current?.focus()
-  }, [confirmando])
-
-  function pedir(e) {
-    e.preventDefault()
-    setError(null)
-    const limpio = numero.trim()
-    if (!/^\d+$/.test(limpio) || Number(limpio) < 1) {
-      setMotivo('Escribe el número del usuario, solo con cifras.')
-      setTimeout(() => campo.current?.focus(), 0)
-      return
-    }
-    setMotivo(null)
-    setConfirmando(Number(limpio))
-  }
-
-  async function desbloquear() {
-    if (enCurso.current) return
-    enCurso.current = true
-    setEnviando(true)
-    try {
-      await apiPlataformaEmpresas.desbloquearUsuario(empresaId, confirmando)
-      alExito(`Usuario ${confirmando} desbloqueado.`)
-      setNumero('')
-    } catch (e) {
-      setError(e.message || 'No se pudo completar la operación.')
-    } finally {
-      enCurso.current = false
-      setEnviando(false)
-      setConfirmando(null)
-    }
-  }
-
-  return (
-    <section className="tarjeta desbloqueo" aria-label="Desbloquear a un usuario">
-      <h2>Desbloquear a un usuario</h2>
-      <p className="nota">
-        Una cuenta se bloquea tras varios intentos fallidos de entrada. Desbloquearla no cambia la contraseña:
-        la persona sigue entrando con la suya. El bloqueo también se quita solo a los 15 minutos.
-      </p>
-      {error && <Aviso tipo="peligro">{error}</Aviso>}
-      {confirmando !== null ? (
-        <div className="confirmacion" role="group" aria-labelledby="desbloqueo-pregunta" tabIndex={-1} ref={caja}>
-          <p id="desbloqueo-pregunta" className="confirmacion-pregunta">{`¿Desbloquear al usuario ${confirmando}?`}</p>
-          <p>
-            Podrá volver a intentar entrar. Esto no cambia la contraseña de esa persona. Si ese número no es de esta empresa,
-            el sistema no hace nada y te lo avisa.
-          </p>
-          <div className="acciones">
-            <button type="button" className="boton" disabled={enviando} onClick={desbloquear}>Sí, desbloquear</button>
-            <button type="button" className="boton secundario" disabled={enviando} onClick={() => setConfirmando(null)}>
-              Cancelar
-            </button>
-          </div>
-        </div>
-      ) : (
-        <form onSubmit={pedir} noValidate className="fila-desbloqueo">
-          <Campo
-            etiqueta="Número del usuario" motivo={motivo}
-            ayuda="Lo ve el administrador de esa empresa en la ficha del usuario."
-          >
-            <input type="text" inputMode="numeric" autoComplete="off" ref={campo} value={numero} onChange={(e) => setNumero(e.target.value)} />
-          </Campo>
-          <button type="submit" className="boton secundario">Desbloquear</button>
-        </form>
-      )}
-    </section>
-  )
-}
-
-function Ficha({ empresa, recargar, avisoInicial }) {
+function Ficha({ empresa, usuarios, recargar, avisoInicial }) {
   const [confirmando, setConfirmando] = useState(null)
   const [motivo, setMotivo] = useState('')
   const [enviando, setEnviando] = useState(false)
   const [exito, setExito] = useState(avisoInicial ?? null)
   const [error, setError] = useState(null)
+  const [foco, setFoco] = useState(null)
   const caja = useRef(null)
+  const datos = useRef(null)
+  const botonActivar = useRef(null)
+  const botonDesactivar = useRef(null)
   const enCurso = useRef(false)
 
   useEffect(() => {
     if (confirmando) caja.current?.focus()
   }, [confirmando])
+
+  // El foco vuelve cuando la confirmación ya se cerró y los botones ya están en pantalla.
+  useEffect(() => {
+    if (confirmando || !foco) return
+    const destino = { activar: botonActivar, desactivar: botonDesactivar }[foco]?.current ?? datos.current
+    destino?.focus()
+    setFoco(null)
+  }, [confirmando, foco])
+
+  const activos = usuarios.datos ? usuarios.datos.filter((u) => u.activo).length : null
 
   async function cambiarEstado() {
     if (enCurso.current) return
@@ -141,15 +81,19 @@ function Ficha({ empresa, recargar, avisoInicial }) {
     setEnviando(true)
     setError(null)
     setExito(null)
-    const llamar = confirmando === 'activar' ? apiPlataformaEmpresas.activar : apiPlataformaEmpresas.desactivar
-    const mensaje = confirmacionDe(confirmando, empresa).exito
+    const accion = confirmando
+    const llamar = accion === 'activar' ? apiPlataformaEmpresas.activar : apiPlataformaEmpresas.desactivar
+    const mensaje = confirmacionDe(accion, empresa, activos).exito
     try {
       await llamar(empresa.empresaId, motivo.trim())
+      // El botón que abrió la confirmación cambia con el nuevo estado: el foco va a un lugar estable.
+      setFoco('estable')
       setConfirmando(null)
       setMotivo('')
       setExito(mensaje)
       recargar()
     } catch (e) {
+      setFoco(accion)
       setConfirmando(null)
       setError(e.message || 'No se pudo completar la operación.')
     } finally {
@@ -165,7 +109,12 @@ function Ficha({ empresa, recargar, avisoInicial }) {
     setConfirmando(accion)
   }
 
-  const pedida = confirmando ? confirmacionDe(confirmando, empresa) : null
+  function cancelar() {
+    setFoco(confirmando)
+    setConfirmando(null)
+  }
+
+  const pedida = confirmando ? confirmacionDe(confirmando, empresa, activos) : null
 
   return (
     <div className="contenido plataforma-empresas">
@@ -175,7 +124,7 @@ function Ficha({ empresa, recargar, avisoInicial }) {
       {exito && <Aviso tipo="exito">{exito}</Aviso>}
       {error && <Aviso tipo="peligro">{error}</Aviso>}
 
-      <section className="tarjeta ficha" aria-label="Datos de la empresa">
+      <section className="tarjeta ficha" aria-label="Datos de la empresa" tabIndex={-1} ref={datos}>
         <dl>
           <div><dt>NIT</dt><dd>{empresa.nit}</dd></div>
           <div><dt>Estado</dt><dd><EstadoEmpresa estado={empresa.estado} /></dd></div>
@@ -196,7 +145,7 @@ function Ficha({ empresa, recargar, avisoInicial }) {
           </Campo>
           <div className="acciones">
             <button type="button" className="boton" disabled={enviando} onClick={cambiarEstado}>{pedida.boton}</button>
-            <button type="button" className="boton secundario" disabled={enviando} onClick={() => setConfirmando(null)}>
+            <button type="button" className="boton secundario" disabled={enviando} onClick={cancelar}>
               Cancelar
             </button>
           </div>
@@ -204,15 +153,21 @@ function Ficha({ empresa, recargar, avisoInicial }) {
       ) : (
         <div className="acciones">
           {empresa.estado !== 'ACTIVA' && (
-            <button type="button" className="boton" onClick={() => abrir('activar')}>Activar</button>
+            <button type="button" className="boton" ref={botonActivar} onClick={() => abrir('activar')}>Activar</button>
           )}
           {empresa.estado !== 'DESACTIVADA' && (
-            <button type="button" className="boton secundario" onClick={() => abrir('desactivar')}>Desactivar</button>
+            <button type="button" className="boton secundario" ref={botonDesactivar} onClick={() => abrir('desactivar')}>
+              Desactivar
+            </button>
           )}
         </div>
       )}
 
-      <Desbloqueo empresaId={empresa.empresaId} alExito={(m) => { setError(null); setExito(m) }} />
+      <UsuariosEmpresa
+        empresaId={empresa.empresaId}
+        usuarios={usuarios}
+        alExito={(mensaje) => { setError(null); setExito(mensaje) }}
+      />
     </div>
   )
 }
@@ -224,8 +179,10 @@ export default function FichaEmpresa({ empresaId }) {
     () => apiPlataformaEmpresas.ver(empresaId),
     [empresaId],
   )
+  // Se pide a la vez que la empresa y no cuelga de ella: la lista tiene sus propios estados.
+  const usuarios = useDatos(() => apiPlataformaEmpresas.listarUsuarios(empresaId), [empresaId])
 
-  if (datos) return <Ficha empresa={datos} recargar={recargar} avisoInicial={aviso} />
+  if (datos) return <Ficha empresa={datos} usuarios={usuarios} recargar={recargar} avisoInicial={aviso} />
 
   let cuerpo
   if (sinPermiso) cuerpo = <EstadoSinPermiso />

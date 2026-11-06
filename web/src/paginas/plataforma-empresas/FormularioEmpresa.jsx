@@ -11,6 +11,19 @@ const VACIO = {
   administradorNombre: '', administradorCorreo: '', administradorClave: '', repite: '',
 }
 
+/**
+ * El servidor responde 409 al NIT repetido y también al correo del administrador
+ * repetido, con el mismo título y sin ningún campo que diga cuál es: solo el texto
+ * del detalle lo distingue (ServicioPlataforma.darDeAlta). Por eso se lee el texto;
+ * si algún día cambia, el 409 no reconocido cae en el aviso de arriba, que sigue
+ * diciendo lo que pasó, y no en un campo equivocado.
+ */
+function campoDelConflicto(detalle) {
+  if (/^El correo /i.test(detalle)) return 'administradorCorreo'
+  if (/identificaci[oó]n tributaria/i.test(detalle)) return 'nit'
+  return null
+}
+
 const largo = (texto, max, nombre) => (texto.length > max ? `${nombre} no puede pasar de ${max} caracteres.` : null)
 
 /** Por qué no se puede enviar lo escrito, campo por campo, en el orden de la pantalla. */
@@ -30,7 +43,8 @@ function motivos(d) {
     administradorNombre: nombre === '' ? 'Escribe el nombre del administrador.' : largo(nombre, 120, 'El nombre'),
     administradorCorreo: correo === '' ? 'Escribe el correo del administrador.'
       : !FORMA_DE_CORREO.test(correo) ? 'Escribe un correo válido, como nombre@tienda.com.' : largo(correo, 120, 'El correo'),
-    administradorClave: d.administradorClave === '' ? 'Escribe la contraseña inicial.'
+    // El DTO exige que no sea solo espacios (@NotBlank): ocho espacios no son una contraseña.
+    administradorClave: d.administradorClave.trim() === '' ? 'Escribe la contraseña inicial.'
       : d.administradorClave.length < 8 ? 'La contraseña debe tener al menos 8 caracteres.'
         : largo(d.administradorClave, 100, 'La contraseña'),
     repite: d.administradorClave !== '' && d.repite !== d.administradorClave ? 'No coincide con la contraseña.' : null,
@@ -49,17 +63,19 @@ export default function FormularioEmpresa() {
   const [intentos, setIntentos] = useState(0)
   const [enviando, setEnviando] = useState(false)
   const [error, setError] = useState(null)
-  const [errorNit, setErrorNit] = useState(null)
+  const [conflictos, setConflictos] = useState({})
   const formulario = useRef(null)
   const aviso = useRef(null)
   const enCurso = useRef(false)
 
   const fallos = motivos(datos)
-  const ver = (campo) => (intentos > 0 ? fallos[campo] : null)
+  // Lo que dijo el servidor va primero: es lo que impide enviar, y se quita al editar su campo.
+  const ver = (campo) => conflictos[campo] ?? (intentos > 0 ? fallos[campo] : null)
 
+  // Solo al enviar, no al limpiar un conflicto: si no, corregir un campo le quitaría el foco.
   useEffect(() => {
     if (intentos > 0) formulario.current?.querySelector('[aria-invalid="true"]')?.focus()
-  }, [intentos, errorNit])
+  }, [intentos])
 
   useEffect(() => {
     if (error) aviso.current?.focus()
@@ -68,7 +84,12 @@ export default function FormularioEmpresa() {
   const cambiar = (campo) => (e) => {
     const valor = e.target.value
     setDatos((d) => ({ ...d, [campo]: valor }))
-    if (campo === 'nit') setErrorNit(null)
+    setConflictos((previos) => {
+      if (!(campo in previos)) return previos
+      const resto = { ...previos }
+      delete resto[campo]
+      return resto
+    })
   }
 
   async function enviar(e) {
@@ -76,7 +97,7 @@ export default function FormularioEmpresa() {
     if (enCurso.current) return
     setIntentos((n) => n + 1)
     setError(null)
-    if (Object.values(fallos).some(Boolean) || errorNit) return
+    if (Object.values(fallos).some(Boolean) || Object.keys(conflictos).length > 0) return
 
     enCurso.current = true
     setEnviando(true)
@@ -98,13 +119,18 @@ export default function FormularioEmpresa() {
     } catch (err) {
       enCurso.current = false
       setEnviando(false)
-      if (err.estado === 409) setErrorNit(err.message)
-      else setError(err.message || 'No se pudo completar la operación.')
+      const campo = err.estado === 409 ? campoDelConflicto(err.message ?? '') : null
+      if (campo) {
+        setConflictos((previos) => ({ ...previos, [campo]: err.message }))
+        setIntentos((n) => n + 1)
+      } else {
+        setError(err.message || 'No se pudo completar la operación.')
+      }
     }
   }
 
   const texto = (campo, etiqueta) => (
-    <Campo etiqueta={etiqueta} motivo={campo === 'nit' ? (errorNit ?? ver(campo)) : ver(campo)}>
+    <Campo etiqueta={etiqueta} motivo={ver(campo)}>
       <input type="text" autoComplete="off" value={datos[campo]} onChange={cambiar(campo)} />
     </Campo>
   )
