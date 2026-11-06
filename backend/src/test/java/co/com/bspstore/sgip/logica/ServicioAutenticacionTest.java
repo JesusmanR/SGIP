@@ -373,6 +373,45 @@ class ServicioAutenticacionTest {
         verify(auditoria, never()).save(any());
     }
 
+    /**
+     * ADR-0028 vale también por esta puerta: intentar con la cuenta bloqueada no
+     * alarga el plazo ni sigue contando intentos (la columna admite hasta 50).
+     */
+    @Test
+    void unErrorAlCambiarLaClaveConLaCuentaBloqueadaNoAlargaElBloqueo() {
+        when(usuarios.findById(20)).thenReturn(Optional.of(usuario));
+        for (int i = 0; i < 5; i++) {
+            assertThrows(ClaveActualIncorrectaException.class,
+                    () -> servicio.cambiarClave(20, "incorrecta", "NuevaClave2026", "10.0.0.5"));
+        }
+        assertEquals(AHORA, usuario.getBloqueadoEn());
+        reloj.adelantarMinutos(5);
+
+        assertThrows(ClaveActualIncorrectaException.class,
+                () -> servicio.cambiarClave(20, "incorrecta", "NuevaClave2026", "10.0.0.5"));
+
+        assertEquals(AHORA, usuario.getBloqueadoEn(), "el plazo sigue contando desde el bloqueo");
+        assertEquals(5, usuario.getIntentosFallidos(), "bloqueada, no sigue sumando");
+    }
+
+    /** Al vencer el plazo los intentos vuelven a cero también al cambiar la clave. */
+    @Test
+    void alVencerElBloqueoUnErrorAlCambiarLaClaveEmpiezaLaCuentaDeNuevo() {
+        when(usuarios.findById(20)).thenReturn(Optional.of(usuario));
+        for (int i = 0; i < 5; i++) {
+            assertThrows(ClaveActualIncorrectaException.class,
+                    () -> servicio.cambiarClave(20, "incorrecta", "NuevaClave2026", "10.0.0.5"));
+        }
+        reloj.adelantarMinutos(MINUTOS_DE_BLOQUEO);
+
+        assertThrows(ClaveActualIncorrectaException.class,
+                () -> servicio.cambiarClave(20, "incorrecta", "NuevaClave2026", "10.0.0.5"));
+
+        assertFalse(usuario.isBloqueado());
+        assertEquals(1, usuario.getIntentosFallidos());
+        assertNull(usuario.getBloqueadoEn());
+    }
+
     @Test
     void elQuintoIntentoConLaActualIncorrectaBloqueaLaCuenta() {
         when(usuarios.findById(20)).thenReturn(Optional.of(usuario));

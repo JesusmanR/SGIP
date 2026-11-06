@@ -98,7 +98,16 @@ public class Usuario {
         return activo && !bloqueado;
     }
 
+    /**
+     * Cuenta un intento fallido. Con la cuenta ya bloqueada no hace nada: ni
+     * alarga el plazo (el instante es el del bloqueo) ni sigue sumando, que la
+     * columna admite hasta 50. Vale para las dos puertas que adivinan una
+     * clave, el ingreso y el cambio de contraseña (ADR-0028).
+     */
     public void registrarIntentoFallido(int maximoPermitido, LocalDateTime ahora) {
+        if (bloqueado) {
+            return;
+        }
         intentosFallidos++;
         if (intentosFallidos >= maximoPermitido) {
             bloqueado = true;

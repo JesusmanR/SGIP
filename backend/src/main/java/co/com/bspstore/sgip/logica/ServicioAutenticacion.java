@@ -128,6 +128,11 @@ public class ServicioAutenticacion {
         Usuario usuario = usuarios.findById(usuarioId)
                 .orElseThrow(() -> new RecursoNoEncontradoException("El usuario no existe."));
 
+        // El mismo vencimiento que en el ingreso: al cumplirse el plazo, los
+        // intentos vuelven a cero también por esta puerta.
+        if (usuario.bloqueoVencido(ahora(), minutosDeBloqueo)) {
+            usuario.desbloquear();
+        }
         if (!Seguridad.verificar(actual, usuario.getClaveHash())) {
             usuario.registrarIntentoFallido(intentosMaximos, ahora());
             // Queda en la misma auditoría que los fallos del ingreso: es la

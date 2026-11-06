@@ -63,8 +63,10 @@ ni registro lleva contraseñas.
   15 minutos. Antes la bloqueaba una sola vez, para siempre; ahora el daño dura lo que
   dura la insistencia, y el dueño tiene siempre la salida de esperar. No hay límite por
   origen todavía: si hace falta, es otra decisión.
-- Mientras la cuenta está bloqueada, intentar no extiende el plazo: el rechazo ocurre
-  antes de mirar la clave.
+- Mientras la cuenta está bloqueada, intentar no extiende el plazo ni suma intentos: en el
+  ingreso el rechazo ocurre antes de mirar la clave, y en `/auth/clave` (que se alcanza con
+  una sesión abierta) el error se audita pero `Usuario.registrarIntentoFallido` no hace
+  nada. Las dos puertas aplican el mismo vencimiento.
 - No hay recuperar ni restablecer contraseña: esta decisión no lo añade. Quien olvida la
   clave sigue sin salida propia, y es un hallazgo aparte.
 - El super administrador bloqueado se desbloquea solo al vencer el plazo; ninguna ruta
