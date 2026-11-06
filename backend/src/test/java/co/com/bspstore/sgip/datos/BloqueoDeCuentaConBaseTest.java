@@ -5,6 +5,7 @@ import co.com.bspstore.sgip.logica.CredencialesInvalidasException;
 import co.com.bspstore.sgip.logica.RecursoNoEncontradoException;
 import co.com.bspstore.sgip.logica.ServicioAutenticacion;
 import co.com.bspstore.sgip.logica.ServicioPlataforma;
+import co.com.bspstore.sgip.modelo.Usuario;
 import co.com.bspstore.sgip.util.Seguridad;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -45,6 +46,7 @@ class BloqueoDeCuentaConBaseTest {
     @Autowired ServicioPlataforma servicioPlataforma;
     @Autowired RepositorioPlataforma plataforma;
     @Autowired JdbcClient jdbc;
+    @Autowired UsuarioRepositorio usuarios;
 
     private String marca;
     private Integer empresaId;
@@ -119,11 +121,17 @@ class BloqueoDeCuentaConBaseTest {
     }
 
     private void bloquearHace(int minutos) {
-        // El instante se calcula aquí, con el reloj de la aplicación, y no con NOW() del motor.
-        jdbc.sql("UPDATE usuarios SET bloqueado = 1, intentos_fallidos = 5, bloqueado_en = :cuando "
-                        + "WHERE usuario_id = :id")
-                .param("cuando", LocalDateTime.now().minusMinutes(minutos))
-                .param("id", usuarioId).update();
+        // Se bloquea por la entidad, el mismo camino que usa la aplicación. Un
+        // UPDATE con JdbcClient guarda el LocalDateTime tal cual, y Hibernate lo
+        // lee convertido de la zona de la conexión a la de la JVM: en la CI, con
+        // la JVM en UTC y la conexión en Bogotá, el bloqueo parecía cinco horas
+        // más reciente.
+        Usuario usuario = usuarios.findById(usuarioId).orElseThrow();
+        LocalDateTime hace = LocalDateTime.now().minusMinutes(minutos);
+        for (int i = 0; i < 5; i++) {
+            usuario.registrarIntentoFallido(5, hace);
+        }
+        usuarios.save(usuario);
     }
 
     @Test
