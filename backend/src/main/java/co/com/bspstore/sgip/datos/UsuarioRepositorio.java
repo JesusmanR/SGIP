@@ -2,6 +2,8 @@ package co.com.bspstore.sgip.datos;
 
 import co.com.bspstore.sgip.modelo.Usuario;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 import java.util.Optional;
@@ -26,6 +28,16 @@ public interface UsuarioRepositorio extends JpaRepository<Usuario, Integer> {
 
     /** Los usuarios del propio negocio, activos y desactivados (RF-12). */
     List<Usuario> findByEmpresaIdOrderByNombre(Integer empresaId);
+
+    /**
+     * Los usuarios de una empresa con su rol, en una sola consulta.
+     *
+     * El rol es EAGER: con un método derivado, Hibernate lo busca después con
+     * una consulta por cada rol distinto. Aquí viene unido y la lista cuesta
+     * lo mismo con dos usuarios que con doscientos.
+     */
+    @Query("select u from Usuario u join fetch u.rol where u.empresaId = :empresaId order by u.nombre")
+    List<Usuario> listarConRolDeLaEmpresa(@Param("empresaId") Integer empresaId);
 
     /**
      * Cuántos administradores activos le quedan a una empresa.

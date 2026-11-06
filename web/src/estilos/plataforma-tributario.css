@@ -1,1 +1,33 @@
-/* Estilos de la sección plataforma-tributario: solo esta sección escribe aquí. */
+/* Estilos de la sección plataforma-tributario: solo esta sección escribe aquí.
+   El color sale solo de tokens.css. */
+
+.plataforma-tributario .seccion-tributaria { margin-bottom: var(--espacio-5); }
+.plataforma-tributario .seccion-tributaria h2 { margin: 0 0 var(--espacio-1); font-size: var(--t-titulo-tarjeta); }
+.plataforma-tributario .seccion-tributaria h3 { margin: 0 0 var(--espacio-3); font-size: var(--t-titulo-tarjeta); }
+.plataforma-tributario .nota {
+  margin: 0 0 var(--espacio-3); color: var(--tinta-2); font-size: var(--t-cuerpo); max-width: 65ch;
+}
+.plataforma-tributario .alerta-uvt { margin-bottom: var(--espacio-4); font-size: var(--t-cuerpo); max-width: 65ch; }
+
+.plataforma-tributario .formulario-tributario { max-width: 32rem; margin-top: var(--espacio-4); }
+.plataforma-tributario .formulario-tributario .nota { margin-top: calc(-1 * var(--espacio-2)); }
+.plataforma-tributario .campo input { width: 100%; }
+/* El fieldset solo existe para deshabilitar los campos mientras se confirma: no se ve. */
+.plataforma-tributario .campos { border: 0; margin: 0; padding: 0; min-width: 0; }
+.plataforma-tributario .confirmacion {
+  background: var(--tarjeta); border: 1px solid var(--borde-control); border-radius: var(--radio-tarjeta);
+  padding: var(--espacio-4); max-width: 65ch;
+}
+.plataforma-tributario .confirmacion p { margin: 0 0 var(--espacio-2); font-size: var(--t-cuerpo); }
+.plataforma-tributario .confirmacion .confirmacion-pregunta { font-weight: 600; font-size: var(--t-titulo-tarjeta); }
+.plataforma-tributario .confirmacion:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; border-color: var(--acento); }
+.plataforma-tributario .campo-mensaje { color: var(--tinta-3); }
+.plataforma-tributario .campo-mensaje.error { color: var(--peligro); }
+
+.plataforma-tributario .acciones { display: flex; flex-wrap: wrap; gap: var(--espacio-2); margin-top: var(--espacio-3); }
+.plataforma-tributario .acciones .boton { min-height: var(--toque-minimo); }
+.plataforma-tributario td .boton.menudo { width: auto; min-height: var(--toque-minimo); padding: 0 var(--espacio-3); }
+
+@media (max-width: 48rem) {
+  .plataforma-tributario .acciones .boton { flex: 1 1 100%; }
+}
