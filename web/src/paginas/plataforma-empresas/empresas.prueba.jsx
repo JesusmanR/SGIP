@@ -277,6 +277,15 @@ describe('usuarios de la empresa y desbloqueo por persona', () => {
     expect(apiPlataformaEmpresas.listarUsuarios).toHaveBeenCalledTimes(1)
   })
 
+  it('el rol de cliente también sale en palabras, no como código', async () => {
+    apiPlataformaEmpresas.ver.mockResolvedValue(BASE)
+    apiPlataformaEmpresas.listarUsuarios.mockResolvedValue([{ ...LUIS, id: 23, nombre: 'Rosa Díaz', rol: 'CLIENTE' }])
+    montar('/plataforma/empresas/4')
+    const tabla = await screen.findByRole('table', { name: /usuarios de la empresa/i })
+    expect(within(tabla).getAllByRole('row')[1]).toHaveTextContent('Cliente')
+    expect(tabla).not.toHaveTextContent('CLIENTE')
+  })
+
   it('ya no pide un número de usuario ni lo explica', async () => {
     apiPlataformaEmpresas.ver.mockResolvedValue(BASE)
     apiPlataformaEmpresas.listarUsuarios.mockResolvedValue(USUARIOS)
