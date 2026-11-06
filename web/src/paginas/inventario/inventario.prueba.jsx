@@ -3,9 +3,9 @@
  * montada en sus rutas reales, con el módulo de API simulado y la clase
  * ErrorApi real: la pantalla decide con `estado` y con el `detail` que trae.
  */
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ErrorApi } from '../../servicios/api.js'
@@ -46,9 +46,14 @@ const PRODUCTO = {
 const OTRO = { productoId: 6, codigo: 'TEC-002', nombre: 'Teclado K2', existencia: 4 }
 const CUADRA = { productoId: 5, existencia: 33, sumaDeMovimientos: 33, cuadra: true }
 
+function Ubicacion() {
+  return <p data-testid="ruta">{useLocation().pathname}</p>
+}
+
 function montar(ruta = '/inventario') {
   return render(
     <MemoryRouter initialEntries={[ruta]}>
+      <Ubicacion />
       <Routes>
         <Route path="/inventario/*" element={<Inventario />} />
       </Routes>
@@ -356,7 +361,7 @@ describe('ajuste', () => {
     await userEvent.type(screen.getByLabelText(/cantidad contada/i), '2,5')
     await userEvent.type(screen.getByLabelText(/motivo del ajuste/i), 'x')
     await userEvent.click(screen.getByRole('button', { name: /revisar ajuste/i }))
-    expect(screen.getByText(/número entero, sin decimales/i)).toBeInTheDocument()
+    expect(screen.getByText(/número entero, sin puntos, comas ni signos/i)).toBeInTheDocument()
     expect(apiInventario.ajustar).not.toHaveBeenCalled()
   })
 
@@ -468,13 +473,13 @@ describe('ajuste', () => {
 
   it('un 400 del servidor muestra su detalle y deja reintentar', async () => {
     apiInventario.ajustar
-      .mockRejectedValueOnce(new ErrorApi(400, 'El saldo quedaría en -10001, por debajo del piso de -9999.'))
+      .mockRejectedValueOnce(new ErrorApi(400, 'motivo: El motivo no puede pasar de 200 caracteres'))
       .mockResolvedValueOnce({ ...AJUSTE, existenciaAnterior: 33, existenciaPosterior: 30 })
     montar('/inventario/ajustes/nuevo')
     await llenar()
     await userEvent.click(screen.getByRole('button', { name: /revisar ajuste/i }))
     await userEvent.click(await screen.findByRole('button', { name: /confirmar ajuste/i }))
-    expect(await screen.findByRole('alert')).toHaveTextContent('El saldo quedaría en -10001, por debajo del piso de -9999.')
+    expect(await screen.findByRole('alert')).toHaveTextContent('motivo: El motivo no puede pasar de 200 caracteres')
     expect(screen.getByRole('button', { name: /confirmar ajuste/i })).toBeEnabled()
     await userEvent.click(screen.getByRole('button', { name: /confirmar ajuste/i }))
     expect(await screen.findByRole('region', { name: /ajuste registrado/i })).toBeInTheDocument()
@@ -584,5 +589,200 @@ describe('ingreso', () => {
     await userEvent.click(await screen.findByRole('button', { name: /confirmar ingreso/i }))
     await userEvent.click(screen.getByRole('button', { name: /registrando/i }))
     expect(apiInventario.ingresar).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('foco, ids raros y búsqueda (ronda 1)', () => {
+  beforeEach(() => {
+    apiInventario.buscarProductos.mockResolvedValue([PRODUCTO])
+  })
+
+  async function hastaRevision() {
+    montar('/inventario/ajustes/nuevo')
+    await elegirProducto('aur', 'auriculares nova')
+    await userEvent.type(screen.getByLabelText(/cantidad contada/i), '30')
+    await userEvent.type(screen.getByLabelText(/motivo del ajuste/i), 'Conteo físico')
+    await userEvent.click(screen.getByRole('button', { name: /revisar ajuste/i }))
+  }
+
+  it('al entrar en la revisión el foco va al título del paso', async () => {
+    await hastaRevision()
+    const titulo = await screen.findByRole('heading', { name: /revisa antes de confirmar/i })
+    await waitFor(() => expect(titulo).toHaveFocus())
+  })
+
+  it('al terminar, el foco va al título de «listo»', async () => {
+    apiInventario.ajustar.mockResolvedValue({ ...AJUSTE, existenciaAnterior: 33, existenciaPosterior: 30 })
+    await hastaRevision()
+    await userEvent.click(await screen.findByRole('button', { name: /confirmar ajuste/i }))
+    const titulo = await screen.findByRole('heading', { name: /ajuste registrado/i })
+    await waitFor(() => expect(titulo).toHaveFocus())
+  })
+
+  it('un error al confirmar lleva el foco al aviso', async () => {
+    apiInventario.ajustar.mockRejectedValue(new ErrorApi(400, 'motivo: Algo falló'))
+    await hastaRevision()
+    await userEvent.click(await screen.findByRole('button', { name: /confirmar ajuste/i }))
+    const alerta = await screen.findByRole('alert')
+    await waitFor(() => expect(alerta.parentElement).toHaveFocus())
+  })
+
+  it('«Corregir» devuelve el foco al primer campo del formulario', async () => {
+    await hastaRevision()
+    await userEvent.click(await screen.findByRole('button', { name: /corregir/i }))
+    await waitFor(() => expect(screen.getByLabelText(/cantidad contada/i)).toHaveFocus())
+  })
+
+  it('elegir producto lleva el foco a la cantidad, y «Cambiar producto» al buscador', async () => {
+    montar('/inventario/ajustes/nuevo')
+    await elegirProducto('aur', 'auriculares nova')
+    await waitFor(() => expect(screen.getByLabelText(/cantidad contada/i)).toHaveFocus())
+    await userEvent.click(screen.getByRole('button', { name: /cambiar producto/i }))
+    await waitFor(() => expect(screen.getByRole('textbox', { name: /^producto/i })).toHaveFocus())
+  })
+
+  it('«Registrar otro ajuste» devuelve el foco al buscador', async () => {
+    apiInventario.ajustar.mockResolvedValue({ ...AJUSTE, existenciaAnterior: 33, existenciaPosterior: 30 })
+    await hastaRevision()
+    await userEvent.click(await screen.findByRole('button', { name: /confirmar ajuste/i }))
+    await userEvent.click(await screen.findByRole('button', { name: /registrar otro ajuste/i }))
+    await waitFor(() => expect(screen.getByRole('textbox', { name: /^producto/i })).toHaveFocus())
+    expect(screen.getByLabelText(/cantidad contada/i)).toHaveValue('')
+  })
+
+  it.each(['abc', '0', '-5', '1.5', '1234567890', '99999999999999999999'])(
+    '?producto=%s no se envía: dice que no se encontró',
+    async (basura) => {
+      montar(`/inventario/ajustes/nuevo?producto=${basura}`)
+      expect(await screen.findByText(/no encontramos ese producto/i)).toBeInTheDocument()
+      expect(apiInventario.producto).not.toHaveBeenCalled()
+    },
+  )
+
+  it.each(['abc', '0', '1234567890'])('/productos/%s no pide nada: dice que no se encontró', async (basura) => {
+    montar(`/inventario/productos/${basura}`)
+    expect(await screen.findByText(/no encontramos ese producto/i)).toBeInTheDocument()
+    expect(apiInventario.producto).not.toHaveBeenCalled()
+    expect(apiInventario.kardex).not.toHaveBeenCalled()
+    expect(apiInventario.cuadre).not.toHaveBeenCalled()
+  })
+
+  it('un id de nueve cifras sí se pide', async () => {
+    apiInventario.producto.mockResolvedValue(PRODUCTO)
+    apiInventario.kardex.mockResolvedValue([])
+    apiInventario.cuadre.mockResolvedValue(CUADRA)
+    montar('/inventario/productos/999999999')
+    await screen.findByRole('heading', { level: 1, name: /auriculares nova/i })
+    expect(apiInventario.producto).toHaveBeenCalledWith('999999999')
+  })
+
+  it('una subruta desconocida lleva a /inventario', async () => {
+    apiInventario.movimientos.mockResolvedValue([INGRESO])
+    montar('/inventario/nada/de/esto')
+    await screen.findByRole('table')
+    expect(screen.getByTestId('ruta').textContent).toBe('/inventario')
+  })
+
+  it('pulsar Buscar otra vez con el mismo texto no repite la petición', async () => {
+    montar('/inventario/ajustes/nuevo')
+    await userEvent.type(screen.getByRole('textbox', { name: /^producto/i }), 'aur')
+    await userEvent.click(screen.getByRole('button', { name: /^buscar/i }))
+    await screen.findByRole('button', { name: /auriculares nova/i })
+    await userEvent.click(screen.getByRole('button', { name: /^buscar/i }))
+    expect(apiInventario.buscarProductos).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('button', { name: /auriculares nova/i })).toBeInTheDocument()
+  })
+
+  it('al editar el texto sin buscar, los resultados viejos desaparecen', async () => {
+    montar('/inventario/ajustes/nuevo')
+    await userEvent.type(screen.getByRole('textbox', { name: /^producto/i }), 'aur{Enter}')
+    await screen.findByRole('button', { name: /auriculares nova/i })
+    await userEvent.type(screen.getByRole('textbox', { name: /^producto/i }), 'x')
+    expect(screen.queryByRole('button', { name: /auriculares nova/i })).not.toBeInTheDocument()
+  })
+
+  it('«1.000» se rechaza con un mensaje que dice sin puntos', async () => {
+    montar('/inventario/ajustes/nuevo')
+    await elegirProducto('aur', 'auriculares nova')
+    await userEvent.type(screen.getByLabelText(/cantidad contada/i), '1.000')
+    await userEvent.type(screen.getByLabelText(/motivo del ajuste/i), 'Conteo')
+    await userEvent.click(screen.getByRole('button', { name: /revisar ajuste/i }))
+    expect(screen.getByText(/sin puntos, comas ni signos/i)).toBeInTheDocument()
+    expect(apiInventario.ajustar).not.toHaveBeenCalled()
+  })
+
+  it('la guarda impide un segundo envío aunque el botón aún no esté deshabilitado', async () => {
+    apiInventario.ajustar.mockReturnValue(new Promise(() => {}))
+    await hastaRevision()
+    const boton = await screen.findByRole('button', { name: /confirmar ajuste/i })
+    act(() => { boton.click(); boton.click() })
+    expect(apiInventario.ajustar).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('ingreso: errores y reintento (ronda 1)', () => {
+  beforeEach(() => {
+    apiInventario.buscarProductos.mockResolvedValue([PRODUCTO])
+  })
+
+  async function hastaRevision() {
+    montar('/inventario/ingresos/nuevo')
+    await elegirProducto('aur', 'auriculares nova')
+    await userEvent.type(screen.getByLabelText(/cantidad que entra/i), '5')
+    await userEvent.click(screen.getByRole('button', { name: /revisar ingreso/i }))
+  }
+
+  it('un 404 dice que el producto ya no está en el catálogo', async () => {
+    apiInventario.ingresar.mockRejectedValue(new ErrorApi(404, 'x'))
+    await hastaRevision()
+    await userEvent.click(await screen.findByRole('button', { name: /confirmar ingreso/i }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(/ya no está en tu catálogo/i)
+  })
+
+  it('un 403 lo dice con la voz del servidor', async () => {
+    apiInventario.ingresar.mockRejectedValue(new ErrorApi(403, 'Tu rol no tiene permiso para hacer esto.'))
+    await hastaRevision()
+    await userEvent.click(await screen.findByRole('button', { name: /confirmar ingreso/i }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(/no tiene permiso/i)
+  })
+
+  it('tras un error se puede reintentar y sale bien', async () => {
+    apiInventario.ingresar
+      .mockRejectedValueOnce(new ErrorApi(500, 'Falló.'))
+      .mockResolvedValueOnce({ ...INGRESO, existenciaAnterior: 33, existenciaPosterior: 38 })
+    await hastaRevision()
+    await userEvent.click(await screen.findByRole('button', { name: /confirmar ingreso/i }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Falló.')
+    await userEvent.click(screen.getByRole('button', { name: /confirmar ingreso/i }))
+    expect(await screen.findByRole('region', { name: /ingreso registrado/i })).toBeInTheDocument()
+    expect(apiInventario.ingresar).toHaveBeenCalledTimes(2)
+  })
+
+  it('«Registrar otro ingreso» vuelve a un formulario vacío', async () => {
+    apiInventario.ingresar.mockResolvedValue({ ...INGRESO, existenciaAnterior: 33, existenciaPosterior: 38 })
+    await hastaRevision()
+    await userEvent.click(await screen.findByRole('button', { name: /confirmar ingreso/i }))
+    await userEvent.click(await screen.findByRole('button', { name: /registrar otro ingreso/i }))
+    expect(screen.getByRole('textbox', { name: /^producto/i })).toBeInTheDocument()
+    expect(screen.getByLabelText(/cantidad que entra/i)).toHaveValue('')
+  })
+
+  it('con ?producto= parte con ese producto; 403, 404 y error reintentable', async () => {
+    apiInventario.producto.mockResolvedValueOnce(PRODUCTO)
+    const a = montar('/inventario/ingresos/nuevo?producto=5')
+    expect(await screen.findByText(/auriculares nova/i)).toBeInTheDocument()
+    a.unmount()
+    apiInventario.producto.mockRejectedValueOnce(new ErrorApi(403, 'no'))
+    const b = montar('/inventario/ingresos/nuevo?producto=5')
+    expect(await screen.findByText(/no tienes permiso/i)).toBeInTheDocument()
+    b.unmount()
+    apiInventario.producto.mockRejectedValueOnce(new ErrorApi(404, 'x'))
+    const c = montar('/inventario/ingresos/nuevo?producto=5')
+    expect(await screen.findByText(/no encontramos ese producto/i)).toBeInTheDocument()
+    c.unmount()
+    apiInventario.producto.mockRejectedValueOnce(new ErrorApi(500, 'Falló.')).mockResolvedValueOnce(PRODUCTO)
+    montar('/inventario/ingresos/nuevo?producto=5')
+    await userEvent.click(await screen.findByRole('button', { name: /reintentar/i }))
+    expect(await screen.findByLabelText(/cantidad que entra/i)).toBeInTheDocument()
   })
 })
