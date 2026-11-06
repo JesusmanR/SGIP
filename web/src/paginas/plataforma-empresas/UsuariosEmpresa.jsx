@@ -7,7 +7,7 @@ import EstadoVacio from '../../componentes/comun/EstadoVacio.jsx'
 import TablaOTarjetas from '../../componentes/comun/TablaOTarjetas.jsx'
 import { apiPlataformaEmpresas } from '../../servicios/api/plataforma-empresas.js'
 
-const ROLES = { ADMINISTRADOR: 'Administrador', VENDEDOR: 'Vendedor' }
+const ROLES = { ADMINISTRADOR: 'Administrador', VENDEDOR: 'Vendedor', CLIENTE: 'Cliente' }
 
 /** Un rol que esta pantalla no conoce se muestra tal cual, en lugar de esconderlo. */
 const rolEnTexto = (rol) => ROLES[rol] ?? rol

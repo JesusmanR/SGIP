@@ -49,7 +49,7 @@
 }
 .plataforma-empresas .confirmacion p { margin: 0 0 var(--espacio-2); font-size: var(--t-cuerpo); }
 .plataforma-empresas .confirmacion .confirmacion-pregunta { font-weight: 600; font-size: var(--t-titulo-tarjeta); }
-.plataforma-empresas .confirmacion:focus-visible { outline: 3px solid var(--acento-sutil); border-color: var(--acento); }
+.plataforma-empresas .confirmacion:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; border-color: var(--acento); }
 .plataforma-empresas .confirmacion .acciones { margin-top: var(--espacio-3); }
 
 /* Usuarios de la empresa y desbloqueo */
