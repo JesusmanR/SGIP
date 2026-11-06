@@ -63,10 +63,25 @@ ni registro lleva contraseñas.
   15 minutos. Antes la bloqueaba una sola vez, para siempre; ahora el daño dura lo que
   dura la insistencia, y el dueño tiene siempre la salida de esperar. No hay límite por
   origen todavía: si hace falta, es otra decisión.
-- Mientras la cuenta está bloqueada, intentar no extiende el plazo ni suma intentos: en el
-  ingreso el rechazo ocurre antes de mirar la clave, y en `/auth/clave` (que se alcanza con
-  una sesión abierta) el error se audita pero `Usuario.registrarIntentoFallido` no hace
-  nada. Las dos puertas aplican el mismo vencimiento.
+- **El bloqueo no cierra las sesiones abiertas.** Solo impide entrar de nuevo: quien ya
+  entró sigue dentro, y su sesión caduca por inactividad como cualquier otra. Antes `FiltroSesion`
+  exigía que la cuenta no estuviera bloqueada en cada petición, y quien conociera un correo podía
+  sacar a su dueño de la sesión equivocándose cinco veces. Ahora solo exige que la cuenta esté
+  activa: desactivar a un usuario sí corta su sesión en el acto, porque es una decisión de la
+  empresa y no un efecto de los errores de quien teclea.
+- Mientras la cuenta está bloqueada, intentar no extiende el plazo ni suma intentos. En el
+  ingreso el rechazo ocurre antes de mirar la clave. En `/auth/clave`, que como el bloqueo ya
+  no cierra la sesión sí se alcanza con la cuenta bloqueada, `cambiarClave` rechaza por sí mismo
+  antes de mirar la clave actual, aunque sea correcta: responde 423 `ProblemDetail` con el plazo
+  (el 401 haría que el cliente diera la sesión por expirada), no cuenta intento y deja el
+  rechazo en `auditoria_accesos` con el motivo `CUENTA_BLOQUEADA`. Al vencer el plazo, las dos
+  puertas aplican el mismo vencimiento y limpian la cuenta.
+- **El tiempo de respuesta del ingreso no delata nada.** Con usuario inexistente, cuenta
+  inactiva o cuenta bloqueada, el servicio deriva la clave contra un hash ficticio del mismo
+  costo que uno real antes de rechazar, igual que cuando la clave es errada. Sin esto, las
+  respuestas rápidas señalaban los correos inexistentes y las cuentas bloqueadas o inactivas.
+  La auditoría registra los mismos motivos que antes. Lo prueba la verificación de la clave
+  en cada rama, no una medición de tiempos.
 - No hay recuperar ni restablecer contraseña: esta decisión no lo añade. Quien olvida la
   clave sigue sin salida propia, y es un hallazgo aparte.
 - El super administrador bloqueado se desbloquea solo al vencer el plazo; ninguna ruta

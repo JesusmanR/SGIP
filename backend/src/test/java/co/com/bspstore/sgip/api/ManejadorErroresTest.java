@@ -3,6 +3,7 @@ package co.com.bspstore.sgip.api;
 import co.com.bspstore.sgip.logica.ClaveActualIncorrectaException;
 import co.com.bspstore.sgip.logica.ClaveNuevaInvalidaException;
 import co.com.bspstore.sgip.logica.CredencialesInvalidasException;
+import co.com.bspstore.sgip.logica.CuentaBloqueadaException;
 import co.com.bspstore.sgip.logica.EstadoDeCargaInvalidoException;
 import co.com.bspstore.sgip.logica.ImpuestoNoDisponibleException;
 import co.com.bspstore.sgip.logica.RecursoNoEncontradoException;
@@ -41,6 +42,16 @@ class ManejadorErroresTest {
             assertFalse(visible.contains(fragmento), visible);
         }
         assertFalse(visible.toLowerCase().contains("sql"), visible);
+    }
+
+    /** Un 401 haría que el cliente diera por expirada la sesión de quien sigue dentro. */
+    @Test
+    void cambiarLaClaveConLaCuentaBloqueadaEsUn423ConElPlazoYNoUn401() {
+        ProblemDetail p = manejador.cuentaBloqueada(new CuentaBloqueadaException(15));
+
+        assertEquals(423, p.getStatus());
+        assertEquals("Cuenta bloqueada", p.getTitle());
+        assertTrue(p.getDetail().contains("15 minutos"), p.getDetail());
     }
 
     @Test

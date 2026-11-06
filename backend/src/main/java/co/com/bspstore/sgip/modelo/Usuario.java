@@ -94,10 +94,6 @@ public class Usuario {
         this.claveHash = claveHash;
     }
 
-    public boolean puedeIngresar() {
-        return activo && !bloqueado;
-    }
-
     /**
      * Cuenta un intento fallido. Con la cuenta ya bloqueada no hace nada: ni
      * alarga el plazo (el instante es el del bloqueo) ni sigue sumando, que la

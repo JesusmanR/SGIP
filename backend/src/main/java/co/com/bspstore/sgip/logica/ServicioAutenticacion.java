@@ -21,6 +21,15 @@ public class ServicioAutenticacion {
     /** El mismo mínimo que el alta de usuario y el inicializador. */
     private static final int CLAVE_MINIMA = 8;
 
+    /**
+     * Hash de una clave que nadie conoce, con el mismo costo que uno real
+     * (sale de {@link Seguridad#derivar}). Sirve para que las ramas del ingreso
+     * que no tienen una clave que comprobar gasten igual tiempo que la que sí
+     * la comprueba: si no, lo que tarda la respuesta dice qué correos existen
+     * y cuáles están bloqueados.
+     */
+    private static final String HASH_FICTICIO = Seguridad.derivar("clave-que-nadie-conoce");
+
     private final UsuarioRepositorio usuarios;
     private final AuditoriaAccesoRepositorio auditoria;
     private final Clock reloj;
@@ -50,10 +59,10 @@ public class ServicioAutenticacion {
 
         Usuario usuario = usuarios.findByCorreo(normalizado).orElse(null);
         if (usuario == null) {
-            rechazar(null, normalizado, MotivoRechazo.USUARIO_INEXISTENTE, origen);
+            rechazarSinClave(null, normalizado, MotivoRechazo.USUARIO_INEXISTENTE, clave, origen);
         }
         if (!usuario.isActivo()) {
-            rechazar(usuario, normalizado, MotivoRechazo.CUENTA_INACTIVA, origen);
+            rechazarSinClave(usuario, normalizado, MotivoRechazo.CUENTA_INACTIVA, clave, origen);
         }
         // Al vencer el plazo la cuenta se limpia antes de mirar la clave: los
         // intentos vuelven a cero y un error no la bloquea de inmediato otra vez.
@@ -61,9 +70,9 @@ public class ServicioAutenticacion {
             usuario.desbloquear();
         }
         if (usuario.isBloqueado()) {
-            rechazar(usuario, normalizado, MotivoRechazo.CUENTA_BLOQUEADA, origen);
+            rechazarSinClave(usuario, normalizado, MotivoRechazo.CUENTA_BLOQUEADA, clave, origen);
         }
-        if (!Seguridad.verificar(clave, usuario.getClaveHash())) {
+        if (!comprobarClave(clave, usuario.getClaveHash())) {
             usuario.registrarIntentoFallido(intentosMaximos, ahora());
             rechazar(usuario, normalizado, MotivoRechazo.CLAVE_INCORRECTA, origen);
         }
@@ -123,7 +132,7 @@ public class ServicioAutenticacion {
      * Ningún mensaje ni registro lleva la contraseña, ni la actual ni la
      * nueva.
      */
-    @Transactional(noRollbackFor = ClaveActualIncorrectaException.class)
+    @Transactional(noRollbackFor = {ClaveActualIncorrectaException.class, CuentaBloqueadaException.class})
     public void cambiarClave(Integer usuarioId, String actual, String nueva, String origen) {
         Usuario usuario = usuarios.findById(usuarioId)
                 .orElseThrow(() -> new RecursoNoEncontradoException("El usuario no existe."));
@@ -132,6 +141,16 @@ public class ServicioAutenticacion {
         // intentos vuelven a cero también por esta puerta.
         if (usuario.bloqueoVencido(ahora(), minutosDeBloqueo)) {
             usuario.desbloquear();
+        }
+        // El bloqueo no cierra las sesiones abiertas (ADR-0028), así que esta
+        // puerta se alcanza con la cuenta bloqueada y tiene que cerrarla ella:
+        // con la actual correcta, de otro modo, la contraseña se cambiaría. No
+        // cuenta intento ni alarga el plazo, y queda en la auditoría como en el
+        // ingreso.
+        if (usuario.isBloqueado()) {
+            auditoria.save(AuditoriaAcceso.fallido(usuario, usuario.getCorreo(),
+                    MotivoRechazo.CUENTA_BLOQUEADA, origen));
+            throw new CuentaBloqueadaException(minutosDeBloqueo);
         }
         if (!Seguridad.verificar(actual, usuario.getClaveHash())) {
             usuario.registrarIntentoFallido(intentosMaximos, ahora());
@@ -154,8 +173,23 @@ public class ServicioAutenticacion {
         usuario.cambiarClave(Seguridad.derivar(nueva));
     }
 
+    /**
+     * Único punto por el que el ingreso gasta el tiempo de derivar la clave.
+     * Es visible en el paquete para que las pruebas comprueben que cada rama
+     * pasa por aquí sin medir tiempos, que serían frágiles.
+     */
     boolean comprobarClave(String clave, String hash) {
         return Seguridad.verificar(clave, hash);
+    }
+
+    /**
+     * Rechaza una rama en la que no hay clave que comprobar, tras gastar el
+     * mismo tiempo que la rama de la clave errada. Lo que se audita no cambia.
+     */
+    private void rechazarSinClave(Usuario usuario, String correo, MotivoRechazo motivo,
+                                  String clave, String origen) {
+        comprobarClave(clave, HASH_FICTICIO);
+        rechazar(usuario, correo, motivo, origen);
     }
 
     private void rechazar(Usuario usuario, String correo, MotivoRechazo motivo, String origen) {

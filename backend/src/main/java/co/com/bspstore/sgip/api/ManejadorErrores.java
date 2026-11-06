@@ -8,6 +8,7 @@ import co.com.bspstore.sgip.logica.DatoTributarioInvalidoException;
 import co.com.bspstore.sgip.logica.EstadoDeCargaInvalidoException;
 import co.com.bspstore.sgip.logica.RecursoNoEncontradoException;
 import co.com.bspstore.sgip.logica.CredencialesInvalidasException;
+import co.com.bspstore.sgip.logica.CuentaBloqueadaException;
 import co.com.bspstore.sgip.logica.FiltroInvalidoException;
 import co.com.bspstore.sgip.logica.ImpuestoNoDisponibleException;
 import co.com.bspstore.sgip.logica.AlmacenArchivos;
@@ -75,6 +76,21 @@ public class ManejadorErrores {
         p.setDetail("El correo o la contraseña no son correctos. Si te equivocas varias veces, "
                 + "la cuenta se bloquea durante " + minutos
                 + (minutos == 1 ? " minuto." : " minutos."));
+        return p;
+    }
+
+    @ExceptionHandler(CuentaBloqueadaException.class)
+    public ProblemDetail cuentaBloqueada(CuentaBloqueadaException e) {
+        // 423 y no 401: el cliente trata todo 401 como «la sesión expiró» y
+        // echaría a quien sigue dentro. Aquí quien pregunta ya está
+        // autenticado, de modo que decirle la causa no revela nada.
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.LOCKED);
+        p.setTitle("Cuenta bloqueada");
+        int minutos = e.getMinutosDeBloqueo();
+        p.setDetail("Tu cuenta está bloqueada por intentos fallidos. "
+                + "No puedes cambiar la contraseña hasta que pasen "
+                + minutos + (minutos == 1 ? " minuto" : " minutos")
+                + " desde el bloqueo.");
         return p;
     }
 
