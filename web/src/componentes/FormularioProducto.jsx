@@ -254,6 +254,9 @@ const filaCreditoDe = (producto) => filaInicial({
   precio: producto.precioCredito, precioFijo: producto.precioFijoCredito,
 })
 
+/** El `type` con que el servidor marca «el producto cambió desde que lo abriste». */
+const TIPO_PRODUCTO_CAMBIO = 'urn:sgip:producto-cambio'
+
 /**
  * Lo que se le dice a quien guarda con datos de antes (I1). El servidor ya
  * contesta algo parecido, pero habla de volver a abrir el producto; aquí hay un
@@ -367,7 +370,9 @@ export default function FormularioProducto({
         })
       onGuardado(fresco)
     } catch (e2) {
-      if (e2.estado === 409) {
+      if (e2.tipo === TIPO_PRODUCTO_CAMBIO) {
+        // Un 409 también es un código repetido, y ese se dice con el texto del
+        // servidor: solo este tipo es «el producto cambió».
         // Lo escrito se queda: el aviso explica y ofrece traer lo actual.
         setConflicto(true)
         setError(PRODUCTO_CAMBIO)

@@ -112,7 +112,7 @@ describe('formulario de producto', () => {
     /** Lo que `pedir` lanza ante un 409: el mensaje del servidor y el estado. */
     const conflicto = () => Object.assign(
       new Error('Otra persona o un proceso modificó este producto antes de que guardaras.'),
-      { estado: 409 })
+      { estado: 409, tipo: 'urn:sgip:producto-cambio' })
 
     it('manda la versión de la ficha que se abrió', async () => {
       const teclado = userEvent.setup()
@@ -162,6 +162,20 @@ describe('formulario de producto', () => {
       await teclado.click(screen.getByRole('button', { name: /guardar/i }))
       await waitFor(() => expect(api.editarProducto).toHaveBeenCalledTimes(2))
       expect(api.editarProducto.mock.calls[1][1].version).toBe(4)
+    })
+
+    it('un 409 por un código repetido dice el motivo del servidor y no habla de cambios', async () => {
+      const teclado = userEvent.setup()
+      api.editarProducto.mockRejectedValue(Object.assign(
+        new Error('Ya existe un producto con el código PC-002.'), { estado: 409, tipo: 'about:blank' }))
+      montar()
+
+      await teclado.click(screen.getByRole('button', { name: /guardar/i }))
+
+      const aviso = await screen.findByRole('alert')
+      expect(aviso).toHaveTextContent('Ya existe un producto con el código PC-002.')
+      expect(aviso).not.toHaveTextContent(/cambió mientras lo editabas/i)
+      expect(screen.queryByRole('button', { name: /ver los datos actuales/i })).not.toBeInTheDocument()
     })
 
     it('un rechazo que no es de versión no ofrece recargar', async () => {

@@ -16,6 +16,7 @@ import java.sql.SQLIntegrityConstraintViolationException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -136,6 +137,24 @@ class ManejadorErroresTest {
         assertEquals("El producto cambió mientras lo editabas", p.getTitle());
         assertNotNull(p.getDetail());
         sinTextoDelMotor(p, "co.com", "bspstore", "Producto.class", "42", "version", "Row was");
+    }
+
+    /**
+     * El 409 tiene varias causas (nombre repetido, carga en otro estado, dato
+     * ya registrado) y el cliente no puede deducir cuál mirando el estado. Este
+     * lleva un tipo propio: es el único que justifica ofrecer «ver los datos
+     * actuales» en el formulario de edición (I1).
+     */
+    @Test
+    void laEdicionQueLlegaTardeSeDistingueDeOtrosConflictosPorSuTipo() {
+        ProblemDetail tarde = manejador.edicionConcurrente(
+                new ObjectOptimisticLockingFailureException(Producto.class, 42));
+        ProblemDetail repetido = manejador.nombreRepetido(
+                new co.com.bspstore.sgip.logica.NombreRepetidoException("Ya existe un producto con el código X."));
+
+        assertEquals(ManejadorErrores.TIPO_PRODUCTO_CAMBIO, tarde.getType());
+        assertEquals("urn:sgip:producto-cambio", tarde.getType().toString());
+        assertNotEquals(ManejadorErrores.TIPO_PRODUCTO_CAMBIO, repetido.getType());
     }
 
     /**

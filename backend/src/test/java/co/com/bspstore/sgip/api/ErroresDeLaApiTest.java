@@ -124,6 +124,20 @@ class ErroresDeLaApiTest {
                 .andExpect(jsonPath("$.detail").value("El producto no tiene imagen."));
     }
 
+    /** El tipo llega al cliente en el JSON: es lo que distingue este 409 de un código repetido. */
+    @Test
+    void laEdicionConDatosViejosEsUn409ConSuTipoEnElCuerpo() throws Exception {
+        when(productos.actualizar(org.mockito.ArgumentMatchers.eq(9), org.mockito.ArgumentMatchers.any()))
+                .thenThrow(new org.springframework.orm.ObjectOptimisticLockingFailureException(
+                        co.com.bspstore.sgip.modelo.Producto.class, 9));
+
+        esProblema(mvc.perform(put("/api/v1/productos/9").with(administrador())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"categoriaId\":4,\"proveedorId\":3,\"codigo\":\"A\",\"nombre\":\"A\","
+                        + "\"costo\":10,\"version\":2}")), 409)
+                .andExpect(jsonPath("$.type").value("urn:sgip:producto-cambio"));
+    }
+
     // ---- 400 con texto propio -------------------------------------------
 
     @Test

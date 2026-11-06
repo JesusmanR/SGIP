@@ -38,6 +38,7 @@ import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import java.net.URI;
 import java.sql.SQLException;
 import java.util.stream.Collectors;
 
@@ -52,6 +53,14 @@ import java.util.stream.Collectors;
 public class ManejadorErrores {
 
     private static final Logger LOG = LoggerFactory.getLogger(ManejadorErrores.class);
+
+    /**
+     * El {@code type} del 409 «el producto cambió desde que lo abriste». El 409
+     * tiene otras causas (nombre repetido, carga en otro estado) y solo esta
+     * justifica que el formulario ofrezca ver los datos actuales: el cliente
+     * lo reconoce por este valor, no por el estado.
+     */
+    public static final URI TIPO_PRODUCTO_CAMBIO = URI.create("urn:sgip:producto-cambio");
 
     // Códigos de error de MySQL (no los SQLState, que son los mismos
     // 23000 para casi todo y no distinguen un duplicado de una referencia).
@@ -296,6 +305,7 @@ public class ManejadorErrores {
     public ProblemDetail edicionConcurrente(ObjectOptimisticLockingFailureException e) {
         LOG.warn("Edición rechazada por bloqueo optimista: {}", e.getMessage());
         ProblemDetail p = ProblemDetail.forStatus(HttpStatus.CONFLICT);
+        p.setType(TIPO_PRODUCTO_CAMBIO);
         p.setTitle("El producto cambió mientras lo editabas");
         p.setDetail("Otra persona o un proceso modificó este producto antes de que guardaras. "
                 + "Vuelve a abrirlo para ver los datos actuales y repite tu cambio.");
