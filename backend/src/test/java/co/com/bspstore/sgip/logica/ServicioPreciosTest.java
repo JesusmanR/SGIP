@@ -6,10 +6,12 @@ import co.com.bspstore.sgip.api.dto.SolicitudReglaMargen;
 import co.com.bspstore.sgip.config.SinEmpresaException;
 import co.com.bspstore.sgip.config.UsuarioAutenticado;
 import co.com.bspstore.sgip.datos.RepositorioPrecios;
+import co.com.bspstore.sgip.datos.RepositorioPrecios.ReglaBloqueada;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
@@ -34,6 +36,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -288,5 +291,160 @@ class ServicioPreciosTest {
 
         assertThrows(ReferenciaAjenaException.class, () -> servicio.alcance(99, null));
         verify(precios, never()).productosAlcanzados(anyInt(), any(), any());
+    }
+
+    // ------------------------------------------- reemplazar una regla vigente
+
+    private static ReglaBloqueada bloqueada(LocalDate desde, LocalDate hasta) {
+        return new ReglaBloqueada(50, null, null, "CONTADO", desde, hasta);
+    }
+
+    private SolicitudReglaMargen reemplazo(LocalDate desde) {
+        return new SolicitudReglaMargen(null, null, "CONTADO", "SOBRE_COSTO",
+                new BigDecimal("1.5000"), desde, null);
+    }
+
+    private void laViejaRigeDesde(LocalDate desde, LocalDate hasta) {
+        when(precios.bloquear(EMPRESA, 50)).thenReturn(Optional.of(bloqueada(desde, hasta)));
+    }
+
+    private void nadaSeEscribio() {
+        verify(precios, never()).cerrar(anyInt(), anyInt(), any());
+        verify(precios, never()).insertar(anyInt(), any(), any(), anyString(), anyString(),
+                any(), any(), any());
+    }
+
+    @Test
+    void reemplazarCierraLaViejaElDiaAntesYCreaLaNuevaEnEseOrden() {
+        laViejaRigeDesde(LocalDate.of(2026, 1, 1), null);
+        LocalDate desde = LocalDate.of(2026, 10, 20);
+
+        var creada = servicio.reemplazar(50, reemplazo(desde));
+
+        assertTrue(creada.isPresent());
+        InOrder orden = inOrder(precios);
+        orden.verify(precios).bloquear(EMPRESA, 50);
+        orden.verify(precios).cerrar(EMPRESA, 50, desde.minusDays(1));
+        orden.verify(precios).insertar(EMPRESA, null, null, "CONTADO", "SOBRE_COSTO",
+                new BigDecimal("1.5000"), desde, null);
+    }
+
+    @Test
+    void elSolapeSeComprueba_ignorandoLaReglaQueSeCierra() {
+        laViejaRigeDesde(LocalDate.of(2026, 1, 1), null);
+
+        servicio.reemplazar(50, reemplazo(LocalDate.of(2026, 10, 20)));
+
+        verify(precios).haySolape(EMPRESA, null, null, "CONTADO",
+                LocalDate.of(2026, 10, 20), null, 50);
+    }
+
+    @Test
+    void siHayUnSolapeNoSeCierraNiSeCreaNada() {
+        laViejaRigeDesde(LocalDate.of(2026, 1, 1), null);
+        when(precios.haySolape(anyInt(), any(), any(), anyString(), any(), any(), eq(50)))
+                .thenReturn(true);
+
+        assertThrows(RegistroRepetidoException.class,
+                () -> servicio.reemplazar(50, reemplazo(LocalDate.of(2026, 10, 20))));
+
+        nadaSeEscribio();
+    }
+
+    @Test
+    void unaReglaAjenaOInexistenteEsVaciaYNoToca() {
+        when(precios.bloquear(EMPRESA, 404)).thenReturn(Optional.empty());
+
+        assertTrue(servicio.reemplazar(404, reemplazo(LocalDate.of(2026, 10, 20))).isEmpty());
+
+        nadaSeEscribio();
+    }
+
+    @Test
+    void unaReglaQueYaTerminoNoSeReemplaza() {
+        laViejaRigeDesde(LocalDate.of(2026, 1, 1), HOY.minusDays(1));
+
+        var e = assertThrows(ReglaInvalidaException.class,
+                () -> servicio.reemplazar(50, reemplazo(HOY)));
+
+        assertTrue(e.getMessage().contains("ya terminó"));
+        nadaSeEscribio();
+    }
+
+    @Test
+    void laNuevaNoPuedeEmpezarAntesQueLaVieja() {
+        laViejaRigeDesde(LocalDate.of(2026, 6, 1), null);
+
+        for (LocalDate desde : List.of(LocalDate.of(2026, 5, 1), LocalDate.of(2026, 6, 1))) {
+            var e = assertThrows(ReglaInvalidaException.class,
+                    () -> servicio.reemplazar(50, reemplazo(desde)));
+            assertTrue(e.getMessage().contains("después"));
+        }
+        nadaSeEscribio();
+    }
+
+    @Test
+    void cerrarLaViejaDespuesDeSuFinPlaneadoLaAlargaria() {
+        laViejaRigeDesde(LocalDate.of(2026, 1, 1), LocalDate.of(2026, 11, 20));
+
+        var e = assertThrows(ReglaInvalidaException.class,
+                () -> servicio.reemplazar(50, reemplazo(LocalDate.of(2026, 12, 15))));
+
+        assertTrue(e.getMessage().contains("2026-11-20"));
+        nadaSeEscribio();
+    }
+
+    @Test
+    void elAlcanceYLaFormaDePagoNoCambianAlReemplazar() {
+        laViejaRigeDesde(LocalDate.of(2026, 1, 1), null);
+        var otraCategoria = new SolicitudReglaMargen(4, null, "CONTADO", "SOBRE_COSTO",
+                new BigDecimal("1.5000"), LocalDate.of(2026, 10, 20), null);
+        var otroPago = new SolicitudReglaMargen(null, null, "CREDITO", "SOBRE_COSTO",
+                new BigDecimal("1.5000"), LocalDate.of(2026, 10, 20), null);
+
+        assertThrows(ReglaInvalidaException.class, () -> servicio.reemplazar(50, otraCategoria));
+        assertThrows(ReglaInvalidaException.class, () -> servicio.reemplazar(50, otroPago));
+
+        nadaSeEscribio();
+    }
+
+    @Test
+    void elMargenSobreElPrecioNoLlegaAlCienPorCientoAlReemplazar() {
+        laViejaRigeDesde(LocalDate.of(2026, 1, 1), null);
+        var s = new SolicitudReglaMargen(null, null, "CONTADO", "SOBRE_PRECIO",
+                new BigDecimal("2.0000"), LocalDate.of(2026, 10, 20), null);
+
+        assertThrows(ReglaInvalidaException.class, () -> servicio.reemplazar(50, s));
+
+        nadaSeEscribio();
+    }
+
+    @Test
+    void laNuevaNoPuedeEmpezarAntesDeHoy() {
+        laViejaRigeDesde(LocalDate.of(2026, 1, 1), null);
+
+        var e = assertThrows(ReglaInvalidaException.class,
+                () -> servicio.reemplazar(50, reemplazo(HOY.minusDays(1))));
+
+        assertTrue(e.getMessage().contains("hoy"));
+        nadaSeEscribio();
+    }
+
+    @Test
+    void laNuevaPuedeEmpezarHoyYLaViejaCierraAyer() {
+        laViejaRigeDesde(LocalDate.of(2026, 1, 1), null);
+
+        assertTrue(servicio.reemplazar(50, reemplazo(HOY)).isPresent());
+
+        verify(precios).cerrar(EMPRESA, 50, HOY.minusDays(1));
+    }
+
+    @Test
+    void siLaReglaNuevaNoSePuedeReleerEsUnErrorDelServidorYNoUnNoEncontrado() {
+        laViejaRigeDesde(LocalDate.of(2026, 1, 1), null);
+        when(precios.buscar(EMPRESA, 50)).thenReturn(Optional.empty());
+
+        assertThrows(IllegalStateException.class,
+                () -> servicio.reemplazar(50, reemplazo(LocalDate.of(2026, 10, 20))));
     }
 }

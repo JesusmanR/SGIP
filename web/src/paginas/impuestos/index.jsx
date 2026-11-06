@@ -1,27 +1,19 @@
 import { Route, Routes } from 'react-router-dom'
-import EncabezadoPagina from '../../componentes/comun/EncabezadoPagina.jsx'
-import EstadoVacio from '../../componentes/comun/EstadoVacio.jsx'
 import '../../estilos/impuestos.css'
+import FormularioReglaIva from './FormularioReglaIva.jsx'
+import Pantalla from './Pantalla.jsx'
 
 /**
- * Punto de entrada de la sección. App.jsx la registra una sola vez como
- * «<ruta>/*»; las subrutas se declaran aquí, con este mismo <Routes>.
+ * Sección Impuestos (P-46), solo del administrador. App.jsx la registra una
+ * sola vez como «/impuestos/*»; las subrutas se declaran aquí. Solo hay las
+ * rutas del backend: `/empresa/tributacion`.
  */
 export default function Seccion() {
   return (
     <Routes>
-      <Route
-        path="*"
-        element={(
-          <div className="contenido">
-            <EncabezadoPagina titulo="Impuestos" />
-            <EstadoVacio
-              titulo="En construcción"
-              detalle="Esta sección todavía no está disponible."
-            />
-          </div>
-        )}
-      />
+      <Route index element={<Pantalla />} />
+      <Route path="reglas/nueva" element={<FormularioReglaIva />} />
+      <Route path="*" element={<Pantalla />} />
     </Routes>
   )
 }

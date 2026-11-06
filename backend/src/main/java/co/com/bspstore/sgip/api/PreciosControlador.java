@@ -116,6 +116,24 @@ public class PreciosControlador {
     }
 
     /**
+     * Reemplaza una regla que rige: cierra la vieja el día antes de que empiece
+     * la nueva y crea la nueva, todo en una transacción. 404 si la regla es
+     * ajena, no existe o es de un producto; 400 si ya terminó, o si la nueva
+     * empieza antes que ella o antes de hoy; 409 si se solaparía con otra.
+     */
+    @PostMapping("/{reglaId}/reemplazar")
+    public ResponseEntity<ReglaDeMargen> reemplazar(
+            @PathVariable Integer reglaId,
+            @Valid @RequestBody SolicitudReglaMargen solicitud) {
+        ReglaDeMargen nueva = servicio.reemplazar(reglaId, solicitud)
+                .orElseThrow(() -> new RecursoNoEncontradoException(
+                        "La regla " + reglaId + " no existe en esta empresa."));
+        return ResponseEntity
+                .created(URI.create("/api/v1/precios/reglas/" + nueva.reglaId()))
+                .body(nueva);
+    }
+
+    /**
      * Cierra la vigencia, que no es borrar: una venta de marzo se
      * explica con la regla que regía en marzo. Sin fecha, cierra ayer,
      * de modo que la regla deja de aplicar hoy mismo.

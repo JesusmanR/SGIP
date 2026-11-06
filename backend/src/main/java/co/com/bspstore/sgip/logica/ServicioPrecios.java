@@ -13,6 +13,7 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -187,6 +188,72 @@ public class ServicioPrecios {
         }
         precios.cerrar(empresa, reglaId, fin);
         return precios.buscar(empresa, reglaId);
+    }
+
+    /**
+     * Reemplaza una regla que rige: cierra la vieja el día antes de que empiece
+     * la nueva y crea la nueva, en una sola transacción.
+     *
+     * Hecho en el navegador en dos llamadas, un fallo de la segunda dejaría
+     * productos sin regla y, por tanto, sin precio de venta. Aquí o pasa todo o
+     * no pasa nada.
+     *
+     * El alcance y la forma de pago son los de la vieja: cambiarlos no es
+     * reemplazar, es otra regla. La nueva no puede empezar antes que la vieja ni
+     * después del fin que la vieja ya tenía: cerrarla más tarde la alargaría y
+     * podría solaparla con otra que ya la sucede. Tampoco puede empezar antes de
+     * hoy: ni el navegador es la única defensa, ni se reescribe el pasado.
+     * Un resultado vacío solo significa que la regla no existe; si la recién
+     * creada no se relee, es un error del servidor.
+     */
+    @Transactional
+    public Optional<ReglaDeMargen> reemplazar(Integer reglaId, SolicitudReglaMargen s) {
+        Integer empresa = ContextoEmpresa.empresaActual();
+        Optional<RepositorioPrecios.ReglaBloqueada> encontrada = precios.bloquear(empresa, reglaId);
+        if (encontrada.isEmpty()) {
+            return Optional.empty();
+        }
+        RepositorioPrecios.ReglaBloqueada vieja = encontrada.get();
+        exigirFactorCoherente(s.formaCalculo(), s.factor());
+        exigirRangoCoherente(s.vigenteDesde(), s.vigenteHasta());
+
+        if (!Objects.equals(s.categoriaId(), vieja.categoriaId())
+                || !Objects.equals(s.proveedorId(), vieja.proveedorId())
+                || !vieja.formaPago().equals(s.formaPago())) {
+            throw new ReglaInvalidaException(
+                    "Al reemplazar una regla no cambian su alcance ni su forma de pago: "
+                            + "para eso, crea otra regla.");
+        }
+        if (vieja.vigenteHasta() != null && vieja.vigenteHasta().isBefore(LocalDate.now(reloj))) {
+            throw new ReglaInvalidaException(
+                    "La regla ya terminó el " + vieja.vigenteHasta() + " y no se puede reemplazar.");
+        }
+        if (!s.vigenteDesde().isAfter(vieja.vigenteDesde())) {
+            throw new ReglaInvalidaException(
+                    "La nueva regla tiene que empezar después del " + vieja.vigenteDesde()
+                            + ", que es cuando empezó la que reemplaza.");
+        }
+        if (s.vigenteDesde().isBefore(LocalDate.now(reloj))) {
+            throw new ReglaInvalidaException(
+                    "La nueva regla no puede empezar antes de hoy: una fecha pasada "
+                            + "cambiaría el precio de ventas que ya se hicieron.");
+        }
+        LocalDate cierre = s.vigenteDesde().minusDays(1);
+        if (vieja.vigenteHasta() != null && cierre.isAfter(vieja.vigenteHasta())) {
+            throw new ReglaInvalidaException(
+                    "La regla actual ya termina el " + vieja.vigenteHasta()
+                            + ": la nueva tiene que empezar a más tardar al día siguiente.");
+        }
+        if (precios.haySolape(empresa, s.categoriaId(), s.proveedorId(), s.formaPago(),
+                s.vigenteDesde(), s.vigenteHasta(), reglaId)) {
+            throw new RegistroRepetidoException(describirSolape(s));
+        }
+
+        precios.cerrar(empresa, reglaId, cierre);
+        Integer id = precios.insertar(empresa, s.categoriaId(), s.proveedorId(), s.formaPago(),
+                s.formaCalculo(), s.factor(), s.vigenteDesde(), s.vigenteHasta());
+        return Optional.of(precios.buscar(empresa, id).orElseThrow(() -> new IllegalStateException(
+                "La regla " + id + " no se encontró justo después de reemplazar la " + reglaId + ".")));
     }
 
     // ------------------------------------------- lo escrito para un producto

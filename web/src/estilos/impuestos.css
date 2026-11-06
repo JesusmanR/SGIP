@@ -1,1 +1,98 @@
-/* Estilos de la sección impuestos: solo esta sección escribe aquí. */
+/* Estilos de la sección impuestos: solo esta sección escribe aquí.
+   Todo cuelga de .seccion-impuestos porque la hoja queda cargada en toda la aplicación.
+   El color sale solo de tokens.css. */
+
+.seccion-impuestos .volver { margin: 0 0 var(--espacio-3); font-size: var(--t-cuerpo); }
+
+.seccion-impuestos .enlace-boton {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: var(--alto-control); text-decoration: none;
+}
+.seccion-impuestos a.boton:not(.secundario) { color: var(--sobre-acento); }
+.seccion-impuestos a.boton.secundario { color: var(--tinta); }
+
+.seccion-impuestos .pila { display: grid; gap: var(--espacio-4); }
+.seccion-impuestos .nota {
+  margin: 0 0 var(--espacio-3); color: var(--tinta-2); font-size: var(--t-cuerpo); max-width: 65ch;
+}
+.seccion-impuestos h2 { margin: 0 0 var(--espacio-1); font-size: var(--t-titulo-tarjeta); line-height: 20px; }
+
+.seccion-impuestos .seccion-cabecera {
+  display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between;
+  gap: var(--espacio-3) var(--espacio-4); margin-bottom: var(--espacio-3);
+}
+
+/* ── Estado: siempre con texto, el color solo acompaña ─────────────── */
+.seccion-impuestos .estado-con-nota { display: grid; gap: var(--espacio-1); justify-items: start; }
+.seccion-impuestos .estado-con-nota small { color: var(--tinta-2); font-size: var(--t-etiqueta); text-align: left; }
+.seccion-impuestos .estado-regla {
+  display: inline-flex; align-items: center; min-height: var(--alto-insignia);
+  padding: 0 var(--espacio-2); border-radius: var(--radio-insignia);
+  font-size: var(--t-insignia); font-weight: 600; white-space: nowrap;
+}
+.seccion-impuestos .estado-regla.rige    { background: var(--exito-fondo); color: var(--exito); }
+.seccion-impuestos .estado-regla.proxima { background: var(--info-fondo);  color: var(--info); }
+.seccion-impuestos .estado-regla.cerrada {
+  background: var(--lienzo); color: var(--tinta-2); border: 1px solid var(--borde-control);
+}
+.seccion-impuestos .impuesto-regla { display: grid; gap: 2px; }
+.seccion-impuestos .impuesto-regla small { color: var(--tinta-2); font-size: var(--t-etiqueta); }
+.seccion-impuestos .boton.menudo { width: auto; }
+.seccion-impuestos .sin-acciones { color: var(--tinta-3); }
+
+/* ── Acciones y confirmación en la misma página ────────────────────── */
+.seccion-impuestos .acciones { display: flex; flex-wrap: wrap; gap: var(--espacio-2); margin-top: var(--espacio-4); }
+.seccion-impuestos .acciones .boton { min-height: var(--toque-minimo); }
+.seccion-impuestos .confirmacion {
+  background: var(--tarjeta); border: 1px solid var(--borde-control); border-radius: var(--radio-tarjeta);
+  padding: var(--espacio-4); max-width: 65ch; margin-bottom: var(--espacio-4);
+}
+.seccion-impuestos .confirmacion p { margin: 0 0 var(--espacio-2); font-size: var(--t-cuerpo); }
+.seccion-impuestos .confirmacion .confirmacion-pregunta { font-weight: 600; font-size: var(--t-titulo-tarjeta); }
+.seccion-impuestos .confirmacion:focus-visible { outline: 3px solid var(--acento-sutil); border-color: var(--acento); }
+.seccion-impuestos .confirmacion .acciones { margin-top: var(--espacio-3); }
+
+/* ── Formularios ───────────────────────────────────────────────────── */
+.seccion-impuestos .configuracion,
+.seccion-impuestos .formulario-regla { max-width: 40rem; }
+.seccion-impuestos .campo select { width: 100%; }
+.seccion-impuestos .campo-mensaje { color: var(--tinta-3); }
+.seccion-impuestos .campo-mensaje.error { color: var(--peligro); }
+.seccion-impuestos .aviso-foco:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }
+
+.seccion-impuestos .opciones,
+.seccion-impuestos .otros-datos {
+  border: 1px solid var(--borde); border-radius: var(--radio-control);
+  padding: var(--espacio-3) var(--espacio-4); margin: 0 0 var(--espacio-4);
+}
+.seccion-impuestos .opciones legend,
+.seccion-impuestos .otros-datos legend {
+  padding: 0 var(--espacio-2); font-size: var(--t-etiqueta); font-weight: 600; color: var(--tinta-2);
+}
+.seccion-impuestos .opcion {
+  display: flex; align-items: flex-start; gap: var(--espacio-3);
+  padding: var(--espacio-2) 0; min-height: var(--alto-control); cursor: pointer;
+}
+.seccion-impuestos .opcion input { width: 1.1rem; height: 1.1rem; margin: .15rem 0 0; flex: none; accent-color: var(--acento); }
+.seccion-impuestos .opcion-texto { display: grid; gap: 2px; font-size: var(--t-cuerpo); }
+.seccion-impuestos .opcion-texto small { color: var(--tinta-2); font-size: var(--t-etiqueta); }
+
+/* ── Buscador de producto ──────────────────────────────────────────── */
+.seccion-impuestos .buscador { display: flex; gap: var(--espacio-2); }
+.seccion-impuestos .buscador input { flex: 1 1 auto; }
+.seccion-impuestos .resultados { list-style: none; margin: 0 0 var(--espacio-4); padding: 0; display: grid; gap: var(--espacio-1); }
+.seccion-impuestos .resultado {
+  width: 100%; display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--espacio-2);
+  min-height: var(--toque-minimo); padding: var(--espacio-2) var(--espacio-3); text-align: left;
+  background: var(--tarjeta); color: var(--tinta); border: 1px solid var(--borde-control);
+  border-radius: var(--radio-control); font-size: var(--t-cuerpo); cursor: pointer;
+}
+.seccion-impuestos .resultado span { color: var(--tinta-2); }
+.seccion-impuestos .producto-elegido-caja { display: flex; flex-wrap: wrap; align-items: center; gap: var(--espacio-3); }
+.seccion-impuestos .producto-elegido { margin: 0; font-size: var(--t-cuerpo); overflow-wrap: anywhere; }
+.seccion-impuestos .busqueda-error { margin-bottom: var(--espacio-4); }
+
+@media (max-width: 48rem) {
+  .seccion-impuestos .acciones .boton { flex: 1 1 100%; }
+  .seccion-impuestos .buscador { flex-direction: column; }
+}
