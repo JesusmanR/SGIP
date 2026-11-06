@@ -1,1 +1,148 @@
-/* Estilos de la sección inventario: solo esta sección escribe aquí. */
+/* Estilos de la sección inventario: solo esta sección escribe aquí.
+   El color sale solo de tokens.css. */
+
+.inventario .volver { margin: 0 0 var(--espacio-3); font-size: var(--t-cuerpo); }
+
+/* Un enlace con aspecto de botón: sin subrayado y centrado en su alto. */
+.inventario .enlace-boton {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: var(--alto-control); text-decoration: none;
+}
+.inventario a.boton:not(.secundario) { color: var(--sobre-acento); }
+.inventario a.boton.secundario { color: var(--tinta); }
+
+.inventario .nota {
+  margin: var(--espacio-3) 0 0; color: var(--tinta-2); font-size: var(--t-cuerpo); max-width: 65ch;
+}
+.inventario .paso { margin: 0 0 var(--espacio-3); color: var(--tinta-2); font-size: var(--t-etiqueta); font-weight: 600; }
+
+/* ── Barra de búsqueda y límite ────────────────────────────────────── */
+.inventario .barra-inventario {
+  display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--espacio-3) var(--espacio-5);
+  margin-bottom: var(--espacio-4);
+}
+.inventario .barra-inventario .elegir-producto { flex: 1 1 20rem; max-width: 32rem; }
+.inventario .barra-inventario .campo { margin-bottom: 0; }
+.inventario .selector-limite { flex: 0 1 12rem; }
+.inventario .campo select,
+.inventario .campo input[type="text"] { width: 100%; }
+.inventario .campo-mensaje { color: var(--tinta-3); }
+.inventario .campo-mensaje.error { color: var(--peligro); }
+
+/* ── Selector de producto ──────────────────────────────────────────── */
+.inventario .buscador { display: flex; gap: var(--espacio-2); }
+.inventario .buscador input { flex: 1 1 auto; min-width: 0; }
+.inventario .buscador .boton { flex: none; min-height: var(--alto-control); }
+.inventario .resultados {
+  list-style: none; margin: var(--espacio-2) 0 0; padding: 0;
+  background: var(--tarjeta); border: 1px solid var(--borde); border-radius: var(--radio-control);
+}
+.inventario .resultados li + li { border-top: 1px solid var(--borde); }
+.inventario .resultado {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--espacio-1) var(--espacio-3);
+  width: 100%; min-height: var(--toque-minimo); padding: var(--espacio-2) var(--espacio-3);
+  background: transparent; border: 0; text-align: left; cursor: pointer;
+  color: var(--tinta); font: inherit; font-size: var(--t-cuerpo);
+}
+.inventario .resultado:hover { background: var(--acento-sutil); }
+.inventario .resultado span { color: var(--tinta-2); font-variant-numeric: tabular-nums; }
+.inventario .busqueda-estado { margin: var(--espacio-2) 0 0; color: var(--tinta-2); font-size: var(--t-cuerpo); }
+.inventario .busqueda-error { margin-top: var(--espacio-2); display: grid; gap: var(--espacio-2); justify-items: start; }
+
+/* ── Tabla de movimientos ──────────────────────────────────────────── */
+.inventario .producto-movimiento { display: grid; gap: 2px; }
+.inventario .producto-movimiento small { color: var(--tinta-3); font-size: var(--t-etiqueta); }
+.inventario .detalle-movimiento { display: grid; gap: 2px; }
+.inventario .existencia-movimiento { display: grid; gap: 2px; justify-items: end; }
+
+/* El tipo siempre es texto; el color solo acompaña. */
+.inventario .tipo-movimiento {
+  display: inline-flex; align-items: center; height: var(--alto-insignia);
+  padding: 0 var(--espacio-2); border-radius: var(--radio-insignia);
+  font-size: var(--t-insignia); font-weight: 600; white-space: nowrap;
+}
+.inventario .tipo-movimiento.ingreso    { background: var(--exito-fondo); color: var(--exito); }
+.inventario .tipo-movimiento.salida     { background: var(--aviso-fondo); color: var(--aviso); }
+.inventario .tipo-movimiento.devolucion { background: var(--info-fondo);  color: var(--info); }
+.inventario .tipo-movimiento.ajuste     { background: var(--acento-sutil); color: var(--tinta-2); }
+.inventario .cambio { font-weight: 600; }
+.inventario .cambio.baja { color: var(--peligro); }
+
+/* Un hueco en la cadena de existencias: texto, no solo color. */
+.inventario .hueco { color: var(--peligro); font-size: var(--t-etiqueta); font-weight: 600; max-width: 22ch; }
+
+.inventario .nota-limite {
+  margin: var(--espacio-3) 0 0; padding: var(--espacio-3) var(--espacio-4);
+  background: var(--info-fondo); color: var(--info); border-radius: var(--radio-control);
+  font-size: var(--t-cuerpo);
+}
+.inventario .nota-reponer {
+  margin: 0 0 var(--espacio-3); padding: var(--espacio-3) var(--espacio-4);
+  background: var(--aviso-fondo); color: var(--aviso); border-radius: var(--radio-control);
+  font-size: var(--t-cuerpo); font-weight: 600;
+}
+
+/* ── Cuadre ────────────────────────────────────────────────────────── */
+.inventario .cuadre {
+  background: var(--tarjeta); border: 1px solid var(--borde); border-radius: var(--radio-tarjeta);
+  padding: var(--espacio-4); margin-bottom: var(--espacio-4);
+}
+.inventario .cuadre-no { background: var(--peligro-fondo); border: 2px solid var(--peligro); }
+.inventario .cuadre-cabecera { display: flex; flex-wrap: wrap; align-items: center; gap: var(--espacio-3); }
+.inventario .cuadre h2 { margin: 0; font-size: var(--t-titulo-tarjeta); }
+.inventario .cuadre p { margin: var(--espacio-2) 0 0; font-size: var(--t-cuerpo); max-width: 65ch; }
+.inventario .cuadre-no p { color: var(--peligro); font-weight: 600; }
+.inventario .estado-cuadre {
+  display: inline-flex; align-items: center; height: var(--alto-insignia);
+  padding: 0 var(--espacio-2); border-radius: var(--radio-insignia);
+  font-size: var(--t-insignia); font-weight: 600;
+}
+.inventario .estado-cuadre.si { background: var(--exito-fondo); color: var(--exito); }
+.inventario .estado-cuadre.no { background: var(--peligro); color: var(--sobre-acento); }
+
+/* ── Cifras con rótulo: cuadre, revisión y confirmado ──────────────── */
+.inventario .cuadre-cifras,
+.inventario .cifras-revision {
+  display: grid; grid-template-columns: max-content 1fr; gap: var(--espacio-2) var(--espacio-5);
+  margin: var(--espacio-3) 0 0; font-size: var(--t-cuerpo);
+}
+.inventario dt { color: var(--tinta-2); font-size: var(--t-etiqueta); font-weight: 600; }
+.inventario dd { margin: 0; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.inventario dd small { color: var(--tinta-3); margin-left: var(--espacio-1); }
+
+/* ── Formulario y pasos ────────────────────────────────────────────── */
+.inventario .formulario-inventario,
+.inventario .revision,
+.inventario .listo { max-width: 36rem; }
+.inventario .revision h2,
+.inventario .listo h2 { margin: 0 0 var(--espacio-3); font-size: var(--t-titulo-tarjeta); }
+.inventario .revision h2:focus-visible,
+.inventario .listo h2:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }
+.inventario .listo p { margin: 0 0 var(--espacio-2); font-size: var(--t-cuerpo); }
+.inventario .aviso-foco { margin-bottom: var(--espacio-3); }
+.inventario .aviso-foco:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }
+
+.inventario .producto-elegido {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--espacio-2) var(--espacio-4);
+  margin-bottom: var(--espacio-4); padding: var(--espacio-3) var(--espacio-4);
+  background: var(--lienzo); border: 1px solid var(--borde); border-radius: var(--radio-control);
+  font-size: var(--t-cuerpo);
+}
+.inventario .producto-elegido > div:first-child { display: grid; gap: 2px; flex: 1 1 10rem; }
+.inventario .producto-elegido > div:first-child span { color: var(--tinta-3); font-size: var(--t-etiqueta); }
+.inventario .producto-elegido .dato { display: grid; gap: 2px; }
+.inventario .producto-elegido .dato span { color: var(--tinta-2); font-size: var(--t-etiqueta); font-weight: 600; }
+.inventario .producto-elegido .dato strong { font-variant-numeric: tabular-nums; }
+
+.inventario .acciones { display: flex; flex-wrap: wrap; gap: var(--espacio-2); margin-top: var(--espacio-4); }
+.inventario .acciones .boton { min-height: var(--toque-minimo); }
+
+@media (max-width: 48rem) {
+  .inventario .acciones .boton { flex: 1 1 100%; }
+  .inventario .barra-inventario .elegir-producto,
+  .inventario .selector-limite { flex: 1 1 100%; max-width: none; }
+  .inventario .buscador .boton { min-height: var(--toque-minimo); }
+  .inventario .cuadre-cifras,
+  .inventario .cifras-revision { grid-template-columns: 1fr; gap: var(--espacio-1); }
+  .inventario .cifras-revision dd { margin-bottom: var(--espacio-2); }
+}
