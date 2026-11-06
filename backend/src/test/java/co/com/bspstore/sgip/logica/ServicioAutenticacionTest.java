@@ -28,7 +28,11 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -153,6 +157,83 @@ class ServicioAutenticacionTest {
                 () -> servicio.autenticar(CORREO, "incorrecta", "prueba"));
 
         assertEquals(porCorreo.getMessage(), porClave.getMessage());
+    }
+
+    // ------------------------- el tiempo de respuesta no delata nada (I-1)
+
+    /**
+     * No se miden tiempos, que serían frágiles: se comprueba que cada rama
+     * pasa por la verificación de la clave, que es lo que cuesta. Las ramas
+     * sin cuenta que mirar la hacen contra un hash ficticio del mismo costo
+     * (mismas iteraciones) que uno real.
+     */
+    private ServicioAutenticacion espiarServicio() {
+        return spy(servicio);
+    }
+
+    private static String iteraciones(String hash) {
+        return hash.split("[$]")[1];
+    }
+
+    @Test
+    void conUnCorreoInexistenteTambienSeVerificaLaClave() {
+        when(usuarios.findByCorreo(any())).thenReturn(Optional.empty());
+        var espia = espiarServicio();
+
+        assertThrows(CredencialesInvalidasException.class,
+                () -> espia.autenticar("nadie@bspstore.com.co", CLAVE, "prueba"));
+
+        verify(espia, times(1)).comprobarClave(eq(CLAVE),
+                argThat(h -> iteraciones(h).equals(iteraciones(usuario.getClaveHash()))));
+    }
+
+    @Test
+    void conUnaCuentaInactivaTambienSeVerificaLaClave() {
+        usuario.desactivar();
+        when(usuarios.findByCorreo(CORREO)).thenReturn(Optional.of(usuario));
+        var espia = espiarServicio();
+
+        assertThrows(CredencialesInvalidasException.class,
+                () -> espia.autenticar(CORREO, CLAVE, "prueba"));
+
+        verify(espia, times(1)).comprobarClave(eq(CLAVE),
+                argThat(h -> iteraciones(h).equals(iteraciones(usuario.getClaveHash()))));
+        verify(auditoria).save(argThat(a -> "CUENTA_INACTIVA".equals(a.getMotivo())));
+    }
+
+    @Test
+    void conUnaCuentaBloqueadaTambienSeVerificaLaClave() {
+        usuario.registrarIntentoFallido(1, AHORA);
+        when(usuarios.findByCorreo(CORREO)).thenReturn(Optional.of(usuario));
+        var espia = espiarServicio();
+
+        assertThrows(CredencialesInvalidasException.class,
+                () -> espia.autenticar(CORREO, CLAVE, "prueba"));
+
+        verify(espia, times(1)).comprobarClave(eq(CLAVE),
+                argThat(h -> iteraciones(h).equals(iteraciones(usuario.getClaveHash()))));
+        verify(auditoria).save(argThat(a -> "CUENTA_BLOQUEADA".equals(a.getMotivo())));
+    }
+
+    @Test
+    void conLaClaveErradaSeVerificaUnaSolaVez() {
+        when(usuarios.findByCorreo(CORREO)).thenReturn(Optional.of(usuario));
+        var espia = espiarServicio();
+
+        assertThrows(CredencialesInvalidasException.class,
+                () -> espia.autenticar(CORREO, "incorrecta", "prueba"));
+
+        verify(espia, times(1)).comprobarClave(anyString(), anyString());
+    }
+
+    @Test
+    void conLasCredencialesCorrectasSeVerificaUnaSolaVez() {
+        when(usuarios.findByCorreo(CORREO)).thenReturn(Optional.of(usuario));
+        var espia = espiarServicio();
+
+        espia.autenticar(CORREO, CLAVE, "prueba");
+
+        verify(espia, times(1)).comprobarClave(eq(CLAVE), eq(usuario.getClaveHash()));
     }
 
     // ------------------------------------------- el bloqueo caduca (I2)
@@ -387,11 +468,46 @@ class ServicioAutenticacionTest {
         assertEquals(AHORA, usuario.getBloqueadoEn());
         reloj.adelantarMinutos(5);
 
-        assertThrows(ClaveActualIncorrectaException.class,
+        assertThrows(CuentaBloqueadaException.class,
                 () -> servicio.cambiarClave(20, "incorrecta", "NuevaClave2026", "10.0.0.5"));
 
         assertEquals(AHORA, usuario.getBloqueadoEn(), "el plazo sigue contando desde el bloqueo");
         assertEquals(5, usuario.getIntentosFallidos(), "bloqueada, no sigue sumando");
+    }
+
+    /**
+     * El bloqueo no cierra la sesión abierta, así que esta puerta es alcanzable
+     * con la cuenta bloqueada y debe cerrarla ella misma: con la clave actual
+     * correcta, antes, la contraseña se cambiaba.
+     */
+    @Test
+    void cambiarLaClaveConLaCuentaBloqueadaSeRechazaAunqueLaActualSeaCorrecta() {
+        when(usuarios.findById(20)).thenReturn(Optional.of(usuario));
+        usuario.registrarIntentoFallido(1, AHORA);
+        String hashAntes = usuario.getClaveHash();
+
+        var e = assertThrows(CuentaBloqueadaException.class,
+                () -> servicio.cambiarClave(20, CLAVE, "NuevaClave2026", "10.0.0.5"));
+
+        assertEquals(MINUTOS_DE_BLOQUEO, e.getMinutosDeBloqueo());
+        assertEquals(hashAntes, usuario.getClaveHash());
+        assertTrue(usuario.isCambioClaveRequerido());
+        verify(auditoria).save(argThat(a -> !a.isExitoso()
+                && "CUENTA_BLOQUEADA".equals(a.getMotivo())
+                && CORREO.equals(a.getCorreo())
+                && "10.0.0.5".equals(a.getOrigen())));
+    }
+
+    @Test
+    void alVencerElBloqueoLaClaveCorrectaSePuedeCambiar() {
+        when(usuarios.findById(20)).thenReturn(Optional.of(usuario));
+        usuario.registrarIntentoFallido(1, AHORA);
+        reloj.adelantarMinutos(MINUTOS_DE_BLOQUEO);
+
+        servicio.cambiarClave(20, CLAVE, "NuevaClave2026", "10.0.0.5");
+
+        assertFalse(usuario.isBloqueado());
+        assertTrue(Seguridad.verificar("NuevaClave2026", usuario.getClaveHash()));
     }
 
     /** Al vencer el plazo los intentos vuelven a cero también al cambiar la clave. */

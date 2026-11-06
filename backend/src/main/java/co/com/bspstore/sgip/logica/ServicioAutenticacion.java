@@ -154,6 +154,10 @@ public class ServicioAutenticacion {
         usuario.cambiarClave(Seguridad.derivar(nueva));
     }
 
+    boolean comprobarClave(String clave, String hash) {
+        return Seguridad.verificar(clave, hash);
+    }
+
     private void rechazar(Usuario usuario, String correo, MotivoRechazo motivo, String origen) {
         auditoria.save(AuditoriaAcceso.fallido(usuario, correo, motivo, origen));
         throw new CredencialesInvalidasException(minutosDeBloqueo);
