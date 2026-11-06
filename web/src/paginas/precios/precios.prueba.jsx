@@ -532,6 +532,35 @@ describe('reemplazar una regla que rige', () => {
     expect(apiPrecios.crear).not.toHaveBeenCalled()
   })
 
+  it('no deja que la nueva empiece después del fin planeado de la actual: alargaría la regla', async () => {
+    apiPrecios.ver.mockResolvedValue({ ...VIGENTE, vigenteHasta: '2026-11-20' })
+    montar('/precios/1/reemplazar')
+    const desde = await screen.findByLabelText('Empieza el')
+    await userEvent.clear(desde)
+    await userEvent.type(desde, '2026-12-15')
+    await userEvent.click(screen.getByRole('button', { name: /cerrar la actual y crear la nueva/i }))
+    expect(screen.getByText(/la regla actual ya termina el 20 nov 2026/i)).toBeInTheDocument()
+    expect(desde).toHaveFocus()
+    expect(apiPrecios.cerrar).not.toHaveBeenCalled()
+    expect(apiPrecios.crear).not.toHaveBeenCalled()
+  })
+
+  it('tras cerrar la actual, la nueva solo puede empezar el día siguiente: ni hueco ni solape', async () => {
+    apiPrecios.ver.mockResolvedValue(VIGENTE)
+    apiPrecios.cerrar.mockResolvedValue({ ...VIGENTE, vigente: false })
+    apiPrecios.crear.mockRejectedValueOnce(new ErrorApi(400, 'Algo falló al crear.'))
+    montar('/precios/1/reemplazar')
+    const desde = await screen.findByLabelText('Empieza el')
+    await userEvent.click(screen.getByRole('button', { name: /cerrar la actual y crear la nueva/i }))
+    await screen.findByRole('alert')
+    await userEvent.clear(desde)
+    await userEvent.type(desde, '2026-11-20')
+    await userEvent.click(screen.getByRole('button', { name: /crear la nueva regla/i }))
+    expect(screen.getByText(/tiene que empezar el 6 nov 2026/i)).toBeInTheDocument()
+    expect(apiPrecios.crear).toHaveBeenCalledTimes(1)
+    expect(apiPrecios.cerrar).toHaveBeenCalledTimes(1)
+  })
+
   it('una regla cerrada no se reemplaza', async () => {
     apiPrecios.ver.mockResolvedValue(CERRADA)
     montar('/precios/4/reemplazar')
