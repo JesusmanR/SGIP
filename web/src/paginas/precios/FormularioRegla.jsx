@@ -25,12 +25,21 @@ const TITULOS = {
 const aNumero = (texto) => (texto === '' ? null : Number(texto))
 
 /** Por qué no se puede enviar lo escrito; cada campo con su mensaje, o `null`. */
-function motivos(modo, regla, d, hoy) {
+function motivos(modo, regla, d, hoy, anteriorCerrada) {
   const m = { porcentaje: porcentajeAFactor(d.porcentaje, d.formaCalculo).error ?? null, desde: null, hasta: null }
   if (d.desde === '') m.desde = 'Elige desde qué día rige.'
   else if (modo !== 'crear' && d.desde < hoy) m.desde = 'La regla no puede empezar antes de hoy.'
-  else if (modo === 'reemplazar' && d.desde <= regla.vigenteDesde) {
+  else if (modo === 'reemplazar' && anteriorCerrada) {
+    // La actual ya quedó cerrada: otro día dejaría días sin regla o la solaparía.
+    const siguiente = sumarDias(anteriorCerrada, 1)
+    if (d.desde !== siguiente) {
+      m.desde = `La regla anterior ya se cerró el ${fechaDia(anteriorCerrada)}: la nueva tiene que empezar el ${fechaDia(siguiente)}.`
+    }
+  } else if (modo === 'reemplazar' && d.desde <= regla.vigenteDesde) {
     m.desde = `Tiene que empezar después del día en que empezó la actual (${fechaDia(regla.vigenteDesde)}).`
+  } else if (modo === 'reemplazar' && regla.vigenteHasta && sumarDias(d.desde, -1) > regla.vigenteHasta) {
+    // Cerrar la actual un día más tarde de su fin planeado la alargaría y podría solaparla con otra.
+    m.desde = `La regla actual ya termina el ${fechaDia(regla.vigenteHasta)}: la nueva tiene que empezar a más tardar el ${fechaDia(sumarDias(regla.vigenteHasta, 1))}.`
   }
   if (d.hasta !== '' && d.desde !== '' && d.hasta < d.desde) {
     m.hasta = 'La fecha final no puede ser anterior a la inicial.'
@@ -117,7 +126,7 @@ function Formulario({ modo, regla, categorias = [], proveedores = [] }) {
     [categoriaId, proveedorId],
   )
 
-  const fallos = motivos(modo, regla, datos, hoy)
+  const fallos = motivos(modo, regla, datos, hoy, anteriorCerrada)
   const ver = (campo) => (intentos > 0 ? fallos[campo] : null)
   const hayFallos = Object.values(fallos).some(Boolean)
 
