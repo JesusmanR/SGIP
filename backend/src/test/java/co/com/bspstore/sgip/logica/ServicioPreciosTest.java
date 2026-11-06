@@ -418,4 +418,33 @@ class ServicioPreciosTest {
 
         nadaSeEscribio();
     }
+
+    @Test
+    void laNuevaNoPuedeEmpezarAntesDeHoy() {
+        laViejaRigeDesde(LocalDate.of(2026, 1, 1), null);
+
+        var e = assertThrows(ReglaInvalidaException.class,
+                () -> servicio.reemplazar(50, reemplazo(HOY.minusDays(1))));
+
+        assertTrue(e.getMessage().contains("hoy"));
+        nadaSeEscribio();
+    }
+
+    @Test
+    void laNuevaPuedeEmpezarHoyYLaViejaCierraAyer() {
+        laViejaRigeDesde(LocalDate.of(2026, 1, 1), null);
+
+        assertTrue(servicio.reemplazar(50, reemplazo(HOY)).isPresent());
+
+        verify(precios).cerrar(EMPRESA, 50, HOY.minusDays(1));
+    }
+
+    @Test
+    void siLaReglaNuevaNoSePuedeReleerEsUnErrorDelServidorYNoUnNoEncontrado() {
+        laViejaRigeDesde(LocalDate.of(2026, 1, 1), null);
+        when(precios.buscar(EMPRESA, 50)).thenReturn(Optional.empty());
+
+        assertThrows(IllegalStateException.class,
+                () -> servicio.reemplazar(50, reemplazo(LocalDate.of(2026, 10, 20))));
+    }
 }
