@@ -3,6 +3,7 @@ package co.com.bspstore.sgip.api;
 import co.com.bspstore.sgip.api.dto.EmpresaEnPlataforma;
 import co.com.bspstore.sgip.api.dto.SolicitudAltaEmpresa;
 import co.com.bspstore.sgip.api.dto.SolicitudCambioEstado;
+import co.com.bspstore.sgip.api.dto.UsuarioEnPlataforma;
 import co.com.bspstore.sgip.logica.RecursoNoEncontradoException;
 import co.com.bspstore.sgip.logica.ServicioPlataforma;
 import jakarta.validation.Valid;
@@ -87,6 +88,16 @@ public class PlataformaControlador {
         return servicio.activar(empresaId, SolicitudCambioEstado.motivoDe(solicitud))
                 .map(ResponseEntity::ok)
                 .orElseThrow(() -> new RecursoNoEncontradoException("La empresa no existe."));
+    }
+
+    /**
+     * Quiénes son los usuarios de la empresa y cuáles no pueden entrar hoy, para
+     * desbloquear a una persona y no a un número. Sin clave ni hash, y 404 si la
+     * empresa no existe.
+     */
+    @GetMapping("/{empresaId}/usuarios")
+    public List<UsuarioEnPlataforma> usuarios(@PathVariable Integer empresaId) {
+        return servicio.usuariosDe(empresaId);
     }
 
     /**

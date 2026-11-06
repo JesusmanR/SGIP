@@ -2,6 +2,7 @@ package co.com.bspstore.sgip.logica;
 
 import co.com.bspstore.sgip.api.dto.EmpresaEnPlataforma;
 import co.com.bspstore.sgip.api.dto.SolicitudAltaEmpresa;
+import co.com.bspstore.sgip.api.dto.UsuarioEnPlataforma;
 import co.com.bspstore.sgip.config.ContextoEmpresa;
 import co.com.bspstore.sgip.config.UsuarioAutenticado;
 import co.com.bspstore.sgip.datos.RepositorioPlataforma;
@@ -12,11 +13,13 @@ import co.com.bspstore.sgip.modelo.EstadoEmpresa;
 import co.com.bspstore.sgip.modelo.Rol;
 import co.com.bspstore.sgip.modelo.Usuario;
 import co.com.bspstore.sgip.util.Seguridad;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -46,15 +49,23 @@ public class ServicioPlataforma {
     private final UsuarioRepositorio usuarios;
     private final RolRepositorio roles;
     private final Clock reloj;
+    private final int minutosDeBloqueo;
 
+    /**
+     * {@code minutosDeBloqueo} es la misma propiedad, con el mismo valor por
+     * omisión, que lee {@link ServicioAutenticacion}: la lista de usuarios dice
+     * «bloqueado» con el mismo criterio con que el ingreso rechaza.
+     */
     public ServicioPlataforma(RepositorioPlataforma plataforma,
                               UsuarioRepositorio usuarios,
                               RolRepositorio roles,
-                              Clock reloj) {
+                              Clock reloj,
+                              @Value("${sgip.seguridad.minutos-de-bloqueo:15}") int minutosDeBloqueo) {
         this.plataforma = plataforma;
         this.usuarios = usuarios;
         this.roles = roles;
         this.reloj = reloj;
+        this.minutosDeBloqueo = minutosDeBloqueo;
     }
 
     @Transactional(readOnly = true)
@@ -65,6 +76,32 @@ public class ServicioPlataforma {
     @Transactional(readOnly = true)
     public Optional<EmpresaEnPlataforma> buscar(Integer empresaId) {
         return plataforma.buscar(empresaId);
+    }
+
+    /**
+     * Los usuarios de una empresa, para elegir a quién desbloquear (ADR-0028).
+     *
+     * Una sola consulta: los usuarios llegan con su rol unido. Que la empresa
+     * exista solo se pregunta cuando la lista viene vacía, que es el único caso
+     * en que no se sabe: una empresa con usuarios existe, y en la empresa
+     * inexistente la lista vacía es justo la respuesta que no se puede dar como
+     * si fuera un dato.
+     *
+     * «Bloqueado» es lo que el ingreso diría hoy: marcado y con el plazo sin
+     * vencer, medido con el mismo reloj. Leer no limpia nada; quitar la marca
+     * vencida es cosa del ingreso o del desbloqueo, no de una consulta.
+     */
+    @Transactional(readOnly = true)
+    public List<UsuarioEnPlataforma> usuariosDe(Integer empresaId) {
+        List<Usuario> lista = usuarios.listarConRolDeLaEmpresa(empresaId);
+        if (lista.isEmpty() && plataforma.estadoDe(empresaId).isEmpty()) {
+            throw new RecursoNoEncontradoException("La empresa no existe.");
+        }
+        LocalDateTime ahora = LocalDateTime.now(reloj);
+        return lista.stream()
+                .map(u -> UsuarioEnPlataforma.de(u,
+                        u.isBloqueado() && !u.bloqueoVencido(ahora, minutosDeBloqueo)))
+                .toList();
     }
 
     /**

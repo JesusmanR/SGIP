@@ -2,6 +2,7 @@ package co.com.bspstore.sgip.logica;
 
 import co.com.bspstore.sgip.api.dto.EmpresaEnPlataforma;
 import co.com.bspstore.sgip.api.dto.SolicitudAltaEmpresa;
+import co.com.bspstore.sgip.api.dto.UsuarioEnPlataforma;
 import co.com.bspstore.sgip.config.UsuarioAutenticado;
 import co.com.bspstore.sgip.datos.RepositorioPlataforma;
 import co.com.bspstore.sgip.datos.RolRepositorio;
@@ -26,6 +27,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.time.Clock;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.List;
@@ -62,6 +64,7 @@ class ServicioPlataformaTest {
 
     private static final LocalDate HOY = LocalDate.of(2026, 10, 17);
     private static final int USUARIO_SUPER_ADMIN = 9;
+    private static final int MINUTOS_DE_BLOQUEO = 15;
 
     @Mock RepositorioPlataforma plataforma;
     @Mock UsuarioRepositorio usuarios;
@@ -74,7 +77,7 @@ class ServicioPlataformaTest {
         Clock reloj = Clock.fixed(
                 ZonedDateTime.of(HOY.atTime(10, 0), ZoneId.of("America/Bogota")).toInstant(),
                 ZoneId.of("America/Bogota"));
-        servicio = new ServicioPlataforma(plataforma, usuarios, roles, reloj);
+        servicio = new ServicioPlataforma(plataforma, usuarios, roles, reloj, MINUTOS_DE_BLOQUEO);
         comoSuperAdmin();
     }
 
@@ -206,7 +209,7 @@ class ServicioPlataformaTest {
         Clock reloj = Clock.fixed(
                 ZonedDateTime.of(dia.atTime(10, 0), ZoneId.of("America/Bogota")).toInstant(),
                 ZoneId.of("America/Bogota"));
-        return new ServicioPlataforma(plataforma, usuarios, roles, reloj);
+        return new ServicioPlataforma(plataforma, usuarios, roles, reloj, MINUTOS_DE_BLOQUEO);
     }
 
     /**
@@ -452,5 +455,106 @@ class ServicioPlataformaTest {
 
         verify(plataforma, never()).registrar(anyInt(), any(), any(), anyString(), anyString(),
                 any(), any(), any());
+    }
+
+    // ------------------------------------------- usuarios de una empresa
+
+    /** El reloj fijo marca las 10:00; el instante del bloqueo se da en minutos antes de eso. */
+    private Usuario usuarioBloqueadoHace(String nombre, Integer minutos) {
+        Usuario u = new Usuario(new Rol("VENDEDOR", "Ventas"), nombre,
+                nombre.toLowerCase() + "@tornillo.co", "hash-que-no-sale");
+        if (minutos != null) {
+            LocalDateTime instante = HOY.atTime(10, 0).minusMinutes(minutos);
+            for (int i = 0; i < 5; i++) {
+                u.registrarIntentoFallido(5, instante);
+            }
+        }
+        return u;
+    }
+
+    @Test
+    void sinBloqueoNoApareceBloqueado() {
+        when(usuarios.listarConRolDeLaEmpresa(4)).thenReturn(List.of(usuarioBloqueadoHace("Ana", null)));
+
+        List<UsuarioEnPlataforma> lista = servicio.usuariosDe(4);
+
+        assertEquals(1, lista.size());
+        assertEquals(false, lista.get(0).bloqueado());
+        assertEquals("VENDEDOR", lista.get(0).rol());
+        assertEquals("ana@tornillo.co", lista.get(0).correo());
+    }
+
+    @Test
+    void unBloqueoDentroDelPlazoApareceBloqueado() {
+        when(usuarios.listarConRolDeLaEmpresa(4)).thenReturn(List.of(usuarioBloqueadoHace("Ana", 1)));
+
+        assertTrue(servicio.usuariosDe(4).get(0).bloqueado());
+    }
+
+    /** El último minuto del plazo: a los 15 exactos ya puede entrar, como en el ingreso. */
+    @Test
+    void elBloqueoCaducaAlCumplirseElPlazoExacto() {
+        when(usuarios.listarConRolDeLaEmpresa(4)).thenReturn(List.of(
+                usuarioBloqueadoHace("Dentro", 14), usuarioBloqueadoHace("Justo", 15)));
+
+        List<UsuarioEnPlataforma> lista = servicio.usuariosDe(4);
+
+        assertTrue(lista.get(0).bloqueado());
+        assertEquals(false, lista.get(1).bloqueado());
+    }
+
+    @Test
+    void unBloqueoVencidoYaNoApareceBloqueado() {
+        when(usuarios.listarConRolDeLaEmpresa(4)).thenReturn(List.of(usuarioBloqueadoHace("Ana", 16)));
+
+        assertEquals(false, servicio.usuariosDe(4).get(0).bloqueado());
+    }
+
+    /** Un bloqueo anterior a la V37 no dice desde cuándo: se toma por vencido, como en el ingreso. */
+    @Test
+    void unBloqueoSinInstanteSeTomaPorVencido() {
+        Usuario u = usuarioBloqueadoHace("Ana", 1);
+        org.springframework.test.util.ReflectionTestUtils.setField(u, "bloqueadoEn", null);
+        when(usuarios.listarConRolDeLaEmpresa(4)).thenReturn(List.of(u));
+
+        assertEquals(false, servicio.usuariosDe(4).get(0).bloqueado());
+    }
+
+    @Test
+    void laListaNoModificaALosUsuarios() {
+        Usuario u = usuarioBloqueadoHace("Ana", 16);
+        when(usuarios.listarConRolDeLaEmpresa(4)).thenReturn(List.of(u));
+
+        servicio.usuariosDe(4);
+
+        // Vencido pero aún marcado: leer la lista no lo limpia, eso lo hace el ingreso.
+        assertTrue(u.isBloqueado());
+        verify(usuarios, never()).save(any());
+    }
+
+    @Test
+    void sinUsuariosEnUnaEmpresaQueNoExisteEsUn404() {
+        when(usuarios.listarConRolDeLaEmpresa(99)).thenReturn(List.of());
+        when(plataforma.estadoDe(99)).thenReturn(Optional.empty());
+
+        assertThrows(RecursoNoEncontradoException.class, () -> servicio.usuariosDe(99));
+    }
+
+    @Test
+    void unaEmpresaSinUsuariosDevuelveUnaListaVacia() {
+        when(usuarios.listarConRolDeLaEmpresa(4)).thenReturn(List.of());
+        when(plataforma.estadoDe(4)).thenReturn(Optional.of(EstadoEmpresa.PRUEBA));
+
+        assertTrue(servicio.usuariosDe(4).isEmpty());
+    }
+
+    /** Con usuarios, la empresa existe: no hace falta una segunda consulta para saberlo. */
+    @Test
+    void conUsuariosNoPreguntaPorLaEmpresa() {
+        when(usuarios.listarConRolDeLaEmpresa(4)).thenReturn(List.of(usuarioBloqueadoHace("Ana", null)));
+
+        servicio.usuariosDe(4);
+
+        verify(plataforma, never()).estadoDe(any());
     }
 }
