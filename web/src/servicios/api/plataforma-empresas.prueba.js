@@ -39,6 +39,11 @@ describe('apiPlataformaEmpresas', () => {
     expect(pedir).toHaveBeenLastCalledWith('/plataforma/empresas/4/desactivar', { method: 'POST', body: { motivo: null } })
   })
 
+  it('lista los usuarios de una empresa con GET', async () => {
+    await apiPlataformaEmpresas.listarUsuarios(4)
+    expect(pedir).toHaveBeenLastCalledWith('/plataforma/empresas/4/usuarios')
+  })
+
   it('desbloquea a un usuario de una empresa', async () => {
     await apiPlataformaEmpresas.desbloquearUsuario(4, 9)
     expect(pedir).toHaveBeenLastCalledWith('/plataforma/empresas/4/usuarios/9/desbloquear', { method: 'POST' })
