@@ -6,7 +6,7 @@
  */
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ErrorApi } from '../../servicios/api.js'
@@ -16,7 +16,7 @@ import Precios from './index.jsx'
 vi.mock('../../servicios/api/precios.js', () => ({
   apiPrecios: {
     listar: vi.fn(), ver: vi.fn(), alcance: vi.fn(), simular: vi.fn(), crear: vi.fn(),
-    corregir: vi.fn(), cerrar: vi.fn(), categorias: vi.fn(), proveedores: vi.fn(),
+    corregir: vi.fn(), reemplazar: vi.fn(), cerrar: vi.fn(), categorias: vi.fn(), proveedores: vi.fn(),
   },
 }))
 
@@ -41,9 +41,14 @@ const DESDE_HOY = { ...BASE, reglaId: 5, categoria: 'Accesorios', vigenteDesde: 
 const CATEGORIAS = [{ id: 3, nombre: 'Computadores' }, { id: 4, nombre: 'Accesorios' }]
 const PROVEEDORES = [{ id: 9, razonSocial: 'Mayorista Tech' }]
 
+function Sonda() {
+  return <span data-testid="estado-de-navegacion">{useLocation().state ? "con-estado" : "null"}</span>
+}
+
 function montar(ruta = '/precios') {
   return render(
     <MemoryRouter initialEntries={[ruta]}>
+      <Sonda />
       <Routes>
         <Route path="/precios/*" element={<Precios />} />
       </Routes>
@@ -309,6 +314,17 @@ describe('formulario de regla nueva', () => {
     expect(await screen.findByRole('table')).toBeInTheDocument()
   })
 
+  it('el aviso de «Regla creada.» no reaparece al recargar: el estado de la navegación se limpia', async () => {
+    apiPrecios.crear.mockResolvedValue({ ...BASE, reglaId: 10 })
+    apiPrecios.listar.mockResolvedValue([VIGENTE])
+    montar('/precios/nueva')
+    await userEvent.type(await screen.findByLabelText('Porcentaje de ganancia'), '10')
+    await userEvent.click(screen.getByRole('button', { name: /guardar regla/i }))
+    expect(await screen.findByText(/regla creada/i)).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByTestId('estado-de-navegacion')).toHaveTextContent(/^null$/))
+    expect(screen.getByText(/regla creada/i)).toBeInTheDocument()
+  })
+
   it('muestra cuántos productos alcanzaría al elegir categoría o proveedor', async () => {
     apiPrecios.alcance.mockResolvedValue({ productos: 7 })
     await abrir()
@@ -448,6 +464,19 @@ describe('corregir una regla que aún no empieza', () => {
     expect(await screen.findByText(/cambios guardados/i)).toBeInTheDocument()
   })
 
+  it.each([
+    [400, 'La vigencia termina antes de empezar.'],
+    [409, 'Con esa vigencia, la regla se solaparía con otra del mismo alcance.'],
+  ])('un %s del servidor al corregir se muestra con su detalle y deja reintentar', async (estado, detalle) => {
+    apiPrecios.ver.mockResolvedValue(PROXIMA)
+    apiPrecios.corregir.mockRejectedValue(new ErrorApi(estado, detalle))
+    montar('/precios/3/corregir')
+    await screen.findByLabelText('Porcentaje de ganancia')
+    await userEvent.click(screen.getByRole('button', { name: /guardar cambios/i }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(detalle)
+    expect(screen.getByRole('button', { name: /guardar cambios/i })).toBeEnabled()
+  })
+
   it('una regla que ya rige no se corrige: dice por qué y ofrece reemplazarla', async () => {
     apiPrecios.ver.mockResolvedValue(VIGENTE)
     montar('/precios/1/corregir')
@@ -458,10 +487,14 @@ describe('corregir una regla que aún no empieza', () => {
 })
 
 describe('reemplazar una regla que rige', () => {
-  it('cierra la actual el día anterior y abre la nueva, en ese orden', async () => {
+  const CUERPO = {
+    categoriaId: 3, proveedorId: null, formaPago: 'CONTADO', formaCalculo: 'SOBRE_COSTO',
+    factor: 1.225, vigenteDesde: '2026-11-06', vigenteHasta: null,
+  }
+
+  it('lo hace en una sola llamada al servidor, que cierra y abre de forma atómica', async () => {
     apiPrecios.ver.mockResolvedValue(VIGENTE)
-    apiPrecios.cerrar.mockResolvedValue({ ...VIGENTE, vigente: false })
-    apiPrecios.crear.mockResolvedValue({ ...BASE, reglaId: 11 })
+    apiPrecios.reemplazar.mockResolvedValue({ ...BASE, reglaId: 11 })
     apiPrecios.listar.mockResolvedValue([])
     montar('/precios/1/reemplazar')
     const campo = await screen.findByLabelText('Porcentaje de ganancia')
@@ -471,24 +504,57 @@ describe('reemplazar una regla que rige', () => {
     await userEvent.clear(campo)
     await userEvent.type(campo, '22,5')
     await userEvent.click(screen.getByRole('button', { name: /cerrar la actual y crear la nueva/i }))
-    await waitFor(() => expect(apiPrecios.crear).toHaveBeenCalledTimes(1))
-    expect(apiPrecios.cerrar).toHaveBeenCalledWith(1, '2026-11-05')
-    expect(apiPrecios.cerrar.mock.invocationCallOrder[0]).toBeLessThan(apiPrecios.crear.mock.invocationCallOrder[0])
-    expect(apiPrecios.crear).toHaveBeenCalledWith({
-      categoriaId: 3, proveedorId: null, formaPago: 'CONTADO', formaCalculo: 'SOBRE_COSTO',
-      factor: 1.225, vigenteDesde: '2026-11-06', vigenteHasta: null,
-    })
+    await waitFor(() => expect(apiPrecios.reemplazar).toHaveBeenCalledTimes(1))
+    expect(apiPrecios.reemplazar).toHaveBeenCalledWith(1, CUERPO)
+    expect(apiPrecios.cerrar).not.toHaveBeenCalled()
+    expect(apiPrecios.crear).not.toHaveBeenCalled()
     expect(await screen.findByText(/regla reemplazada/i)).toBeInTheDocument()
   })
 
-  it('si lo escrito es inválido no cierra la regla vigente', async () => {
+  it('si el servidor rechaza el reemplazo no dice que nada se cerró: no se tocó nada', async () => {
+    apiPrecios.ver.mockResolvedValue(VIGENTE)
+    apiPrecios.reemplazar.mockRejectedValue(new ErrorApi(409, 'Ya hay una regla con una vigencia que se solapa.'))
+    montar('/precios/1/reemplazar')
+    await screen.findByLabelText('Porcentaje de ganancia')
+    await userEvent.click(screen.getByRole('button', { name: /cerrar la actual y crear la nueva/i }))
+    const aviso = await screen.findByRole('alert')
+    expect(aviso).toHaveTextContent('Ya hay una regla con una vigencia que se solapa.')
+    expect(screen.queryByText(/ya se cerró/i)).not.toBeInTheDocument()
+    expect(apiPrecios.cerrar).not.toHaveBeenCalled()
+    expect(apiPrecios.crear).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: /cerrar la actual y crear la nueva/i })).toBeEnabled()
+  })
+
+  it.each([400, 422])('un %s del servidor se muestra con su detalle', async (estado) => {
+    apiPrecios.ver.mockResolvedValue(VIGENTE)
+    apiPrecios.reemplazar.mockRejectedValue(new ErrorApi(estado, 'Motivo del servidor.'))
+    montar('/precios/1/reemplazar')
+    await screen.findByLabelText('Porcentaje de ganancia')
+    await userEvent.click(screen.getByRole('button', { name: /cerrar la actual y crear la nueva/i }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Motivo del servidor.')
+    expect(screen.queryByText(/ya se cerró/i)).not.toBeInTheDocument()
+  })
+
+  it('no manda dos veces con dos pulsaciones seguidas', async () => {
+    apiPrecios.ver.mockResolvedValue(VIGENTE)
+    apiPrecios.listar.mockResolvedValue([])
+    let terminar
+    apiPrecios.reemplazar.mockReturnValue(new Promise((r) => { terminar = r }))
+    montar('/precios/1/reemplazar')
+    await screen.findByLabelText('Porcentaje de ganancia')
+    await userEvent.dblClick(screen.getByRole('button', { name: /cerrar la actual y crear la nueva/i }))
+    expect(apiPrecios.reemplazar).toHaveBeenCalledTimes(1)
+    terminar({ ...BASE })
+    await screen.findByText(/regla reemplazada/i)
+  })
+
+  it('si lo escrito es inválido no llama al servidor', async () => {
     apiPrecios.ver.mockResolvedValue(VIGENTE)
     montar('/precios/1/reemplazar')
     const campo = await screen.findByLabelText('Porcentaje de ganancia')
     await userEvent.clear(campo)
     await userEvent.click(screen.getByRole('button', { name: /cerrar la actual y crear la nueva/i }))
-    expect(apiPrecios.cerrar).not.toHaveBeenCalled()
-    expect(apiPrecios.crear).not.toHaveBeenCalled()
+    expect(apiPrecios.reemplazar).not.toHaveBeenCalled()
     expect(campo).toHaveFocus()
   })
 
@@ -500,36 +566,7 @@ describe('reemplazar una regla que rige', () => {
     await userEvent.type(desde, '2026-10-01')
     await userEvent.click(screen.getByRole('button', { name: /cerrar la actual y crear la nueva/i }))
     expect(screen.getByText(/no puede empezar antes de hoy/i)).toBeInTheDocument()
-    expect(apiPrecios.cerrar).not.toHaveBeenCalled()
-  })
-
-  it('si la nueva falla tras cerrar la actual, lo dice y al reintentar no vuelve a cerrar', async () => {
-    apiPrecios.ver.mockResolvedValue(VIGENTE)
-    apiPrecios.cerrar.mockResolvedValue({ ...VIGENTE, vigente: false })
-    apiPrecios.crear
-      .mockRejectedValueOnce(new ErrorApi(400, 'Algo falló al crear.'))
-      .mockResolvedValueOnce({ ...BASE, reglaId: 12 })
-    apiPrecios.listar.mockResolvedValue([])
-    montar('/precios/1/reemplazar')
-    await screen.findByLabelText('Porcentaje de ganancia')
-    await userEvent.click(screen.getByRole('button', { name: /cerrar la actual y crear la nueva/i }))
-    const aviso = await screen.findByRole('alert')
-    expect(aviso).toHaveTextContent(/ya se cerró/i)
-    expect(aviso).toHaveTextContent('Algo falló al crear.')
-    await userEvent.click(screen.getByRole('button', { name: /crear la nueva/i }))
-    expect(await screen.findByText(/regla reemplazada/i)).toBeInTheDocument()
-    expect(apiPrecios.cerrar).toHaveBeenCalledTimes(1)
-    expect(apiPrecios.crear).toHaveBeenCalledTimes(2)
-  })
-
-  it('si no se pudo cerrar, no crea la nueva', async () => {
-    apiPrecios.ver.mockResolvedValue(VIGENTE)
-    apiPrecios.cerrar.mockRejectedValue(new ErrorApi(400, 'No se puede cerrar.'))
-    montar('/precios/1/reemplazar')
-    await screen.findByLabelText('Porcentaje de ganancia')
-    await userEvent.click(screen.getByRole('button', { name: /cerrar la actual y crear la nueva/i }))
-    expect(await screen.findByRole('alert')).toHaveTextContent('No se puede cerrar.')
-    expect(apiPrecios.crear).not.toHaveBeenCalled()
+    expect(apiPrecios.reemplazar).not.toHaveBeenCalled()
   })
 
   it('no deja que la nueva empiece después del fin planeado de la actual: alargaría la regla', async () => {
@@ -541,24 +578,7 @@ describe('reemplazar una regla que rige', () => {
     await userEvent.click(screen.getByRole('button', { name: /cerrar la actual y crear la nueva/i }))
     expect(screen.getByText(/la regla actual ya termina el 20 nov 2026/i)).toBeInTheDocument()
     expect(desde).toHaveFocus()
-    expect(apiPrecios.cerrar).not.toHaveBeenCalled()
-    expect(apiPrecios.crear).not.toHaveBeenCalled()
-  })
-
-  it('tras cerrar la actual, la nueva solo puede empezar el día siguiente: ni hueco ni solape', async () => {
-    apiPrecios.ver.mockResolvedValue(VIGENTE)
-    apiPrecios.cerrar.mockResolvedValue({ ...VIGENTE, vigente: false })
-    apiPrecios.crear.mockRejectedValueOnce(new ErrorApi(400, 'Algo falló al crear.'))
-    montar('/precios/1/reemplazar')
-    const desde = await screen.findByLabelText('Empieza el')
-    await userEvent.click(screen.getByRole('button', { name: /cerrar la actual y crear la nueva/i }))
-    await screen.findByRole('alert')
-    await userEvent.clear(desde)
-    await userEvent.type(desde, '2026-11-20')
-    await userEvent.click(screen.getByRole('button', { name: /crear la nueva regla/i }))
-    expect(screen.getByText(/tiene que empezar el 6 nov 2026/i)).toBeInTheDocument()
-    expect(apiPrecios.crear).toHaveBeenCalledTimes(1)
-    expect(apiPrecios.cerrar).toHaveBeenCalledTimes(1)
+    expect(apiPrecios.reemplazar).not.toHaveBeenCalled()
   })
 
   it('una regla cerrada no se reemplaza', async () => {

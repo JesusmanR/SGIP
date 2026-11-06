@@ -44,6 +44,11 @@ describe('apiPrecios', () => {
     expect(pedir).toHaveBeenLastCalledWith('/precios/reglas/4', { method: 'PUT', body: REGLA })
   })
 
+  it('reemplaza con un solo POST a la regla indicada, campo a campo', async () => {
+    await apiPrecios.reemplazar(4, { ...REGLA, extra: 1 })
+    expect(pedir).toHaveBeenLastCalledWith('/precios/reglas/4/reemplazar', { method: 'POST', body: REGLA })
+  })
+
   it('cierra con o sin fecha', async () => {
     await apiPrecios.cerrar(4)
     expect(pedir).toHaveBeenLastCalledWith('/precios/reglas/4/cerrar', { method: 'POST' })

@@ -6,7 +6,7 @@
  */
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ErrorApi } from '../../servicios/api.js'
@@ -61,9 +61,14 @@ const FUTURA = {
 const CERRADA = { ...REGLA, reglaId: 4, vigenteHasta: '2025-12-31', vigente: false, categoria: 'Vieja', categoriaId: 5 }
 const DESDE_HOY = { ...REGLA, reglaId: 5, vigenteDesde: '2026-11-06', categoriaId: 3, categoria: 'Papelería' }
 
+function Sonda() {
+  return <span data-testid="estado-de-navegacion">{useLocation().state ? "con-estado" : "null"}</span>
+}
+
 function montar(ruta = '/impuestos') {
   return render(
     <MemoryRouter initialEntries={[ruta]}>
+      <Sonda />
       <Routes>
         <Route path="/impuestos/*" element={<Impuestos />} />
       </Routes>
@@ -143,6 +148,24 @@ describe('la pregunta de IVA', () => {
     expect(screen.getByText(/mientras no respondas/i)).toBeInTheDocument()
     expect(screen.getByText(/se venden al precio, sin iva/i)).toBeInTheDocument()
     expect(screen.queryByText(/19\s?%.*por omisión/i)).not.toBeInTheDocument()
+  })
+
+  it('si guardar exige responder, lo dice junto a la pregunta y no antes de intentarlo como error', async () => {
+    apiImpuestos.configuracion.mockResolvedValue(CONFIG_SIN_RESPONDER)
+    montar()
+    const ayuda = await screen.findByText(/responde sí o no para poder guardar/i)
+    expect(ayuda).not.toHaveAttribute('role', 'alert')
+    expect(radio(/^sí/i).closest('fieldset')).toContainElement(ayuda)
+  })
+
+  it('un error de campo se anuncia como alerta y una ayuda neutra no', async () => {
+    montar()
+    const ayuda = await screen.findByText('De 1 a 365 días.')
+    expect(ayuda).not.toHaveAttribute('role')
+    const campo = screen.getByLabelText(/días que vale una cotización/i)
+    await userEvent.clear(campo)
+    await userEvent.click(screen.getByRole('button', { name: /guardar configuración/i }))
+    expect(screen.getByRole('alert')).toHaveTextContent(/escribe cuántos días/i)
   })
 
   it('con «No» dice, sin alarma, que puede vender sin configurar nada más', async () => {
@@ -526,6 +549,17 @@ describe('regla de IVA nueva', () => {
     })
     expect(await screen.findByText(/regla creada/i)).toBeInTheDocument()
     expect(await screen.findByRole('table', { name: /reglas de iva/i })).toBeInTheDocument()
+  })
+
+  it('el aviso de «Regla creada.» no reaparece al recargar: el estado de la navegación se limpia', async () => {
+    apiImpuestos.crearRegla.mockResolvedValue(REGLA)
+    apiImpuestos.reglas.mockResolvedValue([REGLA])
+    await abrir()
+    await userEvent.selectOptions(screen.getByLabelText('Impuesto'), 'IVA_19')
+    await userEvent.click(screen.getByRole('button', { name: /guardar regla/i }))
+    expect(await screen.findByText(/regla creada/i)).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByTestId('estado-de-navegacion')).toHaveTextContent(/^null$/))
+    expect(screen.getByText(/regla creada/i)).toBeInTheDocument()
   })
 
   it('crea una regla de categoría', async () => {
