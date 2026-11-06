@@ -118,8 +118,8 @@ public class PreciosControlador {
     /**
      * Reemplaza una regla que rige: cierra la vieja el día antes de que empiece
      * la nueva y crea la nueva, todo en una transacción. 404 si la regla es
-     * ajena, no existe o es de un producto; 400 si ya terminó o la nueva
-     * empieza antes que ella; 409 si se solaparía con otra.
+     * ajena, no existe o es de un producto; 400 si ya terminó, o si la nueva
+     * empieza antes que ella o antes de hoy; 409 si se solaparía con otra.
      */
     @PostMapping("/{reglaId}/reemplazar")
     public ResponseEntity<ReglaDeMargen> reemplazar(

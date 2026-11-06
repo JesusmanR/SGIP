@@ -201,7 +201,10 @@ public class ServicioPrecios {
      * El alcance y la forma de pago son los de la vieja: cambiarlos no es
      * reemplazar, es otra regla. La nueva no puede empezar antes que la vieja ni
      * después del fin que la vieja ya tenía: cerrarla más tarde la alargaría y
-     * podría solaparla con otra que ya la sucede.
+     * podría solaparla con otra que ya la sucede. Tampoco puede empezar antes de
+     * hoy: ni el navegador es la única defensa, ni se reescribe el pasado.
+     * Un resultado vacío solo significa que la regla no existe; si la recién
+     * creada no se relee, es un error del servidor.
      */
     @Transactional
     public Optional<ReglaDeMargen> reemplazar(Integer reglaId, SolicitudReglaMargen s) {
@@ -230,6 +233,11 @@ public class ServicioPrecios {
                     "La nueva regla tiene que empezar después del " + vieja.vigenteDesde()
                             + ", que es cuando empezó la que reemplaza.");
         }
+        if (s.vigenteDesde().isBefore(LocalDate.now(reloj))) {
+            throw new ReglaInvalidaException(
+                    "La nueva regla no puede empezar antes de hoy: una fecha pasada "
+                            + "cambiaría el precio de ventas que ya se hicieron.");
+        }
         LocalDate cierre = s.vigenteDesde().minusDays(1);
         if (vieja.vigenteHasta() != null && cierre.isAfter(vieja.vigenteHasta())) {
             throw new ReglaInvalidaException(
@@ -244,7 +252,8 @@ public class ServicioPrecios {
         precios.cerrar(empresa, reglaId, cierre);
         Integer id = precios.insertar(empresa, s.categoriaId(), s.proveedorId(), s.formaPago(),
                 s.formaCalculo(), s.factor(), s.vigenteDesde(), s.vigenteHasta());
-        return precios.buscar(empresa, id);
+        return Optional.of(precios.buscar(empresa, id).orElseThrow(() -> new IllegalStateException(
+                "La regla " + id + " no se encontró justo después de reemplazar la " + reglaId + ".")));
     }
 
     // ------------------------------------------- lo escrito para un producto

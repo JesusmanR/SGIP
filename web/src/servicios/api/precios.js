@@ -37,10 +37,10 @@ export const apiPrecios = {
     pedir(`/precios/reglas/alcance${alcanceConsulta(categoria, proveedor)}`),
   simular: (regla) => pedir('/precios/reglas/simulacion', { method: 'POST', body: cuerpo(regla) }),
   crear: (regla) => pedir('/precios/reglas', { method: 'POST', body: cuerpo(regla) }),
-  // Corrige en el sitio: solo se usa con una regla que todavía no empieza.
   // Cierra la vigente y abre la nueva en una sola transacción del servidor.
   reemplazar: (reglaId, regla) =>
     pedir(`/precios/reglas/${reglaId}/reemplazar`, { method: 'POST', body: cuerpo(regla) }),
+  // Corrige en el sitio: solo se usa con una regla que todavía no empieza.
   corregir: (reglaId, regla) =>
     pedir(`/precios/reglas/${reglaId}`, { method: 'PUT', body: cuerpo(regla) }),
   // Sin fecha cierra ayer: la regla deja de aplicar hoy mismo.
