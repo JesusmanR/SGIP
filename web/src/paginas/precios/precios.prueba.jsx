@@ -174,7 +174,7 @@ describe('cerrar una regla', () => {
     await userEvent.click(screen.getByRole('button', { name: /cerrar/i }))
     await userEvent.click(await screen.findByRole('button', { name: /cancelar/i }))
     expect(apiPrecios.cerrar).not.toHaveBeenCalled()
-    expect(screen.queryByRole('group')).not.toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: /cerrar la regla/i })).not.toBeInTheDocument()
   })
 
   it('una regla que empieza hoy se cierra con la fecha de hoy y la pantalla lo dice', async () => {

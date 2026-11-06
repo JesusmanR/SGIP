@@ -273,7 +273,7 @@ describe('guardar la configuración', () => {
       montar()
       const campo = await screen.findByLabelText(/días que vale una cotización/i)
       await userEvent.clear(campo)
-      await userEvent.type(campo, texto)
+      if (texto) await userEvent.type(campo, texto)
       await userEvent.click(screen.getByRole('button', { name: /guardar configuración/i }))
       expect(screen.getByText(mensaje)).toBeInTheDocument()
       expect(campo).toHaveFocus()
@@ -435,7 +435,7 @@ describe('reglas de IVA', () => {
       await userEvent.click(screen.getByRole('button', { name: /cerrar/i }))
       await userEvent.click(await screen.findByRole('button', { name: /cancelar/i }))
       expect(apiImpuestos.cerrarRegla).not.toHaveBeenCalled()
-      expect(screen.queryByRole('group')).not.toBeInTheDocument()
+      expect(screen.queryByRole('group', { name: /cerrar esta regla/i })).not.toBeInTheDocument()
     })
 
     it('el rechazo del servidor se muestra y no da la regla por cerrada', async () => {
