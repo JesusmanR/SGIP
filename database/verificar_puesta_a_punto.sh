@@ -49,7 +49,7 @@ limpiar () {
       ejecutar "DELETE r FROM reglas_margen r JOIN empresas e ON e.empresa_id = r.empresa_id
                  WHERE e.nit LIKE 'PAP-%';"
       ejecutar "DELETE FROM tipos_impuesto WHERE codigo LIKE 'PAP-%';"
-      # La bitácora de la plataforma apunta a la empresa con RESTRICT (V37).
+      # La bitácora de la plataforma apunta a la empresa con RESTRICT (V21).
       ejecutar "DELETE FROM auditoria_plataforma WHERE referencia LIKE 'PAP-%';"
       # La UVT de prueba que la sección de la V35 pone solo si falta la del
       # año en curso (ver más abajo).
