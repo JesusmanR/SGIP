@@ -16,12 +16,14 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -30,6 +32,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 
 /**
  * Reemplazar una regla de ganancia vigente, de punta a punta contra la base:
@@ -38,7 +43,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * Las fechas son fijas y lejanas a propósito: en la CI la JVM corre en UTC y
  * la conexión en America/Bogota, de modo que «hoy» puede diferir un día, y las
- * fechas se escriben y se leen siempre por JDBC.
+ * fechas se escriben y se leen siempre por JDBC. La nueva regla empieza en el
+ * futuro porque el servicio no deja empezarla antes de hoy.
  *
  * Crea su propia empresa y lo borra todo al terminar.
  */
@@ -47,7 +53,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ReemplazoDeReglaTest {
 
     private static final LocalDate DESDE_VIEJA = LocalDate.of(2020, 1, 1);
-    private static final LocalDate DESDE_NUEVA = LocalDate.of(2024, 1, 1);
+    private static final LocalDate DESDE_NUEVA = LocalDate.of(2040, 1, 1);
+    private static final LocalDate DESDE_LEJANA = LocalDate.of(2050, 1, 1);
 
     @Autowired ServicioPrecios precios;
     @Autowired ServicioProducto productos;
@@ -56,7 +63,9 @@ class ReemplazoDeReglaTest {
     @Autowired ProveedorRepositorio proveedores;
     @Autowired RepositorioPlataforma plataforma;
     @Autowired JdbcClient jdbc;
+    @MockitoSpyBean RepositorioPrecios repositorioPrecios;
 
+    private final List<Integer> empresasAjenas = new ArrayList<>();
     private Integer empresaId;
     private Integer categoriaId;
     private Integer proveedorId;
@@ -93,11 +102,15 @@ class ReemplazoDeReglaTest {
         if (empresaId == null) {
             return;
         }
-        for (String tabla : List.of("reglas_margen", "productos", "proveedores", "categorias",
-                "usuarios", "empresa_config", "empresas")) {
-            jdbc.sql("DELETE FROM " + tabla + " WHERE empresa_id = :empresa")
-                    .param("empresa", empresaId)
-                    .update();
+        List<Integer> empresas = new ArrayList<>(empresasAjenas);
+        empresas.add(empresaId);
+        for (Integer empresa : empresas) {
+            for (String tabla : List.of("reglas_margen", "productos", "proveedores", "categorias",
+                    "usuarios", "empresa_config", "empresas")) {
+                jdbc.sql("DELETE FROM " + tabla + " WHERE empresa_id = :empresa")
+                        .param("empresa", empresa)
+                        .update();
+            }
         }
     }
 
@@ -162,7 +175,7 @@ class ReemplazoDeReglaTest {
     void siLaCreacionFallaPorUnSolapeLaViejaQuedaIntacta() {
         Integer vieja = reglaGeneral("CONTADO", "1.2000", DESDE_VIEJA, null);
         // Otra regla del mismo alcance que ya ocupa el futuro: la nueva chocaría con ella.
-        reglaGeneral("CONTADO", "1.3000", LocalDate.of(2030, 1, 1), null);
+        reglaGeneral("CONTADO", "1.3000", DESDE_LEJANA, null);
 
         assertThrows(RegistroRepetidoException.class,
                 () -> reemplazar(vieja, nueva("1.5000", DESDE_NUEVA)));
@@ -171,14 +184,44 @@ class ReemplazoDeReglaTest {
         assertEquals(2, cuantas(), "no debía crearse ninguna regla");
     }
 
+    /** Un fallo simulado, para reconocer que la excepción vino de la creación y no de otro sitio. */
+    private static final class FalloDeLaCreacion extends RuntimeException {
+        FalloDeLaCreacion() {
+            super("fallo simulado al insertar la regla nueva");
+        }
+    }
+
+    /**
+     * Aquí la creación falla después de haber cerrado la vieja: solo la transacción
+     * del servicio puede devolver ese cierre. Sin ella la vieja quedaría cerrada
+     * y sin sucesora, con los productos sin precio de venta.
+     */
+    @Test
+    void siLaCreacionFallaDespuesDelCierreElCierreSeDeshace() {
+        Integer vieja = reglaGeneral("CONTADO", "1.2000", DESDE_VIEJA, null);
+        doThrow(new FalloDeLaCreacion()).when(repositorioPrecios).insertar(
+                any(), any(), any(), any(), any(), any(), any(), any());
+
+        assertThrows(FalloDeLaCreacion.class,
+                () -> reemplazar(vieja, nueva("1.5000", DESDE_NUEVA)));
+
+        assertNull(hasta(vieja), "el cierre de la vieja debía deshacerse");
+        assertEquals(1, cuantas(), "no debía quedar ninguna regla nueva");
+    }
+
     @Test
     void elCambioDePrecioSeVeEnLaVista() {
         Integer vieja = reglaGeneral("CONTADO", "1.2000", DESDE_VIEJA, null);
         reglaGeneral("CREDITO", "1.2000", DESDE_VIEJA, null);
         Integer id = producto("1000");
+        // La vista compara con CURDATE() de la base y el servicio con el reloj de la JVM:
+        // si difieren (UTC contra Bogota, de noche) la nueva aún no rige en la vista.
+        LocalDate hoy = LocalDate.now();
+        assumeTrue(hoy.equals(jdbc.sql("SELECT CURDATE()").query(LocalDate.class).single()),
+                "la JVM y la base no coinciden en el día de hoy");
         assertEquals(0, new BigDecimal("1200").compareTo(productos.buscar(id).orElseThrow().precioContado()));
 
-        reemplazar(vieja, nueva("1.5000", DESDE_NUEVA));
+        reemplazar(vieja, nueva("1.5000", hoy));
 
         assertEquals(0, new BigDecimal("1500").compareTo(productos.buscar(id).orElseThrow().precioContado()));
         assertEquals(0, new BigDecimal("1200").compareTo(productos.buscar(id).orElseThrow().precioCredito()));
@@ -188,5 +231,61 @@ class ReemplazoDeReglaTest {
     void unaReglaAjenaOInexistenteNoSeReemplaza() {
         assertTrue(reemplazar(987654321, nueva("1.5000", DESDE_NUEVA)).isEmpty());
         assertEquals(0, cuantas());
+    }
+
+    @Test
+    void unaReglaDeOtraEmpresaNoSeReemplazaNiSeToca() {
+        Integer ajena = insertarEmpresaAjena();
+        Integer reglaAjena = reglaDe(ajena, "1.2000");
+
+        assertTrue(reemplazar(reglaAjena, nueva("1.5000", DESDE_NUEVA)).isEmpty());
+
+        assertNull(hasta(reglaAjena), "la regla ajena no debía cerrarse");
+        assertEquals(0, cuantas(), "no debía crearse nada en esta empresa");
+        assertEquals(1, cuantasDe(ajena), "ni en la ajena");
+    }
+
+    @Test
+    void unaReglaDeProductoNoSeReemplazaPorAqui() {
+        Integer productoId = producto("1000");
+        jdbc.sql("""
+                INSERT INTO reglas_margen (empresa_id, producto_id, forma_pago, forma_calculo,
+                                           factor, vigente_desde)
+                VALUES (:e, :producto, 'CONTADO', 'SOBRE_COSTO', 1.2000, :desde)
+                """)
+                .param("e", empresaId).param("producto", productoId)
+                .param("desde", DESDE_VIEJA)
+                .update();
+        Integer reglaProducto = jdbc.sql("SELECT regla_id FROM reglas_margen WHERE producto_id = :p")
+                .param("p", productoId).query(Integer.class).single();
+
+        assertTrue(reemplazar(reglaProducto, nueva("1.5000", DESDE_NUEVA)).isEmpty());
+
+        assertNull(hasta(reglaProducto), "la regla del producto no debía cerrarse");
+        assertEquals(1, cuantas(), "no debía crearse ninguna regla nueva");
+    }
+
+    private Integer insertarEmpresaAjena() {
+        String otra = UUID.randomUUID().toString().replace("-", "").substring(0, 12).toUpperCase();
+        Integer id = plataforma.insertarEmpresa("A" + otra, "Empresa ajena " + otra, null, null, null);
+        empresasAjenas.add(id);
+        return id;
+    }
+
+    private Integer reglaDe(Integer empresa, String factor) {
+        jdbc.sql("""
+                INSERT INTO reglas_margen (empresa_id, forma_pago, forma_calculo, factor,
+                                           vigente_desde)
+                VALUES (:e, 'CONTADO', 'SOBRE_COSTO', :factor, :desde)
+                """)
+                .param("e", empresa).param("factor", new BigDecimal(factor))
+                .param("desde", DESDE_VIEJA)
+                .update();
+        return jdbc.sql("SELECT LAST_INSERT_ID()").query(Integer.class).single();
+    }
+
+    private int cuantasDe(Integer empresa) {
+        return jdbc.sql("SELECT COUNT(*) FROM reglas_margen WHERE empresa_id = :e")
+                .param("e", empresa).query(Integer.class).single();
     }
 }
