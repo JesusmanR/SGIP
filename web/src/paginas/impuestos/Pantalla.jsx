@@ -1,4 +1,5 @@
-import { useLocation } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import EncabezadoPagina from '../../componentes/comun/EncabezadoPagina.jsx'
 import EstadoCarga from '../../componentes/comun/EstadoCarga.jsx'
 import EstadoError from '../../componentes/comun/EstadoError.jsx'
@@ -15,7 +16,14 @@ import ReglasIva from './ReglasIva.jsx'
  * de modo que si una falla, el resto sigue a la vista.
  */
 export default function Pantalla() {
-  const aviso = useLocation().state?.aviso
+  const ubicacion = useLocation()
+  const navegar = useNavigate()
+  // El aviso viaja en el estado de la navegación; se guarda aquí y se borra de
+  // la historia para que no reaparezca al recargar la página.
+  const [aviso] = useState(ubicacion.state?.aviso)
+  useEffect(() => {
+    if (aviso) navegar(ubicacion.pathname, { replace: true, state: null })
+  }, [])
   const { datos, error, sinPermiso, recargar } = useDatos(() => apiImpuestos.configuracion(), [])
 
   let cuerpo

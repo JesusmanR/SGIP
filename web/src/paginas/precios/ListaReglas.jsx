@@ -1,5 +1,5 @@
-import { useRef, useState } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import Aviso from '../../componentes/comun/Aviso.jsx'
 import EncabezadoPagina from '../../componentes/comun/EncabezadoPagina.jsx'
 import EstadoCarga from '../../componentes/comun/EstadoCarga.jsx'
@@ -51,7 +51,14 @@ function Acciones({ regla, hoy, alCerrar }) {
 
 /** Pantalla P-47 · las reglas generales de ganancia de la empresa. */
 export default function ListaReglas() {
-  const avisoInicial = useLocation().state?.aviso
+  const ubicacion = useLocation()
+  const navegar = useNavigate()
+  // El aviso viaja en el estado de la navegación; se guarda aquí y se borra de
+  // la historia para que no reaparezca al recargar la página.
+  const [avisoInicial] = useState(ubicacion.state?.aviso)
+  useEffect(() => {
+    if (avisoInicial) navegar(ubicacion.pathname, { replace: true, state: null })
+  }, [])
   const { datos, cargando, error, sinPermiso, recargar } = useDatos(() => apiPrecios.listar(), [])
   const [verCerradas, setVerCerradas] = useState(false)
   const [cerrando, setCerrando] = useState(null)

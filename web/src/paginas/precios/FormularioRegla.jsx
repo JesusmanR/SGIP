@@ -25,17 +25,11 @@ const TITULOS = {
 const aNumero = (texto) => (texto === '' ? null : Number(texto))
 
 /** Por qué no se puede enviar lo escrito; cada campo con su mensaje, o `null`. */
-function motivos(modo, regla, d, hoy, anteriorCerrada) {
+function motivos(modo, regla, d, hoy) {
   const m = { porcentaje: porcentajeAFactor(d.porcentaje, d.formaCalculo).error ?? null, desde: null, hasta: null }
   if (d.desde === '') m.desde = 'Elige desde qué día rige.'
   else if (modo !== 'crear' && d.desde < hoy) m.desde = 'La regla no puede empezar antes de hoy.'
-  else if (modo === 'reemplazar' && anteriorCerrada) {
-    // La actual ya quedó cerrada: otro día dejaría días sin regla o la solaparía.
-    const siguiente = sumarDias(anteriorCerrada, 1)
-    if (d.desde !== siguiente) {
-      m.desde = `La regla anterior ya se cerró el ${fechaDia(anteriorCerrada)}: la nueva tiene que empezar el ${fechaDia(siguiente)}.`
-    }
-  } else if (modo === 'reemplazar' && d.desde <= regla.vigenteDesde) {
+  else if (modo === 'reemplazar' && d.desde <= regla.vigenteDesde) {
     m.desde = `Tiene que empezar después del día en que empezó la actual (${fechaDia(regla.vigenteDesde)}).`
   } else if (modo === 'reemplazar' && regla.vigenteHasta && sumarDias(d.desde, -1) > regla.vigenteHasta) {
     // Cerrar la actual un día más tarde de su fin planeado la alargaría y podría solaparla con otra.
@@ -113,7 +107,6 @@ function Formulario({ modo, regla, categorias = [], proveedores = [] }) {
   const [enviando, setEnviando] = useState(false)
   const [error, setError] = useState(null)
   const [simulacion, setSimulacion] = useState(null)
-  const [anteriorCerrada, setAnteriorCerrada] = useState(null)
   const formulario = useRef(null)
   const aviso = useRef(null)
   const enCurso = useRef(false)
@@ -126,7 +119,7 @@ function Formulario({ modo, regla, categorias = [], proveedores = [] }) {
     [categoriaId, proveedorId],
   )
 
-  const fallos = motivos(modo, regla, datos, hoy, anteriorCerrada)
+  const fallos = motivos(modo, regla, datos, hoy)
   const ver = (campo) => (intentos > 0 ? fallos[campo] : null)
   const hayFallos = Object.values(fallos).some(Boolean)
 
@@ -170,7 +163,6 @@ function Formulario({ modo, regla, categorias = [], proveedores = [] }) {
     enCurso.current = true
     setEnviando(true)
     const cuerpo = armarCuerpo(modo, regla, datos)
-    let cerradaEn = anteriorCerrada
     try {
       if (modo === 'crear') {
         await apiPrecios.crear(cuerpo)
@@ -179,27 +171,17 @@ function Formulario({ modo, regla, categorias = [], proveedores = [] }) {
         await apiPrecios.corregir(regla.reglaId, cuerpo)
         navegar('/precios', { state: { aviso: 'Cambios guardados.' } })
       } else {
-        // Primero se cierra la vigente: crear la nueva antes daría un solape (409).
-        // El día anterior al nuevo inicio es el último día de la actual.
-        if (!cerradaEn) {
-          cerradaEn = sumarDias(datos.desde, -1)
-          await apiPrecios.cerrar(regla.reglaId, cerradaEn)
-          setAnteriorCerrada(cerradaEn)
-        }
-        await apiPrecios.crear(cuerpo)
+        // Una sola llamada: el servidor cierra la vigente el día anterior y abre la
+        // nueva en una transacción. Si falla, no se tocó nada.
+        await apiPrecios.reemplazar(regla.reglaId, cuerpo)
         navegar('/precios', {
-          state: { aviso: `Regla reemplazada. La anterior quedó cerrada el ${fechaDia(cerradaEn)}.` },
+          state: { aviso: `Regla reemplazada. La anterior quedó cerrada el ${fechaDia(sumarDias(datos.desde, -1))}.` },
         })
       }
     } catch (err) {
       enCurso.current = false
       setEnviando(false)
-      const motivo = err.message || 'No se pudo completar la operación.'
-      setError(
-        modo === 'reemplazar' && cerradaEn
-          ? `La regla anterior ya se cerró el ${fechaDia(cerradaEn)}, pero la nueva no se pudo crear. ${motivo} Corrige lo que haga falta y vuelve a pulsar «Crear la nueva regla»: la anterior no se vuelve a cerrar.`
-          : motivo,
-      )
+      setError(err.message || 'No se pudo completar la operación.')
     }
   }
 
@@ -207,7 +189,7 @@ function Formulario({ modo, regla, categorias = [], proveedores = [] }) {
   if (enviando) etiquetaBoton = 'Guardando…'
   else if (modo === 'crear') etiquetaBoton = 'Guardar regla'
   else if (modo === 'corregir') etiquetaBoton = 'Guardar cambios'
-  else etiquetaBoton = anteriorCerrada ? 'Crear la nueva regla' : 'Cerrar la actual y crear la nueva'
+  else etiquetaBoton = 'Cerrar la actual y crear la nueva'
   const productos = alcance?.productos
 
   return (
@@ -299,7 +281,7 @@ function Formulario({ modo, regla, categorias = [], proveedores = [] }) {
           </Campo>
         </div>
 
-        {modo === 'reemplazar' && datos.desde !== '' && !anteriorCerrada && (
+        {modo === 'reemplazar' && datos.desde !== '' && (
           <p className="nota">
             {`Al guardar, la regla actual se cierra el ${fechaDia(sumarDias(datos.desde, -1))} y la nueva empieza el ${fechaDia(datos.desde)}. No se borra nada: la actual queda en el historial.`}
           </p>

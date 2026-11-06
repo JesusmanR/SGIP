@@ -139,8 +139,8 @@ export default function Configuracion({ guardada, alGuardar }) {
             <small>Muchos comercios pequeños no están obligados a cobrarlo.</small>
           </span>
         </label>
-        <small id="mensaje-iva" role="status" className={`campo-mensaje ${motivoIva ? 'error' : ''}`}>
-          {motivoIva || ''}
+        <small id="mensaje-iva" role={motivoIva ? 'alert' : undefined} className={`campo-mensaje ${motivoIva ? 'error' : ''}`}>
+          {motivoIva || (datos.responsable === null ? 'Responde Sí o No para poder guardar.' : '')}
         </small>
       </fieldset>
 

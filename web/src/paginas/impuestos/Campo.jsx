@@ -15,7 +15,7 @@ export default function Campo({ etiqueta, motivo, ayuda, children }) {
         'aria-invalid': motivo ? 'true' : undefined,
         'aria-describedby': idMensaje,
       })}
-      <small id={idMensaje} role="status" className={`campo-mensaje ${motivo ? 'error' : ''}`}>
+      <small id={idMensaje} role={motivo ? 'alert' : undefined} className={`campo-mensaje ${motivo ? 'error' : ''}`}>
         {motivo || ayuda || ''}
       </small>
     </div>
