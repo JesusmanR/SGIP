@@ -170,6 +170,33 @@ public class ServicioPlataforma {
     }
 
     /**
+     * Levanta el bloqueo de un usuario de la empresa indicada (ADR-0028).
+     *
+     * Es la salida para quien no tiene otro administrador que lo desbloquee, y
+     * la única que no pasa por la propia empresa. El usuario se busca acotado
+     * por la empresa de la ruta, no por su identificador suelto: uno de otra
+     * empresa responde igual que uno inexistente, y el super administrador
+     * tampoco puede, sin querer, tocar a quien no es de la empresa que nombró.
+     *
+     * Desbloquear a quien no está bloqueado no es un error: no cambia nada y no
+     * se anota, por lo mismo que activar una empresa ya activa. La bitácora
+     * registra decisiones con efecto.
+     */
+    @Transactional
+    public void desbloquearUsuario(Integer empresaId, Integer usuarioId) {
+        Usuario usuario = usuarios.findByIdAndEmpresaId(usuarioId, empresaId)
+                .orElseThrow(() -> new RecursoNoEncontradoException("El usuario no existe."));
+        if (!usuario.isBloqueado()) {
+            return;
+        }
+        usuario.desbloquear();
+        // La referencia es el identificador y no el correo: el correo mide hasta
+        // 120 caracteres y la columna admite 60.
+        plataforma.registrar(responsable(), empresaId, AccionPlataforma.USUARIO_DESBLOQUEO,
+                "usuarios", String.valueOf(usuarioId), "BLOQUEADO", "DESBLOQUEADO", null);
+    }
+
+    /**
      * El estado anterior se lee antes de escribir el nuevo, porque es lo
      * que la bitácora tiene que guardar y después del UPDATE ya no está
      * en ninguna parte.

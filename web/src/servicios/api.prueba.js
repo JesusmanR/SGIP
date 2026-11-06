@@ -89,6 +89,14 @@ describe('cliente del API', () => {
     expect(haySesion()).toBe(true)
   })
 
+  it('el error lleva el tipo del problema para distinguir un 409 de otro', async () => {
+    responder(409, { type: 'urn:sgip:producto-cambio', detail: 'Cambió.' })
+    const e = await api.editarProducto(1, {}).catch((x) => x)
+    expect(e).toBeInstanceOf(ErrorApi)
+    expect(e.estado).toBe(409)
+    expect(e.tipo).toBe('urn:sgip:producto-cambio')
+  })
+
   it('usa el detalle del ProblemDetail como mensaje', async () => {
     responder(409, { detail: 'Ya existe una categoría llamada «Bebidas».' })
     await expect(api.categorias()).rejects.toThrow('Ya existe una categoría llamada «Bebidas».')

@@ -151,7 +151,7 @@ class PrecioDeProductoTest {
         ProductoEnCatalogo p = leer(id);
         productos.actualizar(id, new SolicitudEdicionProducto(categoriaId, proveedorId, p.codigo(),
                 p.sku(), null, p.nombre(), null, null, new BigDecimal(costo), 0,
-                contado, credito, creditoIgual));
+                contado, credito, creditoIgual, p.version()));
     }
 
     private ProductoEnCatalogo leer(Integer id) {
@@ -165,6 +165,19 @@ class PrecioDeProductoTest {
                        (:e, 'CREDITO', 'SOBRE_COSTO', :credito, '2026-01-01')
                 """)
                 .param("e", empresaId)
+                .param("contado", new BigDecimal(contado))
+                .param("credito", new BigDecimal(credito))
+                .update();
+    }
+
+    private void reglaDeCategoria(Integer categoria, String contado, String credito) {
+        jdbc.sql("""
+                INSERT INTO reglas_margen (empresa_id, categoria_id, forma_pago, forma_calculo,
+                                           factor, vigente_desde)
+                VALUES (:e, :c, 'CONTADO', 'SOBRE_COSTO', :contado, '2026-01-01'),
+                       (:e, :c, 'CREDITO', 'SOBRE_COSTO', :credito, '2026-01-01')
+                """)
+                .param("e", empresaId).param("c", categoria)
                 .param("contado", new BigDecimal(contado))
                 .param("credito", new BigDecimal(credito))
                 .update();
@@ -218,6 +231,33 @@ class PrecioDeProductoTest {
                 """)
                 .param("e", empresaId).param("p", productosDeUmbral[0])
                 .query(BigDecimal.class).single();
+    }
+
+    // ------------------------------------------------- cambio de categoría (M3)
+
+    /**
+     * Un producto sin regla propia que cambia de categoría y vuelve a «crédito
+     * igual al contado» sin tocar el contado: el crédito copia el contado que
+     * rige tras el cambio, el de la categoría nueva. Sin vaciar el cambio a la
+     * base antes de leer, la vista todavía veía la categoría vieja y el crédito
+     * copiaba la regla de la que se acababa de dejar.
+     */
+    @Test
+    void alCambiarDeCategoriaElCreditoIgualadoCopiaElContadoDeLaCategoriaNueva() {
+        Integer otraCategoria = categorias.save(new Categoria(empresaId, "Otra", null)).getId();
+        reglaDeCategoria(categoriaId, "1.2000", "1.2500");
+        reglaDeCategoria(otraCategoria, "1.3000", "1.3500");
+        Integer id = sinReglaPropia("1000.00");
+        ProductoEnCatalogo antes = leer(id);
+        igualA("1200", antes.precioContado());
+
+        productos.actualizar(id, new SolicitudEdicionProducto(otraCategoria, proveedorId,
+                antes.codigo(), antes.sku(), null, antes.nombre(), null, null,
+                new BigDecimal("1000.00"), 0, null, null, true, antes.version()));
+
+        ProductoEnCatalogo despues = leer(id);
+        igualA("1300", despues.precioContado());
+        igualA("1300", despues.precioCredito());
     }
 
     // ----------------------------------------------------------------- alta

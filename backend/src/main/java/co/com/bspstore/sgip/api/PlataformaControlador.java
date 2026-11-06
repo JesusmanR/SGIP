@@ -3,6 +3,7 @@ package co.com.bspstore.sgip.api;
 import co.com.bspstore.sgip.api.dto.EmpresaEnPlataforma;
 import co.com.bspstore.sgip.api.dto.SolicitudAltaEmpresa;
 import co.com.bspstore.sgip.api.dto.SolicitudCambioEstado;
+import co.com.bspstore.sgip.logica.RecursoNoEncontradoException;
 import co.com.bspstore.sgip.logica.ServicioPlataforma;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -54,7 +55,7 @@ public class PlataformaControlador {
     public ResponseEntity<EmpresaEnPlataforma> ver(@PathVariable Integer empresaId) {
         return servicio.buscar(empresaId)
                 .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+                .orElseThrow(() -> new RecursoNoEncontradoException("La empresa no existe."));
     }
 
     /** RF-01. Devuelve 409 si la identificación tributaria ya está registrada. */
@@ -85,7 +86,20 @@ public class PlataformaControlador {
             @Valid @RequestBody(required = false) SolicitudCambioEstado solicitud) {
         return servicio.activar(empresaId, SolicitudCambioEstado.motivoDe(solicitud))
                 .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+                .orElseThrow(() -> new RecursoNoEncontradoException("La empresa no existe."));
+    }
+
+    /**
+     * Levanta el bloqueo de un usuario de esa empresa (ADR-0028). Es un POST
+     * sobre un recurso propio y no un DELETE, como el desbloqueo que hace el
+     * administrador de la empresa: nada se borra. 404 si el usuario no es de
+     * esa empresa, con el mismo texto que si no existiera.
+     */
+    @PostMapping("/{empresaId}/usuarios/{usuarioId}/desbloquear")
+    public ResponseEntity<Void> desbloquearUsuario(@PathVariable Integer empresaId,
+                                                   @PathVariable Integer usuarioId) {
+        servicio.desbloquearUsuario(empresaId, usuarioId);
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/{empresaId}/desactivar")
@@ -94,6 +108,6 @@ public class PlataformaControlador {
             @Valid @RequestBody(required = false) SolicitudCambioEstado solicitud) {
         return servicio.desactivar(empresaId, SolicitudCambioEstado.motivoDe(solicitud))
                 .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+                .orElseThrow(() -> new RecursoNoEncontradoException("La empresa no existe."));
     }
 }

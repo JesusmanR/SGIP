@@ -8,6 +8,7 @@ import co.com.bspstore.sgip.logica.DatoTributarioInvalidoException;
 import co.com.bspstore.sgip.logica.EstadoDeCargaInvalidoException;
 import co.com.bspstore.sgip.logica.RecursoNoEncontradoException;
 import co.com.bspstore.sgip.logica.CredencialesInvalidasException;
+import co.com.bspstore.sgip.logica.CuentaBloqueadaException;
 import co.com.bspstore.sgip.logica.FiltroInvalidoException;
 import co.com.bspstore.sgip.logica.ImpuestoNoDisponibleException;
 import co.com.bspstore.sgip.logica.AlmacenArchivos;
@@ -22,23 +23,45 @@ import co.com.bspstore.sgip.logica.RolNoAsignableException;
 import co.com.bspstore.sgip.logica.UltimoAdministradorException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import java.net.URI;
 import java.sql.SQLException;
 import java.util.stream.Collectors;
 
+/**
+ * Con {@code spring.mvc.problemdetails.enabled=true} Spring registra su propio
+ * manejador de las excepciones estándar, con orden 0 y con texto en inglés. Este
+ * va por delante a propósito: los textos de la API son estos, y no dependen de
+ * una propiedad que vive en un archivo que no se versiona.
+ */
+@Order(Ordered.HIGHEST_PRECEDENCE)
 @RestControllerAdvice
 public class ManejadorErrores {
 
     private static final Logger LOG = LoggerFactory.getLogger(ManejadorErrores.class);
+
+    /**
+     * El {@code type} del 409 «el producto cambió desde que lo abriste». El 409
+     * tiene otras causas (nombre repetido, carga en otro estado) y solo esta
+     * justifica que el formulario ofrezca ver los datos actuales: el cliente
+     * lo reconoce por este valor, no por el estado.
+     */
+    public static final URI TIPO_PRODUCTO_CAMBIO = URI.create("urn:sgip:producto-cambio");
 
     // Códigos de error de MySQL (no los SQLState, que son los mismos
     // 23000 para casi todo y no distinguen un duplicado de una referencia).
@@ -49,7 +72,25 @@ public class ManejadorErrores {
     public ProblemDetail credencialesInvalidas(CredencialesInvalidasException e) {
         ProblemDetail p = ProblemDetail.forStatus(HttpStatus.UNAUTHORIZED);
         p.setTitle("Credenciales inválidas");
-        p.setDetail("El correo o la contraseña no son correctos.");
+        int minutos = e.getMinutosDeBloqueo();
+        p.setDetail("El correo o la contraseña no son correctos. Si te equivocas varias veces, "
+                + "la cuenta se bloquea durante " + minutos
+                + (minutos == 1 ? " minuto." : " minutos."));
+        return p;
+    }
+
+    @ExceptionHandler(CuentaBloqueadaException.class)
+    public ProblemDetail cuentaBloqueada(CuentaBloqueadaException e) {
+        // 423 y no 401: el cliente trata todo 401 como «la sesión expiró» y
+        // echaría a quien sigue dentro. Aquí quien pregunta ya está
+        // autenticado, de modo que decirle la causa no revela nada.
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.LOCKED);
+        p.setTitle("Cuenta bloqueada");
+        int minutos = e.getMinutosDeBloqueo();
+        p.setDetail("Tu cuenta está bloqueada por intentos fallidos. "
+                + "No puedes cambiar la contraseña hasta que pasen "
+                + minutos + (minutos == 1 ? " minuto" : " minutos")
+                + " desde el bloqueo.");
         return p;
     }
 
@@ -268,9 +309,11 @@ public class ManejadorErrores {
     }
 
     /**
-     * Alguien guardó el producto después de que esta persona lo abriera
-     * (o se aplicó una carga de precios). 409: la petición es válida y es
-     * el estado actual lo que impide atenderla. El mensaje de la
+     * Alguien guardó el producto después de que esta persona abriera el
+     * formulario (otra edición, o se aplicó una carga de precios): la versión
+     * que trae la edición ya no es la del producto. También salta si dos
+     * escrituras se pisan dentro de una misma transacción. 409: la petición es
+     * válida y es el estado actual lo que impide atenderla. El mensaje de la
      * excepción nombra la clase y el identificador, así que no se
      * reenvía; el cliente recibe un texto fijo.
      */
@@ -278,6 +321,7 @@ public class ManejadorErrores {
     public ProblemDetail edicionConcurrente(ObjectOptimisticLockingFailureException e) {
         LOG.warn("Edición rechazada por bloqueo optimista: {}", e.getMessage());
         ProblemDetail p = ProblemDetail.forStatus(HttpStatus.CONFLICT);
+        p.setType(TIPO_PRODUCTO_CAMBIO);
         p.setTitle("El producto cambió mientras lo editabas");
         p.setDetail("Otra persona o un proceso modificó este producto antes de que guardaras. "
                 + "Vuelve a abrirlo para ver los datos actuales y repite tu cambio.");
@@ -331,6 +375,50 @@ public class ManejadorErrores {
         ProblemDetail p = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
         p.setTitle("Datos inválidos");
         p.setDetail(mensajes);
+        return p;
+    }
+
+    /**
+     * JSON mal formado, o con un valor de un tipo que el campo no admite. El
+     * mensaje de Jackson cita el fragmento que no pudo leer y nombra clases
+     * internas, así que no se reenvía: el cliente recibe un texto fijo.
+     */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ProblemDetail cuerpoNoLegible(HttpMessageNotReadableException e) {
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
+        p.setTitle("Cuerpo no válido");
+        p.setDetail("El cuerpo de la petición no es un JSON válido o tiene datos de un tipo equivocado.");
+        return p;
+    }
+
+    /**
+     * Un identificador de la ruta o un parámetro con un valor del tipo
+     * equivocado («abc» donde va un número). Se nombra el parámetro, que es
+     * del código, y nunca lo escrito, que es del cliente.
+     */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ProblemDetail valorNoValido(MethodArgumentTypeMismatchException e) {
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
+        p.setTitle("Valor no válido");
+        p.setDetail("El valor de «" + e.getName() + "» no es válido.");
+        return p;
+    }
+
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ProblemDetail parametroAusente(MissingServletRequestParameterException e) {
+        return datoAusente(e.getParameterName());
+    }
+
+    /** Lo mismo cuando lo que falta es una parte de un envío con archivo. */
+    @ExceptionHandler(MissingServletRequestPartException.class)
+    public ProblemDetail parteAusente(MissingServletRequestPartException e) {
+        return datoAusente(e.getRequestPartName());
+    }
+
+    private static ProblemDetail datoAusente(String nombre) {
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
+        p.setTitle("Falta un dato");
+        p.setDetail("Falta el dato obligatorio «" + nombre + "».");
         return p;
     }
 }

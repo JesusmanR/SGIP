@@ -372,6 +372,21 @@ class ServicioConfiguracionTributariaTest {
         assertNotNull(resultado.regla());
     }
 
+    /**
+     * El servicio decide con su reloj que la regla «aún no empieza»; si el
+     * DELETE no borra nada porque la base ya la tiene vigente, no puede
+     * responder que la retiró.
+     */
+    @Test
+    void siLaBaseYaTieneVigenteLaReglaNoSeDaPorRetirada() {
+        when(repositorio.buscarRegla(EMPRESA, 50))
+                .thenReturn(Optional.of(regla(50, null, null, EN_CINCO_DIAS, null)));
+        when(repositorio.borrarRegla(EMPRESA, 50)).thenReturn(0);
+
+        assertThrows(DatoTributarioInvalidoException.class,
+                () -> servicio.cerrarRegla(50, null));
+    }
+
     @Test
     void cerrarConFechaCierraEsaFecha() {
         servicio.cerrarRegla(50, LocalDate.of(2026, 12, 31));
@@ -385,6 +400,8 @@ class ServicioConfiguracionTributariaTest {
         // historia, corrige una equivocación.
         when(repositorio.buscarRegla(EMPRESA, 50))
                 .thenReturn(Optional.of(regla(50, null, null, EN_CINCO_DIAS, null)));
+
+        when(repositorio.borrarRegla(EMPRESA, 50)).thenReturn(1);
 
         var resultado = servicio.cerrarRegla(50, null).orElseThrow();
 

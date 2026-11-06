@@ -2,6 +2,8 @@ package co.com.bspstore.sgip.api;
 
 import co.com.bspstore.sgip.logica.ClaveActualIncorrectaException;
 import co.com.bspstore.sgip.logica.ClaveNuevaInvalidaException;
+import co.com.bspstore.sgip.logica.CredencialesInvalidasException;
+import co.com.bspstore.sgip.logica.CuentaBloqueadaException;
 import co.com.bspstore.sgip.logica.EstadoDeCargaInvalidoException;
 import co.com.bspstore.sgip.logica.ImpuestoNoDisponibleException;
 import co.com.bspstore.sgip.logica.RecursoNoEncontradoException;
@@ -15,7 +17,9 @@ import java.sql.SQLIntegrityConstraintViolationException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ManejadorErroresTest {
 
@@ -38,6 +42,16 @@ class ManejadorErroresTest {
             assertFalse(visible.contains(fragmento), visible);
         }
         assertFalse(visible.toLowerCase().contains("sql"), visible);
+    }
+
+    /** Un 401 haría que el cliente diera por expirada la sesión de quien sigue dentro. */
+    @Test
+    void cambiarLaClaveConLaCuentaBloqueadaEsUn423ConElPlazoYNoUn401() {
+        ProblemDetail p = manejador.cuentaBloqueada(new CuentaBloqueadaException(15));
+
+        assertEquals(423, p.getStatus());
+        assertEquals("Cuenta bloqueada", p.getTitle());
+        assertTrue(p.getDetail().contains("15 minutos"), p.getDetail());
     }
 
     @Test
@@ -86,6 +100,24 @@ class ManejadorErroresTest {
         sinTextoDelMotor(p, "tabla_secreta", "statement");
     }
 
+    /** El 401 de ingreso orienta sin revelar: el plazo sale del valor configurado. */
+    @Test
+    void elRechazoDelIngresoDiceCuantoDuraElBloqueoSegunLoConfigurado() {
+        ProblemDetail p = manejador.credencialesInvalidas(new CredencialesInvalidasException(20));
+
+        assertEquals(401, p.getStatus());
+        assertEquals("Credenciales inválidas", p.getTitle());
+        assertEquals("El correo o la contraseña no son correctos. Si te equivocas varias veces, "
+                + "la cuenta se bloquea durante 20 minutos.", p.getDetail());
+    }
+
+    @Test
+    void elPlazoDeUnMinutoSeDiceEnSingular() {
+        ProblemDetail p = manejador.credencialesInvalidas(new CredencialesInvalidasException(1));
+
+        assertTrue(p.getDetail().endsWith("durante 1 minuto."), p.getDetail());
+    }
+
     @Test
     void unRecursoQueNoEsDeLaEmpresaEsUn404() {
         ProblemDetail p = manejador.recursoNoEncontrado(
@@ -116,6 +148,24 @@ class ManejadorErroresTest {
         assertEquals("El producto cambió mientras lo editabas", p.getTitle());
         assertNotNull(p.getDetail());
         sinTextoDelMotor(p, "co.com", "bspstore", "Producto.class", "42", "version", "Row was");
+    }
+
+    /**
+     * El 409 tiene varias causas (nombre repetido, carga en otro estado, dato
+     * ya registrado) y el cliente no puede deducir cuál mirando el estado. Este
+     * lleva un tipo propio: es el único que justifica ofrecer «ver los datos
+     * actuales» en el formulario de edición (I1).
+     */
+    @Test
+    void laEdicionQueLlegaTardeSeDistingueDeOtrosConflictosPorSuTipo() {
+        ProblemDetail tarde = manejador.edicionConcurrente(
+                new ObjectOptimisticLockingFailureException(Producto.class, 42));
+        ProblemDetail repetido = manejador.nombreRepetido(
+                new co.com.bspstore.sgip.logica.NombreRepetidoException("Ya existe un producto con el código X."));
+
+        assertEquals(ManejadorErrores.TIPO_PRODUCTO_CAMBIO, tarde.getType());
+        assertEquals("urn:sgip:producto-cambio", tarde.getType().toString());
+        assertNotEquals(ManejadorErrores.TIPO_PRODUCTO_CAMBIO, repetido.getType());
     }
 
     /**

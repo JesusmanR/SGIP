@@ -48,9 +48,12 @@ public class FiltroSesion extends OncePerRequestFilter {
         if (token != null && SecurityContextHolder.getContext().getAuthentication() == null) {
             sesiones.validar(token)
                     .map(Sesion::getUsuario)
-                    // Una cuenta desactivada o bloqueada después del ingreso
-                    // deja de valer de inmediato, sin esperar a que expire.
-                    .filter(Usuario::puedeIngresar)
+                    // Una cuenta desactivada después del ingreso deja de valer
+                    // de inmediato, sin esperar a que expire. El bloqueo por
+                    // intentos fallidos no: solo impide entrar de nuevo. Si
+                    // expulsara, quien conozca un correo sacaría a su dueño de
+                    // la sesión equivocándose cinco veces (ADR-0028).
+                    .filter(Usuario::isActivo)
                     .ifPresent(this::autenticar);
         }
         cadena.doFilter(peticion, respuesta);

@@ -43,6 +43,7 @@ nueva. La decisión original se deja tal como se escribió.
 | 0025 | El precio de venta y el porcentaje se escriben por producto | vigente |
 | 0026 | El acento del producto pasa a morado; reemplaza la paleta de la 0009 | vigente |
 | 0027 | Versiones seguras: LTS en Java y Node, último parche estable en las librerías | vigente |
+| 0028 | El bloqueo de una cuenta caduca y la plataforma puede levantarlo | vigente |
 
 ## Las cuatro que conviene leer antes de escribir código
 

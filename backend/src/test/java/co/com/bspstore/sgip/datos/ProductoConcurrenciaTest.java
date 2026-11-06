@@ -1,6 +1,8 @@
 package co.com.bspstore.sgip.datos;
 
 import co.com.bspstore.sgip.api.dto.FilaDeCarga;
+import co.com.bspstore.sgip.api.dto.ProductoEnCatalogo;
+import co.com.bspstore.sgip.api.dto.SolicitudEdicionProducto;
 import co.com.bspstore.sgip.api.dto.SolicitudPrecio;
 import co.com.bspstore.sgip.api.dto.SolicitudProducto;
 import co.com.bspstore.sgip.config.UsuarioAutenticado;
@@ -263,5 +265,83 @@ class ProductoConcurrenciaTest {
 
         assertEquals(0, new BigDecimal("250.00").compareTo(costoEnBase()),
                 "la edición rechazada no puede devolver el costo al valor anterior a la carga");
+    }
+
+    // ------------------------------------- la edición con datos viejos (I1)
+
+    /** Lo que manda el formulario de edición con lo que traía al abrirse. */
+    private SolicitudEdicionProducto edicionDe(ProductoEnCatalogo abierto, String nombre,
+                                               SolicitudPrecio contado) {
+        return new SolicitudEdicionProducto(abierto.categoriaId(), abierto.proveedorId(),
+                abierto.codigo(), abierto.sku(), null, nombre, null, null,
+                abierto.costo(), abierto.existenciaMinima(), contado, null, null,
+                abierto.version());
+    }
+
+    private void seAplicaUnaCargaQueSubeElCostoA(String costo) {
+        Long cargaId = importacion.insertarCarga(empresaId, proveedorId, usuarioId, "prueba.xlsx", 1, 1, 0);
+        importacion.insertarDetalles(empresaId, cargaId, List.of(new FilaDeCarga(
+                2, productoId, "CONC", "Producto de prueba", new BigDecimal(costo),
+                new BigDecimal("100.00"), true, null, null)));
+        importacion.aplicarCostos(empresaId, cargaId);
+    }
+
+    /**
+     * El escenario de la revisión final: el formulario se abre con el producto
+     * a 100, otra persona aplica una lista que lo sube a 250, y quien tenía el
+     * formulario abierto corrige una errata y guarda. La edición lleva la
+     * versión de antes de la carga, y sin comparar ni siquiera hay conflicto:
+     * el costo volvía a 100 y el precio de venta bajaba con él, sin aviso.
+     */
+    @Test
+    void guardarUnFormularioAbiertoAntesDeUnaCargaDaConflictoYConservaElCostoDeLaCarga() {
+        comoAdministradorDeLaEmpresa();
+        ProductoEnCatalogo abierto = servicioProducto.buscar(productoId).orElseThrow();
+        seAplicaUnaCargaQueSubeElCostoA("250.00");
+
+        assertThrows(ObjectOptimisticLockingFailureException.class, () ->
+                servicioProducto.actualizar(productoId, edicionDe(abierto, "Con la errata corregida", null)));
+
+        assertEquals(0, new BigDecimal("250.00").compareTo(costoEnBase()),
+                "la edición con datos viejos no puede devolver el costo al de antes de la carga");
+        assertEquals("Producto original", servicioProducto.buscar(productoId).orElseThrow().nombre());
+    }
+
+    @Test
+    void dosFormulariosAbiertosAlMismoTiempoGuardanElPrimeroYRechazanElSegundo() {
+        comoAdministradorDeLaEmpresa();
+        ProductoEnCatalogo primero = servicioProducto.buscar(productoId).orElseThrow();
+        ProductoEnCatalogo segundo = servicioProducto.buscar(productoId).orElseThrow();
+
+        servicioProducto.actualizar(productoId, edicionDe(primero, "Editado primero", null));
+
+        assertThrows(ObjectOptimisticLockingFailureException.class, () ->
+                servicioProducto.actualizar(productoId, edicionDe(segundo, "Editado segundo", null)));
+        assertEquals("Editado primero", servicioProducto.buscar(productoId).orElseThrow().nombre());
+    }
+
+    @Test
+    void laRespuestaDeUnaEdicionTraeLaVersionNuevaYConEllaSePuedeVolverAGuardar() {
+        comoAdministradorDeLaEmpresa();
+        ProductoEnCatalogo abierto = servicioProducto.buscar(productoId).orElseThrow();
+
+        servicioProducto.actualizar(productoId, edicionDe(abierto, "Editado una vez", null));
+        ProductoEnCatalogo guardado = servicioProducto.buscar(productoId).orElseThrow();
+
+        assertEquals(abierto.version() + 1, guardado.version());
+        servicioProducto.actualizar(productoId, edicionDe(guardado, "Editado dos veces", null));
+        assertEquals("Editado dos veces", servicioProducto.buscar(productoId).orElseThrow().nombre());
+    }
+
+    /** ADR-0025: la regla es una fila aparte, y un cambio solo de precio no tira lo que otro tenía abierto. */
+    @Test
+    void unCambioSoloDePrecioNoSubeLaVersion() {
+        comoAdministradorDeLaEmpresa();
+        ProductoEnCatalogo abierto = servicioProducto.buscar(productoId).orElseThrow();
+
+        servicioProducto.actualizar(productoId, edicionDe(abierto, abierto.nombre(),
+                new SolicitudPrecio(new BigDecimal("25"), null)));
+
+        assertEquals(abierto.version(), servicioProducto.buscar(productoId).orElseThrow().version());
     }
 }

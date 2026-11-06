@@ -9,11 +9,13 @@ import co.com.bspstore.sgip.datos.ConsultaCatalogo;
 import co.com.bspstore.sgip.datos.ProductoRepositorio;
 import co.com.bspstore.sgip.datos.ProveedorRepositorio;
 import co.com.bspstore.sgip.modelo.Producto;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
@@ -161,6 +163,13 @@ public class ServicioProducto {
      * La existencia no se toca: la solicitud de edición ni siquiera la
      * trae, y el motivo está en Producto.reemplazarDatos.
      *
+     * La solicitud lleva la versión que el formulario traía al abrirse. Si el
+     * producto ya cambió (una carga de precios que subió el costo, otra edición)
+     * se rechaza con el mismo 409 del bloqueo optimista, antes de escribir nada:
+     * guardar con los datos de antes deshacía el cambio sin aviso. {@code @Version}
+     * sola solo cubre los milisegundos entre la lectura y la escritura de esta
+     * transacción, no el tiempo que el formulario estuvo abierto (I1).
+     *
      * El precio solo cambia si alguien lo escribió. Cambiar el costo no escribe
      * ninguna regla, y por eso se conserva lo que se escribió en su día: con un
      * porcentaje cambia el precio y con un precio cambia el margen (ADR-0025).
@@ -174,6 +183,9 @@ public class ServicioProducto {
             return Optional.empty();
         }
         Producto p = encontrado.get();
+        if (!Objects.equals(p.getVersion(), s.version())) {
+            throw new ObjectOptimisticLockingFailureException(Producto.class, productoId);
+        }
 
         categorias.findByEmpresaIdAndId(empresa, s.categoriaId())
                 .orElseThrow(() -> new ReferenciaAjenaException(
@@ -202,12 +214,15 @@ public class ServicioProducto {
         p.reemplazarDatos(s.categoriaId(), s.proveedorId(), codigo, sku, s.nombre(),
                 s.presentacion(), s.descripcion(), barras, s.costo(),
                 s.existenciaMinima() == null ? p.getExistenciaMinima() : s.existenciaMinima());
-        Producto guardado = productos.save(p);
+        // Se vacía a la base antes de escribir los precios: las reglas se leen de la
+        // vista, que junta el producto con la regla de su categoría, y con la
+        // categoría nueva sin escribir seguiría viendo la vieja (M3).
+        productos.saveAndFlush(p);
         // Sin tocar `version`: la regla es una fila aparte, y un cambio solo de
         // precio no le quita a nadie los datos del producto que tenía abiertos.
         precios.escribirPrecios(empresa, productoId, s.costo(), s.contado(), s.credito(),
                 s.creditoIgualAlContado());
-        return Optional.of(guardado);
+        return Optional.of(p);
     }
 
     /**

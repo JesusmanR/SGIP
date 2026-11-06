@@ -8,9 +8,15 @@ import { leerSesion, borrarSesion } from './sesion.js'
  * en lugar de en un error raro en mitad de una pantalla.
  */
 export class ErrorApi extends Error {
-  constructor(estado, detalle) {
+  /**
+   * `tipo` es el `type` del ProblemDetail. Un mismo estado tiene varias causas
+   * (un 409 puede ser un código repetido o un producto que cambió), y el estado
+   * solo no dice cuál: quien necesite distinguirlas mira el tipo.
+   */
+  constructor(estado, detalle, tipo) {
     super(detalle)
     this.estado = estado
+    this.tipo = tipo
   }
 }
 
@@ -103,13 +109,15 @@ export async function pedir(ruta, opciones = {}) {
   if (!respuesta.ok) {
     // El backend responde con ProblemDetail, que trae «detail».
     let detalle = 'No se pudo completar la operación.'
+    let tipo
     try {
       const cuerpo = await respuesta.json()
       if (cuerpo?.detail) detalle = cuerpo.detail
+      tipo = cuerpo?.type
     } catch {
       // Una respuesta sin cuerpo JSON deja el mensaje genérico.
     }
-    throw new ErrorApi(respuesta.status, detalle)
+    throw new ErrorApi(respuesta.status, detalle, tipo)
   }
 
   if (respuesta.status === 204) return null
@@ -148,6 +156,7 @@ export const api = {
     pedir('/auth/clave', { method: 'POST', body: { claveActual, claveNueva } }),
   catalogo: ({ busqueda, categoria, proveedor, estado } = {}) =>
     pedir(`/productos${consulta({ busqueda, categoria, proveedor, estado })}`),
+  producto: (productoId) => pedir(`/productos/${productoId}`),
   crearProducto: (datos) => pedir('/productos', { method: 'POST', body: datos }),
   editarProducto: (productoId, datos) =>
     pedir(`/productos/${productoId}`, { method: 'PUT', body: datos }),

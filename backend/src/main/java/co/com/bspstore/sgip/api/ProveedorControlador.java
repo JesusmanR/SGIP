@@ -2,6 +2,7 @@ package co.com.bspstore.sgip.api;
 
 import co.com.bspstore.sgip.api.dto.ProveedorResumen;
 import co.com.bspstore.sgip.api.dto.SolicitudProveedor;
+import co.com.bspstore.sgip.logica.RecursoNoEncontradoException;
 import co.com.bspstore.sgip.logica.ServicioProveedor;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -42,7 +43,7 @@ public class ProveedorControlador {
         return servicio.buscar(proveedorId)
                 .map(ProveedorResumen::de)
                 .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+                .orElseThrow(() -> new RecursoNoEncontradoException("El proveedor no existe."));
     }
 
     @PostMapping
