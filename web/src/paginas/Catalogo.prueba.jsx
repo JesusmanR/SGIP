@@ -28,6 +28,7 @@ vi.mock('../servicios/api.js', () => ({
     proveedores: vi.fn(),
     editarProducto: vi.fn(),
     crearProducto: vi.fn(),
+    producto: vi.fn(),
   },
   ErrorApi: class extends Error {},
   imagenAutenticada: vi.fn(async () => 'blob:simulada'),
@@ -409,6 +410,32 @@ describe('catálogo de productos', () => {
     expect(api.editarProducto.mock.calls[0][1].version).toBe(3)
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
 
+    await teclado.click(within(fila(screen, 'PC-001')).getByRole('button', { name: /editar/i }))
+    await teclado.click(screen.getByRole('button', { name: /guardar/i }))
+    await waitFor(() => expect(api.editarProducto).toHaveBeenCalledTimes(2))
+    expect(api.editarProducto.mock.calls[1][1].version).toBe(4)
+  })
+
+  it('si se trajeron los datos actuales y luego se cancela, la fila muestra los actuales y no los viejos', async () => {
+    const teclado = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    api.editarProducto.mockRejectedValue(Object.assign(
+      new Error('Otra persona modificó este producto.'),
+      { estado: 409, tipo: 'urn:sgip:producto-cambio' }))
+    api.producto.mockResolvedValue({ ...PC, nombre: 'Portátil del servidor', version: 4 })
+    montar()
+    await conFilas()
+    await teclado.click(within(fila(screen, 'PC-001')).getByRole('button', { name: /editar/i }))
+    await teclado.click(screen.getByRole('button', { name: /guardar/i }))
+    await teclado.click(await screen.findByRole('button', { name: /ver los datos actuales/i }))
+    const dialogo = screen.getByRole('dialog')
+    await waitFor(() => expect(within(dialogo).getByLabelText(/nombre/i)).toHaveValue('Portátil del servidor'))
+
+    await teclado.click(screen.getByRole('button', { name: /cancelar/i }))
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(fila(screen, 'PC-001')).toHaveTextContent('Portátil del servidor')
+    expect(fila(screen, 'PC-001')).not.toHaveTextContent('Portátil Lenovo V15')
+    // La siguiente edición parte de la versión nueva, no de la que dio el 409.
     await teclado.click(within(fila(screen, 'PC-001')).getByRole('button', { name: /editar/i }))
     await teclado.click(screen.getByRole('button', { name: /guardar/i }))
     await waitFor(() => expect(api.editarProducto).toHaveBeenCalledTimes(2))

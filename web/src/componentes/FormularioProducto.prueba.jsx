@@ -25,6 +25,7 @@ vi.mock('../servicios/api.js', () => ({
 function montar(extra = {}) {
   const onGuardado = vi.fn()
   const onCerrar = vi.fn()
+  const onActualizado = vi.fn()
   render(
     <FormularioProducto
       producto={{ ...PC, ...extra }}
@@ -32,8 +33,9 @@ function montar(extra = {}) {
       proveedores={PROVEEDORES}
       onCerrar={onCerrar}
       onGuardado={onGuardado}
+      onActualizado={onActualizado}
     />)
-  return { onGuardado, onCerrar }
+  return { onGuardado, onCerrar, onActualizado }
 }
 
 describe('formulario de producto', () => {
@@ -162,6 +164,48 @@ describe('formulario de producto', () => {
       await teclado.click(screen.getByRole('button', { name: /guardar/i }))
       await waitFor(() => expect(api.editarProducto).toHaveBeenCalledTimes(2))
       expect(api.editarProducto.mock.calls[1][1].version).toBe(4)
+    })
+
+    it('tras traer los datos actuales el foco queda en el formulario y no se pierde en la página', async () => {
+      const teclado = userEvent.setup()
+      api.editarProducto.mockRejectedValueOnce(conflicto())
+      api.producto.mockResolvedValue({ ...PC, nombre: 'Portátil del servidor', version: 4 })
+      montar()
+      await teclado.click(screen.getByRole('button', { name: /guardar/i }))
+      await screen.findByRole('alert')
+
+      await teclado.click(screen.getByRole('button', { name: /ver los datos actuales/i }))
+
+      // El botón vivía dentro del aviso: al desaparecer el aviso, el foco caía a <body>.
+      await waitFor(() => expect(screen.getByLabelText(/nombre/i)).toHaveFocus())
+    })
+
+    it('avisa de los datos actuales a quien lo abrió, para que el catálogo no muestre los viejos', async () => {
+      const teclado = userEvent.setup()
+      api.editarProducto.mockRejectedValueOnce(conflicto())
+      const actual = { ...PC, nombre: 'Portátil del servidor', version: 4 }
+      api.producto.mockResolvedValue(actual)
+      const { onActualizado } = montar()
+      await teclado.click(screen.getByRole('button', { name: /guardar/i }))
+      await screen.findByRole('alert')
+
+      await teclado.click(screen.getByRole('button', { name: /ver los datos actuales/i }))
+
+      await waitFor(() => expect(onActualizado).toHaveBeenCalledWith(actual))
+    })
+
+    it('si no se pueden traer los datos actuales, no avisa de nada', async () => {
+      const teclado = userEvent.setup()
+      api.editarProducto.mockRejectedValue(conflicto())
+      api.producto.mockRejectedValue(new Error('El producto no existe.'))
+      const { onActualizado } = montar()
+      await teclado.click(screen.getByRole('button', { name: /guardar/i }))
+      await screen.findByRole('alert')
+
+      await teclado.click(screen.getByRole('button', { name: /ver los datos actuales/i }))
+
+      await screen.findByText(/el producto no existe/i)
+      expect(onActualizado).not.toHaveBeenCalled()
     })
 
     it('un 409 por un código repetido dice el motivo del servidor y no habla de cambios', async () => {
