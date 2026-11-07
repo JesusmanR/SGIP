@@ -9,7 +9,9 @@
 .armazon-contenido { grid-column: 2; min-width: 0; }
 .armazon-contenido:focus { outline: none; }
 /* El aviso de conexión va arriba del contenido, con el mismo margen lateral que la página. */
-.armazon-contenido > .aviso-estado { margin: var(--espacio-4) var(--espacio-5) 0; }
+.armazon-contenido > .aviso-estado {
+  width: calc(100% - 3rem); max-width: calc(1100px - 3rem); margin: var(--espacio-4) auto 0;
+}
 
 .saltar {
   position: absolute; left: var(--espacio-2); top: -4rem; z-index: 30;
