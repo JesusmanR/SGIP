@@ -6,7 +6,11 @@ import '../estilos/acceso.css'
 
 /** Pantalla P-01 · Acceso. */
 export default function Acceso() {
-  useEffect(() => { document.title = 'Acceso · SGIP' }, [])
+  useEffect(() => {
+    document.title = 'Acceso · SGIP'
+    // El armazón no pone título en la primera carga: sin esto se quedaría el de acceso.
+    return () => { document.title = 'SGIP' }
+  }, [])
   const [correo, setCorreo] = useState('')
   const [clave, setClave] = useState('')
   const [error, setError] = useState(null)
