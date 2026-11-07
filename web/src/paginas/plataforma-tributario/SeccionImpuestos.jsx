@@ -9,6 +9,7 @@ import { apiPlataformaTributario } from '../../servicios/api/plataforma-tributar
 import { NUMERO } from '../../servicios/formato.js'
 import { erroresPorCampo, numeroEscrito, sinCampo } from './campos.js'
 import Campo from '../../componentes/comun/Campo.jsx'
+import Confirmacion from '../../componentes/comun/Confirmacion.jsx'
 
 const CON_TOPE = 'EXCLUIDO_HASTA_UMBRAL'
 const TRATAMIENTOS = {
@@ -65,12 +66,10 @@ function EditarImpuesto({ impuesto, alGuardar, alCancelar }) {
   })
   const [intentos, setIntentos] = useState(0)
   const [confirmando, setConfirmando] = useState(false)
-  const [volverAlBoton, setVolverAlBoton] = useState(false)
   const [enviando, setEnviando] = useState(false)
   const [error, setError] = useState(null)
   const [camposServidor, setCamposServidor] = useState({})
   const formulario = useRef(null)
-  const caja = useRef(null)
   const botonGuardar = useRef(null)
   const enCurso = useRef(false)
 
@@ -84,15 +83,6 @@ function EditarImpuesto({ impuesto, alGuardar, alCancelar }) {
   useEffect(() => {
     if (intentos > 0) formulario.current?.querySelector('[aria-invalid="true"]')?.focus()
   }, [intentos])
-  useEffect(() => {
-    if (confirmando) caja.current?.focus()
-  }, [confirmando])
-  // El foco vuelve al botón cuando la confirmación ya se cerró y el botón ya está en pantalla.
-  useEffect(() => {
-    if (confirmando || !volverAlBoton) return
-    botonGuardar.current?.focus()
-    setVolverAlBoton(false)
-  }, [confirmando, volverAlBoton])
 
   const cambiar = (campo) => (e) => {
     const valor = e.target.value
@@ -107,11 +97,6 @@ function EditarImpuesto({ impuesto, alGuardar, alCancelar }) {
     setCamposServidor({})
     if (Object.values(fallos).some(Boolean)) return
     setConfirmando(true)
-  }
-
-  function volverAEditar() {
-    setVolverAlBoton(true)
-    setConfirmando(false)
   }
 
   async function guardar() {
@@ -133,7 +118,6 @@ function EditarImpuesto({ impuesto, alGuardar, alCancelar }) {
         setIntentos((n) => n + 1)
       } else {
         setError(err.message || 'No se pudo completar la operación.')
-        setVolverAlBoton(true)
       }
       setConfirmando(false)
       enCurso.current = false
@@ -168,18 +152,16 @@ function EditarImpuesto({ impuesto, alGuardar, alCancelar }) {
         </Campo>
       </fieldset>
       {confirmando ? (
-        <div className="confirmacion" role="group" aria-labelledby="impuesto-pregunta" tabIndex={-1} ref={caja}>
-          <p id="impuesto-pregunta" className="confirmacion-pregunta">{`¿Guardar los cambios de ${impuesto.nombre}?`}</p>
-          <p>
-            Este cambio afecta a todas las tiendas y rige al instante, sin esperar a nada más.
-          </p>
-          <div className="acciones">
-            <button type="button" className="boton" disabled={enviando} onClick={guardar}>Sí, guardar</button>
-            <button type="button" className="boton secundario" disabled={enviando} onClick={volverAEditar}>
-              Volver a editar
-            </button>
-          </div>
-        </div>
+        <Confirmacion
+          pregunta={`¿Guardar los cambios de ${impuesto.nombre}?`}
+          detalle="Este cambio afecta a todas las tiendas y rige al instante, sin esperar a nada más."
+          textoConfirmar="Sí, guardar"
+          textoCancelar="Volver a editar"
+          enviando={enviando}
+          volverA={() => botonGuardar.current}
+          alConfirmar={guardar}
+          alCancelar={() => setConfirmando(false)}
+        />
       ) : (
         <div className="acciones">
           <button type="submit" className="boton" ref={botonGuardar}>Guardar impuesto</button>

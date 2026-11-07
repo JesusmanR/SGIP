@@ -43,19 +43,11 @@
 .plataforma-empresas .ficha + .acciones { margin-top: 0; }
 .plataforma-empresas .acciones .boton { min-height: var(--toque-minimo); }
 
-.plataforma-empresas .confirmacion {
-  background: var(--tarjeta); border: 1px solid var(--borde-control); border-radius: var(--radio-tarjeta);
-  padding: var(--espacio-4); max-width: 65ch;
-}
-.plataforma-empresas .confirmacion p { margin: 0 0 var(--espacio-2); font-size: var(--t-cuerpo); }
-.plataforma-empresas .confirmacion .confirmacion-pregunta { font-weight: 600; font-size: var(--t-titulo-tarjeta); }
-.plataforma-empresas .confirmacion:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; border-color: var(--acento); }
-.plataforma-empresas .confirmacion .acciones { margin-top: var(--espacio-3); }
 
 /* Usuarios de la empresa y desbloqueo */
 .plataforma-empresas .usuarios { margin-top: var(--espacio-5); }
 .plataforma-empresas .usuarios h2 { margin: 0 0 var(--espacio-2); font-size: var(--t-titulo-tarjeta); }
-.plataforma-empresas .usuarios .confirmacion { margin-top: var(--espacio-4); }
+.plataforma-empresas 
 .plataforma-empresas td .boton.menudo { width: auto; min-height: var(--toque-minimo); padding: 0 var(--espacio-3); }
 
 /* Un lugar al que el foco vuelve por código se ve igual que uno al que se llega con el teclado. */

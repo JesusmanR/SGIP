@@ -38,17 +38,9 @@
 .seccion-precios .boton.menudo { width: auto; }
 .seccion-precios .sin-acciones { color: var(--tinta-3); }
 
-/* ── Acciones y confirmación en la misma página ────────────────────── */
+/* ── Acciones ────────────────────── */
 .seccion-precios .acciones { display: flex; flex-wrap: wrap; gap: var(--espacio-2); margin-top: var(--espacio-4); }
 .seccion-precios .acciones .boton { min-height: var(--toque-minimo); }
-.seccion-precios .confirmacion {
-  background: var(--tarjeta); border: 1px solid var(--borde-control); border-radius: var(--radio-tarjeta);
-  padding: var(--espacio-4); max-width: 65ch; margin-bottom: var(--espacio-4);
-}
-.seccion-precios .confirmacion p { margin: 0 0 var(--espacio-2); font-size: var(--t-cuerpo); }
-.seccion-precios .confirmacion .confirmacion-pregunta { font-weight: 600; font-size: var(--t-titulo-tarjeta); }
-.seccion-precios .confirmacion:focus-visible { outline: 3px solid var(--acento-sutil); border-color: var(--acento); }
-.seccion-precios .confirmacion .acciones { margin-top: var(--espacio-3); }
 
 /* ── Formulario ────────────────────────────────────────────────────── */
 .seccion-precios .formulario-regla { max-width: 40rem; }

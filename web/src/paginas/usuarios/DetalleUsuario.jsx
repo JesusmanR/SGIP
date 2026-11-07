@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import Aviso from '../../componentes/comun/Aviso.jsx'
+import Confirmacion from '../../componentes/comun/Confirmacion.jsx'
 import EncabezadoPagina from '../../componentes/comun/EncabezadoPagina.jsx'
 import { apiUsuarios } from '../../servicios/api/usuarios.js'
 import { fechaCorta } from '../../servicios/formato.js'
@@ -32,12 +33,8 @@ function Ficha({ usuario, recargar, avisoInicial }) {
   const [enviando, setEnviando] = useState(false)
   const [exito, setExito] = useState(avisoInicial ?? null)
   const [error, setError] = useState(null)
-  const caja = useRef(null)
+  const pagina = useRef(null)
   const enCurso = useRef(false)
-
-  useEffect(() => {
-    if (confirmando) caja.current?.focus()
-  }, [confirmando])
 
   async function ejecutar(llamar, mensajeExito) {
     if (enCurso.current) return
@@ -62,7 +59,7 @@ function Ficha({ usuario, recargar, avisoInicial }) {
   const pedida = confirmando ? CONFIRMACIONES[confirmando](usuario) : null
 
   return (
-    <div className="contenido usuarios">
+    <div className="contenido usuarios" tabIndex={-1} ref={pagina}>
       <p className="volver"><Link to="/usuarios">Volver a usuarios</Link></p>
       <EncabezadoPagina
         titulo={usuario.nombre}
@@ -93,21 +90,15 @@ function Ficha({ usuario, recargar, avisoInicial }) {
       </section>
 
       {pedida ? (
-        <div className="confirmacion" role="group" aria-labelledby="confirmacion-pregunta" tabIndex={-1} ref={caja}>
-          <p id="confirmacion-pregunta" className="confirmacion-pregunta">{pedida.pregunta}</p>
-          <p>{pedida.detalle}</p>
-          <div className="acciones">
-            <button
-              type="button" className="boton" disabled={enviando}
-              onClick={() => ejecutar(pedida.llamar, pedida.exito)}
-            >
-              {pedida.boton}
-            </button>
-            <button type="button" className="boton secundario" disabled={enviando} onClick={() => setConfirmando(null)}>
-              Cancelar
-            </button>
-          </div>
-        </div>
+        <Confirmacion
+          pregunta={pedida.pregunta}
+          detalle={pedida.detalle}
+          textoConfirmar={pedida.boton}
+          enviando={enviando}
+          focoEstable={pagina}
+          alConfirmar={() => ejecutar(pedida.llamar, pedida.exito)}
+          alCancelar={() => setConfirmando(null)}
+        />
       ) : (
         <div className="acciones">
           {usuario.bloqueado && (

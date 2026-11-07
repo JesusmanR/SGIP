@@ -39,15 +39,6 @@
 .usuarios .ficha + .acciones { margin-top: 0; }
 .usuarios .acciones .boton { min-height: var(--toque-minimo); }
 
-/* Confirmación en la misma página: no hace falta un diálogo para una pregunta. */
-.usuarios .confirmacion {
-  background: var(--tarjeta); border: 1px solid var(--borde-control); border-radius: var(--radio-tarjeta);
-  padding: var(--espacio-4); max-width: 65ch;
-}
-.usuarios .confirmacion p { margin: 0 0 var(--espacio-2); font-size: var(--t-cuerpo); }
-.usuarios .confirmacion .confirmacion-pregunta { font-weight: 600; font-size: var(--t-titulo-tarjeta); }
-.usuarios .confirmacion:focus-visible { outline: 3px solid var(--acento-sutil); border-color: var(--acento); }
-.usuarios .confirmacion .acciones { margin-top: var(--espacio-3); }
 
 /* ── Formulario ────────────────────────────────────────────────────── */
 .usuarios .formulario-usuario { max-width: 32rem; }

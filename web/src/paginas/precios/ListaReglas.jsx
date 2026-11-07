@@ -66,6 +66,7 @@ export default function ListaReglas() {
   const [exito, setExito] = useState(avisoInicial ?? null)
   const [fallo, setFallo] = useState(null)
   const enCurso = useRef(false)
+  const pagina = useRef(null)
   const hoy = hoyISO()
 
   async function cerrar(regla, hasta) {
@@ -133,7 +134,7 @@ export default function ListaReglas() {
   }
 
   return (
-    <div className="contenido seccion-precios">
+    <div className="contenido seccion-precios" tabIndex={-1} ref={pagina}>
       <EncabezadoPagina
         titulo="Reglas de ganancia"
         descripcion="Porcentajes generales por categoría o proveedor, para no escribirlos producto por producto."
@@ -161,6 +162,7 @@ export default function ListaReglas() {
           regla={cerrando}
           hoy={hoy}
           enviando={enviando}
+          focoEstable={pagina}
           alConfirmar={(hasta) => cerrar(cerrando, hasta)}
           alCancelar={() => setCerrando(null)}
         />
