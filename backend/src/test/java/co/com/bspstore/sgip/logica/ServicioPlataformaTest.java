@@ -77,7 +77,7 @@ class ServicioPlataformaTest {
         Clock reloj = Clock.fixed(
                 ZonedDateTime.of(HOY.atTime(10, 0), ZoneId.of("America/Bogota")).toInstant(),
                 ZoneId.of("America/Bogota"));
-        servicio = new ServicioPlataforma(plataforma, usuarios, roles, reloj, MINUTOS_DE_BLOQUEO);
+        servicio = new ServicioPlataforma(plataforma, usuarios, roles, reloj, new PoliticaDeBloqueo(MINUTOS_DE_BLOQUEO));
         comoSuperAdmin();
     }
 
@@ -209,7 +209,7 @@ class ServicioPlataformaTest {
         Clock reloj = Clock.fixed(
                 ZonedDateTime.of(dia.atTime(10, 0), ZoneId.of("America/Bogota")).toInstant(),
                 ZoneId.of("America/Bogota"));
-        return new ServicioPlataforma(plataforma, usuarios, roles, reloj, MINUTOS_DE_BLOQUEO);
+        return new ServicioPlataforma(plataforma, usuarios, roles, reloj, new PoliticaDeBloqueo(MINUTOS_DE_BLOQUEO));
     }
 
     /**

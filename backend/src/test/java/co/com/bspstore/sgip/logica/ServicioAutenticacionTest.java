@@ -69,7 +69,7 @@ class ServicioAutenticacionTest {
     @BeforeEach
     void preparar() {
         reloj = new RelojAjustable();
-        servicio = new ServicioAutenticacion(usuarios, auditoria, reloj, 5, MINUTOS_DE_BLOQUEO);
+        servicio = new ServicioAutenticacion(usuarios, auditoria, reloj, 5, new PoliticaDeBloqueo(MINUTOS_DE_BLOQUEO));
         Rol admin = new Rol("ADMINISTRADOR", "Administrador");
         usuario = new Usuario(admin, "Jesús Durán", CORREO, Seguridad.derivar(CLAVE));
     }
@@ -292,7 +292,7 @@ class ServicioAutenticacionTest {
 
     @Test
     void elPlazoSeConfiguraYNoEstaEscritoEnElCodigo() {
-        servicio = new ServicioAutenticacion(usuarios, auditoria, reloj, 5, 30);
+        servicio = new ServicioAutenticacion(usuarios, auditoria, reloj, 5, new PoliticaDeBloqueo(30));
         bloquearConCincoErrores();
         reloj.adelantarMinutos(29);
         assertThrows(CredencialesInvalidasException.class,
