@@ -80,7 +80,7 @@ describe('una hoja de pantalla solo se usa donde se importa', () => {
 
   it.each(hojas)('las clases de %s no aparecen en archivos que no la importan', (nombre) => {
     const clases = new Set([...sinComentarios(leer(nombre)).matchAll(/\.([a-z][\w-]*)/g)].map((m) => m[1]))
-    const importa = new RegExp(`estilos/${nombre}\.css`)
+    const importa = new RegExp(String.raw`estilos/${nombre}.css`)
     const usos = []
     for (const { ruta, texto } of fuentes) {
       if (importa.test(texto)) continue

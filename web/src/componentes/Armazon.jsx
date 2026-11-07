@@ -20,6 +20,9 @@ export default function Armazon() {
   const boton = useRef(null)
   const contenido = useRef(null)
   const rutaAnterior = useRef(pathname)
+  // Dónde estaba el foco al pintar la navegación, antes de que la página nueva lo toque.
+  const focoAntes = useRef(null)
+  focoAntes.current = document.activeElement
 
   // Navegar cierra el menú: si no, taparía la pantalla a la que se fue.
   useEffect(() => { setAbierto(false) }, [pathname])
@@ -34,10 +37,11 @@ export default function Armazon() {
     if (seccion) document.title = `${seccion.etiqueta} · SGIP`
     const main = contenido.current
     if (!main) return undefined
-    // Una página que ya movió su propio foco al montarse (un buscador, por
-    // ejemplo) lo conserva: el de antes se desmontó con la página vieja.
+    // Una página que movió su propio foco al montarse (un buscador, por
+    // ejemplo) lo conserva: se nota porque el foco ya no está donde estaba
+    // antes de navegar.
     const activo = document.activeElement
-    if (activo !== main && main.contains(activo)) return undefined
+    if (activo !== main && main.contains(activo) && activo !== focoAntes.current) return undefined
     function enfocarTitulo() {
       const h1 = main.querySelector('h1')
       if (!h1) return false
