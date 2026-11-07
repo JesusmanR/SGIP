@@ -84,7 +84,7 @@ describe('lista de reglas', () => {
     expect(within(filas[1]).getByText('Rige hoy')).toBeInTheDocument()
     expect(within(filas[2]).getByText('Todos los productos')).toBeInTheDocument()
     expect(within(filas[2]).getByText('Crédito')).toBeInTheDocument()
-    expect(within(filas[2]).getByText('Margen sobre el precio de venta')).toBeInTheDocument()
+    expect(within(filas[2]).getByText('Ganancia sobre el precio de venta')).toBeInTheDocument()
     expect(within(filas[2]).getByText(/25,00\s%/)).toBeInTheDocument()
     expect(within(filas[3]).getByText('Proveedor Mayorista Tech')).toBeInTheDocument()
     expect(within(filas[3]).getByText(/1,25\s%/)).toBeInTheDocument()
@@ -263,9 +263,9 @@ describe('formulario de regla nueva', () => {
     expect(apiPrecios.crear).not.toHaveBeenCalled()
   })
 
-  it('el margen sobre el precio no llega al 100 %', async () => {
+  it('la ganancia sobre el precio no llega al 100 %', async () => {
     await abrir()
-    await userEvent.click(screen.getByRole('radio', { name: /margen sobre el precio/i }))
+    await userEvent.click(screen.getByRole('radio', { name: /ganancia sobre el precio/i }))
     await userEvent.type(screen.getByLabelText('Porcentaje de ganancia'), '100')
     await userEvent.click(screen.getByRole('button', { name: /guardar regla/i }))
     expect(screen.getByText(/menor que 100/i)).toBeInTheDocument()
