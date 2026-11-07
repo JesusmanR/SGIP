@@ -44,6 +44,18 @@ describe('TablaOTarjetas', () => {
     expect(screen.getByRole('table', { name: 'Productos' }).parentElement).toHaveClass('tabla-tarjetas-caja')
   })
 
+  it('el contenido de cada celda va en un solo bloque, aunque tenga varios elementos', () => {
+    render(
+      <TablaOTarjetas
+        columnas={[{ clave: 'n', titulo: 'Nombre', principal: true, render: (f) => <><span>{f.n}</span><small>nota</small></> }]}
+        filas={[{ id: 1, n: 'Mouse' }]} claveFila={(f) => f.id} etiqueta="Uno" />,
+    )
+    const celda = screen.getByRole('rowheader')
+    expect(celda.children).toHaveLength(1)
+    expect(celda.firstElementChild).toHaveClass('celda-valor')
+    expect(celda.firstElementChild).toHaveTextContent('Mousenota')
+  })
+
   it('es una tabla real con nombre, cabeceras y una fila por dato', () => {
     montar()
     const tabla = screen.getByRole('table', { name: 'Productos' })

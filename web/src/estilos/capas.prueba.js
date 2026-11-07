@@ -62,8 +62,9 @@ describe('tabla sobre tarjeta', () => {
     expect(movil).toMatch(/\.tabla-tarjetas-caja\s*\{[^}]*border:\s*0/)
   })
 
-  it('en celular el valor, insignias incluidas, se alinea a la derecha', () => {
+  it('en celular todo el contenido de la celda va a la derecha como un bloque', () => {
     const movil = comun.slice(comun.indexOf('@media (max-width'))
-    expect(movil).toMatch(/\.tabla-tarjetas td > \*[^{]*\{[^}]*margin-left:\s*auto/)
+    expect(movil).toMatch(/\.tabla-tarjetas \.celda-valor\s*\{[^}]*display:\s*block[^}]*margin-left:\s*auto/)
+    expect(movil).not.toMatch(/td > \*/)
   })
 })
