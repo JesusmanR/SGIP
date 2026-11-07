@@ -1,18 +1,27 @@
 import { useEffect, useState } from 'react'
-import Aviso from './Aviso.jsx'
 
 const SE_QUITA_A_LOS = 5000
 
+const TEXTOS = {
+  sin: { clase: 'aviso-estado--aviso', rotulo: 'Atención: ', texto: 'Sin conexión. No podrás guardar cambios hasta que vuelva.' },
+  volvio: { clase: 'aviso-estado--exito', rotulo: 'Listo: ', texto: 'Conexión restablecida. Ya puedes continuar.' },
+}
+
 /**
- * Dice con palabras que el navegador perdió la conexión y, cuando vuelve,
+ * Dice con palabras que el navegador perdió la conexión y, si la perdió,
  * que volvió; ese segundo aviso se quita solo.
+ *
+ * La región `role="status"` está siempre montada y vacía cuando no hay
+ * nada que decir: un lector de pantalla anuncia los cambios dentro de una
+ * región que ya existía, no una región que aparece con su texto.
  */
 export default function AvisoConexion() {
   const [estado, setEstado] = useState(() => (navigator.onLine === false ? 'sin' : 'normal'))
 
   useEffect(() => {
     const alPerder = () => setEstado('sin')
-    const alVolver = () => setEstado('volvio')
+    // Volver solo se avisa si antes se perdió.
+    const alVolver = () => setEstado((previo) => (previo === 'sin' ? 'volvio' : previo))
     window.addEventListener('offline', alPerder)
     window.addEventListener('online', alVolver)
     return () => {
@@ -27,11 +36,14 @@ export default function AvisoConexion() {
     return () => clearTimeout(espera)
   }, [estado])
 
-  if (estado === 'sin') {
-    return <Aviso tipo="aviso">Sin conexión. No podrás guardar cambios hasta que vuelva.</Aviso>
-  }
-  if (estado === 'volvio') {
-    return <Aviso tipo="exito">Conexión restablecida. Ya puedes continuar.</Aviso>
-  }
-  return null
+  const aviso = TEXTOS[estado]
+  return (
+    <div className="aviso-conexion" role="status">
+      {aviso && (
+        <div className={`aviso-estado ${aviso.clase}`}>
+          <strong>{aviso.rotulo}</strong>{aviso.texto}
+        </div>
+      )}
+    </div>
+  )
 }

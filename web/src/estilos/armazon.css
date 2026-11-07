@@ -8,8 +8,10 @@
 .armazon-barra { display: none; }
 .armazon-contenido { grid-column: 2; min-width: 0; }
 .armazon-contenido:focus { outline: none; }
-/* El aviso de conexión va arriba del contenido, con el mismo margen lateral que la página. */
-.armazon-contenido > .aviso-estado {
+/* El aviso de conexión va arriba del contenido, con el mismo margen lateral que la página.
+   La región existe siempre (así se anuncia el cambio); vacía no ocupa sitio. */
+.aviso-conexion:empty { display: none; }
+.aviso-conexion .aviso-estado {
   width: calc(100% - 3rem); max-width: calc(1100px - 3rem); margin: var(--espacio-4) auto 0;
 }
 
