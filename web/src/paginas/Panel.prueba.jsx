@@ -387,7 +387,10 @@ describe('rediseño: lectura del movimiento y de las críticas', () => {
     montar()
     const seccion = await screen.findByRole('region', { name: /existencia crítica/i })
     const enlace = within(seccion).getByRole('link', { name: /ver todas/i })
-    enlace.focus()
+    // Tabulando desde el inicio hay que llegar al enlace: depende de que
+    // sea un ancla real y de que nada lo saque del orden de tabulación.
+    const teclado = userEvent.setup()
+    for (let i = 0; i < 12 && document.activeElement !== enlace; i += 1) await teclado.tab()
     expect(enlace).toHaveFocus()
     expect(enlace).toHaveAttribute('href', '/catalogo?estado=CRITICO')
   })

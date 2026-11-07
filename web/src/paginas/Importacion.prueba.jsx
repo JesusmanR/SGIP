@@ -8,7 +8,7 @@
  * explícita antes de aplicar, y que quien no es administrador no pueda
  * decidir.
  */
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -16,6 +16,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import Importacion from './Importacion.jsx'
 import { api } from '../servicios/api.js'
 import { guardarSesion } from '../servicios/sesion.js'
+import { NUMERO } from '../servicios/formato.js'
 
 vi.mock('../servicios/api.js', () => ({
   api: {
@@ -439,6 +440,97 @@ describe('importación de lista de precios', () => {
       montar()
       await subirLista(teclado, carga({ aceptados: 0, rechazados: 412, cruces: [] }))
       expect(screen.getByRole('button', { name: /aplicar al catálogo/i })).toBeDisabled()
+    })
+  })
+
+
+  describe('ronda 1: confirmación, foco, envío doble, arrastre, singular y cifras', () => {
+    const haciaExcluido = { ...CRUCES[0], tratamientoAntes: 'GRAVADO', tratamientoDespues: 'EXCLUIDO' }
+
+    it('la confirmación también cuenta las que dejan de causar IVA', async () => {
+      montar()
+      await subirLista(teclado, carga({ cruces: [haciaExcluido] }))
+      await teclado.click(screen.getByRole('button', { name: /aplicar al catálogo/i }))
+      expect(screen.getByRole('alertdialog'))
+        .toHaveTextContent(/1 referencia dejará de causar iva/i)
+    })
+
+    it('con cruces en las dos direcciones dice las dos', async () => {
+      montar()
+      await subirLista(teclado, carga({ cruces: [CRUCES[0], { ...haciaExcluido, productoId: 5 }] }))
+      await teclado.click(screen.getByRole('button', { name: /aplicar al catálogo/i }))
+      const dialogo = screen.getByRole('alertdialog')
+      expect(dialogo).toHaveTextContent(/1 referencia pasará a causar iva/i)
+      expect(dialogo).toHaveTextContent(/1 referencia dejará de causar iva/i)
+    })
+
+    it('Escape devuelve el foco a «Aplicar al catálogo»', async () => {
+      montar()
+      await subirLista(teclado)
+      await teclado.click(screen.getByRole('button', { name: /aplicar al catálogo/i }))
+      await teclado.keyboard('{Escape}')
+      expect(screen.getByRole('button', { name: /aplicar al catálogo/i })).toHaveFocus()
+    })
+
+    it('«Volver a revisar» devuelve el foco a «Aplicar al catálogo»', async () => {
+      montar()
+      await subirLista(teclado)
+      await teclado.click(screen.getByRole('button', { name: /aplicar al catálogo/i }))
+      await teclado.click(screen.getByRole('button', { name: /volver a revisar/i }))
+      expect(screen.getByRole('button', { name: /aplicar al catálogo/i })).toHaveFocus()
+    })
+
+    it('un doble clic en «Sí, aplicar» envía una sola vez', async () => {
+      montar()
+      await subirLista(teclado)
+      api.aplicarCarga.mockReturnValue(new Promise(() => {}))
+      await teclado.click(screen.getByRole('button', { name: /aplicar al catálogo/i }))
+      await teclado.dblClick(screen.getByRole('button', { name: /sí, aplicar/i }))
+      expect(api.aplicarCarga).toHaveBeenCalledTimes(1)
+    })
+
+    it('soltar un archivo mientras se lee otro no lo envía', async () => {
+      montar()
+      api.cargarLista.mockReturnValue(new Promise(() => {}))
+      await teclado.selectOptions(await screen.findByLabelText(/proveedor/i), '1')
+      await teclado.upload(screen.getByLabelText(/archivo/i), archivo())
+      await screen.findByText(/leyendo el archivo/i)
+      const zona = screen.getByLabelText(/archivo/i).closest('label')
+      fireEvent.drop(zona, { dataTransfer: { files: [archivo()] } })
+      expect(api.cargarLista).toHaveBeenCalledTimes(1)
+    })
+
+    it('con una sola fila aceptada y una cruzada todo va en singular', async () => {
+      montar()
+      const una = carga({ aceptados: 1, rechazados: 1, muestra: MUESTRA.slice(0, 1).concat(MUESTRA[3]) })
+      await subirLista(teclado, una)
+      expect(screen.getByText(/aplica solo la aceptada/i)).toBeInTheDocument()
+      expect(screen.getByText(/cruza el umbral del artículo/i)).toBeInTheDocument()
+      expect(screen.getByText(/entra el 1 aceptado/i)).toBeInTheDocument()
+      await teclado.click(screen.getByRole('button', { name: /aplicar al catálogo/i }))
+      expect(screen.getByRole('alertdialog')).toHaveTextContent(/1 costo del catálogo/i)
+    })
+
+    it('una referencia actualizada, en singular', async () => {
+      montar()
+      await subirLista(teclado, carga({ estado: 'APLICADA', aceptados: 1, cruces: [] }))
+      expect(screen.getByText('1 referencia actualizada')).toBeInTheDocument()
+    })
+
+    it('las cifras llevan el separador de miles del proyecto', async () => {
+      montar()
+      await subirLista(teclado, carga({ leidos: 12345, aceptados: 12000, rechazados: 345 }))
+      expect(screen.getByText(NUMERO.format(12345), { selector: '.cifra-valor' })).toBeInTheDocument()
+      expect(screen.getByText(NUMERO.format(12000), { selector: '.cifra-valor' })).toBeInTheDocument()
+      expect(screen.getByText(NUMERO.format(345), { selector: '.cifra-valor' })).toBeInTheDocument()
+      expect(screen.getByText((t) => t.includes(`4 de ${NUMERO.format(12345)} registros`))).toBeInTheDocument()
+    })
+
+    it('el tope de filas se escribe con el mismo formato', async () => {
+      montar()
+      await screen.findByLabelText(/proveedor/i)
+      // Cadena y no expresión regular: el punto del separador casaría con cualquier carácter.
+      expect(screen.getByText((t) => t.includes(`${NUMERO.format(20000)} filas`))).toBeInTheDocument()
     })
   })
 })
