@@ -47,3 +47,23 @@ describe('menú móvil', () => {
     expect((armazon.match(/var\(--alto-barra-movil\)/g) ?? []).length).toBeGreaterThanOrEqual(2)
   })
 })
+
+describe('tabla sobre tarjeta', () => {
+  it('en escritorio la caja es una tarjeta con borde que desplaza por dentro', () => {
+    const caja = regla(comun, '.tabla-tarjetas-caja')
+    expect(caja).toMatch(/background:\s*var\(--tarjeta\)/)
+    expect(caja).toMatch(/border:\s*1px solid var\(--borde\)/)
+    expect(caja).toMatch(/overflow-x:\s*auto/)
+  })
+
+  it('en celular la caja desaparece y deja a cada fila ser su tarjeta', () => {
+    const movil = comun.slice(comun.indexOf('@media (max-width'))
+    expect(movil).toMatch(/\.tabla-tarjetas-caja\s*\{[^}]*overflow:\s*visible/)
+    expect(movil).toMatch(/\.tabla-tarjetas-caja\s*\{[^}]*border:\s*0/)
+  })
+
+  it('en celular el valor, insignias incluidas, se alinea a la derecha', () => {
+    const movil = comun.slice(comun.indexOf('@media (max-width'))
+    expect(movil).toMatch(/\.tabla-tarjetas td > \*[^{]*\{[^}]*margin-left:\s*auto/)
+  })
+})

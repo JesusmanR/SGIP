@@ -37,6 +37,11 @@ describe('TablaOTarjetas', () => {
     <TablaOTarjetas columnas={columnas} filas={filas} claveFila={(f) => f.id} etiqueta="Productos" />,
   )
 
+  it('va sobre una caja que hace de tarjeta', () => {
+    montar()
+    expect(screen.getByRole('table', { name: 'Productos' }).parentElement).toHaveClass('tabla-tarjetas-caja')
+  })
+
   it('es una tabla real con nombre, cabeceras y una fila por dato', () => {
     montar()
     const tabla = screen.getByRole('table', { name: 'Productos' })
