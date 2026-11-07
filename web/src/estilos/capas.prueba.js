@@ -64,7 +64,8 @@ describe('tabla sobre tarjeta', () => {
 
   it('en celular todo el contenido de la celda va a la derecha como un bloque', () => {
     const movil = comun.slice(comun.indexOf('@media (max-width'))
-    expect(movil).toMatch(/\.tabla-tarjetas \.celda-valor\s*\{[^}]*display:\s*block[^}]*margin-left:\s*auto/)
-    expect(movil).not.toMatch(/td > \*/)
+    expect(movil).toMatch(/\.tabla-tarjetas td,[^{]*\{[^}]*display:\s*grid/)
+    expect(movil).toMatch(/\.tabla-tarjetas td > \*[^{]*\{[^}]*grid-column:\s*2/)
+    expect(movil).not.toMatch(/margin-left:\s*auto/)
   })
 })

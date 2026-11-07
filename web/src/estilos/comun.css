@@ -45,8 +45,12 @@
     overflow-wrap: anywhere;
   }
   .tabla-tarjetas tbody th { text-align: right; }
-  /* El valor va a la derecha aunque sea una insignia o una columna de dos líneas. */
-  .tabla-tarjetas td > *, .tabla-tarjetas th > * { margin-left: auto; text-align: right; }
+  /* Rótulo a la izquierda y, a la derecha, todo lo que lleve la celda
+     (texto, insignia o varios elementos) apilado y alineado a la derecha. */
+  .tabla-tarjetas td, .tabla-tarjetas th {
+    display: grid; grid-template-columns: auto minmax(0, 1fr); justify-items: end; align-items: start;
+  }
+  .tabla-tarjetas td > *, .tabla-tarjetas th > * { grid-column: 2; text-align: right; }
   .tabla-tarjetas [data-etiqueta]::before {
     content: attr(data-etiqueta); color: var(--tinta-2); font-weight: 500;
     font-size: var(--t-etiqueta); text-align: left; flex: none;
