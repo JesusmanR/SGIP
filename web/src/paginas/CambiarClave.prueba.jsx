@@ -277,4 +277,77 @@ describe('cambio de contraseña obligatorio', () => {
       await waitFor(() => expect(api.cambiarClave).toHaveBeenCalledWith('Inicial2026', 'Nueva2026xyz'))
     })
   })
+
+  describe('ronda 1: foco, errores junto a su campo y entradas de contraseña', () => {
+    it('si no coinciden, el foco va al campo «Repite»', async () => {
+      montar()
+      await rellenar({ nueva: 'Nueva2026xyz', repetida: 'Otra2026xyzz' })
+      await screen.findByRole('alert')
+      expect(screen.getByLabelText('Repite la contraseña nueva')).toHaveFocus()
+    })
+
+    it('la contraseña actual incorrecta (400) va junto a su campo y lo enfoca', async () => {
+      api.cambiarClave.mockRejectedValue(new ErrorApi(400, 'La contraseña actual no es correcta.'))
+      montar()
+      await rellenar()
+      const alerta = await screen.findByRole('alert')
+      const actual = screen.getByLabelText('Contraseña actual')
+      expect(alerta).toHaveTextContent('La contraseña actual no es correcta.')
+      expect(actual).toHaveAttribute('aria-invalid', 'true')
+      expect(actual).toHaveAttribute('aria-describedby', expect.stringContaining(alerta.id))
+      expect(actual).toHaveFocus()
+      // No se repite arriba, en el aviso del formulario.
+      expect(screen.getAllByRole('alert')).toHaveLength(1)
+    })
+
+    it('otros errores del servidor siguen arriba y no marcan la contraseña actual', async () => {
+      api.cambiarClave.mockRejectedValue(new ErrorApi(400, 'La contraseña nueva debe ser distinta de la actual.'))
+      montar()
+      await rellenar()
+      const alerta = await screen.findByRole('alert')
+      expect(alerta).toHaveTextContent(/distinta de la actual/i)
+      expect(alerta.className).toMatch(/aviso-estado/)
+      expect(screen.getByLabelText('Contraseña actual')).not.toHaveAttribute('aria-invalid', 'true')
+    })
+
+    it('el 423 sigue arriba como aviso del formulario', async () => {
+      api.cambiarClave.mockRejectedValue(new ErrorApi(423, 'Tu cuenta está bloqueada por intentos fallidos.'))
+      montar()
+      await rellenar()
+      const alerta = await screen.findByRole('alert')
+      expect(alerta.className).toMatch(/aviso-estado/)
+      expect(screen.getByLabelText('Contraseña actual')).not.toHaveAttribute('aria-invalid', 'true')
+    })
+
+    it('al enviar, las contraseñas mostradas vuelven a ocultarse', async () => {
+      api.cambiarClave.mockRejectedValue(new ErrorApi(400, 'La contraseña actual no es correcta.'))
+      montar()
+      const teclado = userEvent.setup()
+      await teclado.click(screen.getByRole('button', { name: /mostrar contraseña nueva/i }))
+      expect(screen.getByLabelText('Contraseña nueva')).toHaveAttribute('type', 'text')
+      await rellenar()
+      await screen.findByRole('alert')
+      expect(screen.getByLabelText('Contraseña nueva')).toHaveAttribute('type', 'password')
+      expect(screen.getByRole('button', { name: /mostrar contraseña nueva/i })).toBeInTheDocument()
+    })
+
+    it('las entradas no corrigen, ni capitalizan, ni revisan la ortografía de una contraseña', () => {
+      montar()
+      for (const nombre of ['Contraseña actual', 'Contraseña nueva', 'Repite la contraseña nueva']) {
+        const campo = screen.getByLabelText(nombre)
+        expect(campo).toHaveAttribute('spellcheck', 'false')
+        expect(campo).toHaveAttribute('autocapitalize', 'none')
+        expect(campo).toHaveAttribute('autocorrect', 'off')
+        expect(campo).toHaveAttribute('maxlength', '100')
+      }
+    })
+
+    it('teclear no vuelve a leer la sesión', async () => {
+      montar()
+      const lectura = vi.spyOn(Storage.prototype, 'getItem')
+      await userEvent.setup().type(screen.getByLabelText('Contraseña nueva'), 'abcdef')
+      expect(lectura).not.toHaveBeenCalled()
+      lectura.mockRestore()
+    })
+  })
 })
