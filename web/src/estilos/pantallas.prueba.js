@@ -3,7 +3,7 @@
  * pantalla viven en su hoja (`estilos/<pantalla>.css`), importada por ella:
  * así quien rediseña una pantalla no pisa a otra ni toca lo común.
  */
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 const leer = (nombre) => readFileSync(`src/estilos/${nombre}.css`, 'utf8')
@@ -56,5 +56,41 @@ describe('mensaje de ayuda de campo', () => {
       'plataforma-tributario', 'precios', 'usuarios']) {
       expect(sinComentarios(leer(hoja)), hoja).not.toMatch(/\.campo-mensaje(\.error|\.ayuda)?\s*\{/)
     }
+  })
+})
+
+describe('una hoja de pantalla solo se usa donde se importa', () => {
+  const fuentes = []
+  const recorrer = (dir) => {
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      const ruta = `${dir}/${e.name}`
+      if (e.isDirectory()) recorrer(ruta)
+      else if (/\.jsx$/.test(e.name) && !/prueba/.test(e.name)) fuentes.push({ ruta, texto: readFileSync(ruta, 'utf8') })
+    }
+  }
+  recorrer('src')
+
+  // Palabras que además de clase son texto corriente o clases de otra hoja con el mismo nombre.
+  const homonimos = new Set(['actual', 'codigo']) // prosa y claves de datos que se llaman igual
+
+  // Lo que base.css, comun.css o armazon.css ya definen es común: una hoja de
+  // pantalla solo lo retoca (`.acceso .tarjeta`) y no es suyo.
+  const compartidas = new Set(['base', 'comun', 'armazon']
+    .flatMap((h) => [...sinComentarios(leer(h)).matchAll(/\.([a-z][\w-]*)/g)].map((m) => m[1])))
+
+  it.each(hojas)('las clases de %s no aparecen en archivos que no la importan', (nombre) => {
+    const clases = new Set([...sinComentarios(leer(nombre)).matchAll(/\.([a-z][\w-]*)/g)].map((m) => m[1]))
+    const importa = new RegExp(`estilos/${nombre}\.css`)
+    const usos = []
+    for (const { ruta, texto } of fuentes) {
+      if (importa.test(texto)) continue
+      const literales = [...texto.matchAll(/(['"`])((?:(?!\1).)*)\1/g)].map((m) => m[2])
+      for (const c of clases) {
+        if (homonimos.has(c)) continue
+        if (compartidas.has(c)) continue
+        if (literales.some((l) => !l.includes('/') && l.split(/\s+/).includes(c))) usos.push(`${ruta} usa .${c}`)
+      }
+    }
+    expect(usos).toEqual([])
   })
 })
