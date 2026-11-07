@@ -1,5 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api } from '../servicios/api.js'
+import EstadoCarga from './comun/EstadoCarga.jsx'
+import EstadoError from './comun/EstadoError.jsx'
+import useDialogo from './useDialogo.js'
 import '../estilos/producto.css'
 
 /**
@@ -19,24 +22,65 @@ export default function Categorias({ onCerrar, onCambio }) {
   // Qué categoría se está renombrando, y con qué texto.
   const [editando, setEditando] = useState(null)
   const [nombreEditado, setNombreEditado] = useState('')
+  // «cargando» y «fallo» solo valen mientras no haya una lista que mostrar: un
+  // error posterior se dice arriba y la lista que ya hay se queda.
+  const [carga, setCarga] = useState('cargando')
+  const cargada = useRef(false)
+  const dialogo = useDialogo(onCerrar)
+  const campoNueva = useRef(null)
+  const campoRenombre = useRef(null)
+  // A dónde debe ir el foco cuando termine lo que se está haciendo: el botón o
+  // el campo que lo tenía puede haber desaparecido o estar desactivado, y un
+  // foco perdido en <body> deja a Escape sin efecto.
+  const foco = useRef(null)
+
+  useEffect(() => {
+    const panel = dialogo.ref.current
+    if (!panel) return
+    const activo = document.activeElement
+    if (ocupado) {
+      // Los botones se desactivan mientras dura la operación: el foco espera
+      // en el diálogo, donde Escape sigue funcionando.
+      if (!panel.contains(activo) || activo.disabled) panel.focus()
+      return
+    }
+    const destino = foco.current
+    if (!destino) return
+    foco.current = null
+    const objetivo = destino.campo
+      ? campoRenombre.current
+      : destino.fila != null
+        ? panel.querySelector(`[data-renombrar="${destino.fila}"]`)
+        : null
+    ;(objetivo ?? campoNueva.current ?? panel).focus()
+  }, [ocupado, editando, dialogo.ref])
 
   async function recargar() {
     try {
       const frescas = await api.categorias()
       setCategorias(frescas)
       setError(null)
+      cargada.current = true
+      setCarga('lista')
       onCambio?.(frescas)
       return frescas
     } catch (e) {
       setError(e.message)
+      if (!cargada.current) setCarga('fallo')
       return null
     }
   }
 
   useEffect(() => { recargar() }, [])
 
+  function reintentar() {
+    setCarga('cargando')
+    recargar()
+  }
+
   /** Envuelve una operación: apaga los botones y muestra lo que falle. */
-  async function operar(accion) {
+  async function operar(accion, despues = {}) {
+    foco.current = despues
     setOcupado(true)
     setError(null)
     try {
@@ -52,114 +96,134 @@ export default function Categorias({ onCerrar, onCambio }) {
   }
 
   return (
-    <div className="velo" role="dialog" aria-modal="true" aria-label="Categorías del catálogo">
-      <div className="tarjeta panel">
+    <div
+      className="velo" role="dialog" aria-modal="true" aria-label="Categorías del catálogo"
+      tabIndex={-1} ref={dialogo.ref} onKeyDown={dialogo.onKeyDown}
+    >
+      <div className="tarjeta panel panel-categorias">
         <div className="panel-cabecera">
-          <h3>Categorías</h3>
-          <button className="boton secundario" onClick={onCerrar}>Cerrar</button>
+          <h2>Categorías</h2>
+          <button type="button" className="boton secundario" onClick={onCerrar}>Cerrar</button>
         </div>
 
-        {error && <div className="aviso error" role="alert">{error}</div>}
+        {carga === 'cargando' && <EstadoCarga mensaje="Cargando categorías…" />}
+        {carga === 'fallo' && <EstadoError error={error} alReintentar={reintentar} />}
 
-        <form
-          className="panel-acciones"
-          onSubmit={(e) => {
-            e.preventDefault()
-            if (!nueva.trim()) return
-            operar(async () => {
-              await api.crearCategoria({ nombre: nueva.trim(), descripcion: null })
-              setNueva('')
-            })
-          }}
-        >
-          <input
-            value={nueva}
-            onChange={(e) => setNueva(e.target.value)}
-            placeholder="Nombre de la categoría nueva"
-            maxLength={80}
-            aria-label="Nombre de la categoría nueva"
-          />
-          <button className="boton" type="submit" disabled={ocupado || !nueva.trim()}>
-            Añadir
-          </button>
-        </form>
+        {carga === 'lista' && (
+          <>
+          {error && <div className="aviso error" role="alert">{error}</div>}
 
-        <table>
-          <thead>
-            <tr>
-              <th>Categoría</th>
-              <th><span className="oculto">Acciones</span></th>
-            </tr>
-          </thead>
-          <tbody>
-            {categorias.map((c) => (
-              <tr key={c.id}>
-                <td>
-                  {editando === c.id ? (
-                    <input
-                      value={nombreEditado}
-                      onChange={(e) => setNombreEditado(e.target.value)}
-                      maxLength={80}
-                      aria-label={`Nuevo nombre de ${c.nombre}`}
-                    />
-                  ) : (
-                    <>
-                      {c.nombre}
-                      {c.descripcion && <span className="sub-linea">{c.descripcion}</span>}
-                    </>
-                  )}
-                </td>
-                <td className="acciones">
-                  {editando === c.id ? (
-                    <>
-                      <button
-                        className="boton"
-                        disabled={ocupado || !nombreEditado.trim()}
-                        onClick={() => operar(async () => {
-                          await api.editarCategoria(c.id, {
-                            nombre: nombreEditado.trim(),
-                            descripcion: c.descripcion ?? null,
-                          })
-                          setEditando(null)
-                        })}
-                      >
-                        Guardar
-                      </button>
-                      <button
-                        className="boton secundario"
-                        onClick={() => setEditando(null)}
-                        disabled={ocupado}
-                      >
-                        Cancelar
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <button
-                        className="enlace"
-                        disabled={ocupado}
-                        onClick={() => { setEditando(c.id); setNombreEditado(c.nombre) }}
-                      >
-                        renombrar
-                      </button>
-                      {' · '}
-                      <button
-                        className="enlace"
-                        disabled={ocupado}
-                        onClick={() => operar(() => api.desactivarCategoria(c.id))}
-                      >
-                        desactivar
-                      </button>
-                    </>
-                  )}
-                </td>
+          <form
+            className="panel-acciones"
+            onSubmit={(e) => {
+              e.preventDefault()
+              if (!nueva.trim()) return
+              operar(async () => {
+                await api.crearCategoria({ nombre: nueva.trim(), descripcion: null })
+                setNueva('')
+              })
+            }}
+          >
+            <input
+              ref={campoNueva}
+              value={nueva}
+              onChange={(e) => setNueva(e.target.value)}
+              placeholder="Nombre de la categoría nueva"
+              maxLength={80}
+              aria-label="Nombre de la categoría nueva"
+            />
+            <button className="boton" type="submit" disabled={ocupado || !nueva.trim()}>
+              Añadir
+            </button>
+          </form>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Categoría</th>
+                <th><span className="oculto">Acciones</span></th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {categorias.map((c) => (
+                <tr key={c.id}>
+                  <td>
+                    {editando === c.id ? (
+                      <input
+                        ref={campoRenombre}
+                        value={nombreEditado}
+                        onChange={(e) => setNombreEditado(e.target.value)}
+                        maxLength={80}
+                        aria-label={`Nuevo nombre de ${c.nombre}`}
+                      />
+                    ) : (
+                      <>
+                        {c.nombre}
+                        {c.descripcion && <span className="sub-linea">{c.descripcion}</span>}
+                      </>
+                    )}
+                  </td>
+                  <td className="acciones">
+                    {editando === c.id ? (
+                      <>
+                        <button
+                          className="boton"
+                          disabled={ocupado || !nombreEditado.trim()}
+                          onClick={() => operar(async () => {
+                            await api.editarCategoria(c.id, {
+                              nombre: nombreEditado.trim(),
+                              descripcion: c.descripcion ?? null,
+                            })
+                            // Si llegó hasta aquí, la fila vuelve a su estado
+                            // normal y el foco, a su botón.
+                            foco.current = { fila: c.id }
+                            setEditando(null)
+                          }, { campo: true })}
+                        >
+                          Guardar
+                        </button>
+                        <button
+                          className="boton secundario"
+                          onClick={() => { foco.current = { fila: c.id }; setEditando(null) }}
+                          disabled={ocupado}
+                        >
+                          Cancelar
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          className="enlace"
+                          disabled={ocupado}
+                          data-renombrar={c.id}
+                          onClick={() => {
+                            foco.current = { campo: true }
+                            setEditando(c.id)
+                            setNombreEditado(c.nombre)
+                          }}
+                        >
+                          renombrar
+                        </button>
+                        {' · '}
+                        <button
+                          className="enlace"
+                          disabled={ocupado}
+                          onClick={() => operar(() => api.desactivarCategoria(c.id))}
+                        >
+                          desactivar
+                        </button>
+                      </>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
 
-        {categorias.length === 0 && (
-          <p style={{ color: 'var(--tinta-3)' }}>Todavía no hay categorías.</p>
+          {categorias.length === 0 && (
+            <p className="sub-linea">Todavía no hay categorías.</p>
+          )}
+          </>
         )}
       </div>
     </div>

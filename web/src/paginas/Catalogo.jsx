@@ -1,5 +1,10 @@
 import { useEffect, useState } from 'react'
 import Categorias from '../componentes/Categorias.jsx'
+import EncabezadoPagina from '../componentes/comun/EncabezadoPagina.jsx'
+import EstadoCarga from '../componentes/comun/EstadoCarga.jsx'
+import EstadoError from '../componentes/comun/EstadoError.jsx'
+import EstadoVacio from '../componentes/comun/EstadoVacio.jsx'
+import TablaOTarjetas from '../componentes/comun/TablaOTarjetas.jsx'
 import FormularioProducto from '../componentes/FormularioProducto.jsx'
 import Galeria from '../componentes/Galeria.jsx'
 import SubirImagen from '../componentes/SubirImagen.jsx'
@@ -53,6 +58,14 @@ function anotaciones(precio, total, cerca, base) {
   return partes
 }
 
+/**
+ * El estado de existencia con palabras. El servidor manda un código y el
+ * código no es lo que se le dice a quien vende; la insignia lleva siempre
+ * texto, porque los colores de estado se confunden en escala de grises
+ * (ADR-0009).
+ */
+const ESTADOS = { ACTIVO: 'Disponible', CRITICO: 'Stock bajo', AGOTADO: 'Agotado' }
+
 /** Pantalla P-03 · Catálogo de productos. */
 
 export default function Catalogo() {
@@ -65,8 +78,12 @@ export default function Catalogo() {
   const [estado, setEstado] = useState('')
   const [categorias, setCategorias] = useState([])
   const [proveedores, setProveedores] = useState([])
+  // `error` es el de la lista y la reemplaza; `aviso` es el de una acción
+  // (subir una imagen) y se dice sobre la lista, que sigue ahí.
   const [error, setError] = useState(null)
+  const [aviso, setAviso] = useState(null)
   const [cargando, setCargando] = useState(true)
+  const [intento, setIntento] = useState(0)
   const esAdministrador = leerSesion()?.rol === 'ADMINISTRADOR'
   const [galeria, setGaleria] = useState(null)
   const [editando, setEditando] = useState(null)
@@ -107,9 +124,218 @@ export default function Catalogo() {
         .finally(() => { if (vigente) setCargando(false) })
     }, 300)
     return () => { vigente = false; clearTimeout(temporizador) }
-  }, [busqueda, categoria, proveedor, estado])
+  }, [busqueda, categoria, proveedor, estado, intento])
 
   const hayFiltro = Boolean(busqueda || categoria || proveedor || estado)
+  const limpiarFiltros = () => {
+    setBusqueda(''); setCategoria(''); setProveedor(''); setEstado('')
+  }
+  const reintentar = () => { setError(null); setCargando(true); setIntento((n) => n + 1) }
+
+  /** Sube las imágenes elegidas en el recuadro de una fila y deja la primera como principal. */
+  async function subirDeLaFila(p, archivos) {
+    setAviso(null)
+    const { creadas, problemas } = await subirImagenes(p.productoId, archivos)
+
+    // La primera de la tanda pasa a ser la principal: el recuadro que tocaste
+    // muestra la primera que elegiste, que es lo que cabe esperar. Para
+    // cambiarla después está la galería.
+    const primera = creadas[0]
+    if (primera && !primera.principal) {
+      await api.hacerPrincipal(primera.id)
+    }
+    if (primera) {
+      setProductos((filas) => filas.map((f) =>
+        f.productoId === p.productoId
+          ? { ...f, tieneImagen: 1, imagenPrincipalId: primera.id }
+          : f))
+    }
+    // Lo que no entró se dice archivo por archivo. Sin esto el rechazo del
+    // servidor no se veía y parecía que todo se había aceptado.
+    if (problemas.length > 0) setAviso(problemas.join(' · '))
+  }
+
+  /**
+   * Las columnas. Costo, margen y acciones son del administrador: a quien vende
+   * el servidor ni siquiera le manda el costo (`ProductoParaVenta`), y aquí
+   * tampoco se pinta nada que lo insinúe.
+   *
+   * Cada celda va envuelta en un solo bloque: en celular la fila pasa a tarjeta
+   * y el rótulo de la celda se pone en una columna aparte del contenido.
+   */
+  const columnas = [
+    {
+      clave: 'imagen',
+      titulo: 'Imagen',
+      render: (p) => (
+        <div className="celda">
+          <SubirImagen
+            // La dirección lleva el identificador de la imagen, no el del
+            // producto. Así cambiar de principal cambia la dirección, y la
+            // caché no puede servir la anterior aunque quiera.
+            src={p.imagenPrincipalId ? `/api/v1/imagenes/${p.imagenPrincipalId}/miniatura` : null}
+            alt={`Imagen de ${p.nombre}`}
+            puedeEditar={esAdministrador}
+            onFallo={setAviso}
+            multiple
+            ayuda={`Subir imágenes de ${p.nombre}. Puedes elegir varias; la primera será la principal.`}
+            onSubir={(archivos) => subirDeLaFila(p, archivos)}
+          />
+        </div>
+      ),
+    },
+    {
+      clave: 'producto',
+      titulo: 'Producto',
+      principal: true,
+      render: (p) => (
+        <div className="celda celda-producto">
+          <span className="producto-nombre">
+            {p.nombre}{p.presentacion ? ` · ${p.presentacion}` : ''}
+          </span>
+          {/* El aviso va en la fila del producto: enterarse de que falta la
+              regla de impuesto al facturar es enterarse tarde. Solo lo recibe
+              la empresa que se declaró responsable de IVA. Informa y no
+              bloquea: sin regla el producto se vende al precio (ADR-0024).
+              Es del administrador, que es quien puede crear la regla. */}
+          {esAdministrador && p.tributacionSinConfigurar === 1 && (
+            <span><span className="insignia critico">Impuestos sin configurar</span></span>
+          )}
+          {/* El código va bajo el nombre. El SKU solo aparece cuando difiere:
+              por omisión se copia del código y repetirlo sería ruido. */}
+          <span className="sub-linea">
+            Cód. {p.codigo}
+            {p.sku && p.sku !== p.codigo ? ` · SKU ${p.sku}` : ''}
+            {/* Quien vende no puede añadir imágenes: sin ninguna, no se le
+                ofrece un botón que no lleva a nada que pueda hacer. */}
+            {(esAdministrador || p.tieneImagen === 1) && (
+              <>
+                {' · '}
+                <button
+                  type="button"
+                  className="enlace"
+                  aria-label={`${p.tieneImagen === 1 ? 'Ver' : 'Añadir'} imágenes de ${p.nombre}`}
+                  onClick={() => setGaleria({ id: p.productoId, nombre: p.nombre })}
+                >
+                  {p.tieneImagen === 1 ? 'ver imágenes' : 'añadir imágenes'}
+                </button>
+              </>
+            )}
+          </span>
+        </div>
+      ),
+    },
+    { clave: 'categoria', titulo: 'Categoría', render: (p) => <div className="celda">{p.categoria}</div> },
+    ...(esAdministrador ? [
+      {
+        clave: 'costo',
+        titulo: 'Costo',
+        numerica: true,
+        render: (p) => <div className="celda">{PESOS.format(p.costo)}</div>,
+      },
+      {
+        // Sin precio no hay margen de cero: hay un precio que falta, y eso es
+        // lo que se dice.
+        clave: 'margen',
+        titulo: 'Margen',
+        numerica: true,
+        render: (p) => (
+          <div className="celda">
+            {p.precioContado == null
+              ? 'Falta el precio de venta'
+              : porcentajeConDecimales(p.margenContado)}
+            {p.margenCredito != null
+              && Number(p.margenCredito) !== Number(p.margenContado) && (
+              <span className="sub-linea">
+                a crédito {porcentajeConDecimales(p.margenCredito)}
+              </span>
+            )}
+          </div>
+        ),
+      },
+    ] : []),
+    {
+      // Bajo cada precio va su total con impuesto, y solo cuando difiere: si el
+      // producto está excluido, el total es el precio y repetirlo sería ruido.
+      clave: 'contado',
+      titulo: 'Contado',
+      numerica: true,
+      render: (p) => (
+        <div className="celda">
+          {p.precioContado == null ? '—' : PESOS.format(p.precioContado)}
+          {anotaciones(p.precioContado, p.totalContado, p.cercaUmbral, p.baseContado).map((t) => (
+            <span className="sub-linea" key={t}>{t}</span>
+          ))}
+        </div>
+      ),
+    },
+    {
+      clave: 'credito',
+      titulo: 'Crédito',
+      numerica: true,
+      render: (p) => (
+        <div className="celda">
+          {p.precioCredito == null ? '—' : PESOS.format(p.precioCredito)}
+          {anotaciones(p.precioCredito, p.totalCredito, p.cercaUmbralCredito, p.baseCredito).map((t) => (
+            <span className="sub-linea" key={t}>{t}</span>
+          ))}
+          {/* El caso que el margen provoca por sí solo: excluido de contado y
+              gravado a crédito, porque el umbral se mide contra el precio de
+              venta. Quien ofrezca el crédito mirando solo el precio se queda
+              corto por el importe del impuesto. */}
+          {p.cruzaUmbralEnCredito === 1 && (
+            <span
+              className="insignia umbral"
+              title={'Excluido de IVA al contado y gravado a crédito: el precio '
+                + 'a crédito cruza el umbral del Art. 424.'}
+            >
+              cruza el umbral
+            </span>
+          )}
+        </div>
+      ),
+    },
+    {
+      clave: 'existencia',
+      titulo: 'Existencias',
+      numerica: true,
+      render: (p) => (
+        <div className="celda">
+          {p.existencia}
+          {p.existenciaMinima != null && (
+            <span className="sub-linea">mín. {p.existenciaMinima}</span>
+          )}
+        </div>
+      ),
+    },
+    {
+      clave: 'estado',
+      titulo: 'Estado',
+      render: (p) => (
+        <div className="celda">
+          <span className={`insignia ${(p.estadoStock || '').toLowerCase()}`}>
+            {ESTADOS[p.estadoStock] ?? p.estadoStock}
+          </span>
+        </div>
+      ),
+    },
+    ...(esAdministrador ? [{
+      clave: 'acciones',
+      titulo: 'Acciones',
+      render: (p) => (
+        <div className="celda">
+          <button
+            type="button"
+            className="enlace"
+            aria-label={`Editar ${p.nombre}`}
+            onClick={() => setEditando(p)}
+          >
+            editar
+          </button>
+        </div>
+      ),
+    }] : []),
+  ]
 
   return (
     <>
@@ -183,20 +409,21 @@ export default function Catalogo() {
           }}
         />
       )}
-      <div className="contenido">
-        <div className="titulo-fila">
-          <h2>Catálogo</h2>
-          {esAdministrador && (
+      <div className="contenido seccion-catalogo">
+        <EncabezadoPagina
+          titulo="Catálogo"
+          descripcion="Consulta productos, precios y existencias."
+          acciones={esAdministrador && (
             <>
-              <button className="boton secundario" onClick={() => setPanelCategorias(true)}>
+              <button type="button" className="boton secundario" onClick={() => setPanelCategorias(true)}>
                 Categorías
               </button>
-              <button className="boton" onClick={() => setCreando(true)}>
+              <button type="button" className="boton" onClick={() => setCreando(true)}>
                 Nuevo producto
               </button>
             </>
           )}
-        </div>
+        />
 
         <div className="filtros">
           <label className="campo">
@@ -230,222 +457,89 @@ export default function Catalogo() {
             <span>Existencia</span>
             <select value={estado} onChange={(e) => setEstado(e.target.value)}>
               <option value="">Cualquiera</option>
-              <option value="ACTIVO">Activo</option>
-              <option value="CRITICO">Crítico</option>
-              <option value="AGOTADO">Agotado</option>
+              {Object.entries(ESTADOS).map(([valor, texto]) => (
+                <option key={valor} value={valor}>{texto}</option>
+              ))}
             </select>
           </label>
 
           {hayFiltro && (
-            <button
-              className="enlace"
-              onClick={() => { setBusqueda(''); setCategoria(''); setProveedor(''); setEstado('') }}
-            >
+            <button type="button" className="enlace" onClick={limpiarFiltros}>
               limpiar filtros
             </button>
           )}
         </div>
 
-        {error && <div className="aviso error" role="alert">{error}</div>}
+        {aviso && <div className="aviso error" role="alert">{aviso}</div>}
 
-        <div className="tarjeta">
-          {/* La tabla tiene hasta diez columnas y en un teléfono no cabe. Sin
-              este contenedor no se recortaba: se derramaba fuera de la
-              tarjeta y arrastraba la página entera hacia la derecha, de
-              modo que el precio quedaba sobre el fondo y no sobre la
-              tabla. Con él, la tabla se desplaza sola y la página no. */}
-          <div className="tabla-ancha">
-          <table>
-            <thead>
-              <tr>
-                <th className="col-imagen"><span className="oculto">Imagen</span></th>
-                <th>Producto</th>
-                <th>Categoría</th>
-                {esAdministrador && <th className="numero">Costo</th>}
-                {esAdministrador && <th className="numero">Margen</th>}
-                <th className="numero">Contado</th>
-                <th className="numero">Crédito</th>
-                <th className="numero">Exist.</th>
-                <th>Estado</th>
-                {esAdministrador && <th><span className="oculto">Acciones</span></th>}
-              </tr>
-            </thead>
-            <tbody>
-              {productos.map((p) => (
-                <tr key={p.productoId}>
-                  <td className="col-imagen">
-                    <SubirImagen
-                      // La dirección lleva el identificador de la imagen,
-                      // no el del producto. Así cambiar de principal
-                      // cambia la dirección, y la caché no puede servir
-                      // la anterior aunque quiera.
-                      src={p.imagenPrincipalId
-                        ? `/api/v1/imagenes/${p.imagenPrincipalId}/miniatura`
-                        : null}
-                      alt={`Imagen de ${p.nombre}`}
-                      puedeEditar={esAdministrador}
-                      onFallo={setError}
-                      multiple
-                      ayuda="Subir imágenes. Puedes elegir varias; la primera será la principal."
-                      onSubir={async (archivos) => {
-                        setError(null)
-                        const { creadas, problemas } = await subirImagenes(p.productoId, archivos)
+        {error && <EstadoError error={error} alReintentar={reintentar} />}
 
-                        // La primera de la tanda pasa a ser la principal:
-                        // el recuadro que tocaste muestra la primera que
-                        // elegiste, que es lo que cabe esperar. Para
-                        // cambiarla después está la galería.
-                        const primera = creadas[0]
-                        if (primera && !primera.principal) {
-                          await api.hacerPrincipal(primera.id)
-                        }
-                        if (primera) {
-                          setProductos((filas) => filas.map((f) =>
-                            f.productoId === p.productoId
-                              ? { ...f, tieneImagen: 1, imagenPrincipalId: primera.id }
-                              : f))
-                        }
-                        // Lo que no entró se dice archivo por archivo. Sin
-                        // esto el rechazo del servidor no se veía y parecía
-                        // que todo se había aceptado.
-                        if (problemas.length > 0) setError(problemas.join(' · '))
-                      }}
-                    />
-                  </td>
-                  <td>
-                    {p.nombre}{p.presentacion ? ` · ${p.presentacion}` : ''}
-                    {/* El aviso va en la fila del producto: enterarse de que
-                        falta la regla de impuesto al facturar es enterarse
-                        tarde. Solo lo recibe la empresa que se declaró
-                        responsable de IVA. Informa y no bloquea: sin regla
-                        el producto se vende al precio (ADR-0024), y la
-                        leyenda de abajo lo dice con palabras. Es del
-                        administrador, que es quien puede crear la regla:
-                        quien vende no puede atenderlo y le estorbaría
-                        delante del cliente. */}
-                    {esAdministrador && p.tributacionSinConfigurar === 1 && (
-                      <> <span className="insignia critico">Impuestos sin configurar</span></>
-                    )}
-                    {/* El código va bajo el nombre, como en el diseño de la
-                        P-03. El SKU solo aparece cuando difiere: por omisión
-                        se copia del código y repetirlo sería ruido. */}
-                    <span className="sub-linea">
-                      Cód. {p.codigo}
-                      {p.sku && p.sku !== p.codigo ? ` · SKU ${p.sku}` : ''}
-                      {/* Antes este enlace solo aparecía si el producto ya
-                          tenía una imagen, y eso dejaba sin salida al caso
-                          más común: un producto sin ninguna, al que se le
-                          quieren subir varias de golpe. El recuadro de la
-                          izquierda admite una sola. */}
-                      {' · '}
-                      <button
-                        type="button"
-                        className="enlace"
-                        onClick={() => setGaleria({ id: p.productoId, nombre: p.nombre })}
-                      >
-                        {p.tieneImagen === 1 ? 'ver imágenes' : 'añadir imágenes'}
-                      </button>
-                    </span>
-                  </td>
-                  <td>{p.categoria}</td>
-                  {esAdministrador && <td className="numero">{PESOS.format(p.costo)}</td>}
-                  {/* El margen, como el costo del que sale, es del
-                      administrador. Sin precio no hay margen de cero: hay
-                      un precio que falta, y eso es lo que se dice. */}
-                  {esAdministrador && (
-                    <td className="numero">
-                      {p.precioContado == null
-                        ? 'Falta el precio de venta'
-                        : porcentajeConDecimales(p.margenContado)}
-                      {p.margenCredito != null
-                        && Number(p.margenCredito) !== Number(p.margenContado) && (
-                        <span className="sub-linea">
-                          a crédito {porcentajeConDecimales(p.margenCredito)}
-                        </span>
-                      )}
-                    </td>
-                  )}
-                  {/* Bajo cada precio va su total con impuesto, y solo
-                      cuando difiere: si el producto está excluido, el
-                      total es el precio y repetirlo sería ruido. El
-                      RF-33 pide los dos precios; la V20 añadió el total
-                      a crédito, que faltaba. */}
-                  <td className="numero">
-                    {p.precioContado == null ? '—' : PESOS.format(p.precioContado)}
-                    {anotaciones(p.precioContado, p.totalContado,
-                      p.cercaUmbral, p.baseContado).map((t) => (
-                        <span className="sub-linea" key={t}>{t}</span>
-                      ))}
-                  </td>
-                  <td className="numero">
-                    {p.precioCredito == null ? '—' : PESOS.format(p.precioCredito)}
-                    {anotaciones(p.precioCredito, p.totalCredito,
-                      p.cercaUmbralCredito, p.baseCredito).map((t) => (
-                        <span className="sub-linea" key={t}>{t}</span>
-                      ))}
-                    {/* El caso que el margen provoca por sí solo:
-                        excluido de contado y gravado a crédito, porque
-                        el umbral se mide contra el precio de venta. Un
-                        vendedor que ofrezca el crédito mirando solo el
-                        precio se queda corto por el importe del
-                        impuesto. */}
-                    {p.cruzaUmbralEnCredito === 1 && (
-                      <span className="insignia umbral" title={
-                        'Excluido de IVA al contado y gravado a crédito: el margen '
-                        + 'a crédito cruza el umbral del Art. 424.'}>
-                        cruza el umbral
-                      </span>
-                    )}
-                  </td>
-                  <td className="numero">{p.existencia}</td>
-                  <td>
-                    <span className={`insignia ${(p.estadoStock || '').toLowerCase()}`}>
-                      {p.estadoStock}
-                    </span>
-                  </td>
-                  {esAdministrador && (
-                    <td className="acciones">
-                      <button className="enlace" onClick={() => setEditando(p)}>editar</button>
-                    </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          </div>
+        {!error && cargando && productos.length === 0 && (
+          <EstadoCarga mensaje="Cargando el catálogo…" />
+        )}
 
-          {/* Sin esta línea, la anotación «margen sobre el precio» no se
-              puede interpretar: quien no la vea en una fila no sabe si
-              es que allí se aplicó la otra base o que nadie la anotó. */}
-          {!cargando && productos.length > 0 && (
-            <p className="leyenda">
-              Los precios sin anotación se calculan como recargo sobre el costo.
-              Los marcados «sobre el precio» aplican el margen sobre el precio de
-              venta, de modo que un 20 % da 1.250 y no 1.200 sobre un costo de
-              1.000. Los marcados «precio escrito» se venden a esa cifra aunque
-              cambie el costo.
-            </p>
-          )}
+        {!error && !cargando && productos.length === 0 && (
+          hayFiltro
+            ? (
+              <EstadoVacio
+                titulo="Ningún producto coincide con los filtros."
+                detalle="Prueba con otra búsqueda o quita los filtros."
+                accion={(
+                  <button type="button" className="boton secundario" onClick={limpiarFiltros}>
+                    Limpiar filtros
+                  </button>
+                )}
+              />
+            )
+            : <EstadoVacio titulo="El catálogo está vacío." />
+        )}
 
-          {/* La insignia sola no dice qué pasa con el producto. Esto lo
-              dice, y solo cuando hay alguno marcado. */}
-          {!cargando && esAdministrador
-            && productos.some((p) => p.tributacionSinConfigurar === 1) && (
-            <p className="leyenda">
-              «Impuestos sin configurar» marca un producto sin regla de IVA en una
-              empresa responsable de IVA. Se vende al precio, sin impuesto, hasta que
-              se cree la regla.
-            </p>
-          )}
+        {!error && productos.length > 0 && (
+          <>
+            <TablaOTarjetas
+              etiqueta="Productos del catálogo"
+              filas={productos}
+              claveFila={(p) => p.productoId}
+              columnas={columnas}
+            />
 
-          {!cargando && productos.length === 0 && (
-            <p style={{ color: 'var(--tinta-3)' }}>
-              {hayFiltro
-                ? 'Ningún producto coincide con los filtros.'
-                : 'El catálogo está vacío.'}
-            </p>
-          )}
-        </div>
+            {/* Sin esta línea, la anotación «sobre el precio» no se puede
+                interpretar: quien no la vea en una fila no sabe si es que
+                allí se aplicó la otra base o que nadie la anotó. */}
+            {!cargando && (
+              <p className="leyenda">
+                {esAdministrador ? (
+                  <>
+                    Los precios sin anotación se calculan como recargo sobre el costo.
+                    Los marcados «sobre el precio» aplican la ganancia sobre el precio de
+                    venta, de modo que un 20 % da 1.250 y no 1.200 sobre un costo de
+                    1.000. Los marcados «precio escrito» se venden a esa cifra aunque
+                    cambie el costo.
+                  </>
+                ) : (
+                  // Quien vende no ve el costo ni cómo se calculó: se le dice
+                  // qué significa cada anotación sin nombrar lo que no ve.
+                  <>
+                    «Sobre el precio» indica que la ganancia se aplicó sobre el precio de
+                    venta. «Precio escrito» indica que el producto se vende a esa cifra
+                    fija. «Cerca del umbral» avisa de que el impuesto podría cambiar.
+                  </>
+                )}
+              </p>
+            )}
+
+            {/* La insignia sola no dice qué pasa con el producto. Esto lo
+                dice, y solo cuando hay alguno marcado. */}
+            {!cargando && esAdministrador
+              && productos.some((p) => p.tributacionSinConfigurar === 1) && (
+              <p className="leyenda">
+                «Impuestos sin configurar» marca un producto sin regla de IVA en una
+                empresa responsable de IVA. Se vende al precio, sin impuesto, hasta que
+                se cree la regla.
+              </p>
+            )}
+          </>
+        )}
       </div>
     </>
   )

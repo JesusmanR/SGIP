@@ -243,14 +243,17 @@ describe('catálogo de productos', () => {
     it('un administrador puede editar', async () => {
       montar()
       await conFilas()
-      expect(screen.getAllByRole('button', { name: 'editar' }).length).toBeGreaterThan(0)
+      expect(screen.getAllByRole('button', { name: /^editar /i }).length).toBeGreaterThan(0)
     })
 
     it('un vendedor no', async () => {
       guardarSesion({ token: 't', nombre: 'Ana', rol: 'VENDEDOR' })
       montar()
       await conFilas()
-      expect(screen.queryByRole('button', { name: 'editar' })).not.toBeInTheDocument()
+      // Cualquier botón cuyo nombre empiece por «Editar» (el nombre incluye el
+      // producto) y la columna de acciones: ninguno para quien vende.
+      expect(screen.queryAllByRole('button', { name: /^editar/i })).toHaveLength(0)
+      expect(screen.queryByRole('columnheader', { name: /acciones/i })).not.toBeInTheDocument()
     })
   })
 
@@ -284,7 +287,9 @@ describe('catálogo de productos', () => {
       expect(screen.queryByRole('columnheader', { name: 'Costo' })).not.toBeInTheDocument()
       expect(screen.queryByLabelText(/proveedor/i)).not.toBeInTheDocument()
       expect(screen.getAllByRole('columnheader')).toHaveLength(7)
-      expect(fila(screen, 'PC-001').querySelectorAll('td')).toHaveLength(7)
+      // El nombre del producto es ahora la cabecera de su fila (th), no una celda (td).
+      expect(fila(screen, 'PC-001').querySelectorAll('td')).toHaveLength(6)
+      expect(within(fila(screen, 'PC-001')).getAllByRole('rowheader')).toHaveLength(1)
       expect(fila(screen, 'PC-001')).not.toHaveTextContent('2.100.000')
     })
 
@@ -380,6 +385,7 @@ describe('catálogo de productos', () => {
     })
 
     it('un precio escrito se anota, y la leyenda dice qué significa', async () => {
+      guardarSesion({ token: 't', nombre: 'Jesús Manuel', rol: 'ADMINISTRADOR' })
       api.catalogo.mockResolvedValue([
         { ...PC, baseContado: null, precioFijoContado: 2500000, precioContado: 2500000 },
       ])
@@ -387,6 +393,17 @@ describe('catálogo de productos', () => {
       await conFilas()
       expect(fila(screen, 'PC-001')).toHaveTextContent('precio escrito')
       expect(screen.getByText(/se venden a esa cifra aunque cambie el costo/i)).toBeInTheDocument()
+    })
+
+    it('a quien vende la leyenda le explica el precio escrito sin nombrar el costo', async () => {
+      api.catalogo.mockResolvedValue([
+        { ...PC, baseContado: null, precioFijoContado: 2500000, precioContado: 2500000 },
+      ])
+      montar()
+      await conFilas()
+      expect(screen.getByText(/«precio escrito» indica que el producto se vende a esa cifra/i))
+        .toBeInTheDocument()
+      expect(screen.queryByText(/costo/i)).not.toBeInTheDocument()
     })
 
     it('si los proveedores fallan, el administrador conserva las categorías', async () => {
