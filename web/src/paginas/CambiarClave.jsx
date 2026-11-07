@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Aviso from '../componentes/comun/Aviso.jsx'
 import Campo from '../componentes/comun/Campo.jsx'
@@ -56,20 +56,30 @@ export default function CambiarClave() {
   const [repetida, setRepetida] = useState('')
   const [error, setError] = useState(null)
   const [noCoincide, setNoCoincide] = useState(null)
+  const [claveActualMal, setClaveActualMal] = useState(null)
+  const [envios, setEnvios] = useState(0)
+  const campoActual = useRef(null)
+  const campoRepetida = useRef(null)
   const [enviando, setEnviando] = useState(false)
   const navegar = useNavigate()
   const idRequisitos = useId()
-  const nombre = leerSesion()?.nombre
+  // Se leen una vez: la sesión no cambia mientras se teclea.
+  const [{ nombre, pendiente }] = useState(() => ({
+    nombre: leerSesion()?.nombre, pendiente: debeCambiarClave(),
+  }))
 
   async function enviar(evento) {
     evento.preventDefault()
     setError(null)
     setNoCoincide(null)
+    setClaveActualMal(null)
+    setEnvios((n) => n + 1)
 
     // La comprobación de la repetición es de la pantalla y no viaja: el
     // servidor solo necesita la contraseña nueva una vez.
     if (nueva !== repetida) {
       setNoCoincide('Las contraseñas nuevas no coinciden. Escríbelas otra vez.')
+      campoRepetida.current?.focus()
       return
     }
 
@@ -85,6 +95,13 @@ export default function CambiarClave() {
       if (e instanceof ErrorApi && e.estado === 401) {
         // La sesión caducó mientras se escribía; el cliente ya la borró.
         navegar('/acceso', { replace: true })
+        return
+      }
+      // El servidor no distingue este 400 por tipo: solo por el texto, que empieza
+      // por «La contraseña actual» (ClaveActualIncorrectaException y el DTO).
+      if (e instanceof ErrorApi && e.estado === 400 && /^La contraseña actual/i.test(e.message)) {
+        setClaveActualMal(e.message)
+        campoActual.current?.focus()
         return
       }
       // Un 423 (cuenta bloqueada) llega con su propio texto y su duración.
@@ -111,7 +128,7 @@ export default function CambiarClave() {
       <form className="tarjeta" onSubmit={enviar}>
         <h1>Cambia tu contraseña</h1>
         <p className="sub">
-          {debeCambiarClave()
+          {pendiente
             ? 'Entraste con una contraseña temporal. Elige una propia para poder seguir.'
             : 'Elige una contraseña nueva.'}
         </p>
@@ -125,11 +142,14 @@ export default function CambiarClave() {
 
         {error && <Aviso tipo="peligro">{error}</Aviso>}
 
-        <Campo etiqueta="Contraseña actual">
+        <Campo etiqueta="Contraseña actual" motivo={claveActualMal} rol="alert">
           <EntradaClave
             nombre="contraseña actual"
+            reinicio={envios}
+            entradaRef={campoActual}
+            maxLength={100}
             value={actual}
-            onChange={(e) => setActual(e.target.value)}
+            onChange={(e) => { setActual(e.target.value); setClaveActualMal(null) }}
             autoComplete="current-password"
             required
           />
@@ -138,6 +158,8 @@ export default function CambiarClave() {
         <Campo etiqueta="Contraseña nueva">
           <EntradaClave
             nombre="contraseña nueva"
+            reinicio={envios}
+            maxLength={100}
             descritoPor={idRequisitos}
             value={nueva}
             onChange={(e) => { setNueva(e.target.value); setNoCoincide(null) }}
@@ -157,6 +179,9 @@ export default function CambiarClave() {
         <Campo etiqueta="Repite la contraseña nueva" motivo={noCoincide} rol="alert">
           <EntradaClave
             nombre="repetición de la contraseña nueva"
+            reinicio={envios}
+            entradaRef={campoRepetida}
+            maxLength={100}
             value={repetida}
             onChange={(e) => { setRepetida(e.target.value); setNoCoincide(null) }}
             autoComplete="new-password"

@@ -67,5 +67,5 @@
   .acceso--ingreso .acceso-marca .acceso-logo { color: var(--sobre-acento); margin: 0 0 auto; }
   .acceso--ingreso .acceso-lema { margin: 0; font-size: clamp(2rem, 4vw, 3.25rem); font-weight: 500; line-height: 1.1; }
   .acceso--ingreso .acceso-lema em { font-style: normal; color: var(--acento-claro); }
-  .acceso--ingreso .acceso-descripcion { margin: 0 0 auto; max-width: 28rem; color: var(--borde); line-height: 1.5; }
+  .acceso--ingreso .acceso-descripcion { margin: 0 0 auto; max-width: 28rem; color: var(--sobre-acento); line-height: 1.5; }
 }

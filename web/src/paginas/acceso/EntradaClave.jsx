@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import '../../estilos/acceso.css'
 
 /**
@@ -10,15 +10,27 @@ import '../../estilos/acceso.css'
  * una misma pantalla y «Mostrar» a secas no distingue cuál.
  *
  * `descritoPor` suma ids propios (la lista de requisitos) a los que pone Campo.
+ * `reinicio` es un contador: cada vez que cambia, la contraseña vuelve a
+ * ocultarse (la pantalla lo sube al enviar, para que no quede a la vista).
+ * `entradaRef` da acceso al input para llevarle el foco.
  */
 export default function EntradaClave({
-  nombre, descritoPor, 'aria-describedby': deCampo, ...entrada
+  nombre, descritoPor, reinicio, entradaRef, 'aria-describedby': deCampo, ...entrada
 }) {
   const [visible, setVisible] = useState(false)
+  useEffect(() => { setVisible(false) }, [reinicio])
   const descripcion = [deCampo, descritoPor].filter(Boolean).join(' ') || undefined
   return (
     <div className="entrada-clave">
-      <input {...entrada} type={visible ? 'text' : 'password'} aria-describedby={descripcion} />
+      <input
+        {...entrada}
+        ref={entradaRef}
+        spellCheck={false}
+        autoCapitalize="none"
+        autoCorrect="off"
+        type={visible ? 'text' : 'password'}
+        aria-describedby={descripcion}
+      />
       <button
         type="button"
         className="entrada-clave-boton"

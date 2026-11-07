@@ -26,11 +26,13 @@ export default function Acceso() {
   const [clave, setClave] = useState('')
   const [error, setError] = useState(null)
   const [enviando, setEnviando] = useState(false)
+  const [envios, setEnvios] = useState(0)
   const navegar = useNavigate()
 
   async function enviar(evento) {
     evento.preventDefault()
     setError(null)
+    setEnvios((n) => n + 1)
     setEnviando(true)
     try {
       const sesion = await api.entrar(correo, clave)
@@ -73,6 +75,7 @@ export default function Acceso() {
           <Campo etiqueta="Contraseña">
             <EntradaClave
               nombre="contraseña"
+              reinicio={envios}
               value={clave}
               onChange={(e) => setClave(e.target.value)}
               autoComplete="current-password"
