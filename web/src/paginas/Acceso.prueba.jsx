@@ -7,7 +7,7 @@
  * es la clase de cosa que alguien «arregla» con buena intención al
  * intentar ser más útil con el usuario.
  */
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -45,6 +45,11 @@ describe('pantalla de acceso', () => {
 
   it('pone su propio título a la pestaña', () => {
     expect(document.title).toBe('Acceso · SGIP')
+  })
+
+  it('al salir de la pantalla devuelve el título de la aplicación', () => {
+    cleanup()
+    expect(document.title).toBe('SGIP')
   })
 
   it('guarda la sesión y entra al catálogo', async () => {

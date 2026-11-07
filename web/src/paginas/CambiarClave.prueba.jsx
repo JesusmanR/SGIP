@@ -7,7 +7,7 @@
  * aterriza donde le toca. Las demás pantallas se sustituyen por un rótulo
  * para no arrastrar sus llamadas al API.
  */
-import { render, screen, waitFor } from '@testing-library/react'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -51,6 +51,12 @@ describe('cambio de contraseña obligatorio', () => {
   it('pone su propio título a la pestaña', () => {
     montar()
     expect(document.title).toBe('Cambiar contraseña · SGIP')
+  })
+
+  it('al salir de la pantalla devuelve el título de la aplicación', () => {
+    montar()
+    cleanup()
+    expect(document.title).toBe('SGIP')
   })
 
   describe('quién llega a la pantalla', () => {
