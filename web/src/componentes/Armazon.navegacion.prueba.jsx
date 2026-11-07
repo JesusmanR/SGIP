@@ -1,6 +1,7 @@
 /** Título de la pestaña y foco al navegar dentro del armazón. */
-import { render, screen } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { lazy, Suspense } from 'react'
 import { Link, MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -64,8 +65,47 @@ describe('al navegar dentro del armazón', () => {
 
   it('al cambiar solo la búsqueda de la misma página no hace nada', async () => {
     montar()
-    await userEvent.click(screen.getByRole('link', { name: 'buscar' }))
+    const enlace = screen.getByRole('link', { name: 'buscar' })
+    await userEvent.click(enlace)
     expect(document.title).toBe('SGIP')
-    expect(document.activeElement).not.toBe(screen.getByRole('main'))
+    expect(enlace).toHaveFocus()
+  })
+
+  it('el foco llega al h1 de una página perezosa que aparece después de navegar', async () => {
+    let soltar
+    const puerta = new Promise((ok) => { soltar = ok })
+    const Perezosa = lazy(() => puerta.then(() => ({ default: () => <h1>Perezosa</h1> })))
+    render(
+      <MemoryRouter initialEntries={['/catalogo']}>
+        <Routes>
+          <Route element={<Armazon />}>
+            <Route path="/catalogo" element={<Enlaces />} />
+            <Route path="/proveedores" element={<Suspense fallback={<p>cargando</p>}><Perezosa /></Suspense>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    )
+    await userEvent.click(screen.getByRole('link', { name: 'proveedores' }))
+    expect(screen.getByRole('main')).toHaveFocus()
+    await act(async () => { soltar() })
+    expect(await screen.findByRole('heading', { level: 1, name: 'Perezosa' })).toHaveFocus()
+  })
+
+  it('una página que mueve su propio foco al montarse lo conserva', async () => {
+    function ConFoco() {
+      return <><h1>Con foco</h1><input aria-label="buscar aquí" ref={(el) => el?.focus()} /></>
+    }
+    render(
+      <MemoryRouter initialEntries={['/catalogo']}>
+        <Routes>
+          <Route element={<Armazon />}>
+            <Route path="/catalogo" element={<Enlaces />} />
+            <Route path="/proveedores" element={<ConFoco />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    )
+    await userEvent.click(screen.getByRole('link', { name: 'proveedores' }))
+    expect(screen.getByLabelText('buscar aquí')).toHaveFocus()
   })
 })
