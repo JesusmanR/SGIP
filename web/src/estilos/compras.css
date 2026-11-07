@@ -17,7 +17,7 @@
 .insignia.estado-abierta  { background: var(--info-fondo);    color: var(--info); }
 .insignia.estado-parcial  { background: var(--aviso-fondo);   color: var(--aviso); }
 .insignia.estado-recibida { background: var(--exito-fondo);   color: var(--exito); }
-.insignia.estado-anulada  { background: var(--borde);         color: var(--tinta-2); }
+.insignia.estado-anulada  { background: var(--neutro-fondo);  color: var(--neutro); }
 
 .seccion-compras .subtitulo-seccion {
   margin: var(--espacio-5) 0 var(--espacio-3); font-size: var(--t-titulo-tarjeta); line-height: 20px;
