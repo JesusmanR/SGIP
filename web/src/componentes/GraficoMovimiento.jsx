@@ -1,4 +1,5 @@
 import { NUMERO, diaCorto } from '../servicios/formato.js'
+import '../estilos/panel.css'
 
 /**
  * Ingresos y egresos de los últimos treinta días, en barras.

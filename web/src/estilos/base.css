@@ -48,12 +48,6 @@ a      { color: var(--acento); }
 .aviso[tabindex="-1"]:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }
 
 /* ── Estructura ────────────────────────────────────────────────────── */
-.acceso { min-height: 100vh; display: grid; place-items: center; padding: 1rem; }
-.acceso .tarjeta { width: 100%; max-width: 380px; }
-.acceso h1 { margin: 0 0 .25rem; font-size: 1.4rem; }
-.acceso p.sub { margin: 0 0 1.5rem; color: var(--tinta-3); font-size: .9rem; }
-
-.acceso .acciones-formulario { display: flex; flex-wrap: wrap; gap: .6rem; }
 
 .contenido { padding: 1.5rem; max-width: 1100px; margin: 0 auto; }
 
@@ -96,7 +90,6 @@ td.numero, th.numero { text-align: right; font-variant-numeric: tabular-nums; }
 .leyenda { margin: .75rem 0 0; font-size: .78rem; color: var(--tinta-3); max-width: 62ch; }
 
 /* ── Imágenes ──────────────────────────────────────────────────────── */
-.col-imagen { width: 56px; }
 .oculto {
   /* Visible para un lector de pantalla, no en la página: la columna no
      necesita rótulo a la vista pero sí tiene que tener nombre. */
@@ -115,33 +108,10 @@ td.numero, th.numero { text-align: right; font-variant-numeric: tabular-nums; }
 .casilla-imagen:disabled { cursor: default; border-style: solid; }
 .casilla-imagen:focus-visible { outline: 3px solid var(--acento-sutil); border-color: var(--acento); }
 
-.fila-logo { display: flex; gap: 1.25rem; align-items: center; }
-.titulo-empresa { margin: 0 0 .25rem; font-size: 1.1rem; font-weight: 600; }
-
-/* ── Galería de imágenes ───────────────────────────────────────────── */
-.velo {
-  position: fixed; inset: 0; z-index: 40; padding: 1rem;
-  background: var(--velo);
-  display: grid; place-items: center;
-}
-.panel { max-width: 640px; width: 100%; max-height: 90vh; overflow: auto; }
 .panel-cabecera { display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem; }
 .panel-cabecera h3 { margin: 0; font-size: 1.1rem; flex: 1; }
 
-.panel-acciones {
-  display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; margin-bottom: 1rem;
-}
-
-.galeria { list-style: none; margin: 0 0 1rem; padding: 0; display: flex; flex-wrap: wrap; gap: 1rem; }
-.galeria li {
-  display: flex; flex-direction: column; gap: .4rem; align-items: center;
-  width: 136px; padding: .6rem; border: 1px solid var(--borde); border-radius: 8px;
-}
-.galeria li.principal { border-color: var(--acento); }
-.casilla-imagen.grande { width: 120px; height: 120px; }
-
 .boton.menudo { padding: .3rem .6rem; font-size: .78rem; width: 100%; }
-
 
 .enlace {
   background: none; border: 0; padding: 0; font: inherit;
@@ -169,10 +139,6 @@ td.numero, th.numero { text-align: right; font-variant-numeric: tabular-nums; }
 }
 .campo select:focus-visible { outline: 3px solid var(--acento-sutil); border-color: var(--acento); }
 
-/* El título y sus botones comparten línea; en un teléfono, los botones bajan. */
-.titulo-fila { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; margin-bottom: 1rem; }
-.titulo-fila h2 { margin: 0; flex: 1; }
-
 /* Columna de acciones: no se estira y no parte sus botones. */
 td.acciones, th.acciones { white-space: nowrap; text-align: right; }
 td.acciones .boton { margin-left: .4rem; }
@@ -189,7 +155,6 @@ td.acciones .boton { margin-left: .4rem; }
 .campo-mensaje.error { color: var(--peligro); }
 .campo-mensaje.advertencia { color: var(--aviso); }
 .campo input[aria-invalid="true"], .campo select[aria-invalid="true"] { border-color: var(--peligro); }
-.ayuda-precio { margin: -.5rem 0 .75rem; }
 
 .casilla { display: flex; align-items: center; gap: .5rem; margin-bottom: 1rem;
   font-size: .9rem; color: var(--tinta); cursor: pointer; }
@@ -198,51 +163,6 @@ td.acciones .boton { margin-left: .4rem; }
 
 /* Un botón de enlace deshabilitado no debe parecer pulsable. */
 .enlace:disabled { color: var(--bruma); text-decoration: none; cursor: not-allowed; }
-
-/* Un input suelto dentro de una fila de acciones —el de «categoría
-   nueva»— no estaba dentro de un .campo y por eso salía sin el mismo
-   borde ni el mismo alto que el resto de los controles. */
-.panel-acciones input[type="text"], .panel-acciones input:not([type]) {
-  flex: 1 1 14rem; padding: .6rem .75rem; font-size: .95rem;
-  border: 1px solid var(--borde-control); border-radius: 6px;
-  background: var(--tarjeta); color: var(--tinta);
-}
-.panel-acciones input:focus-visible {
-  outline: 3px solid var(--acento-sutil); border-color: var(--acento);
-}
-
-/* ── Importación de lista de precios · P-07 ────────────────────────── */
-
-/* El indicador de tres pasos. Su trabajo no es decorar: es dejar claro
-   en todo momento que leer el archivo no cambia el catálogo y que solo
-   aplicar lo hace, que es lo que la especificación de la P-07 pone
-   como primera frase. */
-.pasos {
-  display: flex; align-items: center; gap: .75rem; flex-wrap: wrap;
-  list-style: none; margin: 0 0 1.25rem; padding: 0;
-  font-size: .9rem; color: var(--tinta-3);
-}
-.pasos li { display: flex; align-items: center; gap: .4rem; }
-.pasos li:not(:last-child)::after {
-  content: ''; width: 24px; height: 1px; background: var(--borde); margin-left: .5rem;
-}
-.pasos-numero {
-  display: inline-grid; place-items: center; width: 22px; height: 22px;
-  border-radius: 999px; background: var(--borde); color: var(--tinta-2);
-  font-size: .75rem; font-weight: 700;
-}
-.pasos .hecho  { color: var(--exito); }
-.pasos .hecho  .pasos-numero { background: var(--exito-fondo); color: var(--exito); }
-.pasos .actual { color: var(--tinta); font-weight: 600; }
-.pasos .actual .pasos-numero { background: var(--acento); color: var(--sobre-acento); }
-/* El estado va al final de la fila y sin raya detrás: no es un paso
-   más, es en cuál está la carga. */
-.pasos-estado {
-  margin-left: auto; font-size: .75rem; font-weight: 600;
-  padding: .15rem .5rem; border-radius: var(--radio-insignia);
-  background: var(--info-fondo); color: var(--info);
-}
-.pasos li.pasos-estado::after { content: none; }
 
 /* Las cuatro cifras de la carga, en fila y sin encogerse por debajo de
    lo legible. */
@@ -255,18 +175,10 @@ td.acciones .boton { margin-left: .4rem; }
 .cifra-valor  { font-size: 1.75rem; font-weight: 700; line-height: 1.1;
                 font-variant-numeric: tabular-nums; }
 .cifra-pie    { font-size: .75rem; color: var(--tinta-3); }
-.cifra-valor.exito       { color: var(--exito); }
-.cifra-valor.aviso-texto { color: var(--aviso); }
 
-/* La variación lleva color además del signo, pero el signo va primero:
-   quien no distinga los dos tonos sigue leyendo «+3,8 %».
-
-   El `nowrap` no es cosmético: «+900,0 %» partido en dos renglones deja
+/* El `nowrap` no es cosmético: «+900,0 %» partido en dos renglones deja
    el número y su unidad en líneas distintas, y es justo la cifra que la
    columna existe para hacer saltar. */
-.sube, .baja { font-weight: 600; }
-.sube { color: var(--peligro); }
-.baja { color: var(--exito); }
 td.numero { white-space: nowrap; }
 .insignia { white-space: nowrap; }
 
@@ -286,157 +198,8 @@ td.numero { white-space: nowrap; }
 .boton.peligro { background: var(--peligro); color: var(--sobre-acento); }
 .boton:disabled { background: var(--bruma); cursor: not-allowed; }
 
-/* La zona de arrastre de la P-07. La etiqueta envuelve un control de
-   archivo oculto, de modo que un clic sigue abriendo el selector y el
-   teclado sigue llegando al control: ocultarlo con `display:none` lo
-   sacaría del orden de tabulación. */
-.campo-rotulo {
-  display: block; font-size: .8rem; color: var(--tinta-2);
-  font-weight: 500; margin-bottom: .35rem;
-}
-.zona-archivo {
-  display: flex; flex-direction: column; align-items: center; gap: .15rem;
-  padding: 1.5rem 1rem; cursor: pointer; text-align: center;
-  border: 2px dashed var(--borde-control); border-radius: var(--radio-control);
-  background: var(--lienzo); color: var(--tinta-2);
-}
-.zona-archivo:hover,
-.zona-archivo.arrastrando { border-color: var(--acento); background: var(--acento-sutil); }
-.zona-archivo:focus-within { outline: 3px solid var(--acento-sutil); border-color: var(--acento); }
-.zona-archivo strong { color: var(--acento); font-size: .95rem; }
-
 /* Visible para un lector de pantalla y para el foco, no a la vista. */
 .oculto-visualmente {
   position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
   overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
-}
-
-/* =====================================================================
-   Panel de indicadores (P-02)
-   ===================================================================== */
-
-.subtitulo { color: var(--tinta-2); font-size: .9rem; margin: -.4rem 0 1.1rem; }
-
-/* Dos columnas en escritorio y una en pantalla estrecha. El `minmax`
-   con `1fr` como mínimo —y no el ancho de la tarjeta— es lo que impide
-   que la tabla de dentro desborde la rejilla: con `minmax(28rem, 1fr)`
-   una tabla de cinco columnas ensancha su celda y empuja la segunda
-   fuera de la pantalla. */
-.panel-rejilla {
-  display: grid; gap: 1rem; margin-bottom: 1rem;
-  /* `minmax(0, 1fr)` y no `1fr`, también con una sola columna: el
-     mínimo implícito de `1fr` es `min-content`, de modo que la tabla de
-     dentro ensancha la columna y la tarjeta se sale de la pantalla en
-     lugar de que la tabla se desplace dentro de ella. Con 390px de
-     ancho la página desbordaba 643px por esto. */
-  grid-template-columns: minmax(0, 1fr);
-}
-@media (min-width: 60rem) {
-  .panel-rejilla { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
-}
-/* Cada tarjeta mide lo que mide su contenido. Por omisión el grid las
-   estira a la altura de la más alta, y con dos referencias críticas
-   frente a una carga con su aviso de umbral, la tarjeta de la izquierda
-   quedaba con un palmo de blanco debajo de la última fila que parecía
-   contenido que no cargó. */
-.panel-rejilla { align-items: start; }
-
-.tarjeta-cabecera {
-  display: flex; align-items: baseline; justify-content: space-between;
-  gap: .75rem; margin-bottom: .75rem;
-}
-.tarjeta-cabecera h2 { font-size: .95rem; font-weight: 600; margin: 0; }
-.tarjeta-nota { font-size: .75rem; color: var(--tinta-3); }
-
-.vacio-tarjeta { color: var(--tinta-2); font-size: .9rem; margin: 0; }
-
-/* El código de la referencia bajo su nombre: segunda línea, más
-   pequeño y en tinta auxiliar. Es dato de apoyo, no de lectura. */
-/* El `nowrap` no es cosmético: en una columna estrecha «MON-001» se
-   parte por el guion y queda «MON-» y «001» en renglones distintos, que
-   se lee como dos datos y no como un código. */
-.codigo {
-  display: block; font-size: .72rem; color: var(--tinta-3);
-  font-variant-numeric: tabular-nums; white-space: nowrap;
-}
-.codigo-inline {
-  font-size: .78rem; color: var(--tinta-2); font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-
-/* La tabla del panel es corta y cabe sin ancho mínimo de 860px, que es
-   el que `.tabla-ancha` impone para la del catálogo. Sin esto, la
-   tarjeta de la rejilla arrastra una barra de desplazamiento desde el
-   primer momento aunque haya sitio de sobra. */
-.tabla-estrecha > table { min-width: 0; }
-.tabla-estrecha td, .tabla-estrecha th { font-size: .82rem; }
-
-/* El rojo corporativo para agotadas y el ámbar para críticas, que es la
-   regla que la especificación de P-02 fija. El rótulo escrito va
-   siempre al lado: los dos colores son casi el mismo gris —ver la nota
-   de tokens.css— y una cifra que solo se distinga por el tono no dice
-   nada a quien no lo distinga. */
-.cifra-valor.peligro-cifra { color: var(--peligro); }
-
-.carga-proveedor { font-weight: 600; margin: 0 0 .15rem; }
-.carga-detalle { font-size: .8rem; color: var(--tinta-3); margin: 0 0 .6rem; }
-
-.carga-cifras {
-  display: flex; flex-wrap: wrap; gap: 1.25rem; margin: .9rem 0 0;
-}
-.carga-cifras div { display: flex; flex-direction: column-reverse; }
-.carga-cifras dt { font-size: .72rem; color: var(--tinta-3); }
-.carga-cifras dd {
-  margin: 0; font-size: 1.15rem; font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-
-.umbral-aviso { margin-top: .9rem; }
-.umbral-aviso p { margin: 0 0 .4rem; }
-.umbral-lista { margin: 0; padding-left: 1.1rem; font-size: .82rem; }
-.umbral-lista li + li { margin-top: .25rem; }
-
-/* ── El gráfico de movimiento ─────────────────────────────────────── */
-
-/* Altura fija y `preserveAspectRatio: none` en el SVG: el gráfico se
-   estira a lo ancho y conserva su alto, que es lo que hace comparable
-   la altura de una barra entre dos tamaños de pantalla. */
-.grafico-lienzo { width: 100%; height: 180px; display: block; }
-.grafico-eje { stroke: var(--borde); stroke-width: 1; }
-.barra-ingreso { fill: var(--exito); }
-.barra-egreso  { fill: var(--peligro); }
-
-.grafico-leyenda {
-  font-size: .78rem; color: var(--tinta-2); margin: .5rem 0 0;
-  display: flex; align-items: center; gap: .35rem; flex-wrap: wrap;
-}
-.llave {
-  display: inline-block; width: .7rem; height: .7rem; border-radius: 2px;
-}
-.llave-ingreso { background: var(--exito); }
-.llave-egreso  { background: var(--peligro); }
-.grafico-techo { color: var(--tinta-3); font-variant-numeric: tabular-nums; }
-
-/* ── Los esqueletos de carga ──────────────────────────────────────── */
-
-/* Un bloque gris que late. El `prefers-reduced-motion` no es un detalle:
-   una animación que se repite sin fin es justo lo que dispara un
-   malestar a quien es sensible al movimiento, y aquí se puede quitar sin
-   perder nada —el bloque sigue comunicando que falta contenido. */
-.hueso {
-  display: block; border-radius: var(--radio-control);
-  background: var(--lienzo); animation: latido 1.4s ease-in-out infinite;
-}
-.hueso-rotulo { width: 55%; height: .78rem; margin-bottom: .45rem; }
-.hueso-cifra  { width: 40%; height: 1.75rem; margin-bottom: .45rem; }
-.hueso-pie    { width: 70%; height: .75rem; }
-.hueso-titulo { width: 35%; height: .95rem; margin-bottom: .9rem; }
-.hueso-fila   { width: 100%; height: 1.6rem; margin-bottom: .5rem; }
-
-@keyframes latido {
-  0%, 100% { opacity: 1; }
-  50%      { opacity: .55; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .hueso { animation: none; }
 }

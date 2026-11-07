@@ -1,0 +1,8 @@
+/* Estilos del catálogo (P-03): imagen de la fila y título con sus botones.
+   El color sale solo de tokens.css. */
+
+.col-imagen { width: 56px; }
+
+/* El título y sus botones comparten línea; en un teléfono, los botones bajan. */
+.titulo-fila { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; margin-bottom: 1rem; }
+.titulo-fila h2 { margin: 0; flex: 1; }

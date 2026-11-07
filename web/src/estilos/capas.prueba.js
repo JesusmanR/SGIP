@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest'
 
 const leer = (nombre) => readFileSync(`src/estilos/${nombre}.css`, 'utf8')
 const base = leer('base')
+const producto = leer('producto')
 const armazon = leer('armazon')
 const comun = leer('comun')
 
@@ -21,7 +22,7 @@ function regla(css, selector) {
 
 describe('capas', () => {
   it('el velo de un diálogo queda por encima de la barra y el menú del armazón', () => {
-    const velo = Number(regla(base, '.velo').match(/z-index:\s*(\d+)/)[1])
+    const velo = Number(regla(producto, '.velo').match(/z-index:\s*(\d+)/)[1])
     const zArmazon = [...armazon.matchAll(/z-index:\s*(\d+)/g)].map((m) => Number(m[1]))
     expect(zArmazon.length).toBeGreaterThan(0)
     for (const z of zArmazon) expect(velo).toBeGreaterThan(z)

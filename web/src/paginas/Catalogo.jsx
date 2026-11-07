@@ -8,6 +8,7 @@ import { subirImagenes } from '../servicios/subidas.js'
 import { leerSesion } from '../servicios/sesion.js'
 
 import { PESOS, porcentajeConDecimales } from '../servicios/formato.js'
+import '../estilos/catalogo.css'
 
 /**
  * Si el total con impuesto dice algo que el precio no diga ya.

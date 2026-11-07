@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, imagenAutenticada } from '../servicios/api.js'
 import { FORMATOS_ACEPTADOS } from '../servicios/imagenes.js'
 import { MAXIMO_POR_PRODUCTO as MAXIMO, subirImagenes } from '../servicios/subidas.js'
+import '../estilos/producto.css'
 
 /** Una miniatura de la galería, con su propia descarga autenticada. */
 function Miniatura({ imagen }) {

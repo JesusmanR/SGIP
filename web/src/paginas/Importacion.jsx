@@ -3,6 +3,7 @@ import { api } from '../servicios/api.js'
 import { leerSesion } from '../servicios/sesion.js'
 
 import { PESOS } from '../servicios/formato.js'
+import '../estilos/importacion.css'
 
 /** Las categorías que la V30 guarda, con su texto y su color. */
 const PASTILLAS = {

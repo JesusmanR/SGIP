@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, ErrorApi } from '../servicios/api.js'
+import '../estilos/acceso.css'
 import {
   borrarSesion, debeCambiarClave, guardarSesion, inicioSegunRol, leerSesion,
 } from '../servicios/sesion.js'

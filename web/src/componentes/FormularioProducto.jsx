@@ -1,6 +1,7 @@
 import { cloneElement, useEffect, useId, useRef, useState } from 'react'
 import { api } from '../servicios/api.js'
 import { porcentajeDesdePrecio, precioDesdePorcentaje } from '../servicios/precio.js'
+import '../estilos/producto.css'
 
 const PORCENTAJE_MAXIMO = 9899.99
 
