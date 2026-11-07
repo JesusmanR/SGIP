@@ -3,6 +3,7 @@ import SubirImagen from '../componentes/SubirImagen.jsx'
 import { api } from '../servicios/api.js'
 import { prepararImagen } from '../servicios/imagenes.js'
 import { leerSesion } from '../servicios/sesion.js'
+import '../estilos/empresa.css'
 
 export default function Empresa() {
   const [empresa, setEmpresa] = useState(null)

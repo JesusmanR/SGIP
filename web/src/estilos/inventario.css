@@ -26,8 +26,6 @@
 .inventario .selector-limite { flex: 0 1 12rem; }
 .inventario .campo select,
 .inventario .campo input[type="text"] { width: 100%; }
-.inventario .campo-mensaje { color: var(--tinta-3); }
-.inventario .campo-mensaje.error { color: var(--peligro); }
 
 /* ── Selector de producto ──────────────────────────────────────────── */
 .inventario .buscador { display: flex; gap: var(--espacio-2); }

@@ -1,7 +1,7 @@
 import '../../estilos/comun.css'
 
 /**
- * Tabla real en escritorio; a ancho de celular cada fila pasa a tarjeta.
+ * Tabla real en escritorio, sobre una tarjeta con borde; a ancho de celular cada fila pasa a tarjeta.
  *
  * El cambio es solo CSS: cada celda lleva su rótulo en data-etiqueta y
  * la hoja de estilos lo pinta con ::before únicamente en la vista de
@@ -14,6 +14,7 @@ import '../../estilos/comun.css'
  */
 export default function TablaOTarjetas({ columnas, filas, claveFila, etiqueta }) {
   return (
+    <div className="tabla-tarjetas-caja">
     <table className="tabla-tarjetas" aria-label={etiqueta}>
       <thead>
         <tr>
@@ -36,5 +37,6 @@ export default function TablaOTarjetas({ columnas, filas, claveFila, etiqueta })
         ))}
       </tbody>
     </table>
+    </div>
   )
 }

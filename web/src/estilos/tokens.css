@@ -65,6 +65,9 @@
   --peligro-fondo:   #F6E8E7;
   --info:            #2C5A78;
   --info-fondo:      #E7EEF3;
+  /* Estado que no es éxito, aviso ni peligro: borrador, anulada, inactivo. */
+  --neutro:          #4A4270;
+  --neutro-fondo:    #ECEBF1;
 
   /* ── Radio ──────────────────────────────────────────────────────────
      La diferencia entre 10 y 6 comunica jerarquía sin recurrir a la

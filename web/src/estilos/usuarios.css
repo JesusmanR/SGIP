@@ -53,8 +53,6 @@
 .usuarios .formulario-usuario { max-width: 32rem; }
 .usuarios .dato-fijo { margin: 0; font-size: var(--t-cuerpo); color: var(--tinta); overflow-wrap: anywhere; }
 .usuarios .campo select { width: 100%; }
-.usuarios .campo-mensaje { color: var(--tinta-3); }
-.usuarios .campo-mensaje.error { color: var(--peligro); }
 .usuarios .aviso-foco:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }
 .usuarios .clave-inicial {
   border: 1px solid var(--borde); border-radius: var(--radio-control);

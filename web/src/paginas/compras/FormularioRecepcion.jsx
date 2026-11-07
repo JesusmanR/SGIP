@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import Aviso from '../../componentes/comun/Aviso.jsx'
 import { recibirOrden } from '../../servicios/api/compras.js'
-import Campo from './Campo.jsx'
+import Campo from '../../componentes/comun/Campo.jsx'
 
 const ENTERO = /^\d+$/
 

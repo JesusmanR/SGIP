@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, ErrorApi } from '../servicios/api.js'
+import '../estilos/acceso.css'
 import {
   borrarSesion, debeCambiarClave, guardarSesion, inicioSegunRol, leerSesion,
 } from '../servicios/sesion.js'
@@ -16,6 +17,11 @@ const MINIMO = 8
  * sesión, y no se queda atrapado en una pantalla sin menú.
  */
 export default function CambiarClave() {
+  useEffect(() => {
+    document.title = 'Cambiar contraseña · SGIP'
+    // El armazón no pone título en la primera carga: sin esto se quedaría este.
+    return () => { document.title = 'SGIP' }
+  }, [])
   const [actual, setActual] = useState('')
   const [nueva, setNueva] = useState('')
   const [repetida, setRepetida] = useState('')

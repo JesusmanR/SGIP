@@ -73,6 +73,21 @@ describe('useDatos', () => {
     expect(result.current.datos).toBe('detalle 6')
   })
 
+  it('ni un solo render enseña los datos de la dependencia anterior', async () => {
+    const vistos = []
+    const { result, rerender } = renderHook(({ id }) => {
+      const r = useDatos(() => Promise.resolve(`dato ${id}`), [id])
+      vistos.push({ id, datos: r.datos, cargando: r.cargando })
+      return r
+    }, { initialProps: { id: 1 } })
+    await waitFor(() => expect(result.current.datos).toBe('dato 1'))
+    vistos.length = 0
+    rerender({ id: 2 })
+    await waitFor(() => expect(result.current.datos).toBe('dato 2'))
+    expect(vistos.filter((v) => v.id === 2 && v.datos === 'dato 1')).toEqual([])
+    expect(vistos[0]).toMatchObject({ id: 2, datos: null, cargando: true })
+  })
+
   it('recargar sí conserva los datos mientras llegan los nuevos', async () => {
     const segunda = diferida()
     const cargar = vi.fn().mockResolvedValueOnce('a').mockReturnValueOnce(segunda.promesa)

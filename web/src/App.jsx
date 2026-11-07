@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import Armazon from './componentes/Armazon.jsx'
 import EstadoCarga from './componentes/comun/EstadoCarga.jsx'
@@ -47,20 +47,30 @@ function desvioDeSesion() {
   return null
 }
 
+/** Un rol que la tabla no conoce no tiene dónde empezar. */
+function sinDondeEmpezar(sesion) {
+  return Boolean(sesion) && !sesion.debeCambiarClave && seccionesDe(sesion.rol).length === 0
+}
+
 /**
  * Dónde empieza quien tiene sesión. Un rol que la tabla no conoce no tiene
  * dónde empezar: llevarlo a un inicio que tampoco puede ver sería un bucle
- * de redirecciones, así que se cierra su sesión y va al acceso.
+ * de redirecciones, así que va al acceso (y `IrAlInicio` le cierra la sesión).
+ * No escribe nada: se llama al pintar.
  */
 function inicioDeSesion() {
   if (!haySesion()) return '/acceso'
   const sesion = leerSesion()
   if (sesion.debeCambiarClave) return '/cambiar-clave'
-  if (seccionesDe(sesion.rol).length === 0) {
-    borrarSesion()
-    return '/acceso'
-  }
+  if (sinDondeEmpezar(sesion)) return '/acceso'
   return inicioSegunRol(sesion)
+}
+
+/** Redirige al inicio de la sesión; la sesión de un rol sin inicio se cierra en un efecto, no al pintar. */
+function IrAlInicio() {
+  const cerrar = sinDondeEmpezar(leerSesion())
+  useEffect(() => { if (cerrar) borrarSesion() }, [cerrar])
+  return <Navigate to={inicioDeSesion()} replace />
 }
 
 /**
@@ -73,7 +83,7 @@ function inicioDeSesion() {
 function RutaDeSeccion({ ruta, children }) {
   const desvio = desvioDeSesion()
   if (desvio) return <Navigate to={desvio} replace />
-  if (!puedeVer(ruta, leerSesion()?.rol)) return <Navigate to={inicioDeSesion()} replace />
+  if (!puedeVer(ruta, leerSesion()?.rol)) return <IrAlInicio />
   return children
 }
 
@@ -106,7 +116,7 @@ export default function App() {
           />
         ))}
       </Route>
-      <Route path="*" element={<Navigate to={inicioDeSesion()} replace />} />
+      <Route path="*" element={<IrAlInicio />} />
     </Routes>
   )
 }

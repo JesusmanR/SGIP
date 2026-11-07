@@ -10,7 +10,7 @@ import TablaOTarjetas from '../../componentes/comun/TablaOTarjetas.jsx'
 import { useDatos } from '../../hooks/useDatos.js'
 import { PRODUCTOS_POR_BUSQUEDA, buscarProductos, crearOrden } from '../../servicios/api/compras.js'
 import { listarProveedores } from '../../servicios/api/proveedores.js'
-import Campo from './Campo.jsx'
+import Campo from '../../componentes/comun/Campo.jsx'
 import { pesos } from './EstadoOrden.jsx'
 
 const CANTIDAD = /^\d+$/

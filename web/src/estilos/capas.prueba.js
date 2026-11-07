@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 const leer = (nombre) => readFileSync(`src/estilos/${nombre}.css`, 'utf8')
-const base = leer('base')
+const producto = leer('producto')
 const armazon = leer('armazon')
 const comun = leer('comun')
 
@@ -21,7 +21,7 @@ function regla(css, selector) {
 
 describe('capas', () => {
   it('el velo de un diálogo queda por encima de la barra y el menú del armazón', () => {
-    const velo = Number(regla(base, '.velo').match(/z-index:\s*(\d+)/)[1])
+    const velo = Number(regla(producto, '.velo').match(/z-index:\s*(\d+)/)[1])
     const zArmazon = [...armazon.matchAll(/z-index:\s*(\d+)/g)].map((m) => Number(m[1]))
     expect(zArmazon.length).toBeGreaterThan(0)
     for (const z of zArmazon) expect(velo).toBeGreaterThan(z)
@@ -45,5 +45,27 @@ describe('menú móvil', () => {
   it('la altura de la barra es una variable que usan la barra y el menú', () => {
     expect(armazon).toMatch(/--alto-barra-movil:\s*[\d.]+rem/)
     expect((armazon.match(/var\(--alto-barra-movil\)/g) ?? []).length).toBeGreaterThanOrEqual(2)
+  })
+})
+
+describe('tabla sobre tarjeta', () => {
+  it('en escritorio la caja es una tarjeta con borde que desplaza por dentro', () => {
+    const caja = regla(comun, '.tabla-tarjetas-caja')
+    expect(caja).toMatch(/background:\s*var\(--tarjeta\)/)
+    expect(caja).toMatch(/border:\s*1px solid var\(--borde\)/)
+    expect(caja).toMatch(/overflow-x:\s*auto/)
+  })
+
+  it('en celular la caja desaparece y deja a cada fila ser su tarjeta', () => {
+    const movil = comun.slice(comun.indexOf('@media (max-width'))
+    expect(movil).toMatch(/\.tabla-tarjetas-caja\s*\{[^}]*overflow:\s*visible/)
+    expect(movil).toMatch(/\.tabla-tarjetas-caja\s*\{[^}]*border:\s*0/)
+  })
+
+  it('en celular todo el contenido de la celda va a la derecha como un bloque', () => {
+    const movil = comun.slice(comun.indexOf('@media (max-width'))
+    expect(movil).toMatch(/\.tabla-tarjetas td,[^{]*\{[^}]*display:\s*grid/)
+    expect(movil).toMatch(/\.tabla-tarjetas td > \*[^{]*\{[^}]*grid-column:\s*2/)
+    expect(movil).not.toMatch(/margin-left:\s*auto/)
   })
 })

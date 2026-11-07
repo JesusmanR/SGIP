@@ -17,4 +17,3 @@
 .seccion-proveedores .ficha dd { margin: var(--espacio-1) 0 0; overflow-wrap: anywhere; }
 
 /* La ayuda de un campo es una pista, no una advertencia. */
-.campo-mensaje.ayuda { color: var(--tinta-3); }

@@ -1,0 +1,5 @@
+/* Estilos de «Mi empresa»: el logo y el nombre.
+   El color sale solo de tokens.css. */
+
+.fila-logo { display: flex; gap: 1.25rem; align-items: center; }
+.titulo-empresa { margin: 0 0 .25rem; font-size: 1.1rem; font-weight: 600; }

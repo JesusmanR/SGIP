@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../servicios/api.js'
+import '../estilos/producto.css'
 
 /**
  * Administración de las categorías del catálogo (RF-19).

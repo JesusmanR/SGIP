@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import Aviso from '../../componentes/comun/Aviso.jsx'
 import EncabezadoPagina from '../../componentes/comun/EncabezadoPagina.jsx'
 import { crearProveedor } from '../../servicios/api/proveedores.js'
-import Campo from '../compras/Campo.jsx'
+import Campo from '../../componentes/comun/Campo.jsx'
 
 const VACIO = { razonSocial: '', nit: '', contacto: '', correo: '', telefono: '', plazoDias: '0' }
 const CORREO = /^[^\s@]+@[^\s@]+$/

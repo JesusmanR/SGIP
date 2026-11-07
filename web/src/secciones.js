@@ -30,7 +30,7 @@ export const secciones = [
 ]
 
 /** La sección a la que pertenece una ruta o subruta, si alguna. */
-function seccionDe(ruta) {
+export function seccionDe(ruta) {
   return secciones.find((s) => ruta === s.ruta || ruta.startsWith(`${s.ruta}/`))
 }
 

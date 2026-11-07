@@ -8,7 +8,7 @@ import TablaOTarjetas from '../../componentes/comun/TablaOTarjetas.jsx'
 import { apiPlataformaTributario } from '../../servicios/api/plataforma-tributario.js'
 import { NUMERO } from '../../servicios/formato.js'
 import { erroresPorCampo, numeroEscrito, sinCampo } from './campos.js'
-import Campo from './Campo.jsx'
+import Campo from '../../componentes/comun/Campo.jsx'
 
 const CON_TOPE = 'EXCLUIDO_HASTA_UMBRAL'
 const TRATAMIENTOS = {

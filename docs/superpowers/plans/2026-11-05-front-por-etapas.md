@@ -53,7 +53,20 @@ Cada rama sigue el flujo del manual: pruebas en rojo y en verde, verificación d
 
 ## Etapa 2: rediseño de lo existente
 
-Acceso, cambio de clave, panel, catálogo y formulario de producto, empresa e importación, según el diseño (pantallas 03, 06–08, 10–12, 22, 23, 52, 53–59, 60–62). Se reparte cuando termine la etapa 1.
+Acceso, cambio de clave, panel, catálogo y formulario de producto, empresa e importación, según el diseño (pantallas 03, 06–08, 10–12, 22, 23, 52, 53–59, 60–62).
+
+Reparto (decidido al cerrar la etapa 1). Hoy los estilos de esas pantallas están mezclados en `base.css`, así que va en dos pasos:
+
+1. **`feature/web-base-2`**, un agente: separar los estilos de cada pantalla actual en su `estilos/<pantalla>.css`; dejar en lo común lo que pidieron las secciones de la etapa 1 (pieza `Campo`, token de estado neutro, mensaje de ayuda de campo, tabla de escritorio sobre tarjeta, foco y título al navegar) y los estados comunes (pantallas 53–55, 59). Sin cambiar cómo se ven las pantallas actuales, salvo lo común.
+2. **En paralelo**, máximo tres, cada una en su worktree y desde `develop` con el paso 1 integrado:
+
+| Rama | Pantallas | Archivos |
+|---|---|---|
+| `feature/web-acceso` | 03, 06, 07, 58 | `Acceso`, `CambiarClave` |
+| `feature/web-panel-empresa` | 08, 10, 52, 60 | `Panel`, `GraficoMovimiento`, `Empresa`, `Importacion` |
+| `feature/web-catalogo` | 11, 12, 22, 23, 61, 62 | `Catalogo`, `FormularioProducto`, `Galeria`, `SubirImagen`, `Categorias` |
+
+Las pantallas 56 (prueba vencida) y 57 (empresa desactivada) solo entran si el backend ya da el dato; si no, se anotan.
 
 ## Fuera de este plan
 

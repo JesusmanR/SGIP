@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import GraficoMovimiento from '../componentes/GraficoMovimiento.jsx'
 import { api } from '../servicios/api.js'
 import { NUMERO, PESOS, fechaCorta, pesosAbreviados } from '../servicios/formato.js'
+import '../estilos/panel.css'
 
 /**
  * Panel de indicadores (P-02).

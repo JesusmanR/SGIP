@@ -1,0 +1,33 @@
+/* Estilos del formulario de producto, la galería de imágenes y las categorías:
+   el velo, el panel de diálogo y la rejilla de imágenes.
+   El color sale solo de tokens.css. */
+
+/* ── Galería de imágenes ───────────────────────────────────────────── */
+.velo {
+  position: fixed; inset: 0; z-index: 40; padding: 1rem;
+  background: var(--velo);
+  display: grid; place-items: center;
+}
+.panel { max-width: 640px; width: 100%; max-height: 90vh; overflow: auto; }
+.panel-acciones {
+  display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; margin-bottom: 1rem;
+}
+.galeria { list-style: none; margin: 0 0 1rem; padding: 0; display: flex; flex-wrap: wrap; gap: 1rem; }
+.galeria li {
+  display: flex; flex-direction: column; gap: .4rem; align-items: center;
+  width: 136px; padding: .6rem; border: 1px solid var(--borde); border-radius: 8px;
+}
+.galeria li.principal { border-color: var(--acento); }
+.casilla-imagen.grande { width: 120px; height: 120px; }
+.ayuda-precio { margin: -.5rem 0 .75rem; }
+/* Un input suelto dentro de una fila de acciones —el de «categoría
+   nueva»— no estaba dentro de un .campo y por eso salía sin el mismo
+   borde ni el mismo alto que el resto de los controles. */
+.panel-acciones input[type="text"], .panel-acciones input:not([type]) {
+  flex: 1 1 14rem; padding: .6rem .75rem; font-size: .95rem;
+  border: 1px solid var(--borde-control); border-radius: 6px;
+  background: var(--tarjeta); color: var(--tinta);
+}
+.panel-acciones input:focus-visible {
+  outline: 3px solid var(--acento-sutil); border-color: var(--acento);
+}

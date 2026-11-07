@@ -10,6 +10,11 @@
 .encabezado-acciones { display: flex; flex-wrap: wrap; gap: var(--espacio-2); }
 
 /* ── Tabla que pasa a tarjetas ─────────────────────────────────────── */
+.tabla-tarjetas-caja {
+  background: var(--tarjeta); border: 1px solid var(--borde);
+  border-radius: var(--radio-tarjeta); overflow-x: auto;
+}
+.tabla-tarjetas-caja .tabla-tarjetas tbody tr:last-child > * { border-bottom: 0; }
 .tabla-tarjetas { width: 100%; border-collapse: collapse; font-size: var(--t-cuerpo); }
 .tabla-tarjetas th, .tabla-tarjetas td {
   text-align: left; padding: var(--espacio-3); border-bottom: 1px solid var(--borde);
@@ -24,6 +29,7 @@
 .tabla-tarjetas .numerica { text-align: right; font-variant-numeric: tabular-nums; }
 
 @media (max-width: 48rem) {
+  .tabla-tarjetas-caja { background: none; border: 0; border-radius: 0; overflow: visible; }
   .tabla-tarjetas, .tabla-tarjetas tbody, .tabla-tarjetas tr,
   .tabla-tarjetas th, .tabla-tarjetas td { display: block; }
   /* La cabecera se oculta del todo: el rótulo de cada dato viaja en la celda. */
@@ -39,6 +45,12 @@
     overflow-wrap: anywhere;
   }
   .tabla-tarjetas tbody th { text-align: right; }
+  /* Rótulo a la izquierda y, a la derecha, todo lo que lleve la celda
+     (texto, insignia o varios elementos) apilado y alineado a la derecha. */
+  .tabla-tarjetas td, .tabla-tarjetas th {
+    display: grid; grid-template-columns: auto minmax(0, 1fr); justify-items: end; align-items: start;
+  }
+  .tabla-tarjetas td > *, .tabla-tarjetas th > * { grid-column: 2; text-align: right; }
   .tabla-tarjetas [data-etiqueta]::before {
     content: attr(data-etiqueta); color: var(--tinta-2); font-weight: 500;
     font-size: var(--t-etiqueta); text-align: left; flex: none;
@@ -48,12 +60,34 @@
 /* ── Estados ───────────────────────────────────────────────────────── */
 .estado-comun {
   background: var(--tarjeta); border: 1px solid var(--borde); border-radius: var(--radio-tarjeta);
-  padding: var(--espacio-5); text-align: center; color: var(--tinta-2);
+  padding: calc(var(--espacio-5) * 2) var(--espacio-5); text-align: center; color: var(--tinta-2);
+  display: flex; flex-direction: column; align-items: center;
 }
-.estado-comun p { margin: 0 0 var(--espacio-2); }
-.estado-comun .estado-titulo { color: var(--tinta); font-weight: 600; font-size: var(--t-titulo-tarjeta); }
-.estado-error { background: var(--peligro-fondo); border-color: var(--peligro); }
-.estado-error p { color: var(--peligro); }
+.estado-comun p { margin: 0 0 var(--espacio-2); max-width: 46ch; line-height: 20px; }
+.estado-comun .estado-titulo {
+  color: var(--tinta); font-weight: 600; font-size: var(--t-titulo-pantalla); line-height: 28px;
+}
+/* El texto dice el estado; el icono solo lo acompaña. El error no pinta la
+   tarjeta de rojo: el título y el mensaje ya lo dicen con palabras. */
+.estado-icono {
+  display: grid; place-items: center; width: 56px; height: 56px;
+  margin-bottom: var(--espacio-4); border-radius: 16px;
+  background: var(--acento-sutil); color: var(--acento);
+}
+.estado-error .estado-icono { background: var(--peligro-fondo); color: var(--peligro); }
+.estado-comun .boton { margin-top: var(--espacio-3); }
+
+/* Cargando: barras que sugieren la forma de lo que viene, y el texto. */
+.estado-esqueleto { display: grid; gap: var(--espacio-3); width: 100%; max-width: 28rem; margin-bottom: var(--espacio-5); }
+.estado-barra { display: block; height: 12px; border-radius: var(--radio-control); background: var(--lienzo); }
+.estado-barra--titulo { width: 40%; height: 16px; }
+.estado-giro {
+  display: inline-block; width: 14px; height: 14px; margin-right: var(--espacio-2);
+  vertical-align: -2px; border: 2px solid var(--borde); border-top-color: var(--acento);
+  border-radius: 50%; animation: estado-giro .9s linear infinite;
+}
+@keyframes estado-giro { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .estado-giro { animation: none; } }
 
 /* ── Aviso: el rótulo en negrita acompaña siempre al color ─────────── */
 .aviso-estado {

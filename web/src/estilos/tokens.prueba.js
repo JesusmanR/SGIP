@@ -41,6 +41,7 @@ const texto = [
   ['tinta-3', 'tarjeta'], ['tinta-3', 'lienzo'],
   ['exito', 'exito-fondo'], ['aviso', 'aviso-fondo'],
   ['peligro', 'peligro-fondo'], ['info', 'info-fondo'],
+  ['neutro', 'neutro-fondo'], // estado que no es éxito, aviso ni peligro: borrador, anulada
   ['tinta-3', 'exito-fondo'], ['tinta-3', 'aviso-fondo'],
   ['tinta-3', 'peligro-fondo'], ['tinta-3', 'info-fondo'], ['tinta-3', 'borde'],
 ]

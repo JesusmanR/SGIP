@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ErrorApi } from '../../servicios/api.js'
 import { buscarProductos, crearOrden, recibirOrden, verOrden } from '../../servicios/api/compras.js'
 import { listarProveedores } from '../../servicios/api/proveedores.js'
-import Campo from './Campo.jsx'
+import Campo from '../../componentes/comun/Campo.jsx'
 import { ORDEN, PRODUCTO_A, PRODUCTO_B, PROVEEDORES, montar } from './ayuda.jsx'
 
 vi.mock('../../servicios/api/compras.js', () => ({
