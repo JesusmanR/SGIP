@@ -10,7 +10,7 @@ import Galeria from '../componentes/Galeria.jsx'
 import SubirImagen from '../componentes/SubirImagen.jsx'
 import { api } from '../servicios/api.js'
 import { subirImagenes } from '../servicios/subidas.js'
-import { leerSesion } from '../servicios/sesion.js'
+import { esAdministrador } from '../servicios/sesion.js'
 
 import { PESOS, costoEnPesos, porcentaje } from '../servicios/formato.js'
 import '../estilos/catalogo.css'
@@ -84,7 +84,7 @@ export default function Catalogo() {
   const [aviso, setAviso] = useState(null)
   const [cargando, setCargando] = useState(true)
   const [intento, setIntento] = useState(0)
-  const esAdministrador = leerSesion()?.rol === 'ADMINISTRADOR'
+  const esAdmin = esAdministrador()
   const [galeria, setGaleria] = useState(null)
   const [editando, setEditando] = useState(null)
   const [creando, setCreando] = useState(false)
@@ -103,13 +103,13 @@ export default function Catalogo() {
     api.categorias()
       .then((cs) => { if (vigente) setCategorias(cs) })
       .catch(() => {})
-    if (esAdministrador) {
+    if (esAdmin) {
       api.proveedores()
         .then((ps) => { if (vigente) setProveedores(ps) })
         .catch(() => {})
     }
     return () => { vigente = false }
-  }, [esAdministrador])
+  }, [esAdmin])
 
   useEffect(() => {
     let vigente = true
@@ -175,7 +175,7 @@ export default function Catalogo() {
             // caché no puede servir la anterior aunque quiera.
             src={p.imagenPrincipalId ? `/api/v1/imagenes/${p.imagenPrincipalId}/miniatura` : null}
             alt={`Imagen de ${p.nombre}`}
-            puedeEditar={esAdministrador}
+            puedeEditar={esAdmin}
             onFallo={setAviso}
             multiple
             ayuda={`Subir imágenes de ${p.nombre}. Puedes elegir varias; la primera será la principal.`}
@@ -198,7 +198,7 @@ export default function Catalogo() {
               la empresa que se declaró responsable de IVA. Informa y no
               bloquea: sin regla el producto se vende al precio (ADR-0024).
               Es del administrador, que es quien puede crear la regla. */}
-          {esAdministrador && p.tributacionSinConfigurar === 1 && (
+          {esAdmin && p.tributacionSinConfigurar === 1 && (
             <span><span className="insignia critico">Impuestos sin configurar</span></span>
           )}
           {/* El código va bajo el nombre. El SKU solo aparece cuando difiere:
@@ -208,7 +208,7 @@ export default function Catalogo() {
             {p.sku && p.sku !== p.codigo ? ` · SKU ${p.sku}` : ''}
             {/* Quien vende no puede añadir imágenes: sin ninguna, no se le
                 ofrece un botón que no lleva a nada que pueda hacer. */}
-            {(esAdministrador || p.tieneImagen === 1) && (
+            {(esAdmin || p.tieneImagen === 1) && (
               <>
                 {' · '}
                 <button
@@ -226,7 +226,7 @@ export default function Catalogo() {
       ),
     },
     { clave: 'categoria', titulo: 'Categoría', render: (p) => <div className="celda">{p.categoria}</div> },
-    ...(esAdministrador ? [
+    ...(esAdmin ? [
       {
         clave: 'costo',
         titulo: 'Costo',
@@ -319,7 +319,7 @@ export default function Catalogo() {
         </div>
       ),
     },
-    ...(esAdministrador ? [{
+    ...(esAdmin ? [{
       clave: 'acciones',
       titulo: 'Acciones',
       render: (p) => (
@@ -343,7 +343,7 @@ export default function Catalogo() {
         <Galeria
           productoId={galeria.id}
           nombre={galeria.nombre}
-          puedeEditar={esAdministrador}
+          puedeEditar={esAdmin}
           onCerrar={() => setGaleria(null)}
           onCambio={(frescas) => {
             // La fila se entera de cuál es ahora la principal, no solo de
@@ -413,7 +413,7 @@ export default function Catalogo() {
         <EncabezadoPagina
           titulo="Catálogo"
           descripcion="Consulta productos, precios y existencias."
-          acciones={esAdministrador && (
+          acciones={esAdmin && (
             <>
               <button type="button" className="boton secundario" onClick={() => setPanelCategorias(true)}>
                 Categorías
@@ -441,7 +441,7 @@ export default function Catalogo() {
 
           {/* El proveedor, como el costo, es del administrador: la API
               rechaza el filtro a quien vende, así que ni se ofrece. */}
-          {esAdministrador && (
+          {esAdmin && (
             <label className="campo">
               <span>Proveedor</span>
               <select value={proveedor} onChange={(e) => setProveedor(e.target.value)}>
@@ -508,7 +508,7 @@ export default function Catalogo() {
                 allí se aplicó la otra base o que nadie la anotó. */}
             {!cargando && (
               <p className="leyenda">
-                {esAdministrador ? (
+                {esAdmin ? (
                   <>
                     Los precios sin anotación se calculan como recargo sobre el costo.
                     Los marcados «sobre el precio» aplican la ganancia sobre el precio de
@@ -530,7 +530,7 @@ export default function Catalogo() {
 
             {/* La insignia sola no dice qué pasa con el producto. Esto lo
                 dice, y solo cuando hay alguno marcado. */}
-            {!cargando && esAdministrador
+            {!cargando && esAdmin
               && productos.some((p) => p.tributacionSinConfigurar === 1) && (
               <p className="leyenda">
                 «Impuestos sin configurar» marca un producto sin regla de IVA en una

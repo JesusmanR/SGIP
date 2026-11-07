@@ -8,7 +8,7 @@ import EstadoVacio from '../componentes/comun/EstadoVacio.jsx'
 import TablaOTarjetas from '../componentes/comun/TablaOTarjetas.jsx'
 import { useDatos } from '../hooks/useDatos.js'
 import { api } from '../servicios/api.js'
-import { leerSesion } from '../servicios/sesion.js'
+import { esAdministrador } from '../servicios/sesion.js'
 
 import { NUMERO, costoEnPesos, porcentaje } from '../servicios/formato.js'
 import '../estilos/importacion.css'
@@ -167,7 +167,7 @@ const columnasVistaPrevia = (cruces) => [
  * ofrecer un formulario que siempre fallaría.
  */
 export default function Importacion() {
-  if (leerSesion()?.rol !== 'ADMINISTRADOR') {
+  if (!esAdministrador()) {
     return (
       <div className="contenido">
         <EncabezadoPagina titulo="Importar precios" />
