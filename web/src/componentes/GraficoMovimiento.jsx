@@ -79,6 +79,19 @@ export default function GraficoMovimiento({ dias }) {
 
   return (
     <div className="grafico">
+      {/* Lo que el dibujo concluye, dicho con números: así quien mira
+          no tiene que sumar barras ni abrir la tabla. */}
+      <div className="grafico-totales" role="group" aria-label="Totales del periodo">
+        <p>
+          <strong>{NUMERO.format(totalIngresos)}</strong>{' '}
+          {totalIngresos === 1 ? 'unidad ingresó' : 'unidades ingresaron'}
+        </p>
+        <p>
+          <strong>{NUMERO.format(totalEgresos)}</strong>{' '}
+          {totalEgresos === 1 ? 'unidad salió' : 'unidades salieron'}
+        </p>
+      </div>
+
       <svg viewBox={`0 0 ${ANCHO} ${ALTO}`} role="img" aria-label={resumen}
            className="grafico-lienzo" preserveAspectRatio="none">
         <line x1="0" y1={EJE} x2={ANCHO} y2={EJE} className="grafico-eje" />

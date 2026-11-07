@@ -34,6 +34,23 @@
 }
 .pasos li.pasos-estado::after { content: none; }
 
+/* El título de la vista previa es un h2 (la página ya tiene su h1):
+   conserva el tamaño que base.css da al h3 de `.panel-cabecera`. */
+.importacion .panel-cabecera h2 { margin: 0; font-size: 1.1rem; flex: 1; }
+
+/* Qué hacer con una fila rechazada: va en tinta normal y no en la
+   auxiliar, porque es la instrucción, no el dato de apoyo. */
+.que-hacer { color: var(--tinta); font-weight: 500; }
+
+/* Un aviso con título y detalle: el detalle baja a su línea. */
+.importacion .aviso strong { display: block; }
+
+/* La vista previa va dentro de su tarjeta: la caja propia de la tabla
+   sobra ahí, y en celular cada fila ya es una tarjeta. */
+.importacion .tarjeta .tabla-tarjetas-caja { border: 0; border-radius: 0; }
+
+.importacion .tarjetas-cifra .cifra-valor { margin: var(--espacio-1) 0; }
+
 /* La variación lleva color además del signo, pero el signo va primero:
    quien no distinga los dos tonos sigue leyendo «+3,8 %». */
 .sube, .baja { font-weight: 600; }
