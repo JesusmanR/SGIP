@@ -250,7 +250,10 @@ describe('catálogo de productos', () => {
       guardarSesion({ token: 't', nombre: 'Ana', rol: 'VENDEDOR' })
       montar()
       await conFilas()
-      expect(screen.queryByRole('button', { name: 'editar' })).not.toBeInTheDocument()
+      // Cualquier botón cuyo nombre empiece por «Editar» (el nombre incluye el
+      // producto) y la columna de acciones: ninguno para quien vende.
+      expect(screen.queryAllByRole('button', { name: /^editar/i })).toHaveLength(0)
+      expect(screen.queryByRole('columnheader', { name: /acciones/i })).not.toBeInTheDocument()
     })
   })
 

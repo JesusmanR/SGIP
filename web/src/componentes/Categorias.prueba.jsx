@@ -139,6 +139,70 @@ describe('categorías', () => {
     expect(filaDe('Monitores')).toBeInTheDocument()
   })
 
+  describe('el foco al renombrar', () => {
+    const abrirRenombrado = async () => {
+      await screen.findByText('Monitores')
+      const boton = within(filaDe('Monitores')).getByRole('button', { name: /renombrar/i })
+      await userEvent.click(boton)
+      return screen.getByLabelText('Nuevo nombre de Monitores')
+    }
+
+    it('al pulsar renombrar, el foco pasa al campo', async () => {
+      montar()
+      const campo = await abrirRenombrado()
+      expect(campo).toHaveFocus()
+    })
+
+    it('al guardar con éxito, el foco queda en el botón renombrar de la fila', async () => {
+      api.editarCategoria.mockResolvedValue({})
+      montar()
+      await abrirRenombrado()
+      await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
+      await waitFor(() => expect(screen.queryByLabelText('Nuevo nombre de Monitores')).not.toBeInTheDocument())
+      await waitFor(() => expect(within(filaDe('Monitores')).getByRole('button', { name: /renombrar/i }))
+        .toHaveFocus())
+    })
+
+    it('al guardar con error, se dice y el foco vuelve al campo, con lo escrito', async () => {
+      api.editarCategoria.mockRejectedValue(new Error('Ya existe una categoría con ese nombre.'))
+      montar()
+      const campo = await abrirRenombrado()
+      await userEvent.type(campo, 'x')
+      await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
+      expect(await screen.findByRole('alert')).toHaveTextContent('Ya existe')
+      await waitFor(() => expect(campo).toHaveFocus())
+      expect(campo).toHaveValue('Monitoresx')
+    })
+
+    it('al cancelar, el foco queda en el botón renombrar de la fila', async () => {
+      montar()
+      await abrirRenombrado()
+      await userEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+      await waitFor(() => expect(within(filaDe('Monitores')).getByRole('button', { name: /renombrar/i }))
+        .toHaveFocus())
+    })
+
+    it('mientras una operación está en curso el foco sigue dentro y Escape cierra', async () => {
+      api.desactivarCategoria.mockReturnValue(new Promise(() => {}))
+      const { onCerrar } = montar()
+      await screen.findByText('Monitores')
+      await userEvent.click(within(filaDe('Monitores')).getByRole('button', { name: /desactivar/i }))
+      expect(screen.getByRole('dialog')).toContainElement(document.activeElement)
+      await userEvent.keyboard('{Escape}')
+      expect(onCerrar).toHaveBeenCalledTimes(1)
+    })
+
+    it('si desactivar falla, el foco queda dentro del diálogo y no en <body>', async () => {
+      api.desactivarCategoria.mockRejectedValue(new Error('Tiene productos.'))
+      montar()
+      await screen.findByText('Monitores')
+      await userEvent.click(within(filaDe('Monitores')).getByRole('button', { name: /desactivar/i }))
+      await screen.findByRole('alert')
+      await waitFor(() => expect(screen.getByRole('dialog')).toContainElement(document.activeElement))
+      expect(document.activeElement).not.toBe(document.body)
+    })
+  })
+
   describe('teclado', () => {
     it('al abrir, el foco entra en el diálogo', async () => {
       montar()

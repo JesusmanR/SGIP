@@ -228,3 +228,63 @@ describe('pantalla del catálogo', () => {
     })
   })
 })
+
+describe('lo que oye y lee quien vende', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    sessionStorage.clear()
+    guardarSesion({ token: 't', nombre: 'Luis', rol: 'VENDEDOR' })
+    api.catalogo.mockResolvedValue([PC, CEL, MON])
+    api.categorias.mockResolvedValue(CATEGORIAS)
+    api.proveedores.mockResolvedValue(PROVEEDORES)
+  })
+  afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
+
+  it('ni el texto ni los atributos hablan de margen, costo, proveedor o kárdex', async () => {
+    montar()
+    await conFilas()
+    const prohibido = /margen|costo|proveedor|k[áa]rdex/i
+    const encontrados = []
+    for (const el of document.body.querySelectorAll('*')) {
+      for (const a of ['title', 'aria-label', 'alt', 'placeholder', 'data-etiqueta']) {
+        if (prohibido.test(el.getAttribute(a) ?? '')) encontrados.push(`${a}: ${el.getAttribute(a)}`)
+      }
+    }
+    expect(encontrados).toEqual([])
+    expect(document.body.textContent).not.toMatch(prohibido)
+  })
+
+  it('el aviso de cruce de umbral habla del precio a crédito, no del margen', async () => {
+    montar()
+    await conFilas()
+    const insignia = within(fila(screen, 'PC-001')).getByText('cruza el umbral')
+    expect(insignia.title).toMatch(/precio a crédito/i)
+  })
+
+  it('no se le ofrece añadir imágenes, que no puede; ver sí, si hay', async () => {
+    api.catalogo.mockResolvedValue([PC, { ...CEL, tieneImagen: 1, imagenPrincipalId: 5 }])
+    montar()
+    await conFilas()
+    expect(screen.queryByRole('button', { name: /añadir/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /ver imágenes de/i })).toBeInTheDocument()
+  })
+})
+
+describe('el recuadro de imagen del administrador', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    sessionStorage.clear()
+    guardarSesion({ token: 't', nombre: 'Ana', rol: 'ADMINISTRADOR' })
+    api.catalogo.mockResolvedValue([PC, CEL, MON])
+    api.categorias.mockResolvedValue(CATEGORIAS)
+    api.proveedores.mockResolvedValue(PROVEEDORES)
+  })
+  afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
+
+  it('su nombre accesible dice de qué producto es', async () => {
+    montar()
+    await conFilas()
+    expect(within(fila(screen, 'PC-001')).getByRole('button', { name: /subir imágenes.*Portátil Lenovo V15/i }))
+      .toBeInTheDocument()
+  })
+})
