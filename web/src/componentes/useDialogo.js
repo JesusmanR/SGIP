@@ -4,6 +4,21 @@ const FOCALIZABLES = 'a[href], button:not([disabled]), input:not([disabled]):not
   + 'select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
 /**
+ * Si el navegador podría enfocarlo: sin el atributo hidden (ni en un
+ * ascendiente) y sin display:none ni visibility:hidden. Un elemento que no
+ * pasa esto no recibe el foco con Tab, de modo que no puede ser el «último».
+ */
+function seEnfoca(el) {
+  if (el.hidden || el.closest('[hidden]')) return false
+  const estilo = getComputedStyle(el)
+  if (estilo.visibility === 'hidden' || estilo.visibility === 'collapse') return false
+  for (let nodo = el; nodo; nodo = nodo.parentElement) {
+    if (getComputedStyle(nodo).display === 'none') return false
+  }
+  return true
+}
+
+/**
  * El teclado de un diálogo modal.
  *
  * Al abrirse el foco entra en el diálogo; al cerrarse vuelve a lo que lo abrió,
@@ -30,7 +45,7 @@ export default function useDialogo(onCerrar) {
       return
     }
     if (evento.key !== 'Tab' || !ref.current) return
-    const dentro = [...ref.current.querySelectorAll(FOCALIZABLES)]
+    const dentro = [...ref.current.querySelectorAll(FOCALIZABLES)].filter(seEnfoca)
     if (dentro.length === 0) return
     const primero = dentro[0]
     const ultimo = dentro[dentro.length - 1]

@@ -178,7 +178,7 @@ export default function Catalogo() {
             puedeEditar={esAdministrador}
             onFallo={setAviso}
             multiple
-            ayuda="Subir imágenes. Puedes elegir varias; la primera será la principal."
+            ayuda={`Subir imágenes de ${p.nombre}. Puedes elegir varias; la primera será la principal.`}
             onSubir={(archivos) => subirDeLaFila(p, archivos)}
           />
         </div>
@@ -206,15 +206,21 @@ export default function Catalogo() {
           <span className="sub-linea">
             Cód. {p.codigo}
             {p.sku && p.sku !== p.codigo ? ` · SKU ${p.sku}` : ''}
-            {' · '}
-            <button
-              type="button"
-              className="enlace"
-              aria-label={`${p.tieneImagen === 1 ? 'Ver' : 'Añadir'} imágenes de ${p.nombre}`}
-              onClick={() => setGaleria({ id: p.productoId, nombre: p.nombre })}
-            >
-              {p.tieneImagen === 1 ? 'ver imágenes' : 'añadir imágenes'}
-            </button>
+            {/* Quien vende no puede añadir imágenes: sin ninguna, no se le
+                ofrece un botón que no lleva a nada que pueda hacer. */}
+            {(esAdministrador || p.tieneImagen === 1) && (
+              <>
+                {' · '}
+                <button
+                  type="button"
+                  className="enlace"
+                  aria-label={`${p.tieneImagen === 1 ? 'Ver' : 'Añadir'} imágenes de ${p.nombre}`}
+                  onClick={() => setGaleria({ id: p.productoId, nombre: p.nombre })}
+                >
+                  {p.tieneImagen === 1 ? 'ver imágenes' : 'añadir imágenes'}
+                </button>
+              </>
+            )}
           </span>
         </div>
       ),
@@ -280,7 +286,7 @@ export default function Catalogo() {
           {p.cruzaUmbralEnCredito === 1 && (
             <span
               className="insignia umbral"
-              title={'Excluido de IVA al contado y gravado a crédito: el margen '
+              title={'Excluido de IVA al contado y gravado a crédito: el precio '
                 + 'a crédito cruza el umbral del Art. 424.'}
             >
               cruza el umbral
@@ -502,11 +508,23 @@ export default function Catalogo() {
                 allí se aplicó la otra base o que nadie la anotó. */}
             {!cargando && (
               <p className="leyenda">
-                Los precios sin anotación se calculan como recargo sobre el costo.
-                Los marcados «sobre el precio» aplican la ganancia sobre el precio de
-                venta, de modo que un 20 % da 1.250 y no 1.200 sobre un costo de
-                1.000. Los marcados «precio escrito» se venden a esa cifra aunque
-                cambie el costo.
+                {esAdministrador ? (
+                  <>
+                    Los precios sin anotación se calculan como recargo sobre el costo.
+                    Los marcados «sobre el precio» aplican la ganancia sobre el precio de
+                    venta, de modo que un 20 % da 1.250 y no 1.200 sobre un costo de
+                    1.000. Los marcados «precio escrito» se venden a esa cifra aunque
+                    cambie el costo.
+                  </>
+                ) : (
+                  // Quien vende no ve el costo ni cómo se calculó: se le dice
+                  // qué significa cada anotación sin nombrar lo que no ve.
+                  <>
+                    «Sobre el precio» indica que la ganancia se aplicó sobre el precio de
+                    venta. «Precio escrito» indica que el producto se vende a esa cifra
+                    fija. «Cerca del umbral» avisa de que el impuesto podría cambiar.
+                  </>
+                )}
               </p>
             )}
 

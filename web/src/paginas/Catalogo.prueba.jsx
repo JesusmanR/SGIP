@@ -385,6 +385,7 @@ describe('catálogo de productos', () => {
     })
 
     it('un precio escrito se anota, y la leyenda dice qué significa', async () => {
+      guardarSesion({ token: 't', nombre: 'Jesús Manuel', rol: 'ADMINISTRADOR' })
       api.catalogo.mockResolvedValue([
         { ...PC, baseContado: null, precioFijoContado: 2500000, precioContado: 2500000 },
       ])
@@ -392,6 +393,17 @@ describe('catálogo de productos', () => {
       await conFilas()
       expect(fila(screen, 'PC-001')).toHaveTextContent('precio escrito')
       expect(screen.getByText(/se venden a esa cifra aunque cambie el costo/i)).toBeInTheDocument()
+    })
+
+    it('a quien vende la leyenda le explica el precio escrito sin nombrar el costo', async () => {
+      api.catalogo.mockResolvedValue([
+        { ...PC, baseContado: null, precioFijoContado: 2500000, precioContado: 2500000 },
+      ])
+      montar()
+      await conFilas()
+      expect(screen.getByText(/«precio escrito» indica que el producto se vende a esa cifra/i))
+        .toBeInTheDocument()
+      expect(screen.queryByText(/costo/i)).not.toBeInTheDocument()
     })
 
     it('si los proveedores fallan, el administrador conserva las categorías', async () => {

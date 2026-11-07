@@ -27,6 +27,33 @@ export default function Categorias({ onCerrar, onCambio }) {
   const [carga, setCarga] = useState('cargando')
   const cargada = useRef(false)
   const dialogo = useDialogo(onCerrar)
+  const campoNueva = useRef(null)
+  const campoRenombre = useRef(null)
+  // A dónde debe ir el foco cuando termine lo que se está haciendo: el botón o
+  // el campo que lo tenía puede haber desaparecido o estar desactivado, y un
+  // foco perdido en <body> deja a Escape sin efecto.
+  const foco = useRef(null)
+
+  useEffect(() => {
+    const panel = dialogo.ref.current
+    if (!panel) return
+    const activo = document.activeElement
+    if (ocupado) {
+      // Los botones se desactivan mientras dura la operación: el foco espera
+      // en el diálogo, donde Escape sigue funcionando.
+      if (!panel.contains(activo) || activo.disabled) panel.focus()
+      return
+    }
+    const destino = foco.current
+    if (!destino) return
+    foco.current = null
+    const objetivo = destino.campo
+      ? campoRenombre.current
+      : destino.fila != null
+        ? panel.querySelector(`[data-renombrar="${destino.fila}"]`)
+        : null
+    ;(objetivo ?? campoNueva.current ?? panel).focus()
+  }, [ocupado, editando, dialogo.ref])
 
   async function recargar() {
     try {
@@ -52,7 +79,8 @@ export default function Categorias({ onCerrar, onCambio }) {
   }
 
   /** Envuelve una operación: apaga los botones y muestra lo que falle. */
-  async function operar(accion) {
+  async function operar(accion, despues = {}) {
+    foco.current = despues
     setOcupado(true)
     setError(null)
     try {
@@ -72,7 +100,7 @@ export default function Categorias({ onCerrar, onCambio }) {
       className="velo" role="dialog" aria-modal="true" aria-label="Categorías del catálogo"
       tabIndex={-1} ref={dialogo.ref} onKeyDown={dialogo.onKeyDown}
     >
-      <div className="tarjeta panel">
+      <div className="tarjeta panel panel-categorias">
         <div className="panel-cabecera">
           <h2>Categorías</h2>
           <button type="button" className="boton secundario" onClick={onCerrar}>Cerrar</button>
@@ -97,6 +125,7 @@ export default function Categorias({ onCerrar, onCambio }) {
             }}
           >
             <input
+              ref={campoNueva}
               value={nueva}
               onChange={(e) => setNueva(e.target.value)}
               placeholder="Nombre de la categoría nueva"
@@ -121,6 +150,7 @@ export default function Categorias({ onCerrar, onCambio }) {
                   <td>
                     {editando === c.id ? (
                       <input
+                        ref={campoRenombre}
                         value={nombreEditado}
                         onChange={(e) => setNombreEditado(e.target.value)}
                         maxLength={80}
@@ -144,14 +174,17 @@ export default function Categorias({ onCerrar, onCambio }) {
                               nombre: nombreEditado.trim(),
                               descripcion: c.descripcion ?? null,
                             })
+                            // Si llegó hasta aquí, la fila vuelve a su estado
+                            // normal y el foco, a su botón.
+                            foco.current = { fila: c.id }
                             setEditando(null)
-                          })}
+                          }, { campo: true })}
                         >
                           Guardar
                         </button>
                         <button
                           className="boton secundario"
-                          onClick={() => setEditando(null)}
+                          onClick={() => { foco.current = { fila: c.id }; setEditando(null) }}
                           disabled={ocupado}
                         >
                           Cancelar
@@ -162,7 +195,12 @@ export default function Categorias({ onCerrar, onCambio }) {
                         <button
                           className="enlace"
                           disabled={ocupado}
-                          onClick={() => { setEditando(c.id); setNombreEditado(c.nombre) }}
+                          data-renombrar={c.id}
+                          onClick={() => {
+                            foco.current = { campo: true }
+                            setEditando(c.id)
+                            setNombreEditado(c.nombre)
+                          }}
                         >
                           renombrar
                         </button>
