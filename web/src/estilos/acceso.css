@@ -1,9 +1,71 @@
 /* Estilos de las pantallas de acceso y de cambio de clave.
    El color sale solo de tokens.css. */
 
-.acceso { min-height: 100vh; display: grid; place-items: center; padding: 1rem; }
-.acceso .tarjeta { width: 100%; max-width: 380px; }
-.acceso h1 { margin: 0 0 .25rem; font-size: 1.4rem; }
-.acceso p.sub { margin: 0 0 1.5rem; color: var(--tinta-3); font-size: .9rem; }
+.acceso { min-height: 100vh; display: grid; place-items: center; padding: var(--espacio-4); }
+.acceso h1 { margin: 0 0 var(--espacio-2); font-size: 1.5rem; font-weight: 600; line-height: 1.25; text-wrap: balance; }
+.acceso p.sub { margin: 0 0 var(--espacio-5); color: var(--tinta-3); font-size: .9rem; line-height: 1.5; }
 
-.acceso .acciones-formulario { display: flex; flex-wrap: wrap; gap: .6rem; }
+.acceso .acceso-logo { margin: 0 0 var(--espacio-5); font-size: 1.25rem; font-weight: 700; letter-spacing: .02em; color: var(--tinta); }
+
+/* El texto que solo lee el lector de pantalla. Va con selector largo porque
+   `.campo span` de base daría tamaño y bloque al rótulo dentro de un campo. */
+.acceso .campo .solo-lector, .acceso .solo-lector {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+  overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0;
+}
+
+/* Campos y botones: en celular 44 px de alto como mínimo y 16 px de letra,
+   para que tocar acierte y el navegador no haga zoom al enfocar. */
+.acceso .campo input { min-height: var(--toque-minimo); font-size: 1rem; }
+.acceso .boton { min-height: var(--toque-minimo); }
+.acceso .acciones-formulario { display: flex; flex-wrap: wrap; gap: var(--espacio-3); margin-top: var(--espacio-5); }
+.acceso .acciones-formulario .boton { flex: 1 1 auto; }
+.acceso--ingreso form > .boton { width: 100%; margin-top: var(--espacio-2); }
+
+/* Contraseña con su botón de mostrar dentro del campo. */
+.acceso .entrada-clave { position: relative; }
+.acceso .entrada-clave input { padding-right: 5.5rem; }
+.acceso .entrada-clave-boton {
+  position: absolute; top: 0; right: 0; bottom: 0; padding: 0 var(--espacio-3);
+  background: none; border: 0; border-radius: 0 var(--radio-control) var(--radio-control) 0;
+  color: var(--acento); font-size: .8rem; font-weight: 600;
+}
+
+/* ── Ingreso: el formulario primero; la marca solo cabe en pantalla ancha ── */
+.acceso--ingreso { padding: 0; place-items: stretch; align-items: start; }
+.acceso--ingreso .acceso-formulario { padding: var(--espacio-5) var(--espacio-4); width: 100%; max-width: 26rem; margin: 0 auto; }
+.acceso--ingreso .acceso-marca { display: none; }
+
+/* ── Cambio de clave: tarjeta centrada bajo la marca ── */
+.acceso--clave { align-content: center; justify-items: center; gap: 0; }
+.acceso--clave .tarjeta { width: 100%; max-width: 28rem; padding: var(--espacio-5); }
+.acceso--clave .acceso-logo { margin-bottom: var(--espacio-4); }
+
+.acceso .acceso-cuenta {
+  display: flex; align-items: center; gap: var(--espacio-3); margin-bottom: var(--espacio-5);
+  padding: var(--espacio-3); background: var(--lienzo); border: 1px solid var(--borde); border-radius: var(--radio-control);
+}
+.acceso .acceso-iniciales {
+  display: grid; place-items: center; width: 2rem; height: 2rem; border-radius: var(--radio-control);
+  background: var(--acento-sutil); color: var(--acento); font-size: .75rem; font-weight: 600;
+}
+.acceso .acceso-nombre { font-size: .9rem; font-weight: 600; }
+
+/* Requisitos de la clave nueva, pegados a su campo. */
+.acceso .requisitos { list-style: none; margin: calc(-1 * var(--espacio-2)) 0 var(--espacio-4); padding: 0; display: flex; flex-wrap: wrap; gap: var(--espacio-1) var(--espacio-4); }
+.acceso .requisito { display: inline-flex; align-items: center; gap: var(--espacio-1); font-size: .78rem; color: var(--tinta-3); }
+.acceso .requisito.cumplido { color: var(--exito); font-weight: 600; }
+
+@media (min-width: 48rem) {
+  .acceso--ingreso { grid-template-columns: 1fr 1fr; align-items: stretch; }
+  .acceso--ingreso .acceso-formulario { align-self: center; padding: var(--espacio-5); order: 2; }
+  .acceso--ingreso .acceso-formulario .acceso-logo { display: none; }
+  .acceso--ingreso .acceso-marca {
+    order: 1; display: flex; flex-direction: column; justify-content: center; gap: var(--espacio-4);
+    padding: 3rem; background: var(--chrome); color: var(--sobre-acento);
+  }
+  .acceso--ingreso .acceso-marca .acceso-logo { color: var(--sobre-acento); margin: 0 0 auto; }
+  .acceso--ingreso .acceso-lema { margin: 0; font-size: clamp(2rem, 4vw, 3.25rem); font-weight: 500; line-height: 1.1; }
+  .acceso--ingreso .acceso-lema em { font-style: normal; color: var(--acento-claro); }
+  .acceso--ingreso .acceso-descripcion { margin: 0 0 auto; max-width: 28rem; color: var(--borde); line-height: 1.5; }
+}
