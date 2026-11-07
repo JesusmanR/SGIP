@@ -8,7 +8,7 @@ import EstadoSinPermiso from '../../componentes/comun/EstadoSinPermiso.jsx'
 import { useDatos } from '../../hooks/useDatos.js'
 import { apiImpuestos } from '../../servicios/api/impuestos.js'
 import BuscadorProducto from './BuscadorProducto.jsx'
-import Campo from './Campo.jsx'
+import Campo from '../../componentes/comun/Campo.jsx'
 import { hoyISO } from './fechas.js'
 import { descripcionDeImpuesto } from './tributos.js'
 
@@ -119,7 +119,7 @@ function Formulario({ catalogo, categorias }) {
         </fieldset>
 
         {datos.alcance === 'categoria' && (
-          <Campo etiqueta="Categoría" motivo={ver('categoria')}>
+          <Campo rol="alert" etiqueta="Categoría" motivo={ver('categoria')}>
             <select value={datos.categoria} onChange={texto('categoria')}>
               <option value="">Elige una categoría</option>
               {categorias.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
@@ -135,7 +135,7 @@ function Formulario({ catalogo, categorias }) {
           />
         )}
 
-        <Campo
+        <Campo rol="alert"
           etiqueta="Impuesto" motivo={ver('impuesto')}
           ayuda={elegido ? descripcionDeImpuesto(elegido.tratamiento, elegido.tarifa) : 'Los publica la plataforma.'}
         >
@@ -146,10 +146,10 @@ function Formulario({ catalogo, categorias }) {
         </Campo>
 
         <div className="rejilla">
-          <Campo etiqueta="Empieza el" motivo={ver('desde')}>
+          <Campo rol="alert" etiqueta="Empieza el" motivo={ver('desde')}>
             <input type="date" value={datos.desde} onChange={texto('desde')} />
           </Campo>
-          <Campo
+          <Campo rol="alert"
             etiqueta="Termina el (opcional)" motivo={ver('hasta')}
             ayuda="Déjalo vacío si no tiene fecha final."
           >
@@ -157,7 +157,7 @@ function Formulario({ catalogo, categorias }) {
           </Campo>
         </div>
 
-        <Campo
+        <Campo rol="alert"
           etiqueta="Fundamento (opcional)" motivo={ver('fundamento')}
           ayuda="Una nota para ti: por qué aplica este impuesto."
         >

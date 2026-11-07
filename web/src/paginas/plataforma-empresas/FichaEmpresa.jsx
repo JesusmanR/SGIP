@@ -9,7 +9,7 @@ import EstadoVacio from '../../componentes/comun/EstadoVacio.jsx'
 import { useDatos } from '../../hooks/useDatos.js'
 import { apiPlataformaEmpresas } from '../../servicios/api/plataforma-empresas.js'
 import { fechaCorta, NUMERO } from '../../servicios/formato.js'
-import Campo from './Campo.jsx'
+import Campo from '../../componentes/comun/Campo.jsx'
 import EstadoEmpresa from './EstadoEmpresa.jsx'
 import UsuariosEmpresa from './UsuariosEmpresa.jsx'
 

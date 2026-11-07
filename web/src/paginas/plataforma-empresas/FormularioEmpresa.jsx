@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import Aviso from '../../componentes/comun/Aviso.jsx'
 import EncabezadoPagina from '../../componentes/comun/EncabezadoPagina.jsx'
 import { apiPlataformaEmpresas } from '../../servicios/api/plataforma-empresas.js'
-import Campo from './Campo.jsx'
+import Campo from '../../componentes/comun/Campo.jsx'
 
 const FORMA_DE_CORREO = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const VACIO = {

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import Aviso from '../../componentes/comun/Aviso.jsx'
 import { apiImpuestos } from '../../servicios/api/impuestos.js'
-import Campo from './Campo.jsx'
+import Campo from '../../componentes/comun/Campo.jsx'
 import { fraccionAPorcentajeTexto, porcentajeTextoAFraccion } from './tributos.js'
 
 const DIAS_MAXIMOS = 365
@@ -167,7 +167,7 @@ export default function Configuracion({ guardada, alGuardar }) {
           Practico retenciones
         </label>
         {datos.retenciones && (
-          <Campo etiqueta="Tarifa de ICA (%)" motivo={ver('ica')} ayuda="Déjala vacía si no pagas ICA. La fija tu municipio.">
+          <Campo rol="alert" etiqueta="Tarifa de ICA (%)" motivo={ver('ica')} ayuda="Déjala vacía si no pagas ICA. La fija tu municipio.">
             <input type="text" inputMode="decimal" autoComplete="off" value={datos.ica} onChange={texto('ica')} />
           </Campo>
         )}
@@ -175,7 +175,7 @@ export default function Configuracion({ guardada, alGuardar }) {
           <input type="checkbox" checked={datos.envios} onChange={marca('envios')} />
           Manejo envíos
         </label>
-        <Campo etiqueta="Días que vale una cotización" motivo={ver('dias')} ayuda="De 1 a 365 días.">
+        <Campo rol="alert" etiqueta="Días que vale una cotización" motivo={ver('dias')} ayuda="De 1 a 365 días.">
           <input type="text" inputMode="numeric" autoComplete="off" value={datos.dias} onChange={texto('dias')} />
         </Campo>
       </fieldset>

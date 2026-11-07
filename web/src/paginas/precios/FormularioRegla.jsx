@@ -9,7 +9,7 @@ import TablaOTarjetas from '../../componentes/comun/TablaOTarjetas.jsx'
 import { useDatos } from '../../hooks/useDatos.js'
 import { apiPrecios } from '../../servicios/api/precios.js'
 import { PESOS } from '../../servicios/formato.js'
-import Campo from './Campo.jsx'
+import Campo from '../../componentes/comun/Campo.jsx'
 import { fechaDia, hoyISO, sumarDias } from './fechas.js'
 import {
   etiquetaDePago, etiquetaDeTratamiento, factorAPorcentaje, FORMAS_CALCULO, FORMAS_PAGO,
@@ -211,19 +211,19 @@ function Formulario({ modo, regla, categorias = [], proveedores = [] }) {
 
         {modo === 'crear' ? (
           <div className="rejilla">
-            <Campo etiqueta="Categoría">
+            <Campo rol="alert" etiqueta="Categoría">
               <select value={datos.categoria} onChange={cambiar('categoria')}>
                 <option value="">Todas las categorías</option>
                 {categorias.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
               </select>
             </Campo>
-            <Campo etiqueta="Proveedor">
+            <Campo rol="alert" etiqueta="Proveedor">
               <select value={datos.proveedor} onChange={cambiar('proveedor')}>
                 <option value="">Todos los proveedores</option>
                 {proveedores.map((p) => <option key={p.id} value={p.id}>{p.razonSocial}</option>)}
               </select>
             </Campo>
-            <Campo etiqueta="Se cobra">
+            <Campo rol="alert" etiqueta="Se cobra">
               <select value={datos.formaPago} onChange={cambiar('formaPago')}>
                 {FORMAS_PAGO.map((f) => <option key={f.valor} value={f.valor}>{f.etiqueta}</option>)}
               </select>
@@ -262,7 +262,7 @@ function Formulario({ modo, regla, categorias = [], proveedores = [] }) {
           ))}
         </fieldset>
 
-        <Campo
+        <Campo rol="alert"
           etiqueta="Porcentaje de ganancia" motivo={ver('porcentaje')}
           ayuda="Escribe el porcentaje con coma, por ejemplo 12,5."
         >
@@ -270,10 +270,10 @@ function Formulario({ modo, regla, categorias = [], proveedores = [] }) {
         </Campo>
 
         <div className="rejilla">
-          <Campo etiqueta="Empieza el" motivo={ver('desde')}>
+          <Campo rol="alert" etiqueta="Empieza el" motivo={ver('desde')}>
             <input type="date" value={datos.desde} onChange={cambiar('desde')} />
           </Campo>
-          <Campo
+          <Campo rol="alert"
             etiqueta="Termina el (opcional)" motivo={ver('hasta')}
             ayuda="Déjalo vacío si no tiene fecha final."
           >

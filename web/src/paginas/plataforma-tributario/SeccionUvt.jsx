@@ -7,7 +7,7 @@ import EstadoVacio from '../../componentes/comun/EstadoVacio.jsx'
 import TablaOTarjetas from '../../componentes/comun/TablaOTarjetas.jsx'
 import { apiPlataformaTributario } from '../../servicios/api/plataforma-tributario.js'
 import { erroresPorCampo, numeroEscrito, sinCampo } from './campos.js'
-import Campo from './Campo.jsx'
+import Campo from '../../componentes/comun/Campo.jsx'
 import { UVT_PESOS } from './formato.js'
 
 const VACIO = { anio: '', valor: '', resolucion: '', motivo: '' }
