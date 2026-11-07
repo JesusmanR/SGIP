@@ -98,7 +98,7 @@ export default function CambiarClave() {
         return
       }
       // El servidor no distingue este 400 por tipo: solo por el texto, que empieza
-      // por «La contraseña actual» (ClaveActualIncorrectaException y el DTO).
+      // por «La contraseña actual» (ClaveActualIncorrectaException). Los del DTO llegan con el prefijo «actual: » y se quedan arriba.
       if (e instanceof ErrorApi && e.estado === 400 && /^La contraseña actual/i.test(e.message)) {
         setClaveActualMal(e.message)
         campoActual.current?.focus()
