@@ -312,7 +312,7 @@ class ServicioPlataformaTest {
     void rechazaLaIdentificacionTributariaYaRegistrada() {
         when(plataforma.existeNit("900123456-1")).thenReturn(true);
 
-        RegistroRepetidoException e = assertThrows(RegistroRepetidoException.class,
+        RegistroRepetidoException e = assertThrows(NitRepetidoException.class,
                 () -> servicio.darDeAlta(solicitud()));
 
         assertTrue(e.getMessage().contains("900123456-1"),
@@ -327,7 +327,7 @@ class ServicioPlataformaTest {
         when(plataforma.existeNit(anyString())).thenReturn(false);
         when(usuarios.existsByCorreo("ana@tornillo.co")).thenReturn(true);
 
-        RegistroRepetidoException e = assertThrows(RegistroRepetidoException.class,
+        RegistroRepetidoException e = assertThrows(CorreoRepetidoException.class,
                 () -> servicio.darDeAlta(solicitud()));
 
         assertTrue(e.getMessage().contains("ana@tornillo.co"));

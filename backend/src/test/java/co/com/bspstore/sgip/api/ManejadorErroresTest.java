@@ -2,6 +2,9 @@ package co.com.bspstore.sgip.api;
 
 import co.com.bspstore.sgip.logica.ClaveActualIncorrectaException;
 import co.com.bspstore.sgip.logica.ClaveNuevaInvalidaException;
+import co.com.bspstore.sgip.logica.CorreoRepetidoException;
+import co.com.bspstore.sgip.logica.NitRepetidoException;
+import co.com.bspstore.sgip.logica.RegistroRepetidoException;
 import co.com.bspstore.sgip.logica.CredencialesInvalidasException;
 import co.com.bspstore.sgip.logica.CuentaBloqueadaException;
 import co.com.bspstore.sgip.logica.EstadoDeCargaInvalidoException;
@@ -294,6 +297,52 @@ class ManejadorErroresTest {
         assertEquals(400, nueva.getStatus());
         assertEquals("La contraseña actual no es correcta.", actual.getDetail());
         assertEquals("La contraseña nueva debe ser distinta de la actual.", nueva.getDetail());
+    }
+
+    /**
+     * El 400 de clave actual incorrecta y los 400 del DTO se parecen en el estado;
+     * el cliente lo reconoce por el tipo y no por el principio del texto.
+     */
+    @Test
+    void laClaveActualIncorrectaLlevaSuPropioTipo() {
+        ProblemDetail actual = manejador.claveActualIncorrecta(new ClaveActualIncorrectaException());
+        ProblemDetail nueva = manejador.claveNuevaInvalida(
+                new ClaveNuevaInvalidaException("La contraseña nueva debe ser distinta de la actual."));
+
+        assertEquals("urn:sgip:clave-actual-incorrecta", actual.getType().toString());
+        assertEquals(ManejadorErrores.TIPO_CLAVE_ACTUAL_INCORRECTA, actual.getType());
+        assertNotEquals(ManejadorErrores.TIPO_CLAVE_ACTUAL_INCORRECTA, nueva.getType());
+    }
+
+    @Test
+    void elNitRepetidoLlevaSuPropioTipoYConservaElDetalle() {
+        ProblemDetail p = manejador.nitRepetido(new NitRepetidoException(
+                "Ya hay una empresa registrada con la identificación tributaria 900."));
+
+        assertEquals(409, p.getStatus());
+        assertEquals("Dato ya registrado", p.getTitle());
+        assertEquals("urn:sgip:nit-repetido", p.getType().toString());
+        assertEquals("Ya hay una empresa registrada con la identificación tributaria 900.", p.getDetail());
+    }
+
+    @Test
+    void elCorreoRepetidoLlevaSuPropioTipoYConservaElDetalle() {
+        ProblemDetail p = manejador.correoRepetido(new CorreoRepetidoException(
+                "El correo a@b.co ya pertenece a un usuario de la plataforma."));
+
+        assertEquals(409, p.getStatus());
+        assertEquals("Dato ya registrado", p.getTitle());
+        assertEquals("urn:sgip:correo-repetido", p.getType().toString());
+        assertEquals("El correo a@b.co ya pertenece a un usuario de la plataforma.", p.getDetail());
+    }
+
+    /** Los demás datos repetidos (reglas, órdenes) siguen sin tipo propio. */
+    @Test
+    void otroRegistroRepetidoNoLlevaTipoPropio() {
+        ProblemDetail p = manejador.registroRepetido(new RegistroRepetidoException("Se solapa con otra regla."));
+
+        assertEquals(409, p.getStatus());
+        assertEquals("about:blank", p.getType().toString());
     }
 
     @Test
