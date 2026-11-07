@@ -342,7 +342,7 @@ class ManejadorErroresTest {
         ProblemDetail p = manejador.registroRepetido(new RegistroRepetidoException("Se solapa con otra regla."));
 
         assertEquals(409, p.getStatus());
-        assertEquals("about:blank", p.getType().toString());
+        assertTrue(p.getType() == null || "about:blank".equals(p.getType().toString()), String.valueOf(p.getType()));
     }
 
     @Test

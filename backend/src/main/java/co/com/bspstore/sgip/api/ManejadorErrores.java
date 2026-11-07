@@ -7,6 +7,8 @@ import co.com.bspstore.sgip.logica.ClaveNuevaInvalidaException;
 import co.com.bspstore.sgip.logica.DatoTributarioInvalidoException;
 import co.com.bspstore.sgip.logica.EstadoDeCargaInvalidoException;
 import co.com.bspstore.sgip.logica.RecursoNoEncontradoException;
+import co.com.bspstore.sgip.logica.CorreoRepetidoException;
+import co.com.bspstore.sgip.logica.NitRepetidoException;
 import co.com.bspstore.sgip.logica.CredencialesInvalidasException;
 import co.com.bspstore.sgip.logica.CuentaBloqueadaException;
 import co.com.bspstore.sgip.logica.FiltroInvalidoException;
@@ -63,6 +65,15 @@ public class ManejadorErrores {
      */
     public static final URI TIPO_PRODUCTO_CAMBIO = URI.create("urn:sgip:producto-cambio");
 
+    /**
+     * Los otros errores que un formulario necesita reconocer sin leer el texto,
+     * con la misma forma: un {@code type} propio en el ProblemDetail. El cliente
+     * decide por el tipo; lo que no reconoce va al aviso general.
+     */
+    public static final URI TIPO_NIT_REPETIDO = URI.create("urn:sgip:nit-repetido");
+    public static final URI TIPO_CORREO_REPETIDO = URI.create("urn:sgip:correo-repetido");
+    public static final URI TIPO_CLAVE_ACTUAL_INCORRECTA = URI.create("urn:sgip:clave-actual-incorrecta");
+
     // Códigos de error de MySQL (no los SQLState, que son los mismos
     // 23000 para casi todo y no distinguen un duplicado de una referencia).
     private static final int MYSQL_ENTRADA_DUPLICADA = 1062;
@@ -103,6 +114,9 @@ public class ManejadorErrores {
         // y echaría al usuario por un error de tecleo. La sesión es
         // válida; lo que falla es un dato del cuerpo.
         ProblemDetail p = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
+        // El tipo propio distingue este 400 de los de validación (que llegan con
+        // el prefijo «campo: »): el formulario lo marca en su campo sin leer el texto.
+        p.setType(TIPO_CLAVE_ACTUAL_INCORRECTA);
         p.setTitle("Contraseña actual incorrecta");
         p.setDetail(e.getMessage());
         return p;
@@ -227,6 +241,29 @@ public class ManejadorErrores {
         // correo) y también a dos reglas del mismo alcance a la vez dentro de
         // una empresa; el detalle dice cuál es el dato que choca.
         ProblemDetail p = ProblemDetail.forStatus(HttpStatus.CONFLICT);
+        p.setTitle("Dato ya registrado");
+        p.setDetail(e.getMessage());
+        return p;
+    }
+
+    /**
+     * Los dos choques del alta de una empresa (y el correo del alta de un
+     * usuario) llevan tipo propio. Spring elige el manejador de la clase más
+     * específica, de modo que estos dos ganan al de {@link RegistroRepetidoException}.
+     */
+    @ExceptionHandler(NitRepetidoException.class)
+    public ProblemDetail nitRepetido(NitRepetidoException e) {
+        return conflictoDeDatoRepetido(e, TIPO_NIT_REPETIDO);
+    }
+
+    @ExceptionHandler(CorreoRepetidoException.class)
+    public ProblemDetail correoRepetido(CorreoRepetidoException e) {
+        return conflictoDeDatoRepetido(e, TIPO_CORREO_REPETIDO);
+    }
+
+    private static ProblemDetail conflictoDeDatoRepetido(RegistroRepetidoException e, URI tipo) {
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.CONFLICT);
+        p.setType(tipo);
         p.setTitle("Dato ya registrado");
         p.setDetail(e.getMessage());
         return p;

@@ -127,11 +127,11 @@ public class ServicioPlataforma {
         String correoAdmin = solicitud.administradorCorreo().trim().toLowerCase(Locale.ROOT);
 
         if (plataforma.existeNit(nit)) {
-            throw new RegistroRepetidoException(
+            throw new NitRepetidoException(
                     "Ya hay una empresa registrada con la identificación tributaria " + nit + ".");
         }
         if (usuarios.existsByCorreo(correoAdmin)) {
-            throw new RegistroRepetidoException(
+            throw new CorreoRepetidoException(
                     "El correo " + correoAdmin + " ya pertenece a un usuario de la plataforma.");
         }
 

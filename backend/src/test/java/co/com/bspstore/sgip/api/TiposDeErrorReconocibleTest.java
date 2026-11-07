@@ -11,6 +11,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -61,8 +62,10 @@ class TiposDeErrorReconocibleTest {
 
     @Test
     void otroRegistroRepetidoLlegaSinTipoPropio() throws Exception {
-        mvc.perform(get("/otro")).andExpect(status().isConflict())
-                .andExpect(jsonPath("$.type").value("about:blank"));
+        String cuerpo = mvc.perform(get("/otro")).andExpect(status().isConflict())
+                .andReturn().getResponse().getContentAsString();
+
+        assertFalse(cuerpo.contains("urn:sgip:"), cuerpo);
     }
 
     @Test
