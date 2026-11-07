@@ -1,5 +1,26 @@
-/* Estilos de «Mi empresa»: el logo y el nombre.
-   El color sale solo de tokens.css. */
+/* Estilos de «Mi empresa»: el logo, el nombre y la nota de impuestos.
+   El color sale solo de tokens.css. `.casilla-imagen` es de base.css y la
+   comparte con el catálogo: aquí solo se sitúa. */
 
-.fila-logo { display: flex; gap: 1.25rem; align-items: center; }
-.titulo-empresa { margin: 0 0 .25rem; font-size: 1.1rem; font-weight: 600; }
+.empresa-perfil {
+  display: flex; align-items: center; gap: var(--espacio-4);
+  margin-bottom: var(--espacio-4);
+}
+.empresa-datos { min-width: 0; }
+.titulo-empresa {
+  margin: 0 0 var(--espacio-1); font-size: 1.1rem; font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.empresa-datos .sub-linea { max-width: 62ch; }
+
+.empresa-impuestos h2 {
+  margin: 0 0 var(--espacio-2); font-size: var(--t-titulo-tarjeta); font-weight: 600;
+}
+.empresa-impuestos p {
+  margin: 0 0 var(--espacio-3); color: var(--tinta-2);
+  font-size: var(--t-cuerpo); max-width: 62ch;
+}
+
+@media (max-width: 30rem) {
+  .empresa-perfil { flex-direction: column; align-items: flex-start; }
+}
