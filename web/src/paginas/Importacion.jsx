@@ -10,7 +10,7 @@ import { useDatos } from '../hooks/useDatos.js'
 import { api } from '../servicios/api.js'
 import { leerSesion } from '../servicios/sesion.js'
 
-import { PESOS } from '../servicios/formato.js'
+import { NUMERO, PESOS } from '../servicios/formato.js'
 import '../estilos/importacion.css'
 
 /** Las categorías que la V30 guarda, con su texto y su color. */
@@ -84,9 +84,23 @@ function Variacion({ anterior, nuevo }) {
   )
 }
 
-/** «1 referencia pasará a causar IVA» / «3 referencias pasarán a causar IVA». */
-function textoAGravadas(n) {
-  return n === 1 ? '1 referencia pasará a causar IVA' : `${n} referencias pasarán a causar IVA`
+/**
+ * «1 referencia pasará a causar IVA» y «2 referencias dejarán de causar IVA»,
+ * las dos juntas si hay cruces en ambos sentidos.
+ */
+function textoCruces(aGravadas, aExcluidas) {
+  const frases = []
+  if (aGravadas > 0) {
+    frases.push(aGravadas === 1
+      ? '1 referencia pasará a causar IVA'
+      : `${NUMERO.format(aGravadas)} referencias pasarán a causar IVA`)
+  }
+  if (aExcluidas > 0) {
+    frases.push(aExcluidas === 1
+      ? '1 referencia dejará de causar IVA'
+      : `${NUMERO.format(aExcluidas)} referencias dejarán de causar IVA`)
+  }
+  return frases.join(' y ')
 }
 
 const columnasVistaPrevia = (cruces) => [
@@ -177,15 +191,32 @@ function ImportacionAdministrador() {
   const [confirmando, setConfirmando] = useState(false)
   const [arrastrando, setArrastrando] = useState(false)
   const volver = useRef(null)
+  const botonAplicar = useRef(null)
+  const cerradaPorUsuario = useRef(false)
+  // Guarda síncrona contra el doble envío: `trabajando` es estado y solo
+  // cambia en el siguiente render, de modo que dos eventos seguidos
+  // podrían pasar antes de que el botón se deshabilite.
+  const enCurso = useRef(false)
 
   // La opción segura recibe el foco al abrir la confirmación: un Enter
-  // distraído no debe cambiar todos los precios.
+  // distraído no debe cambiar todos los precios. Al cerrarla sin aplicar,
+  // el foco vuelve al botón que la abrió.
   useEffect(() => {
-    if (confirmando) volver.current?.focus()
+    if (confirmando) {
+      volver.current?.focus()
+    } else if (cerradaPorUsuario.current) {
+      cerradaPorUsuario.current = false
+      botonAplicar.current?.focus()
+    }
   }, [confirmando])
 
+  function cerrarConfirmacion() {
+    cerradaPorUsuario.current = true
+    setConfirmando(false)
+  }
+
   async function subir(archivo) {
-    if (!archivo) return
+    if (!archivo || enCurso.current) return
     if (!proveedor) {
       setFallo({
         mensaje: 'Elige primero de qué proveedor es la lista.',
@@ -194,6 +225,7 @@ function ImportacionAdministrador() {
       return
     }
     setFallo(null)
+    enCurso.current = true
     setTrabajando(true)
     try {
       setCarga(await api.cargarLista(proveedor, archivo))
@@ -202,12 +234,15 @@ function ImportacionAdministrador() {
       // el tamaño, el número de filas o el encabezado.
       setFallo({ mensaje: e.message, queHacer: 'Corrige el archivo y vuelve a subirlo.' })
     } finally {
+      enCurso.current = false
       setTrabajando(false)
     }
   }
 
   async function decidir(accion, queHacer) {
+    if (enCurso.current) return
     setFallo(null)
+    enCurso.current = true
     setTrabajando(true)
     try {
       setCarga(await accion(carga.cargaId))
@@ -215,6 +250,7 @@ function ImportacionAdministrador() {
     } catch (e) {
       setFallo({ mensaje: e.message, queHacer })
     } finally {
+      enCurso.current = false
       setTrabajando(false)
     }
   }
@@ -303,6 +339,9 @@ function ImportacionAdministrador() {
             onDrop={(e) => {
               e.preventDefault()
               setArrastrando(false)
+              // El control está deshabilitado mientras se lee, pero soltar
+              // un archivo no pasa por él.
+              if (trabajando) return
               subir(e.dataTransfer.files?.[0])
             }}
           >
@@ -318,7 +357,7 @@ function ImportacionAdministrador() {
             <span className="sub-linea">o arrástralo aquí</span>
           </label>
           <p className="leyenda">
-            Se admiten .xlsx y .csv de hasta 10 MB y 20 000 filas. El archivo se lee
+            Se admiten .xlsx y .csv de hasta 10 MB y {NUMERO.format(20000)} filas. El archivo se lee
             y se revisa; el catálogo no cambia hasta que lo apliques.
           </p>
         </div>
@@ -329,12 +368,12 @@ function ImportacionAdministrador() {
           <div className="tarjetas-cifra importacion-cifras">
             <div className="tarjeta cifra">
               <span className="cifra-rotulo">Registros leídos</span>
-              <strong className="cifra-valor">{carga.leidos}</strong>
+              <strong className="cifra-valor">{NUMERO.format(carga.leidos)}</strong>
               <span className="cifra-pie">{carga.nombreArchivo}</span>
             </div>
             <div className="tarjeta cifra">
               <span className="cifra-rotulo">Aceptados</span>
-              <strong className="cifra-valor exito">{carga.aceptados}</strong>
+              <strong className="cifra-valor exito">{NUMERO.format(carga.aceptados)}</strong>
               <span className="cifra-pie">
                 {carga.leidos > 0
                   ? `${((carga.aceptados / carga.leidos) * 100).toFixed(1)
@@ -344,12 +383,12 @@ function ImportacionAdministrador() {
             </div>
             <div className="tarjeta cifra">
               <span className="cifra-rotulo">Rechazados</span>
-              <strong className="cifra-valor">{carga.rechazados}</strong>
+              <strong className="cifra-valor">{NUMERO.format(carga.rechazados)}</strong>
               <span className="cifra-pie">Con motivo registrado</span>
             </div>
             <div className="tarjeta cifra">
               <span className="cifra-rotulo">Cruzan umbral</span>
-              <strong className="cifra-valor aviso-texto">{cruces.length}</strong>
+              <strong className="cifra-valor aviso-texto">{NUMERO.format(cruces.length)}</strong>
               <span className="cifra-pie">Cambian de tratamiento de IVA</span>
             </div>
           </div>
@@ -362,11 +401,14 @@ function ImportacionAdministrador() {
               <strong>
                 {carga.rechazados === 1
                   ? '1 fila no se aplicará.'
-                  : `${carga.rechazados} filas no se aplicarán.`}
+                  : `${NUMERO.format(carga.rechazados)} filas no se aplicarán.`}
               </strong>
               <span className="sub-linea">
-                Cada una dice abajo qué falló y qué hacer. Corrígelas en el archivo y
-                vuelve a subirlo, o aplica solo las {carga.aceptados} aceptadas.
+                {carga.rechazados === 1 ? 'Dice' : 'Cada una dice'} abajo qué falló y qué hacer.
+                {' '}{carga.rechazados === 1 ? 'Corrígela' : 'Corrígelas'} en el archivo y
+                vuelve a subirlo, o aplica solo {carga.aceptados === 1
+                  ? 'la aceptada'
+                  : `las ${NUMERO.format(carga.aceptados)} aceptadas`}.
               </span>
             </div>
           )}
@@ -388,8 +430,10 @@ function ImportacionAdministrador() {
 
             {carga.leidos > carga.muestra.length && (
               <p className="leyenda">
-                Se muestran {carga.muestra.length} de {carga.leidos} registros, los
-                rechazados primero. Al aplicar entran los {carga.aceptados} aceptados.
+                Se muestran {NUMERO.format(carga.muestra.length)} de {NUMERO.format(carga.leidos)} registros, los
+                rechazados primero. Al aplicar {carga.aceptados === 1
+                  ? 'entra el 1 aceptado'
+                  : `entran los ${NUMERO.format(carga.aceptados)} aceptados`}.
               </p>
             )}
           </div>
@@ -409,7 +453,8 @@ function ImportacionAdministrador() {
                   : `${aExcluidas} dejarían de causarlo`)}
               </strong>
               <span className="sub-linea">
-                {cruces.map((c) => c.nombre || c.codigo).join(', ')} cruzan el umbral
+                {cruces.map((c) => c.nombre || c.codigo).join(', ')}{' '}
+                {cruces.length === 1 ? 'cruza' : 'cruzan'} el umbral
                 del artículo 424 con el costo nuevo.
               </span>
             </div>
@@ -417,7 +462,11 @@ function ImportacionAdministrador() {
 
           {estado === 'APLICADA' && (
             <div className="aviso exito" role="status">
-              <strong>{carga.aceptados} referencias actualizadas</strong>
+              <strong>
+                {carga.aceptados === 1
+                  ? '1 referencia actualizada'
+                  : `${NUMERO.format(carga.aceptados)} referencias actualizadas`}
+              </strong>
               <span className="sub-linea">
                 Los precios por porcentaje ya salen del costo nuevo. Los precios
                 escritos se conservan y cambia su margen.
@@ -442,7 +491,8 @@ function ImportacionAdministrador() {
                         'La carga sigue pendiente. Vuelve a intentarlo.')}>
                 Rechazar carga
               </button>
-              <button className="boton peligro" disabled={trabajando || carga.aceptados === 0}
+              <button ref={botonAplicar} className="boton peligro"
+                      disabled={trabajando || carga.aceptados === 0}
                       onClick={() => setConfirmando(true)}>
                 Aplicar al catálogo
               </button>
@@ -456,10 +506,12 @@ function ImportacionAdministrador() {
           {decidible && confirmando && (
             <div className="aviso error" role="alertdialog"
                  aria-label="Confirmar aplicación al catálogo"
-                 onKeyDown={(e) => { if (e.key === 'Escape') setConfirmando(false) }}>
+                 onKeyDown={(e) => { if (e.key === 'Escape') cerrarConfirmacion() }}>
               <strong>
-                Se van a actualizar {carga.aceptados} costos del catálogo
-                {aGravadas.length > 0 && `, y ${textoAGravadas(aGravadas.length)}`}.
+                {carga.aceptados === 1
+                  ? 'Se va a actualizar 1 costo del catálogo'
+                  : `Se van a actualizar ${NUMERO.format(carga.aceptados)} costos del catálogo`}
+                {cruces.length > 0 && `, y ${textoCruces(aGravadas.length, aExcluidas)}`}.
               </strong>
               <span className="sub-linea">
                 Es una operación de todo o nada y no se deshace sola: para volver
@@ -467,7 +519,7 @@ function ImportacionAdministrador() {
               </span>
               <div className="acciones-pie">
                 <button ref={volver} className="boton secundario" disabled={trabajando}
-                        onClick={() => setConfirmando(false)}>
+                        onClick={cerrarConfirmacion}>
                   Volver a revisar
                 </button>
                 <button className="boton peligro" disabled={trabajando}
