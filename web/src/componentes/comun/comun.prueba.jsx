@@ -1,9 +1,11 @@
-import { render, screen, within } from '@testing-library/react'
+import { readFileSync } from 'node:fs'
+import { act, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ErrorApi } from '../../servicios/api.js'
 import Aviso from './Aviso.jsx'
+import AvisoConexion from './AvisoConexion.jsx'
 import EncabezadoPagina from './EncabezadoPagina.jsx'
 import EstadoCarga from './EstadoCarga.jsx'
 import EstadoError from './EstadoError.jsx'
@@ -130,5 +132,53 @@ describe('Aviso', () => {
     // No reutiliza la clase global .aviso, que tiene otras reglas.
     expect(aviso).toHaveClass(`aviso-estado--${tipo}`)
     expect(aviso).not.toHaveClass('aviso')
+  })
+})
+
+describe('estados con el tono del diseño', () => {
+  it('vacío, carga y error llevan un icono decorativo y conservan sus roles', () => {
+    const { container, rerender } = render(<EstadoVacio titulo="Nada" />)
+    expect(container.querySelector('.estado-icono[aria-hidden="true"]')).not.toBeNull()
+    rerender(<EstadoCarga />)
+    expect(container.querySelector('.estado-esqueleto[aria-hidden="true"]')).not.toBeNull()
+    expect(screen.getByRole('status')).toHaveTextContent('Cargando…')
+    rerender(<EstadoError error="Se cayó" />)
+    expect(container.querySelector('.estado-icono[aria-hidden="true"]')).not.toBeNull()
+    expect(screen.getByRole('alert')).toBeInTheDocument()
+  })
+
+  it('el error ya no pinta toda la tarjeta de rojo: el texto basta', () => {
+    expect(readFileSync('src/estilos/comun.css', 'utf8')).not.toMatch(/\.estado-error\s*\{[^}]*background/)
+  })
+})
+
+describe('AvisoConexion', () => {
+  beforeEach(() => vi.useFakeTimers())
+  afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks() })
+
+  it('sin aviso mientras hay conexión', () => {
+    render(<AvisoConexion />)
+    expect(screen.queryByRole('status')).toBeNull()
+  })
+
+  it('al perder la conexión lo dice con palabras', () => {
+    render(<AvisoConexion />)
+    act(() => { window.dispatchEvent(new Event('offline')) })
+    expect(screen.getByRole('status')).toHaveTextContent(/sin conexión/i)
+  })
+
+  it('al volver avisa que volvió y se quita solo', () => {
+    render(<AvisoConexion />)
+    act(() => { window.dispatchEvent(new Event('offline')) })
+    act(() => { window.dispatchEvent(new Event('online')) })
+    expect(screen.getByRole('status')).toHaveTextContent(/conexión restablecida/i)
+    act(() => { vi.advanceTimersByTime(6000) })
+    expect(screen.queryByRole('status')).toBeNull()
+  })
+
+  it('si ya empieza sin conexión, avisa desde el principio', () => {
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false)
+    render(<AvisoConexion />)
+    expect(screen.getByRole('status')).toHaveTextContent(/sin conexión/i)
   })
 })

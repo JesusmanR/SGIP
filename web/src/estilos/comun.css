@@ -56,12 +56,34 @@
 /* ── Estados ───────────────────────────────────────────────────────── */
 .estado-comun {
   background: var(--tarjeta); border: 1px solid var(--borde); border-radius: var(--radio-tarjeta);
-  padding: var(--espacio-5); text-align: center; color: var(--tinta-2);
+  padding: calc(var(--espacio-5) * 2) var(--espacio-5); text-align: center; color: var(--tinta-2);
+  display: flex; flex-direction: column; align-items: center;
 }
-.estado-comun p { margin: 0 0 var(--espacio-2); }
-.estado-comun .estado-titulo { color: var(--tinta); font-weight: 600; font-size: var(--t-titulo-tarjeta); }
-.estado-error { background: var(--peligro-fondo); border-color: var(--peligro); }
-.estado-error p { color: var(--peligro); }
+.estado-comun p { margin: 0 0 var(--espacio-2); max-width: 46ch; line-height: 20px; }
+.estado-comun .estado-titulo {
+  color: var(--tinta); font-weight: 600; font-size: var(--t-titulo-pantalla); line-height: 28px;
+}
+/* El texto dice el estado; el icono solo lo acompaña. El error no pinta la
+   tarjeta de rojo: el título y el mensaje ya lo dicen con palabras. */
+.estado-icono {
+  display: grid; place-items: center; width: 56px; height: 56px;
+  margin-bottom: var(--espacio-4); border-radius: 16px;
+  background: var(--acento-sutil); color: var(--acento);
+}
+.estado-error .estado-icono { background: var(--peligro-fondo); color: var(--peligro); }
+.estado-comun .boton { margin-top: var(--espacio-3); }
+
+/* Cargando: barras que sugieren la forma de lo que viene, y el texto. */
+.estado-esqueleto { display: grid; gap: var(--espacio-3); width: 100%; max-width: 28rem; margin-bottom: var(--espacio-5); }
+.estado-barra { display: block; height: 12px; border-radius: var(--radio-control); background: var(--lienzo); }
+.estado-barra--titulo { width: 40%; height: 16px; }
+.estado-giro {
+  display: inline-block; width: 14px; height: 14px; margin-right: var(--espacio-2);
+  vertical-align: -2px; border: 2px solid var(--borde); border-top-color: var(--acento);
+  border-radius: 50%; animation: estado-giro .9s linear infinite;
+}
+@keyframes estado-giro { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .estado-giro { animation: none; } }
 
 /* ── Aviso: el rótulo en negrita acompaña siempre al color ─────────── */
 .aviso-estado {
