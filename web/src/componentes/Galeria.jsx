@@ -2,6 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, imagenAutenticada } from '../servicios/api.js'
 import { FORMATOS_ACEPTADOS } from '../servicios/imagenes.js'
 import { MAXIMO_POR_PRODUCTO as MAXIMO, subirImagenes } from '../servicios/subidas.js'
+import EstadoCarga from './comun/EstadoCarga.jsx'
+import EstadoError from './comun/EstadoError.jsx'
+import useDialogo from './useDialogo.js'
 import '../estilos/producto.css'
 
 /** Una miniatura de la galería, con su propia descarga autenticada. */
@@ -42,7 +45,13 @@ export default function Galeria({ productoId, nombre, puedeEditar, onCerrar, onC
   const [error, setError] = useState(null)
   const [ocupado, setOcupado] = useState(false)
   const [rechazadas, setRechazadas] = useState([])
+  // Si todavía no hay lista que mostrar: «cargando» al abrir y «fallo» si la
+  // primera petición no llegó. Un error posterior no tira la lista que ya hay:
+  // se dice arriba y la galería sigue.
+  const [carga, setCarga] = useState('cargando')
+  const cargada = useRef(false)
   const entrada = useRef(null)
+  const dialogo = useDialogo(onCerrar)
 
   /** Devuelve la lista fresca: quien llama necesita cuántas quedaron. */
   const recargar = useCallback(async () => {
@@ -50,14 +59,22 @@ export default function Galeria({ productoId, nombre, puedeEditar, onCerrar, onC
       const frescas = await api.imagenesDe(productoId)
       setImagenes(frescas)
       setError(null)
+      cargada.current = true
+      setCarga('lista')
       return frescas
     } catch (e) {
       setError(e.message)
+      if (!cargada.current) setCarga('fallo')
       return null
     }
   }, [productoId])
 
   useEffect(() => { recargar() }, [recargar])
+
+  function reintentar() {
+    setCarga('cargando')
+    recargar()
+  }
 
   async function accion(hacer) {
     setOcupado(true)
@@ -108,87 +125,100 @@ export default function Galeria({ productoId, nombre, puedeEditar, onCerrar, onC
   }
 
   return (
-    <div className="velo" role="dialog" aria-modal="true" aria-label={`Imágenes de ${nombre}`}>
+    <div
+      className="velo" role="dialog" aria-modal="true" aria-label={`Imágenes de ${nombre}`}
+      tabIndex={-1} ref={dialogo.ref} onKeyDown={dialogo.onKeyDown}
+    >
       <div className="tarjeta panel">
         <div className="panel-cabecera">
-          <h3>Imágenes de {nombre}</h3>
-          <button className="boton secundario" onClick={onCerrar}>Cerrar</button>
+          <h2>Imágenes de {nombre}</h2>
+          <button type="button" className="boton secundario" onClick={onCerrar}>Cerrar</button>
         </div>
 
-        {error && <div className="aviso error" role="alert">{error}</div>}
+        {carga === 'cargando' && <EstadoCarga mensaje="Cargando imágenes…" />}
+        {carga === 'fallo' && <EstadoError error={error} alReintentar={reintentar} />}
 
-        {rechazadas.length > 0 && (
-          <div className="aviso error" role="alert">
-            <p>No se pudieron subir:</p>
-            <ul>
-              {rechazadas.map((r) => <li key={r}>{r}</li>)}
-            </ul>
-          </div>
-        )}
+        {carga === 'lista' && (
+          <>
+            {error && <div className="aviso error" role="alert">{error}</div>}
 
-        {puedeEditar && (
-          <div className="panel-acciones">
-            <button
-              className="boton"
-              disabled={ocupado || imagenes.length >= MAXIMO}
-              onClick={() => entrada.current?.click()}
-            >
-              {ocupado ? 'Subiendo…' : 'Añadir imágenes'}
-            </button>
-            <span className="sub-linea">
-              {imagenes.length >= MAXIMO
-                ? `Ya hay ${MAXIMO}. Elimina alguna para subir otra.`
-                : `Puedes elegir varias a la vez; caben ${MAXIMO - imagenes.length} más.`}
-            </span>
-            <input
-              ref={entrada}
-              type="file"
-              accept={FORMATOS_ACEPTADOS}
-              multiple
-              hidden
-              onChange={subirVarias}
-            />
-          </div>
-        )}
-
-        {imagenes.length === 0 && !error && !ocupado && (
-          <p className="sub-linea">Este producto todavía no tiene imágenes.</p>
-        )}
-
-        <ul className="galeria">
-          {imagenes.map((i) => (
-            <li key={i.id} className={i.principal ? 'principal' : ''}>
-              <div className="casilla-imagen grande">
-                <Miniatura imagen={i} />
+            {rechazadas.length > 0 && (
+              <div className="aviso error" role="alert">
+                <p>No se pudieron subir:</p>
+                <ul>
+                  {rechazadas.map((r) => <li key={r}>{r}</li>)}
+                </ul>
               </div>
-              {i.principal
-                ? <span className="insignia activo">Principal</span>
-                : puedeEditar && (
-                  <button
-                    className="boton secundario menudo"
-                    disabled={ocupado}
-                    onClick={() => accion(() => api.hacerPrincipal(i.id))}
-                  >
-                    Hacer principal
-                  </button>
-                )}
-              {puedeEditar && (
-                <button
-                  className="boton secundario menudo"
-                  disabled={ocupado}
-                  onClick={() => accion(() => api.borrarImagen(i.id))}
-                >
-                  Eliminar
-                </button>
-              )}
-            </li>
-          ))}
-        </ul>
+            )}
 
-        <p className="sub-linea">
-          Hasta cinco imágenes por producto. La principal es la que aparece en el
-          catálogo y en el documento exportable.
-        </p>
+            {puedeEditar && (
+              <div className="panel-acciones">
+                <button
+                  type="button"
+                  className="boton"
+                  disabled={ocupado || imagenes.length >= MAXIMO}
+                  onClick={() => entrada.current?.click()}
+                >
+                  {ocupado ? 'Subiendo…' : 'Añadir imágenes'}
+                </button>
+                <span className="sub-linea">
+                  {imagenes.length >= MAXIMO
+                    ? `Ya hay ${MAXIMO}. Elimina alguna para subir otra.`
+                    : `Puedes elegir varias a la vez; caben ${MAXIMO - imagenes.length} más.`}
+                </span>
+                <input
+                  ref={entrada}
+                  type="file"
+                  accept={FORMATOS_ACEPTADOS}
+                  multiple
+                  hidden
+                  onChange={subirVarias}
+                />
+              </div>
+            )}
+
+            {imagenes.length === 0 && !error && !ocupado && (
+              <p className="sub-linea">Este producto todavía no tiene imágenes.</p>
+            )}
+
+            <ul className="galeria">
+              {imagenes.map((i) => (
+                <li key={i.id} className={i.principal ? 'principal' : ''}>
+                  <div className="casilla-imagen grande">
+                    <Miniatura imagen={i} />
+                  </div>
+                  {i.principal
+                    ? <span className="insignia activo">Principal</span>
+                    : puedeEditar && (
+                      <button
+                        type="button"
+                        className="boton secundario menudo"
+                        disabled={ocupado}
+                        onClick={() => accion(() => api.hacerPrincipal(i.id))}
+                      >
+                        Hacer principal
+                      </button>
+                    )}
+                  {puedeEditar && (
+                    <button
+                      type="button"
+                      className="boton secundario menudo"
+                      disabled={ocupado}
+                      onClick={() => accion(() => api.borrarImagen(i.id))}
+                    >
+                      Eliminar
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+
+            <p className="sub-linea">
+              Hasta cinco imágenes por producto. La principal es la que aparece en el
+              catálogo y en el documento exportable.
+            </p>
+          </>
+        )}
       </div>
     </div>
   )

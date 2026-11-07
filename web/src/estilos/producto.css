@@ -1,5 +1,5 @@
 /* Estilos del formulario de producto, la galería de imágenes y las categorías:
-   el velo, el panel de diálogo y la rejilla de imágenes.
+   el velo, el panel de diálogo, sus secciones y la rejilla de imágenes.
    El color sale solo de tokens.css. */
 
 /* ── Galería de imágenes ───────────────────────────────────────────── */
@@ -30,4 +30,37 @@
 }
 .panel-acciones input:focus-visible {
   outline: 3px solid var(--acento-sutil); border-color: var(--acento);
+}
+
+/* ── Diálogos ──────────────────────────────────────────────────────── */
+/* El velo recibe el foco al abrir (para que Escape y Tab actúen dentro): el
+   anillo del navegador sobre toda la pantalla no informa de nada. */
+.velo:focus { outline: none; }
+.panel-cabecera h2 { margin: 0; font-size: 1.1rem; flex: 1; }
+.panel-titulo { flex: 1; min-width: 0; }
+.panel-titulo h2 { flex: none; }
+.panel-titulo .sub-linea { margin-top: var(--espacio-1); }
+
+/* ── Formulario de producto ────────────────────────────────────────── */
+.panel-producto { max-width: 720px; }
+.seccion-producto { border: 0; margin: 0 0 var(--espacio-5); padding: 0; min-width: 0; }
+.seccion-producto legend {
+  float: left; width: 100%; padding: 0 0 var(--espacio-2); margin-bottom: var(--espacio-3);
+  border-bottom: 1px solid var(--borde);
+  font-size: .85rem; font-weight: 600; color: var(--tinta-2);
+}
+.seccion-producto legend + * { clear: both; }
+
+/* Guardar y Cancelar quedan a la vista aunque el formulario se desplace. */
+.panel-pie {
+  position: sticky; bottom: -1.25rem; z-index: 1;
+  justify-content: flex-end; margin: 0 -1.25rem -1.25rem; padding: var(--espacio-3) 1.25rem;
+  background: var(--tarjeta); border-top: 1px solid var(--borde);
+  border-radius: 0 0 10px 10px;
+}
+
+@media (max-width: 48rem) {
+  .velo { padding: 0; place-items: stretch; }
+  .velo .panel { max-width: none; max-height: 100%; border-radius: 0; }
+  .panel-pie > .boton { flex: 1 1 0; min-height: var(--toque-minimo); }
 }

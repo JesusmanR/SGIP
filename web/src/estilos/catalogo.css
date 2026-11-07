@@ -1,8 +1,38 @@
-/* Estilos del catálogo (P-03): imagen de la fila y título con sus botones.
-   El color sale solo de tokens.css. */
+/* Estilos del catálogo (P-03): la lista de productos, en tabla o en tarjetas.
+   Cabecera, estados y tabla son piezas comunes (comun.css); aquí solo lo que
+   es de esta pantalla. El color sale solo de tokens.css. */
 
-.col-imagen { width: 56px; }
+/* Diez columnas para el administrador: algo más de ancho que el resto. */
+.seccion-catalogo { max-width: 1280px; }
 
-/* El título y sus botones comparten línea; en un teléfono, los botones bajan. */
-.titulo-fila { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; margin-bottom: 1rem; }
-.titulo-fila h2 { margin: 0; flex: 1; }
+.seccion-catalogo .filtros { margin-bottom: var(--espacio-4); }
+
+/* Cada celda es un solo bloque, para que en celular el rótulo ocupe su
+   columna y todo el contenido de la celda la otra. */
+.celda { min-width: 0; }
+.celda-producto { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; }
+.producto-nombre { font-weight: 600; color: var(--tinta); }
+
+.seccion-catalogo .tabla-tarjetas td, .seccion-catalogo .tabla-tarjetas th { vertical-align: top; }
+.seccion-catalogo .tabla-tarjetas .sub-linea { margin-top: 0; }
+.seccion-catalogo .tabla-tarjetas .insignia { margin-top: var(--espacio-1); }
+
+/* La miniatura es el único control de la celda: pide un tamaño que se pueda
+   tocar y esquinas como las de los demás controles. */
+.seccion-catalogo .casilla-imagen {
+  width: 48px; height: 48px; border-radius: var(--radio-control);
+}
+
+/* La leyenda explica las anotaciones de la tabla: va pegada a ella. */
+.seccion-catalogo .leyenda { margin-top: var(--espacio-3); }
+
+@media (max-width: 48rem) {
+  .seccion-catalogo { padding: var(--espacio-4); }
+  /* Los filtros ocupan el ancho: un campo por línea se lee y se toca mejor. */
+  .seccion-catalogo .filtros .campo { flex: 1 1 100%; }
+  .celda-producto { align-items: flex-end; text-align: right; }
+  /* Los enlaces de la tarjeta se tocan con el pulgar. */
+  .seccion-catalogo .tabla-tarjetas .enlace {
+    min-height: var(--toque-minimo); padding-inline: var(--espacio-2);
+  }
+}

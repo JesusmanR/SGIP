@@ -93,6 +93,14 @@ export default function SubirImagen({
     }
   }
 
+  // El nombre accesible es la acción, no el contenido: un recuadro vacío solo
+  // tiene «+» o «—», que un lector de pantalla no sabe leer como instrucción.
+  const rotulo = puedeEditar
+    ? (ayuda ?? (multiple
+      ? 'Subir imágenes. Puedes elegir varias a la vez.'
+      : 'Subir o reemplazar la imagen'))
+    : alt
+
   return (
     <>
       <button
@@ -100,11 +108,8 @@ export default function SubirImagen({
         className={`casilla-imagen${redondo ? ' redondo' : ''}`}
         onClick={() => entrada.current?.click()}
         disabled={!puedeEditar || subiendo}
-        title={puedeEditar
-          ? (ayuda ?? (multiple
-            ? 'Subir imágenes. Puedes elegir varias a la vez.'
-            : 'Subir o reemplazar la imagen'))
-          : alt}
+        title={rotulo}
+        aria-label={rotulo}
       >
         {subiendo ? (
           <span className="pista">…</span>

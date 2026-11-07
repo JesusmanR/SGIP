@@ -1,6 +1,7 @@
 import { cloneElement, useEffect, useId, useRef, useState } from 'react'
 import { api } from '../servicios/api.js'
 import { porcentajeDesdePrecio, precioDesdePorcentaje } from '../servicios/precio.js'
+import useDialogo from './useDialogo.js'
 import '../estilos/producto.css'
 
 const PORCENTAJE_MAXIMO = 9899.99
@@ -315,6 +316,7 @@ export default function FormularioProducto({
   const [recargas, setRecargas] = useState(0)
   const formulario = useRef(null)
   const aviso = useRef(null)
+  const dialogo = useDialogo(onCerrar)
 
   useEffect(() => {
     if (intentos > 0) formulario.current?.querySelector('[aria-invalid="true"]')?.focus()
@@ -456,13 +458,20 @@ export default function FormularioProducto({
     <div
       className="velo" role="dialog" aria-modal="true"
       aria-label={esAlta ? titulo : `Editar ${ficha.nombre}`}
+      tabIndex={-1} ref={dialogo.ref} onKeyDown={dialogo.onKeyDown}
     >
       {/* Al crear, los errores los dice cada campo con palabras: el globo del
           navegador muestra uno solo y desaparece. */}
-      <form className="tarjeta panel" onSubmit={guardar} noValidate={esAlta} ref={formulario}>
+      <form className="tarjeta panel panel-producto" onSubmit={guardar} noValidate={esAlta} ref={formulario}>
         <div className="panel-cabecera">
-          <h3>{titulo}</h3>
-          <button type="button" className="boton secundario" onClick={onCerrar}>Cancelar</button>
+          <div className="panel-titulo">
+            <h2>{titulo}</h2>
+            <p className="sub-linea">
+              {esAlta
+                ? 'Agrega un artículo al catálogo.'
+                : `${ficha.codigo ?? ''}${ficha.nombre ? ` · ${ficha.nombre}` : ''}`}
+            </p>
+          </div>
         </div>
 
         {error && (
@@ -481,116 +490,124 @@ export default function FormularioProducto({
           </div>
         )}
 
-        <Campo etiqueta="Nombre" motivo={motivo('nombre')}>
-          <input value={datos.nombre} onChange={cambiar('nombre')} required maxLength={160} />
-        </Campo>
-
-        <div className="rejilla">
-          <Campo
-            etiqueta="Categoría"
-            motivo={motivo('categoriaId')}
-            advertencia={esAlta && categorias.length === 0 ? SIN_CATEGORIAS : null}
-          >
-            <select value={datos.categoriaId} onChange={cambiar('categoriaId')} required>
-              <option value="">Elige una</option>
-              {categorias.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-            </select>
+        <fieldset className="seccion-producto">
+          <legend>Identificación</legend>
+          <Campo etiqueta="Nombre" motivo={motivo('nombre')}>
+            <input value={datos.nombre} onChange={cambiar('nombre')} required maxLength={160} />
           </Campo>
 
-          <Campo
-            etiqueta="Proveedor"
-            motivo={motivo('proveedorId')}
-            advertencia={esAlta && proveedores.length === 0 ? SIN_PROVEEDORES : null}
-          >
-            <select value={datos.proveedorId} onChange={cambiar('proveedorId')} required>
-              <option value="">Elige uno</option>
-              {proveedores.map((p) => (
-                <option key={p.id} value={p.id}>{p.razonSocial ?? p.nombre}</option>
-              ))}
-            </select>
-          </Campo>
-        </div>
-
-        <div className="rejilla">
-          <Campo etiqueta="Código" motivo={motivo('codigo')}>
-            <input value={datos.codigo} onChange={cambiar('codigo')} required maxLength={60} />
-          </Campo>
-
-          <Campo etiqueta="SKU">
-            <input
-              value={datos.sku}
-              onChange={cambiar('sku')}
-              maxLength={40}
-              placeholder="Si lo dejas vacío se usa el código"
-            />
-          </Campo>
-        </div>
-
-        <div className="rejilla">
-          <Campo etiqueta="Presentación">
-            <input value={datos.presentacion} onChange={cambiar('presentacion')} maxLength={60} />
-          </Campo>
-
-          <Campo etiqueta="Código de barras">
-            <input value={datos.codigoBarras} onChange={cambiar('codigoBarras')} maxLength={60} />
-          </Campo>
-        </div>
-
-        {/* Al crear, el costo va solo y justo encima del precio, que sale de él;
-            las dos existencias quedan juntas más abajo. */}
-        {esAlta ? campoCosto : <div className="rejilla">{campoCosto}{campoMinima}</div>}
-
-        <FilaDePrecio
-          fila={contado} costo={datos.costo} sufijo="de contado"
-          exigido={esAlta} intentado={intentado} onCambio={setContado}
-        />
-        <p className="sub-linea ayuda-precio">
-          Escribe el porcentaje o el precio y el otro se completa. El que escribas
-          es el que se conserva si cambia el costo.
-        </p>
-
-        <label className="casilla">
-          <input
-            type="checkbox"
-            checked={otroCredito}
-            onChange={(e) => setOtroCredito(e.target.checked)}
-          />
-          <span>Usar otro precio a crédito</span>
-        </label>
-        {otroCredito && (
-          <FilaDePrecio
-            fila={credito} costo={datos.costo} sufijo="a crédito"
-            exigido={esAlta} intentado={intentado} onCambio={setCredito}
-          />
-        )}
-
-        <Campo etiqueta="Descripción">
-          <input value={datos.descripcion} onChange={cambiar('descripcion')} maxLength={400} />
-        </Campo>
-
-        {esAlta && (
           <div className="rejilla">
-            <Campo etiqueta="Existencia inicial" motivo={motivo('existenciaInicial')}>
+            <Campo
+              etiqueta="Categoría"
+              motivo={motivo('categoriaId')}
+              advertencia={esAlta && categorias.length === 0 ? SIN_CATEGORIAS : null}
+            >
+              <select value={datos.categoriaId} onChange={cambiar('categoriaId')} required>
+                <option value="">Elige una</option>
+                {categorias.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+              </select>
+            </Campo>
+
+            <Campo
+              etiqueta="Proveedor"
+              motivo={motivo('proveedorId')}
+              advertencia={esAlta && proveedores.length === 0 ? SIN_PROVEEDORES : null}
+            >
+              <select value={datos.proveedorId} onChange={cambiar('proveedorId')} required>
+                <option value="">Elige uno</option>
+                {proveedores.map((p) => (
+                  <option key={p.id} value={p.id}>{p.razonSocial ?? p.nombre}</option>
+                ))}
+              </select>
+            </Campo>
+          </div>
+
+          <div className="rejilla">
+            <Campo etiqueta="Código" motivo={motivo('codigo')}>
+              <input value={datos.codigo} onChange={cambiar('codigo')} required maxLength={60} />
+            </Campo>
+
+            <Campo etiqueta="SKU">
               <input
-                type="number" step="1" min="0"
-                value={existenciaInicial}
-                onChange={(e) => setExistenciaInicial(e.target.value)}
+                value={datos.sku}
+                onChange={cambiar('sku')}
+                maxLength={40}
+                placeholder="Si lo dejas vacío se usa el código"
               />
             </Campo>
-            {campoMinima}
           </div>
-        )}
 
-        <p className="sub-linea">
-          {esAlta
-            ? `La existencia inicial queda registrada como el primer movimiento de
-               inventario. Si dejas vacía la mínima, se usa 5.`
-            : `Existencia actual: ${ficha.existencia}. Se cambia con movimientos de
-               inventario, no desde aquí, para que todo cambio quede registrado con su
-               valor anterior y posterior.`}
-        </p>
+          <div className="rejilla">
+            <Campo etiqueta="Presentación">
+              <input value={datos.presentacion} onChange={cambiar('presentacion')} maxLength={60} />
+            </Campo>
 
-        <div className="panel-acciones">
+            <Campo etiqueta="Código de barras">
+              <input value={datos.codigoBarras} onChange={cambiar('codigoBarras')} maxLength={60} />
+            </Campo>
+          </div>
+
+          <Campo etiqueta="Descripción">
+            <input value={datos.descripcion} onChange={cambiar('descripcion')} maxLength={400} />
+          </Campo>
+        </fieldset>
+
+        <fieldset className="seccion-producto">
+          <legend>Precio de venta</legend>
+          {campoCosto}
+
+          <FilaDePrecio
+            fila={contado} costo={datos.costo} sufijo="de contado"
+            exigido={esAlta} intentado={intentado} onCambio={setContado}
+          />
+          <p className="sub-linea ayuda-precio">
+            Escribe el porcentaje o el precio y el otro se completa. El que escribas
+            es el que se conserva si cambia el costo.
+          </p>
+
+          <label className="casilla">
+            <input
+              type="checkbox"
+              checked={otroCredito}
+              onChange={(e) => setOtroCredito(e.target.checked)}
+            />
+            <span>Usar otro precio a crédito</span>
+          </label>
+          {otroCredito && (
+            <FilaDePrecio
+              fila={credito} costo={datos.costo} sufijo="a crédito"
+              exigido={esAlta} intentado={intentado} onCambio={setCredito}
+            />
+          )}
+        </fieldset>
+
+        <fieldset className="seccion-producto">
+          <legend>Existencias</legend>
+          {esAlta ? (
+            <div className="rejilla">
+              <Campo etiqueta="Existencia inicial" motivo={motivo('existenciaInicial')}>
+                <input
+                  type="number" step="1" min="0"
+                  value={existenciaInicial}
+                  onChange={(e) => setExistenciaInicial(e.target.value)}
+                />
+              </Campo>
+              {campoMinima}
+            </div>
+          ) : campoMinima}
+
+          <p className="sub-linea">
+            {esAlta
+              ? `La existencia inicial queda registrada como el primer movimiento de
+                 inventario. Si dejas vacía la mínima, se usa 5.`
+              : `Existencia actual: ${ficha.existencia}. Se cambia con movimientos de
+                 inventario, no desde aquí, para que todo cambio quede registrado con su
+                 valor anterior y posterior.`}
+          </p>
+        </fieldset>
+
+        <div className="panel-acciones panel-pie">
+          <button type="button" className="boton secundario" onClick={onCerrar}>Cancelar</button>
           <button className="boton" type="submit" disabled={guardando}>
             {guardando ? 'Guardando…' : esAlta ? 'Crear producto' : 'Guardar cambios'}
           </button>

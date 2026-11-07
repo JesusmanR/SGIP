@@ -243,7 +243,7 @@ describe('catálogo de productos', () => {
     it('un administrador puede editar', async () => {
       montar()
       await conFilas()
-      expect(screen.getAllByRole('button', { name: 'editar' }).length).toBeGreaterThan(0)
+      expect(screen.getAllByRole('button', { name: /^editar /i }).length).toBeGreaterThan(0)
     })
 
     it('un vendedor no', async () => {
@@ -284,7 +284,9 @@ describe('catálogo de productos', () => {
       expect(screen.queryByRole('columnheader', { name: 'Costo' })).not.toBeInTheDocument()
       expect(screen.queryByLabelText(/proveedor/i)).not.toBeInTheDocument()
       expect(screen.getAllByRole('columnheader')).toHaveLength(7)
-      expect(fila(screen, 'PC-001').querySelectorAll('td')).toHaveLength(7)
+      // El nombre del producto es ahora la cabecera de su fila (th), no una celda (td).
+      expect(fila(screen, 'PC-001').querySelectorAll('td')).toHaveLength(6)
+      expect(within(fila(screen, 'PC-001')).getAllByRole('rowheader')).toHaveLength(1)
       expect(fila(screen, 'PC-001')).not.toHaveTextContent('2.100.000')
     })
 
