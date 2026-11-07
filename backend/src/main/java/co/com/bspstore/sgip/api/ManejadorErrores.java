@@ -67,6 +67,9 @@ public class ManejadorErrores {
     // 23000 para casi todo y no distinguen un duplicado de una referencia).
     private static final int MYSQL_ENTRADA_DUPLICADA = 1062;
     private static final int MYSQL_CLAVE_FORANEA_AL_ESCRIBIR = 1452;
+    private static final int MYSQL_FILA_REFERENCIADA = 1451;
+    private static final int MYSQL_COLUMNA_NULA = 1048;
+    private static final int MYSQL_DATO_DEMASIADO_LARGO = 1406;
 
     @ExceptionHandler(CredencialesInvalidasException.class)
     public ProblemDetail credencialesInvalidas(CredencialesInvalidasException e) {
@@ -276,11 +279,16 @@ public class ManejadorErrores {
      * recibe siempre un texto fijo: el mensaje del motor trae nombres de
      * restricciones, tablas y a veces el valor que chocó, y nada de eso
      * es asunto suyo. El error completo queda en el log.
+     *
+     * El nivel del registro sigue a la causa. Un duplicado, una referencia
+     * inexistente o una fila que otra todavía usa son choques que se esperan
+     * (dos personas escribiendo a la vez, un dato mal elegido): quedan en
+     * {@code info}. Un dato ausente o demasiado largo que llega hasta el motor
+     * es una validación que faltó en la solicitud: {@code warn}, para que se
+     * vea y se corrija. Lo demás no se esperaba y sigue en {@code error}.
      */
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ProblemDetail integridad(DataIntegrityViolationException e) {
-        LOG.error("El motor rechazó la operación por integridad de datos", e);
-
         // Hibernate envuelve el SQLException una o dos veces, así que
         // getCause() a secas no llega; se baja por la cadena entera.
         Integer codigo = null;
@@ -289,21 +297,50 @@ public class ManejadorErrores {
                 codigo = sql.getErrorCode();
             }
         }
+        int motor = codigo == null ? 0 : codigo;
 
         ProblemDetail p;
-        if (codigo != null && codigo == MYSQL_ENTRADA_DUPLICADA) {
-            p = ProblemDetail.forStatus(HttpStatus.CONFLICT);
-            p.setTitle("Dato ya registrado");
-            p.setDetail("Ya existe un registro con esos datos.");
-        } else if (codigo != null && codigo == MYSQL_CLAVE_FORANEA_AL_ESCRIBIR) {
-            p = ProblemDetail.forStatus(HttpStatus.UNPROCESSABLE_ENTITY);
-            p.setTitle("Referencia no válida");
-            p.setDetail("Uno de los datos indicados no existe o no corresponde a esta empresa.");
-        } else {
-            p = ProblemDetail.forStatus(HttpStatus.INTERNAL_SERVER_ERROR);
-            p.setTitle("Error interno");
-            p.setDetail("No se pudo completar la operación. Inténtalo de nuevo; "
-                    + "si persiste, avisa al administrador.");
+        switch (motor) {
+            case MYSQL_ENTRADA_DUPLICADA -> {
+                LOG.info("Operación rechazada por un dato repetido (código {}): {}", motor, e.getMessage());
+                p = ProblemDetail.forStatus(HttpStatus.CONFLICT);
+                p.setTitle("Dato ya registrado");
+                p.setDetail("Ya existe un registro con esos datos.");
+            }
+            case MYSQL_CLAVE_FORANEA_AL_ESCRIBIR -> {
+                LOG.info("Operación rechazada por una referencia inexistente (código {}): {}", motor, e.getMessage());
+                p = ProblemDetail.forStatus(HttpStatus.UNPROCESSABLE_ENTITY);
+                p.setTitle("Referencia no válida");
+                p.setDetail("Uno de los datos indicados no existe o no corresponde a esta empresa.");
+            }
+            case MYSQL_FILA_REFERENCIADA -> {
+                LOG.info("Operación rechazada porque otros registros dependen de la fila (código {}): {}",
+                        motor, e.getMessage());
+                p = ProblemDetail.forStatus(HttpStatus.CONFLICT);
+                p.setTitle("Registro en uso");
+                p.setDetail("No se puede quitar o cambiar porque otros registros dependen de él.");
+            }
+            case MYSQL_COLUMNA_NULA -> {
+                LOG.warn("Un dato obligatorio llegó al motor sin valor (código {}): falta una validación. {}",
+                        motor, e.getMessage());
+                p = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
+                p.setTitle("Dato obligatorio");
+                p.setDetail("Falta un dato obligatorio.");
+            }
+            case MYSQL_DATO_DEMASIADO_LARGO -> {
+                LOG.warn("Un texto más largo que su columna llegó al motor (código {}): falta una validación. {}",
+                        motor, e.getMessage());
+                p = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
+                p.setTitle("Dato demasiado largo");
+                p.setDetail("Uno de los textos es más largo de lo que se admite.");
+            }
+            default -> {
+                LOG.error("El motor rechazó la operación por integridad de datos", e);
+                p = ProblemDetail.forStatus(HttpStatus.INTERNAL_SERVER_ERROR);
+                p.setTitle("Error interno");
+                p.setDetail("No se pudo completar la operación. Inténtalo de nuevo; "
+                        + "si persiste, avisa al administrador.");
+            }
         }
         return p;
     }
