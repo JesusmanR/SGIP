@@ -43,6 +43,15 @@ const pagina = (ruta) => `pagina:${ruta}`
 
 beforeEach(() => sessionStorage.clear())
 
+describe('un rol que la tabla no conoce', () => {
+  it.each(['/panel', '/ruta-que-no-existe'])('en %s va al acceso y su sesión se cierra', async (ruta) => {
+    guardarSesion({ token: 't', nombre: 'N', rol: 'FANTASMA' })
+    ir(ruta)
+    expect(await screen.findByText('pagina:/acceso')).toBeInTheDocument()
+    expect(sessionStorage.getItem('sgip.sesion')).toBeNull()
+  })
+})
+
 describe('cada sección, por rol', () => {
   const casos = secciones.flatMap((s) => ROLES.map((rol) => [s.ruta, rol, s.roles.includes(rol)]))
 
