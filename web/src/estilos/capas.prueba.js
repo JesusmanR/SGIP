@@ -7,7 +7,6 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 const leer = (nombre) => readFileSync(`src/estilos/${nombre}.css`, 'utf8')
-const base = leer('base')
 const producto = leer('producto')
 const armazon = leer('armazon')
 const comun = leer('comun')

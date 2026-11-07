@@ -36,8 +36,8 @@ describe('base.css no vuelve a alojar clases de una sola pantalla', () => {
     '.acceso', '.col-imagen', '.titulo-fila', '.fila-logo', '.velo', '.galeria',
     '.pasos', '.zona-archivo', '.panel-rejilla', '.grafico-lienzo', '.hueso',
   ])('%s', (clase) => {
-    const escapada = clase.replace('.', '\.')
-    expect(base).not.toMatch(new RegExp(`${escapada}(?![\w-])`))
+    const escapada = clase.replace('.', String.raw`\.`)
+    expect(base).not.toMatch(new RegExp(String.raw`${escapada}(?![\w-])`))
   })
 })
 
