@@ -156,9 +156,32 @@ describe('AvisoConexion', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks() })
 
-  it('sin aviso mientras hay conexión', () => {
+  it('sin aviso mientras hay conexión: la región existe, vacía', () => {
     render(<AvisoConexion />)
-    expect(screen.queryByRole('status')).toBeNull()
+    expect(screen.getByRole('status')).toBeEmptyDOMElement()
+  })
+
+  it('la región es la misma antes y después del aviso, para que se anuncie el cambio', () => {
+    render(<AvisoConexion />)
+    const region = screen.getByRole('status')
+    act(() => { window.dispatchEvent(new Event('offline')) })
+    expect(screen.getByRole('status')).toBe(region)
+    expect(region).toHaveTextContent(/sin conexión/i)
+    act(() => { window.dispatchEvent(new Event('online')) })
+    act(() => { vi.advanceTimersByTime(6000) })
+    expect(screen.getByRole('status')).toBe(region)
+    expect(region).toBeEmptyDOMElement()
+  })
+
+  it('«restablecida» solo sale si antes hubo una pérdida', () => {
+    render(<AvisoConexion />)
+    act(() => { window.dispatchEvent(new Event('online')) })
+    expect(screen.getByRole('status')).toBeEmptyDOMElement()
+  })
+
+  it('una región vacía no ocupa sitio', () => {
+    const css = readFileSync('src/estilos/armazon.css', 'utf8')
+    expect(css).toMatch(/\.aviso-conexion:empty\s*\{[^}]*display:\s*none/)
   })
 
   it('al perder la conexión lo dice con palabras', () => {
@@ -173,7 +196,7 @@ describe('AvisoConexion', () => {
     act(() => { window.dispatchEvent(new Event('online')) })
     expect(screen.getByRole('status')).toHaveTextContent(/conexión restablecida/i)
     act(() => { vi.advanceTimersByTime(6000) })
-    expect(screen.queryByRole('status')).toBeNull()
+    expect(screen.getByRole('status')).toBeEmptyDOMElement()
   })
 
   it('si ya empieza sin conexión, avisa desde el principio', () => {
