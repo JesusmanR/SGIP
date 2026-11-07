@@ -10,7 +10,7 @@ import { useDatos } from '../hooks/useDatos.js'
 import { api } from '../servicios/api.js'
 import { leerSesion } from '../servicios/sesion.js'
 
-import { NUMERO, PESOS } from '../servicios/formato.js'
+import { NUMERO, costoEnPesos, porcentaje } from '../servicios/formato.js'
 import '../estilos/importacion.css'
 
 /** Las categorías que la V30 guarda, con su texto y su color. */
@@ -76,10 +76,9 @@ function Variacion({ anterior, nuevo }) {
   const v = variacion(anterior, nuevo)
   if (v == null) return <>—</>
   const llamativa = Math.abs(v) >= VARIACION_LLAMATIVA
-  const signo = v > 0 ? '+' : ''
   return (
     <span className={llamativa ? (v > 0 ? 'sube' : 'baja') : undefined}>
-      {signo}{v.toFixed(1).replace('.', ',')} %
+      {porcentaje(v, { decimales: 1, conSigno: true })}
     </span>
   )
 }
@@ -136,11 +135,11 @@ const columnasVistaPrevia = (cruces) => [
   },
   {
     clave: 'costoAnterior', titulo: 'Costo actual', numerica: true,
-    render: (f) => (f.costoAnterior == null ? '—' : PESOS.format(f.costoAnterior)),
+    render: (f) => (f.costoAnterior == null ? '—' : costoEnPesos(f.costoAnterior)),
   },
   {
     clave: 'costo', titulo: 'Costo nuevo', numerica: true,
-    render: (f) => (f.costo == null ? '—' : PESOS.format(f.costo)),
+    render: (f) => (f.costo == null ? '—' : costoEnPesos(f.costo)),
   },
   {
     clave: 'variacion', titulo: 'Variación', numerica: true,
@@ -376,8 +375,7 @@ function ImportacionAdministrador() {
               <strong className="cifra-valor exito">{NUMERO.format(carga.aceptados)}</strong>
               <span className="cifra-pie">
                 {carga.leidos > 0
-                  ? `${((carga.aceptados / carga.leidos) * 100).toFixed(1)
-                    .replace('.', ',')} % del archivo`
+                  ? `${porcentaje((carga.aceptados / carga.leidos) * 100, { decimales: 1 })} del archivo`
                   : '—'}
               </span>
             </div>

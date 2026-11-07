@@ -8,7 +8,7 @@ import EstadoSinPermiso from '../../componentes/comun/EstadoSinPermiso.jsx'
 import TablaOTarjetas from '../../componentes/comun/TablaOTarjetas.jsx'
 import { useDatos } from '../../hooks/useDatos.js'
 import { apiImpuestos } from '../../servicios/api/impuestos.js'
-import { estadoDeVigencia, fechaDia, hoyISO, textoDeVigencia } from './fechas.js'
+import { estadoDeVigencia, fechaDia, hoyISO, textoDeVigencia } from '../../servicios/fechas.js'
 import { descripcionDeImpuesto, textoDeAlcance } from './tributos.js'
 
 /** Lo que cada acción le dice a quien la va a hacer; todo en palabras de tienda. */

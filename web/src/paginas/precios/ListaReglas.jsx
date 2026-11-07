@@ -9,9 +9,9 @@ import EstadoVacio from '../../componentes/comun/EstadoVacio.jsx'
 import TablaOTarjetas from '../../componentes/comun/TablaOTarjetas.jsx'
 import { useDatos } from '../../hooks/useDatos.js'
 import { apiPrecios } from '../../servicios/api/precios.js'
-import { porcentajeConDecimales } from '../../servicios/formato.js'
+import { porcentaje } from '../../servicios/formato.js'
 import Cierre from './Cierre.jsx'
-import { estadoDeVigencia, fechaDia, hoyISO, textoDeVigencia } from './fechas.js'
+import { estadoDeVigencia, fechaDia, hoyISO, textoDeVigencia } from '../../servicios/fechas.js'
 import {
   etiquetaDeCalculo, etiquetaDePago, factorAPorcentaje, textoDeAlcance,
 } from './reglas.js'
@@ -95,7 +95,7 @@ export default function ListaReglas() {
     { clave: 'calculo', titulo: 'Cómo se calcula', render: (r) => etiquetaDeCalculo(r.formaCalculo) },
     {
       clave: 'ganancia', titulo: 'Ganancia', numerica: true,
-      render: (r) => porcentajeConDecimales(Number(factorAPorcentaje(r.factor).replace(',', '.'))),
+      render: (r) => porcentaje(Number(factorAPorcentaje(r.factor).replace(',', '.'))),
     },
     { clave: 'vigencia', titulo: 'Vigencia', render: (r) => textoDeVigencia(r) },
     { clave: 'estado', titulo: 'Estado', render: (r) => <EstadoRegla regla={r} hoy={hoy} /> },

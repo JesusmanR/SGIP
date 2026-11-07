@@ -6,7 +6,7 @@ import EstadoSinPermiso from '../../componentes/comun/EstadoSinPermiso.jsx'
 import EstadoVacio from '../../componentes/comun/EstadoVacio.jsx'
 import TablaOTarjetas from '../../componentes/comun/TablaOTarjetas.jsx'
 import { apiPlataformaTributario } from '../../servicios/api/plataforma-tributario.js'
-import { NUMERO } from '../../servicios/formato.js'
+import { NUMERO, fraccionComoPorcentaje } from '../../servicios/formato.js'
 import { erroresPorCampo, numeroEscrito, sinCampo } from './campos.js'
 import Campo from '../../componentes/comun/Campo.jsx'
 import Confirmacion from '../../componentes/comun/Confirmacion.jsx'
@@ -18,11 +18,6 @@ const TRATAMIENTOS = {
   EXCLUIDO: 'Excluido',
 }
 const CAMPOS_DEL_SERVIDOR = ['tarifa', 'umbralUvt', 'fundamento', 'motivo']
-const PORCENTAJE = new Intl.NumberFormat('es-CO', { maximumFractionDigits: 2 })
-const DURO = String.fromCharCode(160)
-
-/** La tarifa viaja como fracción (0,19); a la vista va como porcentaje. */
-const comoPorcentaje = (tarifa) => `${PORCENTAJE.format(Number(tarifa) * 100)}${DURO}%`
 const aNumero = (texto) => Number(String(texto).trim().replace(',', '.'))
 
 // Los límites de SolicitudTipoImpuesto: la tarifa, una fracción con 4 decimales; el tope, 6 enteros y 2 decimales.
@@ -192,7 +187,7 @@ export default function SeccionImpuestos({ impuestos }) {
   const columnas = [
     { clave: 'nombre', titulo: 'Impuesto', principal: true },
     { clave: 'tratamiento', titulo: 'Tratamiento', render: (i) => TRATAMIENTOS[i.tratamiento] ?? i.tratamiento },
-    { clave: 'tarifa', titulo: 'Tarifa', numerica: true, render: (i) => comoPorcentaje(i.tarifa) },
+    { clave: 'tarifa', titulo: 'Tarifa', numerica: true, render: (i) => fraccionComoPorcentaje(i.tarifa) },
     {
       clave: 'umbralUvt', titulo: 'Tope en UVT', numerica: true,
       render: (i) => (i.umbralUvt == null ? '—' : NUMERO.format(i.umbralUvt)),

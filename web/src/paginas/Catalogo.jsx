@@ -12,7 +12,7 @@ import { api } from '../servicios/api.js'
 import { subirImagenes } from '../servicios/subidas.js'
 import { leerSesion } from '../servicios/sesion.js'
 
-import { PESOS, porcentajeConDecimales } from '../servicios/formato.js'
+import { PESOS, costoEnPesos, porcentaje } from '../servicios/formato.js'
 import '../estilos/catalogo.css'
 
 /**
@@ -231,7 +231,7 @@ export default function Catalogo() {
         clave: 'costo',
         titulo: 'Costo',
         numerica: true,
-        render: (p) => <div className="celda">{PESOS.format(p.costo)}</div>,
+        render: (p) => <div className="celda">{costoEnPesos(p.costo)}</div>,
       },
       {
         // Sin precio no hay margen de cero: hay un precio que falta, y eso es
@@ -243,11 +243,11 @@ export default function Catalogo() {
           <div className="celda">
             {p.precioContado == null
               ? 'Falta el precio de venta'
-              : porcentajeConDecimales(p.margenContado)}
+              : porcentaje(p.margenContado)}
             {p.margenCredito != null
               && Number(p.margenCredito) !== Number(p.margenContado) && (
               <span className="sub-linea">
-                a crédito {porcentajeConDecimales(p.margenCredito)}
+                a crédito {porcentaje(p.margenCredito)}
               </span>
             )}
           </div>

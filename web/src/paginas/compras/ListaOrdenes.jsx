@@ -9,8 +9,8 @@ import EstadoVacio from '../../componentes/comun/EstadoVacio.jsx'
 import TablaOTarjetas from '../../componentes/comun/TablaOTarjetas.jsx'
 import { useDatos } from '../../hooks/useDatos.js'
 import { listarOrdenes } from '../../servicios/api/compras.js'
-import { fechaCorta } from '../../servicios/formato.js'
-import { InsigniaEstado, pesos } from './EstadoOrden.jsx'
+import { costoEnPesos, fechaCorta } from '../../servicios/formato.js'
+import { InsigniaEstado } from './EstadoOrden.jsx'
 
 /** El servidor trae 50 por omisión y no pasa de 200: se pide más de a poco. */
 const ESCALONES = [50, 100, 200]
@@ -68,7 +68,7 @@ export default function ListaOrdenes() {
             { clave: 'proveedor', titulo: 'Proveedor' },
             { clave: 'fecha', titulo: 'Fecha', render: (o) => fechaCorta(o.fecha) },
             { clave: 'estado', titulo: 'Estado', render: (o) => <InsigniaEstado estado={o.estado} /> },
-            { clave: 'total', titulo: 'Total', numerica: true, render: (o) => pesos(o.total) },
+            { clave: 'total', titulo: 'Total', numerica: true, render: (o) => costoEnPesos(o.total) },
           ]}
         />
         {hayMas && siguiente && (
