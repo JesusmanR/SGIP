@@ -43,6 +43,10 @@ describe('pantalla de acceso', () => {
   })
   afterEach(() => vi.clearAllMocks())
 
+  it('pone su propio título a la pestaña', () => {
+    expect(document.title).toBe('Acceso · SGIP')
+  })
+
   it('guarda la sesión y entra al catálogo', async () => {
     api.entrar.mockResolvedValue({ token: 'abc', nombre: 'Ana', rol: 'VENDEDOR' })
     await entrar()

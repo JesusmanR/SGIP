@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, ErrorApi } from '../servicios/api.js'
 import '../estilos/acceso.css'
@@ -17,6 +17,7 @@ const MINIMO = 8
  * sesión, y no se queda atrapado en una pantalla sin menú.
  */
 export default function CambiarClave() {
+  useEffect(() => { document.title = 'Cambiar contraseña · SGIP' }, [])
   const [actual, setActual] = useState('')
   const [nueva, setNueva] = useState('')
   const [repetida, setRepetida] = useState('')

@@ -48,6 +48,11 @@ describe('cambio de contraseña obligatorio', () => {
   })
   afterEach(() => vi.clearAllMocks())
 
+  it('pone su propio título a la pestaña', () => {
+    montar()
+    expect(document.title).toBe('Cambiar contraseña · SGIP')
+  })
+
   describe('quién llega a la pantalla', () => {
     it.each(['/catalogo', '/panel', '/empresa', '/importar'])(
       'con el cambio pendiente, %s lleva a cambiar la contraseña', (ruta) => {

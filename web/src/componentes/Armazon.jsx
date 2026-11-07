@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { api } from '../servicios/api.js'
+import { seccionDe } from '../secciones.js'
 import { borrarSesion, leerSesion } from '../servicios/sesion.js'
 import ErrorBoundary from './ErrorBoundary.jsx'
 import MenuLateral from './MenuLateral.jsx'
@@ -16,9 +17,40 @@ export default function Armazon() {
   const sesion = leerSesion()
   const [abierto, setAbierto] = useState(false)
   const boton = useRef(null)
+  const contenido = useRef(null)
+  const rutaAnterior = useRef(pathname)
 
   // Navegar cierra el menú: si no, taparía la pantalla a la que se fue.
   useEffect(() => { setAbierto(false) }, [pathname])
+
+  // Al cambiar de página (no en la primera carga ni al cambiar solo la
+  // búsqueda): título de la pestaña y foco en el h1 nuevo, o en el main si
+  // no hay. Una página que carga bajo demanda trae su h1 un momento después.
+  useEffect(() => {
+    if (rutaAnterior.current === pathname) return undefined
+    rutaAnterior.current = pathname
+    const seccion = seccionDe(pathname)
+    if (seccion) document.title = `${seccion.etiqueta} · SGIP`
+    const main = contenido.current
+    if (!main) return undefined
+    function enfocarTitulo() {
+      const h1 = main.querySelector('h1')
+      if (!h1) return false
+      h1.setAttribute('tabindex', '-1')
+      h1.focus()
+      return true
+    }
+    if (enfocarTitulo()) return undefined
+    main.focus()
+    const observador = new MutationObserver(() => {
+      const activo = document.activeElement
+      if (activo !== main && activo !== document.body) { observador.disconnect(); return }
+      if (enfocarTitulo()) observador.disconnect()
+    })
+    observador.observe(main, { childList: true, subtree: true })
+    const limite = setTimeout(() => observador.disconnect(), 3000)
+    return () => { observador.disconnect(); clearTimeout(limite) }
+  }, [pathname])
 
   useEffect(() => {
     if (!abierto) return undefined
@@ -61,7 +93,7 @@ export default function Armazon() {
         </button>
       </header>
       <MenuLateral id="menu-principal" rol={sesion?.rol} abierto={abierto} nombre={sesion?.nombre} alSalir={salir} />
-      <main id="contenido-principal" className="armazon-contenido" tabIndex={-1}>
+      <main ref={contenido} id="contenido-principal" className="armazon-contenido" tabIndex={-1}>
         <ErrorBoundary reinicio={pathname}><Outlet /></ErrorBoundary>
       </main>
     </div>

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, ErrorApi } from '../servicios/api.js'
 import { guardarSesion, inicioSegunRol } from '../servicios/sesion.js'
@@ -6,6 +6,7 @@ import '../estilos/acceso.css'
 
 /** Pantalla P-01 · Acceso. */
 export default function Acceso() {
+  useEffect(() => { document.title = 'Acceso · SGIP' }, [])
   const [correo, setCorreo] = useState('')
   const [clave, setClave] = useState('')
   const [error, setError] = useState(null)
