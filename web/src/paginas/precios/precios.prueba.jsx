@@ -303,7 +303,7 @@ describe('formulario de regla nueva', () => {
     await abrir()
     await userEvent.selectOptions(screen.getByLabelText('Categoría'), '3')
     await userEvent.selectOptions(screen.getByLabelText('Se cobra'), 'CREDITO')
-    await userEvent.click(screen.getByRole('radio', { name: /margen sobre el precio/i }))
+    await userEvent.click(screen.getByRole('radio', { name: /ganancia sobre el precio/i }))
     await userEvent.type(screen.getByLabelText('Porcentaje de ganancia'), '25')
     await userEvent.click(screen.getByRole('button', { name: /guardar regla/i }))
     expect(apiPrecios.crear).toHaveBeenCalledWith({

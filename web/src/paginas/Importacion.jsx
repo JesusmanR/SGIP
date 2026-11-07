@@ -467,7 +467,7 @@ function ImportacionAdministrador() {
               </strong>
               <span className="sub-linea">
                 Los precios por porcentaje ya salen del costo nuevo. Los precios
-                escritos se conservan y cambia su margen.
+                escritos se conservan y cambia su ganancia.
               </span>
             </div>
           )}

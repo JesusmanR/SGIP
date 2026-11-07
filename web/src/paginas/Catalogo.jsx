@@ -237,7 +237,7 @@ export default function Catalogo() {
         // Sin precio no hay margen de cero: hay un precio que falta, y eso es
         // lo que se dice.
         clave: 'margen',
-        titulo: 'Margen',
+        titulo: 'Ganancia',
         numerica: true,
         render: (p) => (
           <div className="celda">
