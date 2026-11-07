@@ -1,5 +1,6 @@
-import { cloneElement, useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api } from '../servicios/api.js'
+import Campo from './comun/Campo.jsx'
 import { porcentajeDesdePrecio, precioDesdePorcentaje } from '../servicios/precio.js'
 import useDialogo from './useDialogo.js'
 import '../estilos/producto.css'
@@ -163,39 +164,6 @@ function motivosDelAlta(datos, existenciaInicial, categorias, proveedores) {
     existenciaInicial: cantidad(existenciaInicial),
     existenciaMinima: cantidad(comoTexto(datos.existenciaMinima)),
   }
-}
-
-/**
- * Un campo con su mensaje al lado. No es un `label` envolvente, porque entonces
- * el mensaje formaría parte del nombre del campo y un lector de pantalla lo
- * leería como su etiqueta.
- *
- * La región del mensaje existe siempre, vacía si no hay nada que decir: una
- * región viva que aparece junto con su texto no se anuncia en todos los lectores
- * de pantalla. Es `status` y no `alert` porque se escribe mientras se teclea, y
- * un aviso a cada pulsación interrumpiría lo que se está escribiendo.
- */
-function Campo({ etiqueta, motivo, advertencia, children }) {
-  const id = useId()
-  const idMensaje = `${id}-mensaje`
-  const mensaje = motivo || advertencia || ''
-  return (
-    <div className="campo">
-      <label htmlFor={id}><span>{etiqueta}</span></label>
-      {cloneElement(children, {
-        id,
-        'aria-invalid': motivo ? 'true' : undefined,
-        'aria-describedby': mensaje ? idMensaje : undefined,
-      })}
-      <small
-        id={idMensaje}
-        role="status"
-        className={`campo-mensaje ${motivo ? 'error' : 'advertencia'}`}
-      >
-        {mensaje}
-      </small>
-    </div>
-  )
 }
 
 /** El porcentaje y el precio de una forma de pago, lado a lado. */
