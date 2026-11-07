@@ -64,8 +64,6 @@
 
 /* Formulario */
 .plataforma-empresas .formulario-empresa { max-width: 36rem; }
-.plataforma-empresas .campo-mensaje { color: var(--tinta-3); }
-.plataforma-empresas .campo-mensaje.error { color: var(--peligro); }
 .plataforma-empresas .aviso-foco:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }
 .plataforma-empresas .grupo {
   border: 1px solid var(--borde); border-radius: var(--radio-control);

@@ -53,8 +53,6 @@
 /* ── Formulario ────────────────────────────────────────────────────── */
 .seccion-precios .formulario-regla { max-width: 40rem; }
 .seccion-precios .campo select { width: 100%; }
-.seccion-precios .campo-mensaje { color: var(--tinta-3); }
-.seccion-precios .campo-mensaje.error { color: var(--peligro); }
 .seccion-precios .aviso-foco:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }
 
 .seccion-precios .datos-fijos { margin: 0 0 var(--espacio-3); display: grid; gap: var(--espacio-2); }

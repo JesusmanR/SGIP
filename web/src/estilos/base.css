@@ -149,9 +149,11 @@ td.acciones .boton { margin-left: .4rem; }
 
 /* El mensaje de un campo va pegado a él, y siempre dice con palabras qué
    pasa: el color acompaña, no informa. */
-.campo-mensaje { display: block; margin-top: .3rem; font-size: .78rem; line-height: 1.35; }
+.campo-mensaje { display: block; margin-top: .3rem; font-size: .78rem; line-height: 1.35; color: var(--tinta-3); }
 /* La región existe siempre para que se anuncie; vacía no debe ocupar sitio. */
 .campo-mensaje:empty { margin-top: 0; }
+/* La ayuda es una pista, no una advertencia. */
+.campo-mensaje.ayuda { color: var(--tinta-3); }
 .campo-mensaje.error { color: var(--peligro); }
 .campo-mensaje.advertencia { color: var(--aviso); }
 .campo input[aria-invalid="true"], .campo select[aria-invalid="true"] { border-color: var(--peligro); }

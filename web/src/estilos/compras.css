@@ -59,9 +59,6 @@
 .recepcion > .boton { margin-bottom: var(--espacio-4); }
 .lista-recepcion { margin: 0 0 var(--espacio-4); padding-left: var(--espacio-5); }
 
-/* La ayuda de un campo es una pista, no una advertencia. */
-.campo-mensaje.ayuda { color: var(--tinta-3); }
-
 @media (max-width: 48rem) {
   .resultados-producto li { flex-wrap: wrap; }
   .entrada-celda { text-align: left; }

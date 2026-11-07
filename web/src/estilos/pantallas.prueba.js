@@ -48,3 +48,13 @@ describe('orden de las hojas', () => {
     expect(main.indexOf("./estilos/base.css")).toBeLessThan(main.indexOf("./App.jsx"))
   })
 })
+
+describe('mensaje de ayuda de campo', () => {
+  it('base.css da el color de la ayuda y las hojas de sección no lo repiten', () => {
+    expect(base).toMatch(/\.campo-mensaje\.ayuda\s*\{[^}]*color:\s*var\(--tinta-3\)/)
+    for (const hoja of ['compras', 'proveedores', 'impuestos', 'inventario', 'plataforma-empresas',
+      'plataforma-tributario', 'precios', 'usuarios']) {
+      expect(sinComentarios(leer(hoja)), hoja).not.toMatch(/\.campo-mensaje(\.error|\.ayuda)?\s*\{/)
+    }
+  })
+})
