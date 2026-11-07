@@ -10,12 +10,6 @@ import { describe, expect, it } from 'vitest'
 const leer = (nombre) => readFileSync(`src/estilos/${nombre}.css`, 'utf8')
 const sinComentarios = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '')
 
-/** Los selectores de nivel superior y los de dentro de @media, sin duplicados. */
-function selectores(css) {
-  return [...sinComentarios(css).matchAll(/(?:^|[}\n])\s*([^@\s{}][^{}]*)\{/g)]
-    .flatMap((m) => m[1].split(',').map((s) => s.trim().replace(/\s+/g, ' ')))
-}
-
 const clasesDe = (css) => new Set([...sinComentarios(css).matchAll(/\.([a-z][\w-]*)/g)].map((m) => m[1]))
 
 const fuentes = []
@@ -81,9 +75,17 @@ describe.each(SECCIONES)('estilos/%s.css', (nombre, raiz, carpeta) => {
 describe('clases que se repetían en cada sección', () => {
   const comunes = ['nota', 'volver', 'enlace-boton', 'aviso-foco']
 
-  it.each(comunes)('.%s se define una vez, en comun.css', (clase) => {
+  it.each(comunes)('.%s se define una vez, en comun.css; una sección solo ajusta sus márgenes', (clase) => {
     expect(clasesDe(leer('comun')).has(clase)).toBe(true)
-    const copias = SECCIONES.filter(([nombre]) => clasesDe(leer(nombre)).has(clase)).map(([nombre]) => nombre)
-    expect(copias).toEqual([])
+    const termina = new RegExp(String.raw`\.${clase}(?![\w-])\s*(?::[\w-]+)?$`)
+    const repetidas = []
+    for (const [nombre] of SECCIONES) {
+      for (const [, selector, cuerpo] of sinComentarios(leer(nombre)).matchAll(/([^{}]+)\{([^}]*)\}/g)) {
+        if (!selector.split(',').some((x) => termina.test(x.trim()))) continue
+        const propiedades = cuerpo.split(';').map((d) => d.split(':')[0].trim()).filter(Boolean)
+        if (propiedades.some((p) => !p.startsWith('margin'))) repetidas.push(`${nombre}: ${selector.trim()}`)
+      }
+    }
+    expect(repetidas).toEqual([])
   })
 })

@@ -2,19 +2,7 @@
    Todo cuelga de .seccion-impuestos porque la hoja queda cargada en toda la aplicación.
    El color sale solo de tokens.css. */
 
-.seccion-impuestos .volver { margin: 0 0 var(--espacio-3); font-size: var(--t-cuerpo); }
-
-.seccion-impuestos .enlace-boton {
-  display: inline-flex; align-items: center; justify-content: center;
-  min-height: var(--alto-control); text-decoration: none;
-}
-.seccion-impuestos a.boton:not(.secundario) { color: var(--sobre-acento); }
-.seccion-impuestos a.boton.secundario { color: var(--tinta); }
-
 .seccion-impuestos .pila { display: grid; gap: var(--espacio-4); }
-.seccion-impuestos .nota {
-  margin: 0 0 var(--espacio-3); color: var(--tinta-2); font-size: var(--t-cuerpo); max-width: 65ch;
-}
 .seccion-impuestos h2 { margin: 0 0 var(--espacio-1); font-size: var(--t-titulo-tarjeta); line-height: 20px; }
 
 .seccion-impuestos .seccion-cabecera {
@@ -48,7 +36,6 @@
 .seccion-impuestos .configuracion,
 .seccion-impuestos .formulario-regla { max-width: 40rem; }
 .seccion-impuestos .campo select { width: 100%; }
-.seccion-impuestos .aviso-foco:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }
 
 .seccion-impuestos .opciones,
 .seccion-impuestos .otros-datos {

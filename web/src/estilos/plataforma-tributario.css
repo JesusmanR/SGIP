@@ -4,9 +4,6 @@
 .plataforma-tributario .seccion-tributaria { margin-bottom: var(--espacio-5); }
 .plataforma-tributario .seccion-tributaria h2 { margin: 0 0 var(--espacio-1); font-size: var(--t-titulo-tarjeta); }
 .plataforma-tributario .seccion-tributaria h3 { margin: 0 0 var(--espacio-3); font-size: var(--t-titulo-tarjeta); }
-.plataforma-tributario .nota {
-  margin: 0 0 var(--espacio-3); color: var(--tinta-2); font-size: var(--t-cuerpo); max-width: 65ch;
-}
 .plataforma-tributario .alerta-uvt { margin-bottom: var(--espacio-4); font-size: var(--t-cuerpo); max-width: 65ch; }
 
 .plataforma-tributario .formulario-tributario { max-width: 32rem; margin-top: var(--espacio-4); }

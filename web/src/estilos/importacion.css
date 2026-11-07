@@ -53,9 +53,9 @@
 
 /* La variación lleva color además del signo, pero el signo va primero:
    quien no distinga los dos tonos sigue leyendo «+3,8 %». */
-.sube, .baja { font-weight: 600; }
-.sube { color: var(--peligro); }
-.baja { color: var(--exito); }
+.importacion .variacion-sube, .importacion .variacion-baja { font-weight: 600; }
+.importacion .variacion-sube { color: var(--peligro); }
+.importacion .variacion-baja { color: var(--exito); }
 
 /* La zona de arrastre de la P-07. La etiqueta envuelve un control de
    archivo oculto, de modo que un clic sigue abriendo el selector y el

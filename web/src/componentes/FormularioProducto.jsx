@@ -430,7 +430,7 @@ export default function FormularioProducto({
     >
       {/* Al crear, los errores los dice cada campo con palabras: el globo del
           navegador muestra uno solo y desaparece. */}
-      <form className="tarjeta panel panel-producto" onSubmit={guardar} noValidate={esAlta} ref={formulario}>
+      <form className="tarjeta panel-dialogo panel-producto" onSubmit={guardar} noValidate={esAlta} ref={formulario}>
         <div className="panel-cabecera">
           <div className="panel-titulo">
             <h2>{titulo}</h2>

@@ -77,7 +77,7 @@ function Variacion({ anterior, nuevo }) {
   if (v == null) return <>—</>
   const llamativa = Math.abs(v) >= VARIACION_LLAMATIVA
   return (
-    <span className={llamativa ? (v > 0 ? 'sube' : 'baja') : undefined}>
+    <span className={llamativa ? (v > 0 ? 'variacion-sube' : 'variacion-baja') : undefined}>
       {porcentaje(v, { decimales: 1, conSigno: true })}
     </span>
   )

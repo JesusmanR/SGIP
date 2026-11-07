@@ -1,15 +1,6 @@
 /* Estilos de la sección plataforma-empresas: solo esta sección escribe aquí.
    El color sale solo de tokens.css. */
 
-.plataforma-empresas .volver { margin: 0 0 var(--espacio-3); font-size: var(--t-cuerpo); }
-
-.plataforma-empresas .enlace-boton {
-  display: inline-flex; align-items: center; justify-content: center;
-  min-height: var(--alto-control); text-decoration: none;
-}
-.plataforma-empresas a.boton:not(.secundario) { color: var(--sobre-acento); }
-.plataforma-empresas a.boton.secundario { color: var(--tinta); }
-
 /* Estado: siempre con texto, el color solo acompaña. */
 .estado-empresa {
   display: inline-flex; align-items: center; height: var(--alto-insignia);
@@ -35,28 +26,24 @@
 }
 .plataforma-empresas .ficha dt { color: var(--tinta-2); font-size: var(--t-etiqueta); font-weight: 600; }
 .plataforma-empresas .ficha dd { margin: 0; font-size: var(--t-cuerpo); overflow-wrap: anywhere; }
-.plataforma-empresas .nota {
-  margin: 0 0 var(--espacio-3); color: var(--tinta-2); font-size: var(--t-cuerpo); max-width: 65ch;
-}
 
 .plataforma-empresas .acciones { display: flex; flex-wrap: wrap; gap: var(--espacio-2); margin-top: var(--espacio-4); }
 .plataforma-empresas .ficha + .acciones { margin-top: 0; }
 .plataforma-empresas .acciones .boton { min-height: var(--toque-minimo); }
 
-
 /* Usuarios de la empresa y desbloqueo */
-.plataforma-empresas .usuarios { margin-top: var(--espacio-5); }
-.plataforma-empresas .usuarios h2 { margin: 0 0 var(--espacio-2); font-size: var(--t-titulo-tarjeta); }
+.plataforma-empresas .usuarios-empresa { margin-top: var(--espacio-5); }
+.plataforma-empresas .usuarios-empresa h2 { margin: 0 0 var(--espacio-2); font-size: var(--t-titulo-tarjeta); }
+.plataforma-empresas .usuarios-empresa .confirmacion { margin-top: var(--espacio-4); }
 .plataforma-empresas 
 .plataforma-empresas td .boton.menudo { width: auto; min-height: var(--toque-minimo); padding: 0 var(--espacio-3); }
 
 /* Un lugar al que el foco vuelve por código se ve igual que uno al que se llega con el teclado. */
 .plataforma-empresas .ficha:focus-visible,
-.plataforma-empresas .usuarios:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }
+.plataforma-empresas .usuarios-empresa:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }
 
 /* Formulario */
 .plataforma-empresas .formulario-empresa { max-width: 36rem; }
-.plataforma-empresas .aviso-foco:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }
 .plataforma-empresas .grupo {
   border: 1px solid var(--borde); border-radius: var(--radio-control);
   padding: var(--espacio-3) var(--espacio-4); margin: 0 0 var(--espacio-4);
@@ -69,5 +56,5 @@
   .plataforma-empresas .ficha dl > div { grid-template-columns: 1fr; gap: var(--espacio-1); }
   .plataforma-empresas .acciones .boton { flex: 1 1 100%; }
   /* Sin acción en la fila, la tarjeta no deja un rótulo «Acciones» vacío. */
-  .plataforma-empresas .usuarios td:empty { display: none; }
+  .plataforma-empresas .usuarios-empresa td:empty { display: none; }
 }

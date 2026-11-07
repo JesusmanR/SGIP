@@ -93,7 +93,7 @@ export default function UsuariosEmpresa({ empresaId, usuarios, alExito }) {
   }
 
   return (
-    <section className="tarjeta usuarios" aria-labelledby="usuarios-titulo" tabIndex={-1} ref={seccion}>
+    <section className="tarjeta usuarios-empresa" aria-labelledby="usuarios-titulo" tabIndex={-1} ref={seccion}>
       <h2 id="usuarios-titulo">Usuarios de la empresa</h2>
       <p className="nota">
         Una cuenta se bloquea tras varios intentos fallidos de entrada. Desbloquearla no cambia la contraseña:
