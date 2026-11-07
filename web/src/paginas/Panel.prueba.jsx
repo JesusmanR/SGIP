@@ -10,6 +10,7 @@
  * solo en el color.
  */
 import { render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -309,5 +310,88 @@ describe('los estados de carga y de error', () => {
     const alerta = await screen.findByRole('alert')
     expect(alerta).toHaveTextContent('No se pudo completar la operación.')
     expect(screen.queryByText('Referencias activas')).not.toBeInTheDocument()
+  })
+})
+
+
+describe('rediseño: encabezado, errores y permisos', () => {
+  it('la página tiene un único h1', async () => {
+    await montarCargado()
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Panel')
+  })
+
+  it('el h1 también está cuando falla', async () => {
+    api.panel.mockRejectedValue(new Error('Sin conexión.'))
+    montar()
+    await screen.findByRole('alert')
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
+  })
+
+  it('un fallo ofrece reintentar y, si sale bien, muestra el panel', async () => {
+    const teclado = userEvent.setup()
+    api.panel.mockRejectedValueOnce(new Error('Sin conexión con el servidor.'))
+    montar()
+    await teclado.click(await screen.findByRole('button', { name: /reintentar/i }))
+    expect(await screen.findByRole('region', { name: /indicadores/i })).toBeInTheDocument()
+    expect(api.panel).toHaveBeenCalledTimes(2)
+  })
+
+  it('un 403 dice que no hay permiso, no que falló', async () => {
+    api.panel.mockRejectedValue(Object.assign(new Error('Prohibido'), { estado: 403 }))
+    montar()
+    expect(await screen.findByText(/no tienes permiso/i)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /reintentar/i })).not.toBeInTheDocument()
+  })
+
+  it('quien no es administrador no pide el panel ni ve el capital al costo', async () => {
+    guardarSesion({ token: 'abc', nombre: 'Ana', rol: 'VENDEDOR' })
+    montar()
+    expect(await screen.findByText(/no tienes permiso/i)).toBeInTheDocument()
+    expect(api.panel).not.toHaveBeenCalled()
+    expect(screen.queryByText(/al costo/i)).not.toBeInTheDocument()
+  })
+
+  it('no muestra cifras que el backend no da: ventas, caja ni reportes', async () => {
+    await montarCargado()
+    expect(screen.queryByText(/ventas del mes|caja|reporte/i)).not.toBeInTheDocument()
+  })
+})
+
+
+describe('rediseño: lectura del movimiento y de las críticas', () => {
+  it('los totales del periodo se leen sin abrir la tabla', async () => {
+    montar()
+    const seccion = await screen.findByRole('region', { name: /movimiento de inventario/i })
+    const totales = within(seccion).getByRole('group', { name: /totales del periodo/i })
+    expect(totales).toHaveTextContent('60')
+    expect(totales).toHaveTextContent(/ingresaron/i)
+    expect(totales).toHaveTextContent(/salieron/i)
+  })
+
+  it('en celular cada fila crítica lleva el rótulo de cada dato', async () => {
+    montar()
+    const seccion = await screen.findByRole('region', { name: /existencia crítica/i })
+    expect(seccion.querySelector('[data-etiqueta="Existencia"]')).not.toBeNull()
+    expect(seccion.querySelector('[data-etiqueta="Proveedor"]')).not.toBeNull()
+  })
+
+  it('el estado de cada crítica va escrito, no solo en color', async () => {
+    montar()
+    const seccion = await screen.findByRole('region', { name: /existencia crítica/i })
+    expect(within(seccion).getByText('Agotado')).toBeInTheDocument()
+    expect(within(seccion).getByText('Crítico')).toBeInTheDocument()
+  })
+
+  it('el enlace Ver todas se alcanza con el teclado', async () => {
+    montar()
+    const seccion = await screen.findByRole('region', { name: /existencia crítica/i })
+    const enlace = within(seccion).getByRole('link', { name: /ver todas/i })
+    // Tabulando desde el inicio hay que llegar al enlace: depende de que
+    // sea un ancla real y de que nada lo saque del orden de tabulación.
+    const teclado = userEvent.setup()
+    for (let i = 0; i < 12 && document.activeElement !== enlace; i += 1) await teclado.tab()
+    expect(enlace).toHaveFocus()
+    expect(enlace).toHaveAttribute('href', '/catalogo?estado=CRITICO')
   })
 })
