@@ -34,6 +34,10 @@ export default function Armazon() {
     if (seccion) document.title = `${seccion.etiqueta} · SGIP`
     const main = contenido.current
     if (!main) return undefined
+    // Una página que ya movió su propio foco al montarse (un buscador, por
+    // ejemplo) lo conserva: el de antes se desmontó con la página vieja.
+    const activo = document.activeElement
+    if (activo !== main && main.contains(activo)) return undefined
     function enfocarTitulo() {
       const h1 = main.querySelector('h1')
       if (!h1) return false
