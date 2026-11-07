@@ -32,7 +32,9 @@ const LUIS = { id: 21, nombre: 'Luis Gómez', correo: 'luis@norte.co', rol: 'ADM
 const MARTA = { id: 22, nombre: 'Marta Ríos', correo: 'marta@norte.co', rol: 'VENDEDOR', activo: false, bloqueado: false }
 const USUARIOS = [ANA, LUIS, MARTA]
 
-// Los textos con que el servidor distingue los dos 409 del alta (ServicioPlataforma.darDeAlta).
+// Los dos 409 del alta se reconocen por el `type` del problema (ManejadorErrores), no por el texto.
+const TIPO_NIT = 'urn:sgip:nit-repetido'
+const TIPO_CORREO = 'urn:sgip:correo-repetido'
 const DETALLE_NIT = 'Ya hay una empresa registrada con la identificación tributaria 900555.'
 const DETALLE_CORREO = 'El correo ana@nueva.co ya pertenece a un usuario de la plataforma.'
 
@@ -459,7 +461,7 @@ describe('alta de una empresa', () => {
   })
 
   it('un 409 por NIT repetido queda junto al NIT y no junto al correo', async () => {
-    apiPlataformaEmpresas.darDeAlta.mockRejectedValue(new ErrorApi(409, DETALLE_NIT))
+    apiPlataformaEmpresas.darDeAlta.mockRejectedValue(new ErrorApi(409, DETALLE_NIT, TIPO_NIT))
     montar('/plataforma/empresas/nueva')
     await llenar()
     await userEvent.click(screen.getByRole('button', { name: 'Dar de alta' }))
@@ -471,7 +473,7 @@ describe('alta de una empresa', () => {
   })
 
   it('un 409 por el correo del administrador queda junto al correo y no junto al NIT', async () => {
-    apiPlataformaEmpresas.darDeAlta.mockRejectedValue(new ErrorApi(409, DETALLE_CORREO))
+    apiPlataformaEmpresas.darDeAlta.mockRejectedValue(new ErrorApi(409, DETALLE_CORREO, TIPO_CORREO))
     montar('/plataforma/empresas/nueva')
     await llenar()
     await userEvent.click(screen.getByRole('button', { name: 'Dar de alta' }))
@@ -483,7 +485,7 @@ describe('alta de una empresa', () => {
   })
 
   it('tras un 409 por correo, corregir el correo limpia el error y deja volver a enviar', async () => {
-    apiPlataformaEmpresas.darDeAlta.mockRejectedValueOnce(new ErrorApi(409, DETALLE_CORREO))
+    apiPlataformaEmpresas.darDeAlta.mockRejectedValueOnce(new ErrorApi(409, DETALLE_CORREO, TIPO_CORREO))
     apiPlataformaEmpresas.darDeAlta.mockResolvedValueOnce({ ...BASE, empresaId: 12, razonSocial: 'Tienda Nueva' })
     apiPlataformaEmpresas.ver.mockResolvedValue({ ...BASE, empresaId: 12, razonSocial: 'Tienda Nueva' })
     montar('/plataforma/empresas/nueva')
@@ -507,7 +509,7 @@ describe('alta de una empresa', () => {
   })
 
   it('tras un 409 por NIT, corregir el NIT deja volver a enviar sin tocar el correo', async () => {
-    apiPlataformaEmpresas.darDeAlta.mockRejectedValueOnce(new ErrorApi(409, DETALLE_NIT))
+    apiPlataformaEmpresas.darDeAlta.mockRejectedValueOnce(new ErrorApi(409, DETALLE_NIT, TIPO_NIT))
     apiPlataformaEmpresas.darDeAlta.mockResolvedValueOnce({ ...BASE, empresaId: 12, razonSocial: 'Tienda Nueva' })
     apiPlataformaEmpresas.ver.mockResolvedValue({ ...BASE, empresaId: 12, razonSocial: 'Tienda Nueva' })
     montar('/plataforma/empresas/nueva')
@@ -519,6 +521,43 @@ describe('alta de una empresa', () => {
     expect(nit).not.toHaveAttribute('aria-invalid', 'true')
     await userEvent.click(screen.getByRole('button', { name: 'Dar de alta' }))
     await waitFor(() => expect(apiPlataformaEmpresas.darDeAlta).toHaveBeenCalledTimes(2))
+  })
+
+  it('el NIT repetido se reconoce por el tipo aunque el texto no lo nombre', async () => {
+    apiPlataformaEmpresas.darDeAlta.mockRejectedValue(new ErrorApi(409, 'Ese dato ya está registrado.', TIPO_NIT))
+    montar('/plataforma/empresas/nueva')
+    await llenar()
+    await userEvent.click(screen.getByRole('button', { name: 'Dar de alta' }))
+    const nit = screen.getByLabelText(/identificación tributaria/i)
+    await waitFor(() => expect(nit).toHaveAttribute('aria-invalid', 'true'))
+    expect(screen.getByText('Ese dato ya está registrado.')).toBeInTheDocument()
+    expect(screen.getByLabelText('Correo del administrador')).not.toHaveAttribute('aria-invalid', 'true')
+  })
+
+  it('el correo repetido se reconoce por el tipo aunque el texto no lo nombre', async () => {
+    apiPlataformaEmpresas.darDeAlta.mockRejectedValue(new ErrorApi(409, 'Ese dato ya está registrado.', TIPO_CORREO))
+    montar('/plataforma/empresas/nueva')
+    await llenar()
+    await userEvent.click(screen.getByRole('button', { name: 'Dar de alta' }))
+    const correo = screen.getByLabelText('Correo del administrador')
+    await waitFor(() => expect(correo).toHaveAttribute('aria-invalid', 'true'))
+    expect(screen.getByText('Ese dato ya está registrado.')).toBeInTheDocument()
+    expect(screen.getByLabelText(/identificación tributaria/i)).not.toHaveAttribute('aria-invalid', 'true')
+  })
+
+  it('un 409 sin tipo cuyo texto menciona el NIT o el correo va arriba y no marca ningún campo', async () => {
+    apiPlataformaEmpresas.darDeAlta.mockRejectedValueOnce(new ErrorApi(409, DETALLE_NIT))
+    montar('/plataforma/empresas/nueva')
+    await llenar()
+    await userEvent.click(screen.getByRole('button', { name: 'Dar de alta' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(DETALLE_NIT)
+    expect(screen.getByLabelText(/identificación tributaria/i)).not.toHaveAttribute('aria-invalid', 'true')
+
+    apiPlataformaEmpresas.darDeAlta.mockRejectedValueOnce(new ErrorApi(409, DETALLE_CORREO))
+    await userEvent.click(screen.getByRole('button', { name: 'Dar de alta' }))
+    await waitFor(() => expect(apiPlataformaEmpresas.darDeAlta).toHaveBeenCalledTimes(2))
+    expect(await screen.findByRole('alert')).toHaveTextContent(DETALLE_CORREO)
+    expect(screen.getByLabelText('Correo del administrador')).not.toHaveAttribute('aria-invalid', 'true')
   })
 
   it('un 409 que no es del NIT ni del correo va arriba, no marca ningún campo y deja reintentar', async () => {
