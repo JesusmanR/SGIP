@@ -34,23 +34,24 @@ public class ServicioAutenticacion {
     private final AuditoriaAccesoRepositorio auditoria;
     private final Clock reloj;
     private final int intentosMaximos;
-    private final int minutosDeBloqueo;
+    private final PoliticaDeBloqueo bloqueo;
 
     /**
      * El instante del bloqueo y su vencimiento se miden con el reloj de la
      * aplicación, el mismo en los dos lados: la columna solo guarda el instante
-     * y la base nunca decide si venció (ADR-0028).
+     * y la base nunca decide si venció (ADR-0028). El plazo lo dice
+     * {@link PoliticaDeBloqueo}, el mismo que usa la lista de usuarios de la plataforma.
      */
     public ServicioAutenticacion(UsuarioRepositorio usuarios,
                                  AuditoriaAccesoRepositorio auditoria,
                                  Clock reloj,
                                  @Value("${sgip.seguridad.intentos-maximos:5}") int intentosMaximos,
-                                 @Value("${sgip.seguridad.minutos-de-bloqueo:15}") int minutosDeBloqueo) {
+                                 PoliticaDeBloqueo bloqueo) {
         this.usuarios = usuarios;
         this.auditoria = auditoria;
         this.reloj = reloj;
         this.intentosMaximos = intentosMaximos;
-        this.minutosDeBloqueo = minutosDeBloqueo;
+        this.bloqueo = bloqueo;
     }
 
     @Transactional(noRollbackFor = CredencialesInvalidasException.class)
@@ -66,7 +67,7 @@ public class ServicioAutenticacion {
         }
         // Al vencer el plazo la cuenta se limpia antes de mirar la clave: los
         // intentos vuelven a cero y un error no la bloquea de inmediato otra vez.
-        if (usuario.bloqueoVencido(ahora(), minutosDeBloqueo)) {
+        if (bloqueo.vencido(usuario, ahora())) {
             usuario.desbloquear();
         }
         if (usuario.isBloqueado()) {
@@ -139,7 +140,7 @@ public class ServicioAutenticacion {
 
         // El mismo vencimiento que en el ingreso: al cumplirse el plazo, los
         // intentos vuelven a cero también por esta puerta.
-        if (usuario.bloqueoVencido(ahora(), minutosDeBloqueo)) {
+        if (bloqueo.vencido(usuario, ahora())) {
             usuario.desbloquear();
         }
         // El bloqueo no cierra las sesiones abiertas (ADR-0028), así que esta
@@ -150,7 +151,7 @@ public class ServicioAutenticacion {
         if (usuario.isBloqueado()) {
             auditoria.save(AuditoriaAcceso.fallido(usuario, usuario.getCorreo(),
                     MotivoRechazo.CUENTA_BLOQUEADA, origen));
-            throw new CuentaBloqueadaException(minutosDeBloqueo);
+            throw new CuentaBloqueadaException(bloqueo.minutos());
         }
         if (!Seguridad.verificar(actual, usuario.getClaveHash())) {
             usuario.registrarIntentoFallido(intentosMaximos, ahora());
@@ -194,7 +195,7 @@ public class ServicioAutenticacion {
 
     private void rechazar(Usuario usuario, String correo, MotivoRechazo motivo, String origen) {
         auditoria.save(AuditoriaAcceso.fallido(usuario, correo, motivo, origen));
-        throw new CredencialesInvalidasException(minutosDeBloqueo);
+        throw new CredencialesInvalidasException(bloqueo.minutos());
     }
 
     private LocalDateTime ahora() {

@@ -13,7 +13,6 @@ import co.com.bspstore.sgip.modelo.EstadoEmpresa;
 import co.com.bspstore.sgip.modelo.Rol;
 import co.com.bspstore.sgip.modelo.Usuario;
 import co.com.bspstore.sgip.util.Seguridad;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -49,23 +48,23 @@ public class ServicioPlataforma {
     private final UsuarioRepositorio usuarios;
     private final RolRepositorio roles;
     private final Clock reloj;
-    private final int minutosDeBloqueo;
+    private final PoliticaDeBloqueo bloqueo;
 
     /**
-     * {@code minutosDeBloqueo} es la misma propiedad, con el mismo valor por
-     * omisión, que lee {@link ServicioAutenticacion}: la lista de usuarios dice
-     * «bloqueado» con el mismo criterio con que el ingreso rechaza.
+     * {@code bloqueo} es la misma {@link PoliticaDeBloqueo} que usa
+     * {@link ServicioAutenticacion}: la lista de usuarios dice «bloqueado» con
+     * el mismo criterio con que el ingreso rechaza.
      */
     public ServicioPlataforma(RepositorioPlataforma plataforma,
                               UsuarioRepositorio usuarios,
                               RolRepositorio roles,
                               Clock reloj,
-                              @Value("${sgip.seguridad.minutos-de-bloqueo:15}") int minutosDeBloqueo) {
+                              PoliticaDeBloqueo bloqueo) {
         this.plataforma = plataforma;
         this.usuarios = usuarios;
         this.roles = roles;
         this.reloj = reloj;
-        this.minutosDeBloqueo = minutosDeBloqueo;
+        this.bloqueo = bloqueo;
     }
 
     @Transactional(readOnly = true)
@@ -100,7 +99,7 @@ public class ServicioPlataforma {
         LocalDateTime ahora = LocalDateTime.now(reloj);
         return lista.stream()
                 .map(u -> UsuarioEnPlataforma.de(u,
-                        u.isBloqueado() && !u.bloqueoVencido(ahora, minutosDeBloqueo)))
+                        bloqueo.bloqueadoHoy(u, ahora)))
                 .toList();
     }
 
