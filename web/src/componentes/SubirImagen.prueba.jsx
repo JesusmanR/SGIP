@@ -42,6 +42,11 @@ describe('recuadro de imagen', () => {
     clic.mockRestore()
   })
 
+  it('con permiso y sin ayuda, el botón dice la acción y de qué imagen se trata', () => {
+    render(<SubirImagen src={null} alt="Logo de Comercial Andina S.A.S." puedeEditar />)
+    expect(screen.getByRole('button', { name: 'Subir o reemplazar: Logo de Comercial Andina S.A.S.' })).toBeInTheDocument()
+  })
+
   it('entrega SIEMPRE un arreglo de archivos, también cuando no es múltiple', async () => {
     const onSubir = vi.fn().mockResolvedValue()
     render(<SubirImagen src={null} alt="Logo" puedeEditar onSubir={onSubir} />)
