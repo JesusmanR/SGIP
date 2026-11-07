@@ -237,9 +237,10 @@ public class ManejadorErrores {
     @ExceptionHandler(RegistroRepetidoException.class)
     public ProblemDetail registroRepetido(RegistroRepetidoException e) {
         // 409 igual que el nombre repetido, pero con otro título: «dato ya
-        // registrado» sirve a la unicidad de toda la plataforma (el NIT, el
-        // correo) y también a dos reglas del mismo alcance a la vez dentro de
-        // una empresa; el detalle dice cuál es el dato que choca.
+        // registrado» sirve a dos reglas del mismo alcance a la vez dentro de
+        // una empresa, a una orden con consecutivo repetido y a lo demás que
+        // choque; el detalle dice cuál es el dato. El NIT y el correo repetidos
+        // tienen su propio manejador, con un tipo que el formulario reconoce.
         ProblemDetail p = ProblemDetail.forStatus(HttpStatus.CONFLICT);
         p.setTitle("Dato ya registrado");
         p.setDetail(e.getMessage());
