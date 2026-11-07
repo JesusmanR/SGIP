@@ -98,7 +98,7 @@ export default function SubirImagen({
   const rotulo = puedeEditar
     ? (ayuda ?? (multiple
       ? 'Subir imágenes. Puedes elegir varias a la vez.'
-      : 'Subir o reemplazar la imagen'))
+      : `Subir o reemplazar: ${alt}`))
     : alt
 
   return (
