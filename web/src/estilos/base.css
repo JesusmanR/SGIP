@@ -177,6 +177,8 @@ td.acciones .boton { margin-left: .4rem; }
 .cifra-valor  { font-size: 1.75rem; font-weight: 700; line-height: 1.1;
                 font-variant-numeric: tabular-nums; }
 .cifra-pie    { font-size: .75rem; color: var(--tinta-3); }
+.cifra-valor.exito       { color: var(--exito); }
+.cifra-valor.aviso-texto { color: var(--aviso); }
 
 /* El `nowrap` no es cosmético: «+900,0 %» partido en dos renglones deja
    el número y su unidad en líneas distintas, y es justo la cifra que la

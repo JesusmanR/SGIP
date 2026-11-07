@@ -33,8 +33,6 @@
   background: var(--info-fondo); color: var(--info);
 }
 .pasos li.pasos-estado::after { content: none; }
-.cifra-valor.exito       { color: var(--exito); }
-.cifra-valor.aviso-texto { color: var(--aviso); }
 
 /* La variación lleva color además del signo, pero el signo va primero:
    quien no distinga los dos tonos sigue leyendo «+3,8 %». */
