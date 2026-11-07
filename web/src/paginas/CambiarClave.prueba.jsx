@@ -7,7 +7,7 @@
  * aterriza donde le toca. Las demás pantallas se sustituyen por un rótulo
  * para no arrastrar sus llamadas al API.
  */
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -187,6 +187,94 @@ describe('cambio de contraseña obligatorio', () => {
       await userEvent.setup().click(screen.getByRole('button', { name: /cerrar sesión/i }))
 
       await waitFor(() => expect(haySesion()).toBe(false))
+    })
+  })
+
+  describe('diseño, requisitos y teclado', () => {
+    it('tiene un único h1', () => {
+      montar()
+      expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
+    })
+
+    it('dice de quién es la cuenta que se protege, con el nombre de la sesión', () => {
+      montar()
+      expect(screen.getByText('Ana')).toBeInTheDocument()
+    })
+
+    it('el indicador solo lista lo que el servidor exige: ocho caracteres y distinta de la actual', () => {
+      montar()
+      const lista = screen.getByRole('list', { name: /requisitos/i })
+      expect(within(lista).getAllByRole('listitem')).toHaveLength(2)
+      expect(lista).toHaveTextContent(/al menos 8 caracteres/i)
+      expect(lista).toHaveTextContent(/distinta de la actual/i)
+      expect(lista).not.toHaveTextContent(/mayúscula|minúscula|número|símbolo/i)
+    })
+
+    it('cada requisito dice con palabras si se cumple, no solo con color', async () => {
+      montar()
+      const teclado = userEvent.setup()
+      const lista = screen.getByRole('list', { name: /requisitos/i })
+      const [ocho, distinta] = within(lista).getAllByRole('listitem')
+      expect(ocho).toHaveTextContent(/pendiente/i)
+      expect(distinta).toHaveTextContent(/pendiente/i)
+
+      await teclado.type(screen.getByLabelText('Contraseña nueva'), 'corta')
+      expect(ocho).toHaveTextContent(/pendiente/i)
+      await teclado.type(screen.getByLabelText('Contraseña nueva'), 'larga123')
+      expect(ocho).toHaveTextContent(/cumplido/i)
+
+      await teclado.type(screen.getByLabelText('Contraseña actual'), 'cortalarga123')
+      expect(distinta).toHaveTextContent(/pendiente/i)
+      await teclado.type(screen.getByLabelText('Contraseña actual'), 'X')
+      expect(distinta).toHaveTextContent(/cumplido/i)
+    })
+
+    it('si no coinciden, el motivo queda junto al campo repetido y lo marca como inválido', async () => {
+      montar()
+      await rellenar({ nueva: 'Nueva2026xyz', repetida: 'Otra2026xyzz' })
+      const alerta = await screen.findByRole('alert')
+      expect(alerta).toHaveTextContent(/no coinciden/i)
+      const campo = screen.getByLabelText('Repite la contraseña nueva')
+      expect(campo).toHaveAttribute('aria-invalid', 'true')
+      expect(campo).toHaveAttribute('aria-describedby', expect.stringContaining(alerta.id))
+    })
+
+    it('con la cuenta bloqueada (423) muestra el texto del servidor y deja volver a intentar', async () => {
+      api.cambiarClave.mockRejectedValue(new ErrorApi(423,
+        'Tu cuenta está bloqueada por intentos fallidos. No puedes cambiar la contraseña '
+        + 'hasta que pasen 15 minutos desde el bloqueo.'))
+      montar()
+      await rellenar()
+      expect(await screen.findByRole('alert')).toHaveTextContent(/cuenta está bloqueada/i)
+      expect(leerSesion().debeCambiarClave).toBe(true)
+      expect(screen.getByRole('button', { name: /guardar contraseña/i })).toBeEnabled()
+    })
+
+    it('cada contraseña se puede mostrar y ocultar con su propio botón', async () => {
+      montar()
+      const teclado = userEvent.setup()
+      expect(screen.getAllByRole('button', { name: /mostrar/i })).toHaveLength(3)
+      const nueva = screen.getByLabelText('Contraseña nueva')
+      await teclado.click(screen.getByRole('button', { name: /mostrar contraseña nueva/i }))
+      expect(nueva).toHaveAttribute('type', 'text')
+      expect(screen.getByLabelText('Contraseña actual')).toHaveAttribute('type', 'password')
+      await teclado.click(screen.getByRole('button', { name: /ocultar contraseña nueva/i }))
+      expect(nueva).toHaveAttribute('type', 'password')
+    })
+
+    it('no ofrece recuperar la contraseña ni registrarse', () => {
+      montar()
+      expect(screen.queryByText(/olvidaste|crear cuenta|google/i)).not.toBeInTheDocument()
+    })
+
+    it('Enter en el último campo envía el formulario', async () => {
+      api.cambiarClave.mockResolvedValue(null)
+      montar()
+      const teclado = userEvent.setup()
+      await teclado.type(screen.getByLabelText('Contraseña actual'), 'Inicial2026')
+      await teclado.type(screen.getByLabelText('Contraseña nueva'), 'Nueva2026xyz')
+      await teclado.type(screen.getByLabelText('Repite la contraseña nueva'), 'Nueva2026xyz{Enter}')
+      await waitFor(() => expect(api.cambiarClave).toHaveBeenCalledWith('Inicial2026', 'Nueva2026xyz'))
     })
   })
 })

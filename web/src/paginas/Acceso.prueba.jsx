@@ -33,7 +33,7 @@ async function entrar(correo = 'ana@bsp.com.co', clave = 'secreta') {
   const teclado = userEvent.setup()
   await teclado.type(screen.getByLabelText(/correo/i), correo)
   await teclado.type(screen.getByLabelText(/contraseña/i), clave)
-  await teclado.click(screen.getByRole('button', { name: /entrar/i }))
+  await teclado.click(screen.getByRole('button', { name: /iniciar sesión/i }))
 }
 
 describe('pantalla de acceso', () => {
@@ -144,7 +144,7 @@ describe('pantalla de acceso', () => {
     let resolver
     api.entrar.mockReturnValue(new Promise((r) => { resolver = r }))
     await entrar()
-    const boton = screen.getByRole('button', { name: /entrando/i })
+    const boton = screen.getByRole('button', { name: /iniciando sesión/i })
     expect(boton).toBeDisabled()
     await act(async () => { resolver({ token: 'abc', nombre: 'Ana' }) })
   })
@@ -155,6 +155,52 @@ describe('pantalla de acceso', () => {
     await screen.findByRole('alert')
     // Si el botón se quedara inhabilitado, un error de tecleo obligaría a
     // recargar la página.
-    expect(screen.getByRole('button', { name: /entrar/i })).toBeEnabled()
+    expect(screen.getByRole('button', { name: /iniciar sesión/i })).toBeEnabled()
+  })
+
+  describe('diseño y teclado', () => {
+    it('tiene un único h1 que dice qué se hace aquí', () => {
+      const titulos = screen.getAllByRole('heading', { level: 1 })
+      expect(titulos).toHaveLength(1)
+      expect(titulos[0]).toHaveTextContent(/inicia sesión en tu cuenta/i)
+    })
+
+    it('la contraseña va oculta y un botón la muestra y la vuelve a ocultar', async () => {
+      const teclado = userEvent.setup()
+      const campo = screen.getByLabelText(/contraseña/i)
+      expect(campo).toHaveAttribute('type', 'password')
+      await teclado.click(screen.getByRole('button', { name: /mostrar contraseña/i }))
+      expect(campo).toHaveAttribute('type', 'text')
+      await teclado.click(screen.getByRole('button', { name: /ocultar contraseña/i }))
+      expect(campo).toHaveAttribute('type', 'password')
+    })
+
+    it('no ofrece recuperar la contraseña, registrarse ni otros accesos que no existen', () => {
+      expect(screen.queryByText(/olvidaste|crear cuenta|google|mantener sesión|demostración/i))
+        .not.toBeInTheDocument()
+      expect(screen.queryByRole('link')).not.toBeInTheDocument()
+    })
+
+    it('con el teclado se recorre correo, contraseña, mostrar y entrar, y Enter envía', async () => {
+      api.entrar.mockResolvedValue({ token: 'abc', nombre: 'Ana', rol: 'VENDEDOR' })
+      const teclado = userEvent.setup()
+      await teclado.type(screen.getByLabelText(/correo/i), 'ana@bsp.com.co')
+      await teclado.tab()
+      expect(screen.getByLabelText(/contraseña/i)).toHaveFocus()
+      await teclado.keyboard('secreta')
+      await teclado.tab()
+      expect(screen.getByRole('button', { name: /mostrar contraseña/i })).toHaveFocus()
+      await teclado.tab()
+      expect(screen.getByRole('button', { name: /iniciar sesión/i })).toHaveFocus()
+      await teclado.keyboard('{Enter}')
+      await waitFor(() => expect(api.entrar).toHaveBeenCalledWith('ana@bsp.com.co', 'secreta'))
+    })
+
+    it('el error se anuncia como alerta y no vacía lo escrito', async () => {
+      api.entrar.mockRejectedValue(new ErrorApi(401, 'Correo o contraseña incorrectos.'))
+      await entrar()
+      expect(await screen.findByRole('alert')).toBeInTheDocument()
+      expect(screen.getByLabelText(/correo/i)).toHaveValue('ana@bsp.com.co')
+    })
   })
 })
