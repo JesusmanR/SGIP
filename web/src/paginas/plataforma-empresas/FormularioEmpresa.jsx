@@ -13,15 +13,13 @@ const VACIO = {
 
 /**
  * El servidor responde 409 al NIT repetido y también al correo del administrador
- * repetido, con el mismo título y sin ningún campo que diga cuál es: solo el texto
- * del detalle lo distingue (ServicioPlataforma.darDeAlta). Por eso se lee el texto;
- * si algún día cambia, el 409 no reconocido cae en el aviso de arriba, que sigue
- * diciendo lo que pasó, y no en un campo equivocado.
+ * repetido, con el mismo título; lo que dice cuál es el `type` del problema
+ * (ManejadorErrores). Un 409 con otro tipo, o sin él, cae en el aviso de arriba,
+ * que sigue diciendo lo que pasó, y no en un campo equivocado.
  */
-function campoDelConflicto(detalle) {
-  if (/^El correo /i.test(detalle)) return 'administradorCorreo'
-  if (/identificaci[oó]n tributaria/i.test(detalle)) return 'nit'
-  return null
+const CAMPO_POR_TIPO = {
+  'urn:sgip:nit-repetido': 'nit',
+  'urn:sgip:correo-repetido': 'administradorCorreo',
 }
 
 const largo = (texto, max, nombre) => (texto.length > max ? `${nombre} no puede pasar de ${max} caracteres.` : null)
@@ -119,7 +117,7 @@ export default function FormularioEmpresa() {
     } catch (err) {
       enCurso.current = false
       setEnviando(false)
-      const campo = err.estado === 409 ? campoDelConflicto(err.message ?? '') : null
+      const campo = err.estado === 409 ? (CAMPO_POR_TIPO[err.tipo] ?? null) : null
       if (campo) {
         setConflictos((previos) => ({ ...previos, [campo]: err.message }))
         setIntentos((n) => n + 1)
