@@ -8,7 +8,14 @@ import co.com.bspstore.sgip.logica.EstadoDeCargaInvalidoException;
 import co.com.bspstore.sgip.logica.ImpuestoNoDisponibleException;
 import co.com.bspstore.sgip.logica.RecursoNoEncontradoException;
 import co.com.bspstore.sgip.modelo.Producto;
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.ProblemDetail;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
@@ -24,6 +31,26 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ManejadorErroresTest {
 
     private final ManejadorErrores manejador = new ManejadorErrores();
+
+    private final ListAppender<ILoggingEvent> registro = new ListAppender<>();
+    private Logger logger;
+
+    @BeforeEach
+    void escucharElRegistro() {
+        logger = (Logger) LoggerFactory.getLogger(ManejadorErrores.class);
+        registro.start();
+        logger.addAppender(registro);
+    }
+
+    @AfterEach
+    void dejarDeEscuchar() {
+        logger.detachAppender(registro);
+    }
+
+    private Level nivelRegistrado() {
+        assertEquals(1, registro.list.size(), registro.list.toString());
+        return registro.list.get(0).getLevel();
+    }
 
     /**
      * Imita lo que entrega Hibernate: el SQLException queda dos niveles
@@ -64,6 +91,91 @@ class ManejadorErroresTest {
         assertEquals("Dato ya registrado", p.getTitle());
         assertNotNull(p.getDetail());
         sinTextoDelMotor(p, "uq_productos", "productos", "Duplicate", "ABC");
+    }
+
+    @Test
+    void borrarLoQueOtraFilaReferenciaEsUn409SinExponerLaTabla() {
+        var e = delMotor("Cannot delete or update a parent row: a foreign key constraint fails "
+                + "(`sgip`.`orden_compra_items`, CONSTRAINT `fk_oci_producto_emp` FOREIGN KEY "
+                + "(`empresa_id`, `producto_id`) REFERENCES `productos` (`empresa_id`, `producto_id`))",
+                "23000", 1451);
+
+        ProblemDetail p = manejador.integridad(e);
+
+        assertEquals(409, p.getStatus());
+        assertEquals("Registro en uso", p.getTitle());
+        assertEquals("No se puede quitar o cambiar porque otros registros dependen de él.", p.getDetail());
+        sinTextoDelMotor(p, "fk_oci_producto_emp", "orden_compra_items", "parent row", "sgip");
+    }
+
+    @Test
+    void unDatoObligatorioAusenteEsUn400SinExponerLaColumna() {
+        var e = delMotor("Column 'columna_secreta_x' cannot be null", "23000", 1048);
+
+        ProblemDetail p = manejador.integridad(e);
+
+        assertEquals(400, p.getStatus());
+        assertEquals("Dato obligatorio", p.getTitle());
+        assertEquals("Falta un dato obligatorio.", p.getDetail());
+        sinTextoDelMotor(p, "columna_secreta_x", "cannot be null");
+    }
+
+    @Test
+    void unTextoMasLargoQueLaColumnaEsUn400SinExponerLaColumnaNiElValor() {
+        var e = delMotor("Data too long for column 'columna_secreta_y' at row 1", "22001", 1406);
+
+        ProblemDetail p = manejador.integridad(e);
+
+        assertEquals(400, p.getStatus());
+        assertEquals("Dato demasiado largo", p.getTitle());
+        assertEquals("Uno de los textos es más largo de lo que se admite.", p.getDetail());
+        sinTextoDelMotor(p, "columna_secreta_y", "Data too long", "row 1");
+    }
+
+    /** Un choque que se esperaba no es una falla del sistema: no merece el nivel de error. */
+    @Test
+    void unDuplicadoNoSeRegistraComoError() {
+        manejador.integridad(delMotor("Duplicate entry 'ABC' for key 'k'", "23000", 1062));
+
+        assertTrue(nivelRegistrado().toInt() < Level.ERROR.toInt());
+    }
+
+    @Test
+    void unaReferenciaInexistenteNoSeRegistraComoError() {
+        manejador.integridad(delMotor("Cannot add or update a child row", "23000", 1452));
+
+        assertTrue(nivelRegistrado().toInt() < Level.ERROR.toInt());
+    }
+
+    @Test
+    void borrarAlgoReferenciadoNoSeRegistraComoError() {
+        manejador.integridad(delMotor("Cannot delete or update a parent row", "23000", 1451));
+
+        assertTrue(nivelRegistrado().toInt() < Level.ERROR.toInt());
+    }
+
+    /** Un 1048 o un 1406 que llega al motor es una validación que faltó en la solicitud: hay que verlo. */
+    @Test
+    void unDatoAusenteOLargoQueLlegaAlMotorQuedaComoAviso() {
+        manejador.integridad(delMotor("Column 'x' cannot be null", "23000", 1048));
+        manejador.integridad(delMotor("Data too long for column 'x' at row 1", "22001", 1406));
+
+        assertEquals(2, registro.list.size());
+        registro.list.forEach(ev -> assertEquals(Level.WARN, ev.getLevel()));
+    }
+
+    @Test
+    void unCodigoInesperadoSigueSiendoUnError() {
+        manejador.integridad(delMotor("Check constraint 'ck_x' is violated.", "HY000", 3819));
+
+        assertEquals(Level.ERROR, nivelRegistrado());
+    }
+
+    @Test
+    void sinSqlExceptionEnLaCadenaSigueSiendoUnError() {
+        manejador.integridad(new DataIntegrityViolationException("algo raro"));
+
+        assertEquals(Level.ERROR, nivelRegistrado());
     }
 
     @Test
