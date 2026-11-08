@@ -10,6 +10,7 @@ import co.com.bspstore.sgip.datos.CategoriaRepositorio;
 import co.com.bspstore.sgip.datos.ConsultaCatalogo;
 import co.com.bspstore.sgip.datos.ProductoRepositorio;
 import co.com.bspstore.sgip.datos.ProveedorRepositorio;
+import co.com.bspstore.sgip.datos.RepositorioCostos;
 import co.com.bspstore.sgip.datos.RepositorioPrecios;
 import co.com.bspstore.sgip.modelo.Categoria;
 import co.com.bspstore.sgip.modelo.Producto;
@@ -58,6 +59,7 @@ class ServicioProductoTest {
     @Mock ConsultaCatalogo catalogo;
     @Mock ServicioInventario inventario;
     @Mock RepositorioPrecios precios;
+    @Mock RepositorioCostos costos;
 
     /** Con el ServicioPrecios de verdad: la regla de qué se escribe y cuándo vive allí. */
     private ServicioProducto servicio;
@@ -71,7 +73,7 @@ class ServicioProductoTest {
         Clock reloj = Clock.fixed(HOY.atTime(9, 0).atZone(ZoneId.of("America/Bogota")).toInstant(),
                 ZoneId.of("America/Bogota"));
         servicio = new ServicioProducto(productos, categorias, proveedores, catalogo, inventario,
-                new ServicioPrecios(precios, reloj));
+                new ServicioPrecios(precios, reloj), costos, reloj);
         // Tolerante porque solo las pruebas de alta con existencia llegan
         // a pedirlo; las de edición y las de rechazo no lo tocan.
         lenient().when(inventario.registrarSaldoInicial(any(), anyInt())).thenReturn(
@@ -490,6 +492,62 @@ class ServicioProductoTest {
         assertTrue(servicio.actualizar(11, edicionConVersion(3)).isPresent());
 
         verify(productos).saveAndFlush(any());
+    }
+
+    // ── Costo en el histórico (M15) ──────────────────────────────────
+
+    /** El costo guardado es 3100.00 (ver productoGuardado). */
+    private SolicitudEdicionProducto edicionConCosto(String costo) {
+        return new SolicitudEdicionProducto(4, 9, "ARZ-500", "ARZ-500", "7701234567890",
+                "Arroz Diana", "500 g", null, new BigDecimal(costo), 20, null, null, null, 0);
+    }
+
+    private void unaEdicionLista() {
+        comoEmpresa(3);
+        when(productos.findByEmpresaIdAndId(3, 11)).thenReturn(Optional.of(productoGuardado()));
+        referenciasPropias();
+        when(productos.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
+    }
+
+    @Test
+    void cambiarElCostoLoRegistraEnElHistoricoConElDiaDeBogota() {
+        unaEdicionLista();
+
+        servicio.actualizar(11, edicionConCosto("3400.00"));
+
+        verify(costos).registrarCambio(3, 11, new BigDecimal("3400.00"), HOY);
+    }
+
+    @Test
+    void elHistoricoSeEscribeDespuesDeGuardarElProducto() {
+        unaEdicionLista();
+
+        servicio.actualizar(11, edicionConCosto("3400.00"));
+
+        InOrder orden = inOrder(productos, costos);
+        orden.verify(productos).saveAndFlush(any());
+        orden.verify(costos).registrarCambio(3, 11, new BigDecimal("3400.00"), HOY);
+    }
+
+    /** La base devuelve 3100.00 y el formulario puede mandar 3100: es el mismo costo. */
+    @Test
+    void editarSinCambiarElCostoNoEscribeNadaEnElHistorico() {
+        unaEdicionLista();
+
+        servicio.actualizar(11, edicionConCosto("3100"));
+
+        verifyNoInteractions(costos);
+    }
+
+    @Test
+    void siLaEdicionSeRechazaNoQuedaNadaEnElHistorico() {
+        comoEmpresa(3);
+        when(productos.findByEmpresaIdAndId(3, 11)).thenReturn(Optional.of(productoEnLaVersion(3)));
+
+        assertThrows(org.springframework.orm.ObjectOptimisticLockingFailureException.class,
+                () -> servicio.actualizar(11, edicionConVersion(2)));
+
+        verifyNoInteractions(costos);
     }
 
     // ── Cambio de categoría (M3) ─────────────────────────────────────

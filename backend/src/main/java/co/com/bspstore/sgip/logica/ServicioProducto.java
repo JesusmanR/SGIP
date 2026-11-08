@@ -8,11 +8,14 @@ import co.com.bspstore.sgip.datos.CategoriaRepositorio;
 import co.com.bspstore.sgip.datos.ConsultaCatalogo;
 import co.com.bspstore.sgip.datos.ProductoRepositorio;
 import co.com.bspstore.sgip.datos.ProveedorRepositorio;
+import co.com.bspstore.sgip.datos.RepositorioCostos;
+import co.com.bspstore.sgip.util.Hoy;
 import co.com.bspstore.sgip.modelo.Producto;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
@@ -31,19 +34,25 @@ public class ServicioProducto {
     private final ConsultaCatalogo catalogo;
     private final ServicioInventario inventario;
     private final ServicioPrecios precios;
+    private final RepositorioCostos costos;
+    private final Clock reloj;
 
     public ServicioProducto(ProductoRepositorio productos,
                             CategoriaRepositorio categorias,
                             ProveedorRepositorio proveedores,
                             ConsultaCatalogo catalogo,
                             ServicioInventario inventario,
-                            ServicioPrecios precios) {
+                            ServicioPrecios precios,
+                            RepositorioCostos costos,
+                            Clock reloj) {
         this.productos = productos;
         this.categorias = categorias;
         this.proveedores = proveedores;
         this.catalogo = catalogo;
         this.inventario = inventario;
         this.precios = precios;
+        this.costos = costos;
+        this.reloj = reloj;
     }
 
     /** Los estados que la columna generada estado_stock puede tomar. */
@@ -173,6 +182,10 @@ public class ServicioProducto {
      * El precio solo cambia si alguien lo escribió. Cambiar el costo no escribe
      * ninguna regla, y por eso se conserva lo que se escribió en su día: con un
      * porcentaje cambia el precio y con un precio cambia el margen (ADR-0025).
+     *
+     * Cambiar el costo sí escribe el histórico de costos, con el mismo formato
+     * que la importación y sin carga de origen; si el costo no cambia, no escribe
+     * nada (M15).
      */
     @Transactional
     public Optional<Producto> actualizar(Integer productoId, SolicitudEdicionProducto s) {
@@ -211,6 +224,11 @@ public class ServicioProducto {
         }
         precios.comprobarPrecios(s.costo(), s.contado(), s.credito(), s.creditoIgualAlContado());
 
+        // El costo de antes, para saber si esta edición lo cambia. Se compara el
+        // valor y no la escritura: la base devuelve 3100.00 y el formulario puede
+        // mandar 3100, y eso no es un cambio.
+        boolean cambiaElCosto = p.getCosto().compareTo(s.costo()) != 0;
+
         p.reemplazarDatos(s.categoriaId(), s.proveedorId(), codigo, sku, s.nombre(),
                 s.presentacion(), s.descripcion(), barras, s.costo(),
                 s.existenciaMinima() == null ? p.getExistenciaMinima() : s.existenciaMinima());
@@ -218,6 +236,12 @@ public class ServicioProducto {
         // vista, que junta el producto con la regla de su categoría, y con la
         // categoría nueva sin escribir seguiría viendo la vieja (M3).
         productos.saveAndFlush(p);
+        if (cambiaElCosto) {
+            // Igual que al aplicar una lista de precios: un cambio de costo no deja
+            // rastro en el kárdex, y sin el histórico no habría forma de saber con
+            // qué costo se vendió algo el mes pasado (M15).
+            costos.registrarCambio(empresa, productoId, s.costo(), Hoy.de(reloj));
+        }
         // Sin tocar `version`: la regla es una fila aparte, y un cambio solo de
         // precio no le quita a nadie los datos del producto que tenía abiertos.
         precios.escribirPrecios(empresa, productoId, s.costo(), s.contado(), s.credito(),
