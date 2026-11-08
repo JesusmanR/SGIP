@@ -100,7 +100,7 @@ export default function Categorias({ onCerrar, onCambio }) {
       className="velo" role="dialog" aria-modal="true" aria-label="Categorías del catálogo"
       tabIndex={-1} ref={dialogo.ref} onKeyDown={dialogo.onKeyDown}
     >
-      <div className="tarjeta panel panel-categorias">
+      <div className="tarjeta panel-dialogo panel-categorias">
         <div className="panel-cabecera">
           <h2>Categorías</h2>
           <button type="button" className="boton secundario" onClick={onCerrar}>Cerrar</button>

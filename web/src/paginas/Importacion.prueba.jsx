@@ -105,6 +105,8 @@ describe('importación de lista de precios', () => {
       await waitFor(() =>
         expect(screen.queryByText(/el catálogo aún no cambia/i)).not.toBeInTheDocument())
       expect(screen.getByText(/398 referencias actualizadas/i)).toBeInTheDocument()
+      expect(screen.getByText(/cambia su ganancia/i)).toBeInTheDocument()
+      expect(document.body.textContent).not.toMatch(/margen/i)
     })
 
     it('subir el archivo no aplica nada por sí solo', async () => {

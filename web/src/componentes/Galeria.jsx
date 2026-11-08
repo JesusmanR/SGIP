@@ -129,7 +129,7 @@ export default function Galeria({ productoId, nombre, puedeEditar, onCerrar, onC
       className="velo" role="dialog" aria-modal="true" aria-label={`Imágenes de ${nombre}`}
       tabIndex={-1} ref={dialogo.ref} onKeyDown={dialogo.onKeyDown}
     >
-      <div className="tarjeta panel">
+      <div className="tarjeta panel-dialogo">
         <div className="panel-cabecera">
           <h2>Imágenes de {nombre}</h2>
           <button type="button" className="boton secundario" onClick={onCerrar}>Cerrar</button>

@@ -341,7 +341,7 @@ describe('catálogo de productos', () => {
     it('un vendedor no ve la columna de margen', async () => {
       montar()
       await conFilas()
-      expect(screen.queryByRole('columnheader', { name: 'Margen' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('columnheader', { name: 'Ganancia' })).not.toBeInTheDocument()
       expect(screen.queryByText(/falta el precio de venta/i)).not.toBeInTheDocument()
       expect(fila(screen, 'PC-001')).not.toHaveTextContent('20,00')
     })
@@ -352,7 +352,9 @@ describe('catálogo de productos', () => {
       api.proveedores.mockResolvedValue(PROVEEDORES)
       montar()
       await conFilas()
-      expect(screen.getByRole('columnheader', { name: 'Margen' })).toBeInTheDocument()
+      expect(screen.getByRole('columnheader', { name: 'Ganancia' })).toBeInTheDocument()
+      // Lo que lee el usuario dice «ganancia»; «margen» queda solo en los identificadores.
+      expect(document.body.textContent).not.toMatch(/margen/i)
       expect(fila(screen, 'PC-001')).toHaveTextContent('20,00 %')
       expect(fila(screen, 'PC-001')).toHaveTextContent('a crédito 25,00 %')
       expect(fila(screen, 'CEL-002')).toHaveTextContent('20,00 %')

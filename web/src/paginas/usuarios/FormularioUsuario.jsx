@@ -1,6 +1,7 @@
-import { cloneElement, useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import Aviso from '../../componentes/comun/Aviso.jsx'
+import Campo from '../../componentes/comun/Campo.jsx'
 import EncabezadoPagina from '../../componentes/comun/EncabezadoPagina.jsx'
 import { apiUsuarios } from '../../servicios/api/usuarios.js'
 import { ROLES } from './roles.js'
@@ -26,28 +27,6 @@ function motivos(modo, d) {
     m.repite = d.clave !== '' && d.repite !== d.clave ? 'No coincide con la contraseña.' : null
   }
   return m
-}
-
-/**
- * Un campo con su mensaje al lado. El mensaje no va dentro de la etiqueta,
- * para que un lector de pantalla no lo lea como parte del nombre del campo.
- */
-function Campo({ etiqueta, motivo, children }) {
-  const id = useId()
-  const idMensaje = `${id}-mensaje`
-  return (
-    <div className="campo">
-      <label htmlFor={id}><span>{etiqueta}</span></label>
-      {cloneElement(children, {
-        id,
-        'aria-invalid': motivo ? 'true' : undefined,
-        'aria-describedby': motivo ? idMensaje : undefined,
-      })}
-      <small id={idMensaje} role="status" className={`campo-mensaje ${motivo ? 'error' : ''}`}>
-        {motivo || ''}
-      </small>
-    </div>
-  )
 }
 
 /**

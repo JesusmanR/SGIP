@@ -1,6 +1,7 @@
-import { cloneElement, useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import Aviso from '../../componentes/comun/Aviso.jsx'
+import Campo from '../../componentes/comun/Campo.jsx'
 import EncabezadoPagina from '../../componentes/comun/EncabezadoPagina.jsx'
 import { apiInventario } from '../../servicios/api/inventario.js'
 import { NUMERO } from '../../servicios/formato.js'
@@ -71,22 +72,6 @@ function motivos(tipo, d) {
   }
   if (motivo.length > 200) m.motivo = 'El motivo no puede pasar de 200 caracteres.'
   return m
-}
-
-function Campo({ etiqueta, ayuda, motivo, children }) {
-  const id = useId()
-  const idMensaje = `${id}-mensaje`
-  return (
-    <div className="campo">
-      <label htmlFor={id}><span>{etiqueta}</span></label>
-      {cloneElement(children, {
-        id,
-        'aria-invalid': motivo ? 'true' : undefined,
-        'aria-describedby': idMensaje,
-      })}
-      <small id={idMensaje} className={`campo-mensaje ${motivo ? 'error' : ''}`}>{motivo || ayuda || ''}</small>
-    </div>
-  )
 }
 
 /**

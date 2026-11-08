@@ -76,7 +76,9 @@ describe('formulario de producto como diálogo', () => {
     expect(onCerrar).toHaveBeenCalledTimes(1)
   })
 
-  it('Tab y Mayús+Tab dan la vuelta dentro del diálogo', async () => {
+  // Da la vuelta completa al formulario: muchas pulsaciones, por eso un
+  // límite propio más holgado que los 5 s por omisión.
+  it('Tab y Mayús+Tab dan la vuelta dentro del diálogo', { timeout: 15000 }, async () => {
     montar()
     const dialogo = screen.getByRole('dialog')
     for (let i = 0; i < 40; i += 1) {

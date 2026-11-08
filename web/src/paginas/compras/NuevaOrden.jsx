@@ -11,7 +11,7 @@ import { useDatos } from '../../hooks/useDatos.js'
 import { PRODUCTOS_POR_BUSQUEDA, buscarProductos, crearOrden } from '../../servicios/api/compras.js'
 import { listarProveedores } from '../../servicios/api/proveedores.js'
 import Campo from '../../componentes/comun/Campo.jsx'
-import { pesos } from './EstadoOrden.jsx'
+import { costoEnPesos } from '../../servicios/formato.js'
 
 const CANTIDAD = /^\d+$/
 // Los decimales van con coma: un punto se confundiría con el separador de miles.
@@ -49,7 +49,7 @@ function sumaDeVistaPrevia(lineas) {
 
 function subtotalDeVistaPrevia(linea) {
   if (Object.keys(motivosDeLinea(linea)).length > 0) return '—'
-  return pesos(Number(linea.cantidad.trim()) * Math.round(costoComoNumero(linea.costo) * 100) / 100)
+  return costoEnPesos(Number(linea.cantidad.trim()) * Math.round(costoComoNumero(linea.costo) * 100) / 100)
 }
 
 /** Búsqueda de productos en el servidor: solo al pulsar o dar Enter, y se guarda lo mínimo. */
@@ -105,7 +105,7 @@ function BuscadorDeProductos({ agregados, alAgregar, motivo, referencia }) {
                 <span>
                   <strong>{p.nombre}</strong>
                   <span className="sub-linea">
-                    {p.codigo}{p.costo != null && ` · Costo actual ${pesos(p.costo)}`}
+                    {p.codigo}{p.costo != null && ` · Costo actual ${costoEnPesos(p.costo)}`}
                   </span>
                 </span>
                 {yaEsta && <span className="leyenda">Ya está en la orden</span>}
@@ -263,7 +263,7 @@ function Formulario({ proveedores }) {
         <>
           <TablaOTarjetas etiqueta="Productos de la orden" filas={lineas} claveFila={(l) => l.productoId} columnas={columnas} />
           <p className="total-vista">
-            <span>Total de la vista previa</span> <strong>{pesos(sumaDeVistaPrevia(lineas))}</strong>
+            <span>Total de la vista previa</span> <strong>{costoEnPesos(sumaDeVistaPrevia(lineas))}</strong>
           </p>
           <p className="leyenda">Es una suma para que revises. El total oficial lo calcula el sistema al guardar.</p>
         </>

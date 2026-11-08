@@ -313,7 +313,7 @@ describe('catálogo nacional de impuestos', () => {
     expect(filas).toHaveLength(3)
     expect(filas[1]).toHaveTextContent('IVA general')
     expect(filas[1]).toHaveTextContent('Gravado')
-    expect(filas[1]).toHaveTextContent(/19\s?%/)
+    expect(filas[1]).toHaveTextContent(/19,00\s%/)
     expect(filas[2]).toHaveTextContent(NUMERO.format(3500))
     expect(filas[2]).toHaveTextContent(/excluido hasta el tope/i)
   })

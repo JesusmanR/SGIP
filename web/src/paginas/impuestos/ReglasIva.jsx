@@ -1,13 +1,14 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import Aviso from '../../componentes/comun/Aviso.jsx'
+import Confirmacion from '../../componentes/comun/Confirmacion.jsx'
 import EstadoCarga from '../../componentes/comun/EstadoCarga.jsx'
 import EstadoError from '../../componentes/comun/EstadoError.jsx'
 import EstadoSinPermiso from '../../componentes/comun/EstadoSinPermiso.jsx'
 import TablaOTarjetas from '../../componentes/comun/TablaOTarjetas.jsx'
 import { useDatos } from '../../hooks/useDatos.js'
 import { apiImpuestos } from '../../servicios/api/impuestos.js'
-import { estadoDeVigencia, fechaDia, hoyISO, textoDeVigencia } from './fechas.js'
+import { estadoDeVigencia, fechaDia, hoyISO, textoDeVigencia } from '../../servicios/fechas.js'
 import { descripcionDeImpuesto, textoDeAlcance } from './tributos.js'
 
 /** Lo que cada acción le dice a quien la va a hacer; todo en palabras de tienda. */
@@ -82,13 +83,9 @@ export default function ReglasIva({ responsable, avisoInicial }) {
   const [enviando, setEnviando] = useState(false)
   const [exito, setExito] = useState(avisoInicial ?? null)
   const [fallo, setFallo] = useState(null)
-  const caja = useRef(null)
+  const seccion = useRef(null)
   const enCurso = useRef(false)
   const hoy = hoyISO()
-
-  useEffect(() => {
-    if (pidiendo) caja.current?.focus()
-  }, [pidiendo])
 
   async function ejecutar(pedida) {
     if (enCurso.current) return
@@ -137,7 +134,7 @@ export default function ReglasIva({ responsable, avisoInicial }) {
   ]
 
   return (
-    <section className="tarjeta reglas-iva" aria-labelledby="titulo-reglas-iva">
+    <section className="tarjeta reglas-iva" aria-labelledby="titulo-reglas-iva" tabIndex={-1} ref={seccion}>
       <div className="seccion-cabecera">
         <div>
           <h2 id="titulo-reglas-iva">Reglas de IVA</h2>
@@ -171,18 +168,15 @@ export default function ReglasIva({ responsable, avisoInicial }) {
       {fallo && <Aviso tipo="peligro">{fallo}</Aviso>}
 
       {pedida && (
-        <div className="confirmacion" role="group" aria-labelledby="pregunta-regla" tabIndex={-1} ref={caja}>
-          <p id="pregunta-regla" className="confirmacion-pregunta">{pedida.pregunta}</p>
-          <p>{pedida.detalle}</p>
-          <div className="acciones">
-            <button type="button" className="boton" disabled={enviando} onClick={() => ejecutar(pedida)}>
-              {pedida.boton}
-            </button>
-            <button type="button" className="boton secundario" disabled={enviando} onClick={() => setPidiendo(null)}>
-              Cancelar
-            </button>
-          </div>
-        </div>
+        <Confirmacion
+          pregunta={pedida.pregunta}
+          detalle={pedida.detalle}
+          textoConfirmar={pedida.boton}
+          enviando={enviando}
+          focoEstable={seccion}
+          alConfirmar={() => ejecutar(pedida)}
+          alCancelar={() => setPidiendo(null)}
+        />
       )}
 
       {hayCerradas && (

@@ -6,7 +6,7 @@ import EstadoSinPermiso from '../../componentes/comun/EstadoSinPermiso.jsx'
 import EstadoVacio from '../../componentes/comun/EstadoVacio.jsx'
 import { useDatos } from '../../hooks/useDatos.js'
 import { apiPrecios } from '../../servicios/api/precios.js'
-import { estadoDeVigencia, hoyISO } from './fechas.js'
+import { estadoDeVigencia, hoyISO } from '../../servicios/fechas.js'
 
 const VOLVER = <Link to="/precios">Volver a las reglas</Link>
 

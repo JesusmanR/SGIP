@@ -8,9 +8,9 @@ import EstadoVacio from '../componentes/comun/EstadoVacio.jsx'
 import TablaOTarjetas from '../componentes/comun/TablaOTarjetas.jsx'
 import { useDatos } from '../hooks/useDatos.js'
 import { api } from '../servicios/api.js'
-import { leerSesion } from '../servicios/sesion.js'
+import { esAdministrador } from '../servicios/sesion.js'
 
-import { NUMERO, PESOS } from '../servicios/formato.js'
+import { NUMERO, costoEnPesos, porcentaje } from '../servicios/formato.js'
 import '../estilos/importacion.css'
 
 /** Las categorías que la V30 guarda, con su texto y su color. */
@@ -76,10 +76,9 @@ function Variacion({ anterior, nuevo }) {
   const v = variacion(anterior, nuevo)
   if (v == null) return <>—</>
   const llamativa = Math.abs(v) >= VARIACION_LLAMATIVA
-  const signo = v > 0 ? '+' : ''
   return (
-    <span className={llamativa ? (v > 0 ? 'sube' : 'baja') : undefined}>
-      {signo}{v.toFixed(1).replace('.', ',')} %
+    <span className={llamativa ? (v > 0 ? 'variacion-sube' : 'variacion-baja') : undefined}>
+      {porcentaje(v, { decimales: 1, conSigno: true })}
     </span>
   )
 }
@@ -136,11 +135,11 @@ const columnasVistaPrevia = (cruces) => [
   },
   {
     clave: 'costoAnterior', titulo: 'Costo actual', numerica: true,
-    render: (f) => (f.costoAnterior == null ? '—' : PESOS.format(f.costoAnterior)),
+    render: (f) => (f.costoAnterior == null ? '—' : costoEnPesos(f.costoAnterior)),
   },
   {
     clave: 'costo', titulo: 'Costo nuevo', numerica: true,
-    render: (f) => (f.costo == null ? '—' : PESOS.format(f.costo)),
+    render: (f) => (f.costo == null ? '—' : costoEnPesos(f.costo)),
   },
   {
     clave: 'variacion', titulo: 'Variación', numerica: true,
@@ -168,7 +167,7 @@ const columnasVistaPrevia = (cruces) => [
  * ofrecer un formulario que siempre fallaría.
  */
 export default function Importacion() {
-  if (leerSesion()?.rol !== 'ADMINISTRADOR') {
+  if (!esAdministrador()) {
     return (
       <div className="contenido">
         <EncabezadoPagina titulo="Importar precios" />
@@ -376,8 +375,7 @@ function ImportacionAdministrador() {
               <strong className="cifra-valor exito">{NUMERO.format(carga.aceptados)}</strong>
               <span className="cifra-pie">
                 {carga.leidos > 0
-                  ? `${((carga.aceptados / carga.leidos) * 100).toFixed(1)
-                    .replace('.', ',')} % del archivo`
+                  ? `${porcentaje((carga.aceptados / carga.leidos) * 100, { decimales: 1 })} del archivo`
                   : '—'}
               </span>
             </div>
@@ -469,7 +467,7 @@ function ImportacionAdministrador() {
               </strong>
               <span className="sub-linea">
                 Los precios por porcentaje ya salen del costo nuevo. Los precios
-                escritos se conservan y cambia su margen.
+                escritos se conservan y cambia su ganancia.
               </span>
             </div>
           )}

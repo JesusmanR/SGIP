@@ -84,7 +84,11 @@ describe('una hoja de pantalla solo se usa donde se importa', () => {
     const usos = []
     for (const { ruta, texto } of fuentes) {
       if (importa.test(texto)) continue
-      const literales = [...texto.matchAll(/(['"`])((?:(?!\1).)*)\1/g)].map((m) => m[2])
+      // Las comillas de dentro de una plantilla (`cambio ${x ? 'baja' : ''}`) también cuentan.
+      const literales = [
+        ...texto.matchAll(/(['"`])((?:(?!\1).)*)\1/g),
+        ...texto.matchAll(/(['"])([^'"\n]*)\1/g),
+      ].map((m) => m[2])
       for (const c of clases) {
         if (homonimos.has(c)) continue
         if (compartidas.has(c)) continue
@@ -92,5 +96,23 @@ describe('una hoja de pantalla solo se usa donde se importa', () => {
       }
     }
     expect(usos).toEqual([])
+  })
+})
+
+describe('clases sin prefijo de sección', () => {
+  it('importacion.css no deja .sube ni .baja sueltas: llegaban a la tabla de movimientos de inventario', () => {
+    const propios = selectores(leer('importacion'))
+    expect(propios.filter((s) => /(^|[\s.])(sube|baja)(?![\w-])/.test(s) && !s.startsWith('.importacion '))).toEqual([])
+    expect(propios.some((s) => /\.variacion-(sube|baja)/.test(s))).toBe(true)
+  })
+
+  it('inventario.css tiene sus propias clases de cambio', () => {
+    expect(selectores(leer('inventario')).some((s) => /\.cambio-baja/.test(s))).toBe(true)
+    expect(selectores(leer('inventario')).some((s) => /\.cambio\.baja/.test(s))).toBe(false)
+  })
+
+  it('producto.css no define .panel a secas: el panel de diálogo lleva su prefijo', () => {
+    expect(selectores(leer('producto')).filter((s) => /(^|[\s,])\.panel(?![\w-])/.test(s))).toEqual([])
+    expect(selectores(leer('producto')).some((s) => /\.panel-dialogo/.test(s))).toBe(true)
   })
 })

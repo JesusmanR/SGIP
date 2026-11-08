@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import Aviso from '../../componentes/comun/Aviso.jsx'
+import Confirmacion from '../../componentes/comun/Confirmacion.jsx'
 import EstadoCarga from '../../componentes/comun/EstadoCarga.jsx'
 import EstadoError from '../../componentes/comun/EstadoError.jsx'
 import EstadoSinPermiso from '../../componentes/comun/EstadoSinPermiso.jsx'
@@ -30,32 +31,14 @@ export default function UsuariosEmpresa({ empresaId, usuarios, alExito }) {
   const [confirmando, setConfirmando] = useState(null)
   const [enviando, setEnviando] = useState(false)
   const [errorAccion, setErrorAccion] = useState(null)
-  const [foco, setFoco] = useState(null)
   const seccion = useRef(null)
-  const caja = useRef(null)
-  const botones = useRef(new Map())
+  const desbloqueado = useRef(false)
   const enCurso = useRef(false)
-
-  useEffect(() => {
-    if (confirmando) caja.current?.focus()
-  }, [confirmando])
-
-  useEffect(() => {
-    if (confirmando || !foco) return
-    const boton = foco.id === undefined ? null : botones.current.get(foco.id)
-    const destino = boton ?? seccion.current
-    destino?.focus()
-    setFoco(null)
-  }, [confirmando, foco])
 
   function abrir(persona) {
     setErrorAccion(null)
+    desbloqueado.current = false
     setConfirmando(persona)
-  }
-
-  function cancelar() {
-    setFoco({ id: confirmando.id })
-    setConfirmando(null)
   }
 
   async function desbloquear() {
@@ -65,12 +48,11 @@ export default function UsuariosEmpresa({ empresaId, usuarios, alExito }) {
     const persona = confirmando
     try {
       await apiPlataformaEmpresas.desbloquearUsuario(empresaId, persona.id)
-      setFoco({})
+      desbloqueado.current = true
       setConfirmando(null)
       alExito(`Se desbloqueó a ${persona.nombre}.`)
       recargar()
     } catch (e) {
-      setFoco({ id: persona.id })
       setConfirmando(null)
       setErrorAccion(e.message || 'No se pudo completar la operación.')
     } finally {
@@ -90,7 +72,6 @@ export default function UsuariosEmpresa({ empresaId, usuarios, alExito }) {
         <button
           type="button" className="boton secundario menudo"
           aria-label={`Desbloquear a ${u.nombre}`}
-          ref={(el) => { if (el) botones.current.set(u.id, el); else botones.current.delete(u.id) }}
           onClick={() => abrir(u)}
         >
           Desbloquear
@@ -112,7 +93,7 @@ export default function UsuariosEmpresa({ empresaId, usuarios, alExito }) {
   }
 
   return (
-    <section className="tarjeta usuarios" aria-labelledby="usuarios-titulo" tabIndex={-1} ref={seccion}>
+    <section className="tarjeta usuarios-empresa" aria-labelledby="usuarios-titulo" tabIndex={-1} ref={seccion}>
       <h2 id="usuarios-titulo">Usuarios de la empresa</h2>
       <p className="nota">
         Una cuenta se bloquea tras varios intentos fallidos de entrada. Desbloquearla no cambia la contraseña:
@@ -121,16 +102,16 @@ export default function UsuariosEmpresa({ empresaId, usuarios, alExito }) {
       {errorAccion && <Aviso tipo="peligro">{errorAccion}</Aviso>}
       {lista}
       {confirmando && (
-        <div className="confirmacion" role="group" aria-labelledby="desbloqueo-pregunta" tabIndex={-1} ref={caja}>
-          <p id="desbloqueo-pregunta" className="confirmacion-pregunta">{`¿Desbloquear a ${confirmando.nombre}?`}</p>
-          <p>
-            {confirmando.correo} podrá volver a intentar entrar. Esto no cambia su contraseña: sigue entrando con la suya.
-          </p>
-          <div className="acciones">
-            <button type="button" className="boton" disabled={enviando} onClick={desbloquear}>Sí, desbloquear</button>
-            <button type="button" className="boton secundario" disabled={enviando} onClick={cancelar}>Cancelar</button>
-          </div>
-        </div>
+        <Confirmacion
+          pregunta={`¿Desbloquear a ${confirmando.nombre}?`}
+          detalle={`${confirmando.correo} podrá volver a intentar entrar. Esto no cambia su contraseña: sigue entrando con la suya.`}
+          textoConfirmar="Sí, desbloquear"
+          enviando={enviando}
+          focoEstable={seccion}
+          volverA={() => (desbloqueado.current ? seccion.current : undefined)}
+          alConfirmar={desbloquear}
+          alCancelar={() => setConfirmando(null)}
+        />
       )}
     </section>
   )
