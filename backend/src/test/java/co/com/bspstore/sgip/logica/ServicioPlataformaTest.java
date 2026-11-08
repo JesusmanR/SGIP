@@ -106,7 +106,7 @@ class ServicioPlataformaTest {
         when(usuarios.existsByCorreo(anyString())).thenReturn(false);
         when(plataforma.insertarEmpresa(anyString(), anyString(), any(), any(), any()))
                 .thenReturn(empresaId);
-        when(plataforma.mesesDePrueba()).thenReturn(mesesPrueba);
+        when(plataforma.mesesDePrueba(any())).thenReturn(mesesPrueba);
         when(roles.findByNombre("ADMINISTRADOR"))
                 .thenReturn(Optional.of(new Rol("ADMINISTRADOR", "Operación del negocio")));
         when(plataforma.buscar(empresaId)).thenReturn(Optional.of(empresaEnPlataforma(empresaId)));

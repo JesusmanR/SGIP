@@ -21,6 +21,9 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -33,6 +36,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -55,6 +59,10 @@ class ServicioImportacionTest {
     private static final int USUARIO = 7;
     private static final int PROVEEDOR = 3;
     private static final long CARGA = 55L;
+    private static final LocalDate HOY = LocalDate.of(2026, 11, 7);
+    /** A las 10 de la noche en Bogotá: para la JVM de la CI, en UTC, ya es mañana. */
+    private static final Clock RELOJ = Clock.fixed(
+            HOY.atTime(22, 0).atZone(ZoneId.of("America/Bogota")).toInstant(), ZoneId.of("UTC"));
 
     @Mock RepositorioImportacion importacion;
     @Captor ArgumentCaptor<List<FilaDeCarga>> detalles;
@@ -64,7 +72,7 @@ class ServicioImportacionTest {
 
     @BeforeEach
     void preparar() {
-        servicio = new ServicioImportacion(importacion, List.of(lector));
+        servicio = new ServicioImportacion(importacion, List.of(lector), RELOJ);
         var u = new UsuarioAutenticado(USUARIO, "ana@tienda.co", "ADMINISTRADOR", EMPRESA);
         SecurityContext c = SecurityContextHolder.createEmptyContext();
         c.setAuthentication(new UsernamePasswordAuthenticationToken(u, null, List.of()));
@@ -276,9 +284,9 @@ class ServicioImportacionTest {
         // hubiera abierto hoy, abrir lo nuevo y recién entonces escribir
         // el catálogo. Al revés, el costo anterior ya no se podría leer.
         var orden = org.mockito.Mockito.inOrder(importacion);
-        orden.verify(importacion).cerrarCostoVigente(EMPRESA, CARGA);
-        orden.verify(importacion).retirarCostoDeHoy(EMPRESA, CARGA);
-        orden.verify(importacion).abrirCostoDeHoy(EMPRESA, CARGA);
+        orden.verify(importacion).cerrarCostoVigente(EMPRESA, CARGA, HOY);
+        orden.verify(importacion).retirarCostoDeHoy(EMPRESA, CARGA, HOY);
+        orden.verify(importacion).abrirCostoDeHoy(EMPRESA, CARGA, HOY);
         orden.verify(importacion).aplicarCostos(EMPRESA, CARGA);
         orden.verify(importacion).marcarAplicada(EMPRESA, CARGA);
     }

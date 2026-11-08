@@ -5,12 +5,15 @@ import co.com.bspstore.sgip.api.dto.ResumenCarga;
 import co.com.bspstore.sgip.config.ContextoEmpresa;
 import co.com.bspstore.sgip.config.UsuarioAutenticado;
 import co.com.bspstore.sgip.datos.RepositorioImportacion;
+import co.com.bspstore.sgip.util.Hoy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -51,11 +54,14 @@ public class ServicioImportacion {
 
     private final RepositorioImportacion importacion;
     private final List<LectorListaPrecios> lectores;
+    private final Clock reloj;
 
     public ServicioImportacion(RepositorioImportacion importacion,
-                               List<LectorListaPrecios> lectores) {
+                               List<LectorListaPrecios> lectores,
+                               Clock reloj) {
         this.importacion = importacion;
         this.lectores = lectores;
+        this.reloj = reloj;
     }
 
     /**
@@ -134,9 +140,11 @@ public class ServicioImportacion {
                             + " y solo se puede aplicar una carga validada.");
         }
 
-        importacion.cerrarCostoVigente(empresa, cargaId);
-        importacion.retirarCostoDeHoy(empresa, cargaId);
-        importacion.abrirCostoDeHoy(empresa, cargaId);
+        // Un solo «hoy» para los tres pasos del histórico (M5).
+        LocalDate hoy = Hoy.de(reloj);
+        importacion.cerrarCostoVigente(empresa, cargaId, hoy);
+        importacion.retirarCostoDeHoy(empresa, cargaId, hoy);
+        importacion.abrirCostoDeHoy(empresa, cargaId, hoy);
         int aplicados = importacion.aplicarCostos(empresa, cargaId);
 
         if (aplicados != cabecera.get().aceptados()) {

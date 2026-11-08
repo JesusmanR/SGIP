@@ -226,24 +226,31 @@ public class RepositorioImportacion {
     /**
      * Cierra ayer el periodo de costo que venía rigiendo (RF-28).
      *
+     * «Hoy» es el que pasa quien llama, tomado del reloj de la aplicación
+     * ({@code Hoy.de}) y no el {@code CURDATE()} del motor, en esta sentencia y en
+     * las dos siguientes (M5). Una edición de costo escribe el mismo histórico
+     * con el mismo día ({@link RepositorioCostos}).
+     *
      * Solo los que empezaron antes de hoy. Un periodo abierto hoy mismo
      * no se puede cerrar ayer: `ck_historico_rango` exige que el fin no
      * sea anterior al comienzo, y además no significaría nada.
      */
-    public int cerrarCostoVigente(Integer empresaId, Long cargaId) {
+    public int cerrarCostoVigente(Integer empresaId, Long cargaId, java.time.LocalDate hoy) {
         return jdbc.sql("""
                         UPDATE historico_costos h
                           JOIN detalle_carga_precios d
                             ON d.empresa_id = h.empresa_id
                            AND d.producto_id = h.producto_id
-                           SET h.vigente_hasta = CURDATE() - INTERVAL 1 DAY
+                           SET h.vigente_hasta = :ayer
                          WHERE d.empresa_id = :empresa AND d.carga_id = :carga
                            AND d.aceptado = TRUE
                            AND h.vigente_hasta IS NULL
-                           AND h.vigente_desde < CURDATE()
+                           AND h.vigente_desde < :hoy
                         """)
                 .param("empresa", empresaId)
                 .param("carga", cargaId)
+                .param("hoy", hoy)
+                .param("ayer", hoy.minusDays(1))
                 .update();
     }
 
@@ -261,7 +268,7 @@ public class RepositorioImportacion {
      * entre versiones de MySQL. Esto se entiende leyéndolo y funciona
      * igual en todas.
      */
-    public int retirarCostoDeHoy(Integer empresaId, Long cargaId) {
+    public int retirarCostoDeHoy(Integer empresaId, Long cargaId, java.time.LocalDate hoy) {
         return jdbc.sql("""
                         DELETE h FROM historico_costos h
                           JOIN detalle_carga_precios d
@@ -269,25 +276,27 @@ public class RepositorioImportacion {
                            AND d.producto_id = h.producto_id
                          WHERE d.empresa_id = :empresa AND d.carga_id = :carga
                            AND d.aceptado = TRUE
-                           AND h.vigente_desde = CURDATE()
+                           AND h.vigente_desde = :hoy
                         """)
                 .param("empresa", empresaId)
                 .param("carga", cargaId)
+                .param("hoy", hoy)
                 .update();
     }
 
     /** Abre el periodo que empieza hoy con el costo de la carga. */
-    public int abrirCostoDeHoy(Integer empresaId, Long cargaId) {
+    public int abrirCostoDeHoy(Integer empresaId, Long cargaId, java.time.LocalDate hoy) {
         return jdbc.sql("""
                         INSERT INTO historico_costos
                                (empresa_id, producto_id, costo, vigente_desde, carga_id)
-                        SELECT d.empresa_id, d.producto_id, d.costo, CURDATE(), d.carga_id
+                        SELECT d.empresa_id, d.producto_id, d.costo, :hoy, d.carga_id
                           FROM detalle_carga_precios d
                          WHERE d.empresa_id = :empresa AND d.carga_id = :carga
                            AND d.aceptado = TRUE
                         """)
                 .param("empresa", empresaId)
                 .param("carga", cargaId)
+                .param("hoy", hoy)
                 .update();
     }
 

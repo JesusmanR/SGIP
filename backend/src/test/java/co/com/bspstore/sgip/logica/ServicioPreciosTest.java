@@ -66,7 +66,7 @@ class ServicioPreciosTest {
                 .thenReturn(false);
         when(precios.insertar(anyInt(), any(), any(), anyString(), anyString(), any(),
                 any(), any())).thenReturn(50);
-        when(precios.buscar(EMPRESA, 50)).thenReturn(Optional.of(regla(50, null, null)));
+        when(precios.buscar(EMPRESA, 50, HOY)).thenReturn(Optional.of(regla(50, null, null)));
     }
 
     @AfterEach
@@ -209,16 +209,44 @@ class ServicioPreciosTest {
      */
     @Test
     void cerrarSinFechaDejaLaReglaFueraDesdeHoy() {
-        when(precios.buscar(EMPRESA, 50)).thenReturn(Optional.of(regla(50, null, null)));
+        when(precios.buscar(EMPRESA, 50, HOY)).thenReturn(Optional.of(regla(50, null, null)));
 
         servicio.cerrar(50, null);
 
         verify(precios).cerrar(EMPRESA, 50, HOY.minusDays(1));
     }
 
+    /**
+     * La JVM de la CI corre en UTC: a las 10 de la noche en Bogotá ya es mañana
+     * para ella. «Hoy» es el día de Bogotá, no el de la zona de la JVM.
+     */
+    private ServicioPrecios conLaJvmEnUtc() {
+        Clock utc = Clock.fixed(HOY.plusDays(1).atTime(3, 0).toInstant(java.time.ZoneOffset.UTC),
+                java.time.ZoneOffset.UTC);
+        return new ServicioPrecios(precios, utc);
+    }
+
+    @Test
+    void cerrarSinFechaCierraElDiaAnteriorAlDeBogotaAunqueLaJvmVayaEnUtc() {
+        when(precios.buscar(EMPRESA, 50, HOY)).thenReturn(Optional.of(regla(50, null, null)));
+
+        conLaJvmEnUtc().cerrar(50, null);
+
+        verify(precios).cerrar(EMPRESA, 50, HOY.minusDays(1));
+    }
+
+    @Test
+    void laNuevaPuedeEmpezarElDiaDeBogotaAunqueLaJvmVayaEnUtc() {
+        laViejaRigeDesde(LocalDate.of(2026, 1, 1), null);
+
+        assertTrue(conLaJvmEnUtc().reemplazar(50, reemplazo(HOY)).isPresent());
+
+        verify(precios).cerrar(EMPRESA, 50, HOY.minusDays(1));
+    }
+
     @Test
     void noSeCierraUnaReglaAntesDeQueEmpezaraARegir() {
-        when(precios.buscar(EMPRESA, 50)).thenReturn(Optional.of(regla(50, null, null)));
+        when(precios.buscar(EMPRESA, 50, HOY)).thenReturn(Optional.of(regla(50, null, null)));
 
         var e = assertThrows(ReglaInvalidaException.class,
                 () -> servicio.cerrar(50, LocalDate.of(2025, 1, 1)));
@@ -229,7 +257,7 @@ class ServicioPreciosTest {
 
     @Test
     void loDeOtraEmpresaSeResponderaComoInexistente() {
-        when(precios.buscar(EMPRESA, 404)).thenReturn(Optional.empty());
+        when(precios.buscar(EMPRESA, 404, HOY)).thenReturn(Optional.empty());
 
         assertTrue(servicio.buscar(404).isEmpty());
         assertTrue(servicio.cerrar(404, null).isEmpty());
@@ -246,7 +274,7 @@ class ServicioPreciosTest {
      */
     @Test
     void elAlcanceCuentaLasReferenciasQueCambiarianDePrecio() {
-        when(precios.productosAlcanzados(EMPRESA, 4, null)).thenReturn(34);
+        when(precios.productosAlcanzados(EMPRESA, 4, null, HOY)).thenReturn(34);
 
         assertEquals(34, servicio.alcance(4, null));
     }
@@ -290,7 +318,7 @@ class ServicioPreciosTest {
         when(precios.categoriaPropia(EMPRESA, 99)).thenReturn(false);
 
         assertThrows(ReferenciaAjenaException.class, () -> servicio.alcance(99, null));
-        verify(precios, never()).productosAlcanzados(anyInt(), any(), any());
+        verify(precios, never()).productosAlcanzados(anyInt(), any(), any(), any());
     }
 
     // ------------------------------------------- reemplazar una regla vigente
@@ -442,7 +470,7 @@ class ServicioPreciosTest {
     @Test
     void siLaReglaNuevaNoSePuedeReleerEsUnErrorDelServidorYNoUnNoEncontrado() {
         laViejaRigeDesde(LocalDate.of(2026, 1, 1), null);
-        when(precios.buscar(EMPRESA, 50)).thenReturn(Optional.empty());
+        when(precios.buscar(EMPRESA, 50, HOY)).thenReturn(Optional.empty());
 
         assertThrows(IllegalStateException.class,
                 () -> servicio.reemplazar(50, reemplazo(LocalDate.of(2026, 10, 20))));

@@ -8,6 +8,7 @@ import co.com.bspstore.sgip.api.dto.TipoImpuestoNacional;
 import co.com.bspstore.sgip.config.ContextoEmpresa;
 import co.com.bspstore.sgip.datos.CategoriaRepositorio;
 import co.com.bspstore.sgip.datos.ProductoRepositorio;
+import co.com.bspstore.sgip.util.Hoy;
 import co.com.bspstore.sgip.datos.RepositorioConfiguracionTributaria;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -104,7 +105,7 @@ public class ServicioConfiguracionTributaria {
 
     @Transactional(readOnly = true)
     public List<ReglaDeIva> reglas() {
-        return repositorio.listarReglas(ContextoEmpresa.empresaActual());
+        return repositorio.listarReglas(ContextoEmpresa.empresaActual(), Hoy.de(reloj));
     }
 
     @Transactional
@@ -149,7 +150,7 @@ public class ServicioConfiguracionTributaria {
         Integer id = repositorio.insertarRegla(empresa, s.categoriaId(), s.productoId(),
                 impuesto.tipoImpuestoId(), s.vigenteDesde(), s.vigenteHasta(),
                 limpiar(s.fundamento()));
-        return repositorio.buscarRegla(empresa, id).orElseThrow(() ->
+        return repositorio.buscarRegla(empresa, id, Hoy.de(reloj)).orElseThrow(() ->
                 new IllegalStateException(
                         "La regla " + id + " no se encontró justo después de crearla."));
     }
@@ -179,17 +180,17 @@ public class ServicioConfiguracionTributaria {
     @Transactional
     public Optional<ResultadoCierre> cerrarRegla(Integer reglaId, LocalDate hasta) {
         Integer empresa = ContextoEmpresa.empresaActual();
-        Optional<ReglaDeIva> actual = repositorio.buscarRegla(empresa, reglaId);
+        LocalDate hoy = Hoy.de(reloj);
+        Optional<ReglaDeIva> actual = repositorio.buscarRegla(empresa, reglaId, hoy);
         if (actual.isEmpty()) {
             return Optional.empty();
         }
         ReglaDeIva regla = actual.get();
-        LocalDate hoy = LocalDate.now(reloj);
 
         if (hasta == null && regla.vigenteDesde().isAfter(hoy)) {
-            if (repositorio.borrarRegla(empresa, reglaId) == 0) {
-                // La base ya tiene vigente la regla que este reloj cree por
-                // empezar: no se borró y no se puede decir que se retiró.
+            if (repositorio.borrarRegla(empresa, reglaId, hoy) == 0) {
+                // Otra petición hizo cambiar la regla entre la lectura y el
+                // borrado: no se borró y no se puede decir que se retiró.
                 throw new DatoTributarioInvalidoException(
                         "La regla ya empezó a regir y no se puede retirar. "
                                 + "Para cerrarla, indica «hasta» con una fecha.");
@@ -215,7 +216,7 @@ public class ServicioConfiguracionTributaria {
                             + ": cerrarla puede acortar su vigencia, no alargarla.");
         }
         repositorio.cerrarRegla(empresa, reglaId, fin);
-        return repositorio.buscarRegla(empresa, reglaId)
+        return repositorio.buscarRegla(empresa, reglaId, hoy)
                 .map(r -> new ResultadoCierre(r, false));
     }
 

@@ -157,6 +157,21 @@ class ServicioTributarioTest {
         assertEquals(new AlertaUvt(true, 2027, 0), servicioConHoy("2027-01-01").alertaUvt());
     }
 
+    /**
+     * La JVM de la CI corre en UTC: a las 10 de la noche del 31 de diciembre en
+     * Bogotá ya es 2027 para ella. El año en curso es el de Bogotá.
+     */
+    @Test
+    void elUltimoDiaDelAnioEnBogotaNoCuentaComoAnioNuevoAunqueLaJvmVayaEnUtc() {
+        Clock utc = Clock.fixed(LocalDate.of(2027, 1, 1).atTime(3, 0).toInstant(java.time.ZoneOffset.UTC),
+                java.time.ZoneOffset.UTC);
+        cargadosLosAnios(2026);
+
+        AlertaUvt alerta = new ServicioTributario(tributario, plataforma, utc).alertaUvt();
+
+        assertEquals(new AlertaUvt(true, 2027, 1), alerta);
+    }
+
     @Test
     void elUltimoDiaDelAnioFaltaUnDia() {
         cargadosLosAnios(2026);

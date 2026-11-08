@@ -86,7 +86,7 @@ class ServicioConfiguracionTributariaTest {
         when(repositorio.haySolape(anyInt(), any(), any(), any(), any())).thenReturn(false);
         when(repositorio.insertarRegla(anyInt(), any(), any(), anyInt(), any(), any(), any()))
                 .thenReturn(50);
-        when(repositorio.buscarRegla(EMPRESA, 50))
+        when(repositorio.buscarRegla(EMPRESA, 50, HOY))
                 .thenReturn(Optional.of(regla(50, null, null, ENERO, null)));
         when(repositorio.buscarConfiguracion(EMPRESA))
                 .thenReturn(Optional.of(new ConfiguracionTributaria(
@@ -354,12 +354,12 @@ class ServicioConfiguracionTributariaTest {
 
     @Test
     void cerrarUnaReglaAjenaDevuelveVacio() {
-        when(repositorio.buscarRegla(EMPRESA, 77)).thenReturn(Optional.empty());
+        when(repositorio.buscarRegla(EMPRESA, 77, HOY)).thenReturn(Optional.empty());
 
         assertTrue(servicio.cerrarRegla(77, AYER).isEmpty());
 
         verify(repositorio, never()).cerrarRegla(anyInt(), anyInt(), any());
-        verify(repositorio, never()).borrarRegla(anyInt(), anyInt());
+        verify(repositorio, never()).borrarRegla(anyInt(), anyInt(), any());
     }
 
     @Test
@@ -367,7 +367,7 @@ class ServicioConfiguracionTributariaTest {
         var resultado = servicio.cerrarRegla(50, null).orElseThrow();
 
         verify(repositorio).cerrarRegla(EMPRESA, 50, AYER);
-        verify(repositorio, never()).borrarRegla(anyInt(), anyInt());
+        verify(repositorio, never()).borrarRegla(anyInt(), anyInt(), any());
         assertFalse(resultado.retirada());
         assertNotNull(resultado.regla());
     }
@@ -379,9 +379,9 @@ class ServicioConfiguracionTributariaTest {
      */
     @Test
     void siLaBaseYaTieneVigenteLaReglaNoSeDaPorRetirada() {
-        when(repositorio.buscarRegla(EMPRESA, 50))
+        when(repositorio.buscarRegla(EMPRESA, 50, HOY))
                 .thenReturn(Optional.of(regla(50, null, null, EN_CINCO_DIAS, null)));
-        when(repositorio.borrarRegla(EMPRESA, 50)).thenReturn(0);
+        when(repositorio.borrarRegla(EMPRESA, 50, HOY)).thenReturn(0);
 
         assertThrows(DatoTributarioInvalidoException.class,
                 () -> servicio.cerrarRegla(50, null));
@@ -398,21 +398,21 @@ class ServicioConfiguracionTributariaTest {
     void unaReglaQueTodaviaNoEmpezoYSeCierraSinFechaSeRetira() {
         // Una regla por estrenar nunca explicó una venta: retirarla no borra
         // historia, corrige una equivocación.
-        when(repositorio.buscarRegla(EMPRESA, 50))
+        when(repositorio.buscarRegla(EMPRESA, 50, HOY))
                 .thenReturn(Optional.of(regla(50, null, null, EN_CINCO_DIAS, null)));
 
-        when(repositorio.borrarRegla(EMPRESA, 50)).thenReturn(1);
+        when(repositorio.borrarRegla(EMPRESA, 50, HOY)).thenReturn(1);
 
         var resultado = servicio.cerrarRegla(50, null).orElseThrow();
 
-        verify(repositorio).borrarRegla(EMPRESA, 50);
+        verify(repositorio).borrarRegla(EMPRESA, 50, HOY);
         verify(repositorio, never()).cerrarRegla(anyInt(), anyInt(), any());
         assertTrue(resultado.retirada());
     }
 
     @Test
     void unaReglaFuturaConFechaSeCierraNormalmenteSinBorrarse() {
-        when(repositorio.buscarRegla(EMPRESA, 50))
+        when(repositorio.buscarRegla(EMPRESA, 50, HOY))
                 .thenReturn(Optional.of(regla(50, null, null, EN_CINCO_DIAS, null)));
 
         // El mismo día de inicio vale: la regla rige un día.
@@ -421,12 +421,12 @@ class ServicioConfiguracionTributariaTest {
 
         verify(repositorio).cerrarRegla(EMPRESA, 50, EN_CINCO_DIAS);
         verify(repositorio).cerrarRegla(EMPRESA, 50, EN_CINCO_DIAS.plusDays(10));
-        verify(repositorio, never()).borrarRegla(anyInt(), anyInt());
+        verify(repositorio, never()).borrarRegla(anyInt(), anyInt(), any());
     }
 
     @Test
     void unaReglaQueEmpiezaHoySinFechaSeRechazaDiciendoComoCerrarla() {
-        when(repositorio.buscarRegla(EMPRESA, 50))
+        when(repositorio.buscarRegla(EMPRESA, 50, HOY))
                 .thenReturn(Optional.of(regla(50, null, null, HOY, null)));
 
         var e = assertThrows(DatoTributarioInvalidoException.class,
@@ -438,12 +438,27 @@ class ServicioConfiguracionTributariaTest {
         assertTrue(e.getMessage().contains(HOY.toString()), e.getMessage());
         assertTrue(e.getMessage().contains("hasta"), e.getMessage());
         verify(repositorio, never()).cerrarRegla(anyInt(), anyInt(), any());
-        verify(repositorio, never()).borrarRegla(anyInt(), anyInt());
+        verify(repositorio, never()).borrarRegla(anyInt(), anyInt(), any());
+    }
+
+    /** La JVM de la CI corre en UTC: a las 10 de la noche en Bogotá ya es mañana para ella. */
+    @Test
+    void unaReglaQueEmpiezaHoyEnBogotaNoSeCierraAyerAunqueLaJvmVayaEnUtc() {
+        Clock utc = Clock.fixed(HOY.plusDays(1).atTime(3, 0).toInstant(java.time.ZoneOffset.UTC),
+                java.time.ZoneOffset.UTC);
+        var enUtc = new ServicioConfiguracionTributaria(repositorio, categorias, productos, utc);
+        when(repositorio.buscarRegla(EMPRESA, 50, HOY))
+                .thenReturn(Optional.of(regla(50, null, null, HOY, null)));
+
+        var e = assertThrows(DatoTributarioInvalidoException.class, () -> enUtc.cerrarRegla(50, null));
+
+        assertTrue(e.getMessage().contains(HOY.toString()), e.getMessage());
+        verify(repositorio, never()).cerrarRegla(anyInt(), anyInt(), any());
     }
 
     @Test
     void noSePuedeCerrarUnaReglaAntesDeQueEmpiece() {
-        when(repositorio.buscarRegla(EMPRESA, 50))
+        when(repositorio.buscarRegla(EMPRESA, 50, HOY))
                 .thenReturn(Optional.of(regla(50, null, null, EN_CINCO_DIAS, null)));
 
         var e = assertThrows(DatoTributarioInvalidoException.class,
@@ -451,14 +466,14 @@ class ServicioConfiguracionTributariaTest {
 
         assertTrue(e.getMessage().contains(EN_CINCO_DIAS.toString()), e.getMessage());
         verify(repositorio, never()).cerrarRegla(anyInt(), anyInt(), any());
-        verify(repositorio, never()).borrarRegla(anyInt(), anyInt());
+        verify(repositorio, never()).borrarRegla(anyInt(), anyInt(), any());
     }
 
     @Test
     void cerrarNoAmpliaUnaVigenciaQueYaTerminaba() {
         // Alargar el cierre de una regla vencida podría solaparla con la
         // que la sustituyó: cerrar solo acorta.
-        when(repositorio.buscarRegla(EMPRESA, 50)).thenReturn(Optional.of(
+        when(repositorio.buscarRegla(EMPRESA, 50, HOY)).thenReturn(Optional.of(
                 regla(50, null, null, ENERO, LocalDate.of(2026, 6, 30))));
 
         assertThrows(DatoTributarioInvalidoException.class,

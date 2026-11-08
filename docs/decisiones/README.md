@@ -44,6 +44,7 @@ nueva. La decisión original se deja tal como se escribió.
 | 0026 | El acento del producto pasa a morado; reemplaza la paleta de la 0009 | vigente |
 | 0027 | Versiones seguras: LTS en Java y Node, último parche estable en las librerías | vigente |
 | 0028 | El bloqueo de una cuenta caduca y la plataforma puede levantarlo | vigente |
+| 0029 | «Hoy» lo pone la aplicación, en la hora de Bogotá, y se pasa a cada consulta | vigente |
 
 ## Las cuatro que conviene leer antes de escribir código
 

@@ -29,6 +29,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
@@ -192,13 +193,23 @@ class PrecioDeProductoTest {
                 .query(Integer.class).single();
     }
 
+    /**
+     * El «hoy» de la aplicación (M5): el día de Bogotá, y no el CURDATE() de la base, que
+     * en la CI va en UTC y de noche está un día adelante. Las reglas propias se fechan con
+     * este día, de modo que las pruebas que las mueven también lo usan.
+     */
+    private static LocalDate hoy() {
+        return LocalDate.now(ZoneId.of("America/Bogota"));
+    }
+
     /** Como si la regla propia hubiera empezado antes: las fechas no se pueden simular de otra forma. */
     private void laReglaEmpezoHaceDias(Integer id, String forma, int dias) {
         jdbc.sql("""
-                UPDATE reglas_margen SET vigente_desde = CURDATE() - INTERVAL :d DAY
+                UPDATE reglas_margen SET vigente_desde = :desde
                  WHERE empresa_id = :e AND producto_id = :p AND forma_pago = :f
                 """)
-                .param("d", dias).param("e", empresaId).param("p", id).param("f", forma)
+                .param("desde", hoy().minusDays(dias)).param("e", empresaId).param("p", id)
+                .param("f", forma)
                 .update();
     }
 
@@ -338,8 +349,9 @@ class PrecioDeProductoTest {
         assertEquals(1, jdbc.sql("""
                 SELECT COUNT(*) FROM reglas_margen
                  WHERE empresa_id = :e AND producto_id = :p AND forma_pago = 'CONTADO'
-                   AND precio_fijo = 1250 AND vigente_hasta = CURDATE() - INTERVAL 1 DAY
-                """).param("e", empresaId).param("p", id).query(Integer.class).single());
+                   AND precio_fijo = 1250 AND vigente_hasta = :ayer
+                """).param("e", empresaId).param("p", id).param("ayer", hoy().minusDays(1))
+                .query(Integer.class).single());
         igualA("1300", leer(id).precioContado());
     }
 
@@ -433,10 +445,10 @@ class PrecioDeProductoTest {
         Integer id = alta("1000.00", precio("5000"), null, 0);
         jdbc.sql("""
                 UPDATE reglas_margen
-                   SET vigente_desde = CURDATE() - INTERVAL 5 DAY,
-                       vigente_hasta = CURDATE() - INTERVAL 1 DAY
+                   SET vigente_desde = :desde, vigente_hasta = :hasta
                  WHERE empresa_id = :e AND producto_id = :p
-                """).param("e", empresaId).param("p", id).update();
+                """).param("desde", hoy().minusDays(5)).param("hasta", hoy().minusDays(1))
+                .param("e", empresaId).param("p", id).update();
 
         igualA("1200", leer(id).precioContado());
         igualA("1250", leer(id).precioCredito());
@@ -582,15 +594,16 @@ class PrecioDeProductoTest {
         Integer conReglaFutura = alta("1000.00", porcentaje("5"), null, 0);
         jdbc.sql("""
                 UPDATE reglas_margen
-                   SET vigente_desde = CURDATE() - INTERVAL 5 DAY,
-                       vigente_hasta = CURDATE() - INTERVAL 1 DAY
+                   SET vigente_desde = :desde, vigente_hasta = :hasta
                  WHERE empresa_id = :e AND producto_id = :p
-                """).param("e", empresaId).param("p", conReglaVencida).update();
+                """).param("desde", hoy().minusDays(5)).param("hasta", hoy().minusDays(1))
+                .param("e", empresaId).param("p", conReglaVencida).update();
         jdbc.sql("""
                 UPDATE reglas_margen
-                   SET vigente_desde = CURDATE() + INTERVAL 3 DAY
+                   SET vigente_desde = :desde
                  WHERE empresa_id = :e AND producto_id = :p
-                """).param("e", empresaId).param("p", conReglaFutura).update();
+                """).param("desde", hoy().plusDays(3)).param("e", empresaId).param("p", conReglaFutura)
+                .update();
         assertEquals(2, reglasPropias(conReglaVencida, "CONTADO") + reglasPropias(conReglaVencida, "CREDITO"),
                 "el producto vencido tiene su regla propia en las dos formas");
         assertEquals(2, reglasPropias(conReglaFutura, "CONTADO") + reglasPropias(conReglaFutura, "CREDITO"),

@@ -113,8 +113,9 @@ public class RepositorioConfiguracionTributaria {
 
     /**
      * La especificidad es la de {@code v_regla_iva}: un producto gana a una
-     * categoría y esta a la general. {@code vigente} mira la fecha de hoy
-     * contra el rango, igual que la vista.
+     * categoría y esta a la general. {@code vigente} mira el {@code :hoy} que
+     * pasa quien llama contra el rango, igual que la vista lo hace con su
+     * {@code CURDATE()}.
      */
     private static final String SELECCION_REGLA = """
             SELECT r.regla_iva_id AS regla_id, r.categoria_id, c.nombre AS categoria,
@@ -125,8 +126,8 @@ public class RepositorioConfiguracionTributaria {
                    CASE WHEN r.producto_id IS NOT NULL THEN 2
                         WHEN r.categoria_id IS NOT NULL THEN 1
                         ELSE 0 END AS especificidad,
-                   (CURDATE() >= r.vigente_desde
-                    AND (r.vigente_hasta IS NULL OR CURDATE() <= r.vigente_hasta)) AS vigente
+                   (:hoy >= r.vigente_desde
+                    AND (r.vigente_hasta IS NULL OR :hoy <= r.vigente_hasta)) AS vigente
               FROM reglas_iva r
               JOIN tipos_impuesto t ON t.tipo_impuesto_id = r.tipo_impuesto_id
               LEFT JOIN categorias c ON c.categoria_id = r.categoria_id
@@ -136,21 +137,23 @@ public class RepositorioConfiguracionTributaria {
              WHERE r.empresa_id = :empresa
             """;
 
-    public List<ReglaDeIva> listarReglas(Integer empresaId) {
+    public List<ReglaDeIva> listarReglas(Integer empresaId, LocalDate hoy) {
         return jdbc.sql(SELECCION_REGLA + """
                          ORDER BY especificidad DESC,
                                   r.vigente_desde DESC,
                                   r.regla_iva_id DESC
                         """)
                 .param("empresa", empresaId)
+                .param("hoy", hoy)
                 .query(ReglaDeIva.class)
                 .list();
     }
 
-    public Optional<ReglaDeIva> buscarRegla(Integer empresaId, Integer reglaId) {
+    public Optional<ReglaDeIva> buscarRegla(Integer empresaId, Integer reglaId, LocalDate hoy) {
         return jdbc.sql(SELECCION_REGLA + " AND r.regla_iva_id = :regla")
                 .param("empresa", empresaId)
                 .param("regla", reglaId)
+                .param("hoy", hoy)
                 .query(ReglaDeIva.class)
                 .optional();
     }
@@ -250,19 +253,20 @@ public class RepositorioConfiguracionTributaria {
      * de modo que retirarla corrige una equivocación y no borra historia.
      * Ninguna tabla apunta a {@code reglas_iva}.
      *
-     * Que «aún no empieza» se vuelve a comprobar en la sentencia, contra el día
-     * de la base. El servicio lo decide con su propio reloj, y si aplicación y
-     * base difieren de día, el DELETE sin esa condición borraba una regla que ya
-     * regía y con la que se explican ventas (M4). Devuelve 0 si no borró nada.
+     * Que «aún no empieza» se vuelve a comprobar en la sentencia, contra el mismo
+     * {@code hoy} con el que el servicio lo decidió, y no contra otro reloj: sin
+     * esa condición, entre la lectura y el borrado una regla que ya regía y con la
+     * que se explican ventas podía borrarse (M4). Devuelve 0 si no borró nada.
      */
-    public int borrarRegla(Integer empresaId, Integer reglaId) {
+    public int borrarRegla(Integer empresaId, Integer reglaId, LocalDate hoy) {
         return jdbc.sql("""
                         DELETE FROM reglas_iva
                          WHERE empresa_id = :empresa AND regla_iva_id = :regla
-                           AND vigente_desde > CURDATE()
+                           AND vigente_desde > :hoy
                         """)
                 .param("empresa", empresaId)
                 .param("regla", reglaId)
+                .param("hoy", hoy)
                 .update();
     }
 }

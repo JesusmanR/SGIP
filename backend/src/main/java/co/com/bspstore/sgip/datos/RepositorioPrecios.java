@@ -75,7 +75,8 @@ public class RepositorioPrecios {
      * para quedarse con una (RN-03). Se calcula aquí con la misma
      * expresión, de modo que la pantalla ordena como el motor elige.
      *
-     * `vigente` mira la fecha de hoy contra el rango, igual que la vista.
+     * `vigente` mira el `:hoy` que pasa quien llama contra el rango, igual que
+     * la vista lo hace con su `CURDATE()`.
      */
     private static final String SELECCION = """
             SELECT r.regla_id, r.categoria_id, c.nombre AS categoria,
@@ -84,8 +85,8 @@ public class RepositorioPrecios {
                    r.vigente_desde, r.vigente_hasta,
                    (r.categoria_id IS NOT NULL) + (r.proveedor_id IS NOT NULL)
                        AS especificidad,
-                   (CURDATE() >= r.vigente_desde
-                    AND (r.vigente_hasta IS NULL OR CURDATE() <= r.vigente_hasta))
+                   (:hoy >= r.vigente_desde
+                    AND (r.vigente_hasta IS NULL OR :hoy <= r.vigente_hasta))
                        AS vigente
               FROM reglas_margen r
               LEFT JOIN categorias  c ON c.categoria_id  = r.categoria_id
@@ -96,7 +97,7 @@ public class RepositorioPrecios {
                AND r.producto_id IS NULL
             """;
 
-    public List<ReglaDeMargen> listar(Integer empresaId) {
+    public List<ReglaDeMargen> listar(Integer empresaId, LocalDate hoy) {
         return jdbc.sql(SELECCION + """
                          ORDER BY r.forma_pago,
                                   especificidad DESC,
@@ -104,14 +105,16 @@ public class RepositorioPrecios {
                                   r.regla_id DESC
                         """)
                 .param("empresa", empresaId)
+                .param("hoy", hoy)
                 .query(ReglaDeMargen.class)
                 .list();
     }
 
-    public Optional<ReglaDeMargen> buscar(Integer empresaId, Integer reglaId) {
+    public Optional<ReglaDeMargen> buscar(Integer empresaId, Integer reglaId, LocalDate hoy) {
         return jdbc.sql(SELECCION + " AND r.regla_id = :regla")
                 .param("empresa", empresaId)
                 .param("regla", reglaId)
+                .param("hoy", hoy)
                 .query(ReglaDeMargen.class)
                 .optional();
     }
@@ -278,14 +281,14 @@ public class RepositorioPrecios {
      * esa foto ya no es la verdad.
      */
     public Optional<ReglaDePrecio> reglaPropiaVigente(Integer empresaId, Integer productoId,
-                                                      String formaPago) {
+                                                      String formaPago, LocalDate hoy) {
         return jdbc.sql("""
                         SELECT factor, precio_fijo, forma_calculo
                           FROM reglas_margen
                          WHERE empresa_id = :empresa AND producto_id = :producto
                            AND forma_pago = :forma
-                           AND vigente_desde <= CURDATE()
-                           AND (vigente_hasta IS NULL OR vigente_hasta >= CURDATE())
+                           AND vigente_desde <= :hoy
+                           AND (vigente_hasta IS NULL OR vigente_hasta >= :hoy)
                          ORDER BY vigente_desde DESC
                          LIMIT 1
                            FOR UPDATE
@@ -293,6 +296,7 @@ public class RepositorioPrecios {
                 .param("empresa", empresaId)
                 .param("producto", productoId)
                 .param("forma", formaPago)
+                .param("hoy", hoy)
                 .query(ReglaDePrecio.class)
                 .optional();
     }
@@ -320,14 +324,17 @@ public class RepositorioPrecios {
      * días no explica ninguna venta, y dos filas con la misma fecha de comienzo
      * las prohíbe `uq_reglas_margen_producto`.
      *
-     * «Hoy» es siempre el `CURDATE()` del motor, en esta sentencia y en las dos
-     * siguientes, y nunca el reloj de la aplicación. Es el mismo con el que la
-     * vista decide qué regla rige: si la aplicación y la base no están en la
-     * misma zona horaria, una regla fechada con el otro reloj no regiría hasta
-     * la madrugada siguiente y el producto se quedaría sin precio.
+     * «Hoy» es el que pasa quien llama, tomado del reloj de la aplicación en la
+     * hora de Bogotá ({@code Hoy.de}), en esta sentencia y en las dos siguientes.
+     * Ya no es el `CURDATE()` del motor. La vista que decide qué regla rige sí lo
+     * usa, de modo que las dos coinciden solo mientras la sesión de la base vaya
+     * en la hora de Bogotá: si la base fuera por delante de la aplicación, una
+     * regla fechada «hoy» por la aplicación todavía no regiría para la vista y el
+     * producto se quedaría sin precio. Por eso la sesión se fija en esa hora
+     * (ADR-0029).
      */
     public int corregirReglaPropiaDeHoy(Integer empresaId, Integer productoId, String formaPago,
-                                        ReglaDePrecio regla) {
+                                        ReglaDePrecio regla, LocalDate hoy) {
         return jdbc.sql("""
                         UPDATE reglas_margen
                            SET forma_calculo = :calculo,
@@ -335,7 +342,7 @@ public class RepositorioPrecios {
                                precio_fijo   = :fijo
                          WHERE empresa_id = :empresa AND producto_id = :producto
                            AND forma_pago = :forma
-                           AND vigente_desde = CURDATE()
+                           AND vigente_desde = :hoy
                         """)
                 .param("calculo", regla.formaCalculo())
                 .param("factor", regla.factor())
@@ -343,6 +350,7 @@ public class RepositorioPrecios {
                 .param("empresa", empresaId)
                 .param("producto", productoId)
                 .param("forma", formaPago)
+                .param("hoy", hoy)
                 .update();
     }
 
@@ -354,30 +362,33 @@ public class RepositorioPrecios {
      * {@link #corregirReglaPropiaDeHoy}. Es el mismo cuidado que pone
      * `RepositorioImportacion.cerrarCostoVigente`.
      */
-    public int cerrarReglaPropiaAyer(Integer empresaId, Integer productoId, String formaPago) {
+    public int cerrarReglaPropiaAyer(Integer empresaId, Integer productoId, String formaPago,
+                                     LocalDate hoy) {
         return jdbc.sql("""
                         UPDATE reglas_margen
-                           SET vigente_hasta = CURDATE() - INTERVAL 1 DAY
+                           SET vigente_hasta = :ayer
                          WHERE empresa_id = :empresa AND producto_id = :producto
                            AND forma_pago = :forma
-                           AND vigente_desde < CURDATE()
-                           AND (vigente_hasta IS NULL OR vigente_hasta >= CURDATE())
+                           AND vigente_desde < :hoy
+                           AND (vigente_hasta IS NULL OR vigente_hasta >= :hoy)
                         """)
                 .param("empresa", empresaId)
                 .param("producto", productoId)
                 .param("forma", formaPago)
+                .param("hoy", hoy)
+                .param("ayer", hoy.minusDays(1))
                 .update();
     }
 
     /** Abre desde hoy la regla propia nueva. */
     public void abrirReglaPropia(Integer empresaId, Integer productoId, String formaPago,
-                                 ReglaDePrecio regla) {
+                                 ReglaDePrecio regla, LocalDate hoy) {
         jdbc.sql("""
                         INSERT INTO reglas_margen
                                (empresa_id, producto_id, forma_pago, forma_calculo,
                                 factor, precio_fijo, vigente_desde)
                         VALUES (:empresa, :producto, :forma, :calculo,
-                                :factor, :fijo, CURDATE())
+                                :factor, :fijo, :hoy)
                         """)
                 .param("empresa", empresaId)
                 .param("producto", productoId)
@@ -385,6 +396,7 @@ public class RepositorioPrecios {
                 .param("calculo", regla.formaCalculo())
                 .param("factor", regla.factor())
                 .param("fijo", regla.precioFijo())
+                .param("hoy", hoy)
                 .update();
     }
 
@@ -491,7 +503,7 @@ public class RepositorioPrecios {
      * `PrecioDeProductoTest` contra la vigencia que usa la vista.
      */
     public int productosAlcanzados(Integer empresaId, Integer categoriaId,
-                                   Integer proveedorId) {
+                                   Integer proveedorId, LocalDate hoy) {
         return jdbc.sql("""
                         SELECT COUNT(*) FROM productos p
                          WHERE p.empresa_id = :empresa AND p.activo = 1
@@ -501,12 +513,13 @@ public class RepositorioPrecios {
                                   FROM reglas_margen r
                                  WHERE r.empresa_id = p.empresa_id
                                    AND r.producto_id = p.producto_id
-                                   AND r.vigente_desde <= CURDATE()
-                                   AND (r.vigente_hasta IS NULL OR r.vigente_hasta >= CURDATE())) < 2
+                                   AND r.vigente_desde <= :hoy
+                                   AND (r.vigente_hasta IS NULL OR r.vigente_hasta >= :hoy)) < 2
                         """)
                 .param("empresa", empresaId)
                 .param("categoria", categoriaId)
                 .param("proveedor", proveedorId)
+                .param("hoy", hoy)
                 .query(Integer.class)
                 .single();
     }
