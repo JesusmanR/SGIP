@@ -1,6 +1,7 @@
 package co.com.bspstore.sgip.datos;
 
 import co.com.bspstore.sgip.api.dto.SolicitudPrecio;
+import co.com.bspstore.sgip.logica.DatoTributarioInvalidoException;
 import co.com.bspstore.sgip.logica.ServicioConfiguracionTributaria;
 import co.com.bspstore.sgip.logica.ServicioPrecios;
 import co.com.bspstore.sgip.modelo.Producto;
@@ -20,6 +21,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -91,8 +93,14 @@ class HoyDeLaAplicacionConBaseTest {
 
     // ------------------------------------------------- reglas de IVA
 
+    /**
+     * Con la base por delante de la aplicación, una regla que la aplicación cree por
+     * empezar pero que la base ya tiene vigente no se borra: rige y explica ventas.
+     * El DELETE lleva la doble guarda (el {@code hoy} de la aplicación y el
+     * {@code CURDATE()} del motor), y el servicio dice por qué no pudo (ADR-0030).
+     */
     @Test
-    void unaReglaDeIvaQueAunNoEmpiezaSegunLaAplicacionSePuedeRetirar() {
+    void unaReglaDeIvaQueLaBaseYaTieneVigenteNoSeRetiraAunqueLaAplicacionCreaQueNoEmpieza() {
         Integer iva19 = jdbc.sql("SELECT tipo_impuesto_id FROM tipos_impuesto WHERE codigo = 'IVA_19'")
                 .query(Integer.class).single();
         Integer regla = repositorioTributario.insertarRegla(empresa.empresaId, empresa.categoriaId,
@@ -100,12 +108,11 @@ class HoyDeLaAplicacionConBaseTest {
         var servicio = new ServicioConfiguracionTributaria(repositorioTributario, categorias,
                 repositorioProductos, elDia(LocalDate.of(2020, 1, 1)));
 
-        var resultado = servicio.cerrarRegla(regla, null);
+        assertThrows(DatoTributarioInvalidoException.class, () -> servicio.cerrarRegla(regla, null));
 
-        assertTrue(resultado.orElseThrow().retirada(),
-                "para la aplicación la regla empieza en 2025: aún no rige y se retira");
-        assertEquals(0, jdbc.sql("SELECT COUNT(*) FROM reglas_iva WHERE empresa_id = :e")
-                .param("e", empresa.empresaId).query(Integer.class).single());
+        assertEquals(1, jdbc.sql("SELECT COUNT(*) FROM reglas_iva WHERE empresa_id = :e")
+                .param("e", empresa.empresaId).query(Integer.class).single(),
+                "la regla vigente para la base sigue ahí");
     }
 
     @Test

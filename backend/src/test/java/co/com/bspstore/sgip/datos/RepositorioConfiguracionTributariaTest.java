@@ -213,12 +213,11 @@ class RepositorioConfiguracionTributariaTest {
     }
 
     /**
-     * El servicio decide con su reloj que una regla «aún no empieza»; si entre la
-     * lectura y el borrado la regla pasa a regir en el «hoy» de la sentencia, el
-     * DELETE no puede borrarla: una regla que rige explica ventas.
+     * Si entre la lectura y el borrado la regla pasa a regir en el «hoy» de la
+     * sentencia, el DELETE no puede borrarla: una regla que rige explica ventas.
      */
     @Test
-    void retirarNoBorraUnaReglaQueLaBaseYaTieneVigente() {
+    void retirarNoBorraUnaReglaQueYaRigeSegunElHoyDeLaSentencia() {
         Integer queRigeHoy = regla(empresa, null, null, ENERO, null);
         empiezaEn(queRigeHoy, HOY);
         Integer queRigeDesdeAyer = regla(empresa, categoria, null, ENERO, null);
@@ -229,6 +228,22 @@ class RepositorioConfiguracionTributariaTest {
 
         assertTrue(repositorio.buscarRegla(empresa, queRigeHoy, HOY).isPresent());
         assertTrue(repositorio.buscarRegla(empresa, queRigeDesdeAyer, HOY).isPresent());
+    }
+
+    /**
+     * La segunda guarda: aunque la aplicación pase un «hoy» anterior al del motor, el
+     * DELETE no borra una regla que el motor ya tiene vigente, que es la que las
+     * vistas aplican (ADR-0030). La fecha de la regla es fija y lejana al día de hoy,
+     * de modo que no depende de la hora a la que corra la prueba.
+     */
+    @Test
+    void retirarNoBorraUnaReglaQueElMotorYaTieneVigenteAunqueLaAplicacionDigaOtroDia() {
+        Integer regla = regla(empresa, null, null, ENERO, null);
+        empiezaEn(regla, LocalDate.of(2025, 1, 1));
+
+        assertEquals(0, repositorio.borrarRegla(empresa, regla, LocalDate.of(2020, 1, 1)));
+
+        assertTrue(repositorio.buscarRegla(empresa, regla, HOY).isPresent());
     }
 
     @Test
