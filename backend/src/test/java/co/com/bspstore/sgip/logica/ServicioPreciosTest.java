@@ -106,6 +106,22 @@ class ServicioPreciosTest {
                 new BigDecimal("1.3500"), LocalDate.of(2026, 1, 1), null);
     }
 
+    /**
+     * Un doble envío no puede crear dos reglas iguales: la empresa se bloquea
+     * antes de comprobar el solape y se suelta al confirmar (M14).
+     */
+    @Test
+    void crearBloqueaLaEmpresaAntesDeComprobarElSolapeYDeEscribir() {
+        servicio.crear(solicitud("SOBRE_COSTO", "1.2000"));
+
+        InOrder orden = inOrder(precios);
+        orden.verify(precios).bloquearEmpresa(EMPRESA);
+        orden.verify(precios).categoriaPropia(eq(EMPRESA), any());
+        orden.verify(precios).haySolape(eq(EMPRESA), any(), any(), anyString(), any(), any(), isNull());
+        orden.verify(precios).insertar(eq(EMPRESA), any(), any(), anyString(), anyString(), any(),
+                any(), any());
+    }
+
     @Test
     void unaCategoriaDeOtraEmpresaNoSirveDeAmbito() {
         when(precios.categoriaPropia(EMPRESA, 99)).thenReturn(false);

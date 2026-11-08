@@ -120,6 +120,24 @@ public class RepositorioPrecios {
     }
 
     /**
+     * Pone en fila a quienes crean reglas de ámbito en una misma empresa.
+     *
+     * Comprobar el solape y escribir son dos pasos, y sin nada que los ponga en
+     * fila dos peticiones a la vez ven las dos «no hay solape» y escriben las
+     * dos (un doble clic). No hay fila de regla que bloquear antes de crearla ni
+     * clave única que lo impida —el ámbito se expresa con nulos, ver
+     * {@link #haySolape}—, de modo que se bloquea la fila de la empresa, igual
+     * que hace {@code RepositorioConfiguracionTributaria.bloquearEmpresa} con las
+     * reglas de IVA. El bloqueo se suelta al confirmar la transacción.
+     */
+    public void bloquearEmpresa(Integer empresaId) {
+        jdbc.sql("SELECT empresa_id FROM empresas WHERE empresa_id = :empresa FOR UPDATE")
+                .param("empresa", empresaId)
+                .query(Integer.class)
+                .list();
+    }
+
+    /**
      * Si ya hay una regla del mismo ámbito y forma de pago cuya vigencia
      * se solape con la que se pretende.
      *

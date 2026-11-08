@@ -116,9 +116,20 @@ public class ServicioPrecios {
                 solicitud.formaPago(), solicitud.formaCalculo(), solicitud.factor());
     }
 
+    /**
+     * Crea una regla de ámbito.
+     *
+     * Bloquea la empresa antes de leer nada: el solape se comprueba y se escribe
+     * con ella bloqueada, y el bloqueo se suelta al confirmar. Con un doble clic,
+     * la segunda petición espera aquí y ve la regla de la primera, en lugar de
+     * comprobar a la vez y dejar dos reglas iguales (M14). Va lo primero porque
+     * las lecturas que siguen fijarían la foto de la transacción antes de que la
+     * primera confirme.
+     */
     @Transactional
     public ReglaDeMargen crear(SolicitudReglaMargen solicitud) {
         Integer empresa = ContextoEmpresa.empresaActual();
+        precios.bloquearEmpresa(empresa);
         exigirAmbitoPropio(empresa, solicitud.categoriaId(), solicitud.proveedorId());
         exigirFactorCoherente(solicitud.formaCalculo(), solicitud.factor());
         exigirRangoCoherente(solicitud.vigenteDesde(), solicitud.vigenteHasta());
