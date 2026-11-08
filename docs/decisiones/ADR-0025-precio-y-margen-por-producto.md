@@ -215,6 +215,8 @@ dirían cuál mandó. Guardar lo mismo no escribe nada.
 - El `_emp` de CI sube de 46 a 47. `database/aplicar.sh` se queda en 46 porque
   se detiene en la V31: su número es el de la V31, y el de CI es el del esquema
   final.
+- **Nota posterior (revisión final, I3).** La lectura de un producto que crecía con toda la
+  base está resuelta en la V38: ver ADR-0029.
 - **Nota posterior (revisión final, I1).** El costo vive en la ficha, y una edición con el
   formulario abierto antes de una carga de precios devolvía el costo viejo sin avisar:
   `@Version` solo protege los milisegundos de una misma transacción, no el tiempo que el

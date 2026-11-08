@@ -112,8 +112,11 @@ La página todavía paga por todos los productos **de su propia empresa**:
   la subconsulta de `imagen_principal` en su lista de selección impide fusionarla.
 - Calcula `fn_valor_uvt(CURDATE())` unas quince veces por fila.
 
-Con una empresa de 10.000 productos, la página tardó 5,5 s con V38, frente a 7,9 s con
-V37 en la misma base. No empeora, pero sigue siendo lento. Leer un producto sí es
+Con una empresa de 10.000 productos, en una base que además tenía otros 10.500, la página
+tardó 5,5 s con V38 frente a 7,9 s con V37: en esa base mixta mejora. El caso de una base
+con una sola tienda grande no se midió. La búsqueda de reglas por producto cuesta del
+orden de lo que costaba la ventana sobre toda la base, así que ahí el tiempo puede quedar
+parecido al de V37. Leer un producto sí es
 constante (3–7 ms). Arreglarlo pide redefinir `v_precios_producto`: la UVT calculada una
 vez y la imagen con un `LEFT JOIN`, para que el `LIMIT` actúe antes de buscar reglas.
 Queda para cuando una tienda tenga un catálogo así. No bloquea la caja.
