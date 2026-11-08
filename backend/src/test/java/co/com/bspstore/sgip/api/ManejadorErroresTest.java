@@ -143,6 +143,20 @@ class ManejadorErroresTest {
         assertTrue(nivelRegistrado().toInt() < Level.ERROR.toInt());
     }
 
+    /** El valor repetido suele ser un correo o un NIT: es un dato personal y no va al registro. */
+    @Test
+    void unDuplicadoNoEscribeElValorRepetidoEnElRegistro() {
+        // Spring repite el texto del motor en su propio mensaje, como aquí.
+        String motor = "Duplicate entry 'ana@tienda.co' for key 'usuarios.uq_usuarios_correo'";
+        manejador.integridad(new DataIntegrityViolationException(
+                "could not execute statement [" + motor + "]", new RuntimeException(
+                        new SQLIntegrityConstraintViolationException(motor, "23000", 1062))));
+
+        String linea = registro.list.get(0).getFormattedMessage();
+        assertFalse(linea.contains("ana@tienda.co"), linea);
+        assertTrue(linea.contains("uq_usuarios_correo"), linea);
+    }
+
     @Test
     void unaReferenciaInexistenteNoSeRegistraComoError() {
         manejador.integridad(delMotor("Cannot add or update a child row", "23000", 1452));
