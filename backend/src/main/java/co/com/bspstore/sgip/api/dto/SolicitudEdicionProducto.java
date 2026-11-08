@@ -1,6 +1,7 @@
 package co.com.bspstore.sgip.api.dto;
 
 import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
@@ -70,6 +71,9 @@ public record SolicitudEdicionProducto(
 
         @NotNull(message = "El costo es obligatorio")
         @DecimalMin(value = "0.01", message = "El costo debe ser mayor que cero")
+        // La columna es DECIMAL(14,2): lo que no cabe llegaría al motor como un error genérico.
+        @Digits(integer = 12, fraction = 2,
+                message = "El costo admite hasta doce enteros y dos decimales")
         BigDecimal costo,
 
         @PositiveOrZero(message = "La existencia mínima no puede ser negativa")

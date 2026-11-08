@@ -135,7 +135,7 @@ class ServicioUsuariosTest {
     void unCorreoYaRegistradoEnLaPlataformaSeRechaza() {
         when(usuarios.existsByCorreo("pedro@tienda.co")).thenReturn(true);
 
-        var e = assertThrows(RegistroRepetidoException.class,
+        var e = assertThrows(CorreoRepetidoException.class,
                 () -> servicio.crear(solicitud("VENDEDOR")));
 
         assertTrue(e.getMessage().contains("pedro@tienda.co"));

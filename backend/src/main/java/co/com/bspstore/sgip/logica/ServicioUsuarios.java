@@ -85,7 +85,7 @@ public class ServicioUsuarios {
         // empresa: es la credencial con la que se entra y el ingreso no
         // sabe todavía a qué comercio pertenece quien escribe.
         if (usuarios.existsByCorreo(correo)) {
-            throw new RegistroRepetidoException(
+            throw new CorreoRepetidoException(
                     "El correo " + correo + " ya pertenece a un usuario de la plataforma.");
         }
 
