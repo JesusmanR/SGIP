@@ -35,7 +35,6 @@
 .plataforma-empresas .usuarios-empresa { margin-top: var(--espacio-5); }
 .plataforma-empresas .usuarios-empresa h2 { margin: 0 0 var(--espacio-2); font-size: var(--t-titulo-tarjeta); }
 .plataforma-empresas .usuarios-empresa .confirmacion { margin-top: var(--espacio-4); }
-.plataforma-empresas 
 .plataforma-empresas td .boton.menudo { width: auto; min-height: var(--toque-minimo); padding: 0 var(--espacio-3); }
 
 /* Un lugar al que el foco vuelve por código se ve igual que uno al que se llega con el teclado. */
