@@ -43,6 +43,21 @@ describe('Campo', () => {
     expect(screen.queryByRole('alert')).toBeNull()
   })
 
+  it('la advertencia describe al control, no lo marca inválido y se anuncia', () => {
+    render(<Campo etiqueta="Precio" advertencia="Queda por debajo del costo"><input /></Campo>)
+    const campo = screen.getByLabelText('Precio')
+    expect(campo).not.toHaveAttribute('aria-invalid')
+    expect(campo).toHaveAccessibleDescription('Queda por debajo del costo')
+    expect(screen.getByRole('status')).toHaveClass('campo-mensaje', 'advertencia')
+  })
+
+  it('el error gana a la advertencia, y la advertencia a la ayuda', () => {
+    const { rerender } = render(<Campo etiqueta="P" ayuda="Ayuda" advertencia="Aviso" motivo="Error"><input /></Campo>)
+    expect(screen.getByLabelText('P')).toHaveAccessibleDescription('Error')
+    rerender(<Campo etiqueta="P" ayuda="Ayuda" advertencia="Aviso"><input /></Campo>)
+    expect(screen.getByLabelText('P')).toHaveAccessibleDescription('Aviso')
+  })
+
   it('sin mensaje la región queda vacía y el control no apunta a ella', () => {
     render(<Campo etiqueta="N"><input /></Campo>)
     expect(screen.getByLabelText('N')).not.toHaveAttribute('aria-describedby')

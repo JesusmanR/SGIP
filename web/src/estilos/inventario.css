@@ -1,19 +1,7 @@
 /* Estilos de la sección inventario: solo esta sección escribe aquí.
    El color sale solo de tokens.css. */
 
-.inventario .volver { margin: 0 0 var(--espacio-3); font-size: var(--t-cuerpo); }
-
-/* Un enlace con aspecto de botón: sin subrayado y centrado en su alto. */
-.inventario .enlace-boton {
-  display: inline-flex; align-items: center; justify-content: center;
-  min-height: var(--alto-control); text-decoration: none;
-}
-.inventario a.boton:not(.secundario) { color: var(--sobre-acento); }
-.inventario a.boton.secundario { color: var(--tinta); }
-
-.inventario .nota {
-  margin: var(--espacio-3) 0 0; color: var(--tinta-2); font-size: var(--t-cuerpo); max-width: 65ch;
-}
+.inventario .nota { margin: var(--espacio-3) 0 0; }
 .inventario .paso { margin: 0 0 var(--espacio-3); color: var(--tinta-2); font-size: var(--t-etiqueta); font-weight: 600; }
 
 /* ── Barra de búsqueda y límite ────────────────────────────────────── */
@@ -64,7 +52,7 @@
 .inventario .tipo-movimiento.devolucion { background: var(--info-fondo);  color: var(--info); }
 .inventario .tipo-movimiento.ajuste     { background: var(--acento-sutil); color: var(--tinta-2); }
 .inventario .cambio { font-weight: 600; }
-.inventario .cambio.baja { color: var(--peligro); }
+.inventario .cambio-baja { color: var(--peligro); }
 
 /* Un hueco en la cadena de existencias: texto, no solo color. */
 .inventario .hueco { color: var(--peligro); font-size: var(--t-etiqueta); font-weight: 600; max-width: 22ch; }
@@ -118,7 +106,6 @@
 .inventario .listo h2:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }
 .inventario .listo p { margin: 0 0 var(--espacio-2); font-size: var(--t-cuerpo); }
 .inventario .aviso-foco { margin-bottom: var(--espacio-3); }
-.inventario .aviso-foco:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }
 
 .inventario .producto-elegido {
   display: flex; flex-wrap: wrap; align-items: center; gap: var(--espacio-2) var(--espacio-4);

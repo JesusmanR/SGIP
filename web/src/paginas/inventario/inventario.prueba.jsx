@@ -335,7 +335,12 @@ describe('ajuste', () => {
   async function llenar({ contada = '30', motivo = 'Conteo físico' } = {}) {
     await elegirProducto('aur', 'auriculares nova')
     if (contada !== null) await userEvent.type(screen.getByLabelText(/cantidad contada/i), contada)
-    if (motivo !== null) await userEvent.type(screen.getByLabelText(/motivo del ajuste/i), motivo)
+    // Pegado y no tecleado: escribir 201 letras una a una tarda segundos y,
+    // con la máquina cargada, pasa del límite de 5 s de la prueba.
+    if (motivo !== null) {
+      await userEvent.click(screen.getByLabelText(/motivo del ajuste/i))
+      await userEvent.paste(motivo)
+    }
   }
 
   beforeEach(() => {

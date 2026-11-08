@@ -32,25 +32,29 @@ public class ServicioAutenticacion {
 
     private final UsuarioRepositorio usuarios;
     private final AuditoriaAccesoRepositorio auditoria;
+    private final ServicioSesion sesiones;
     private final Clock reloj;
     private final int intentosMaximos;
-    private final int minutosDeBloqueo;
+    private final PoliticaDeBloqueo bloqueo;
 
     /**
      * El instante del bloqueo y su vencimiento se miden con el reloj de la
      * aplicación, el mismo en los dos lados: la columna solo guarda el instante
-     * y la base nunca decide si venció (ADR-0028).
+     * y la base nunca decide si venció (ADR-0028). El plazo lo dice
+     * {@link PoliticaDeBloqueo}, el mismo que usa la lista de usuarios de la plataforma.
      */
     public ServicioAutenticacion(UsuarioRepositorio usuarios,
                                  AuditoriaAccesoRepositorio auditoria,
+                                 ServicioSesion sesiones,
                                  Clock reloj,
                                  @Value("${sgip.seguridad.intentos-maximos:5}") int intentosMaximos,
-                                 @Value("${sgip.seguridad.minutos-de-bloqueo:15}") int minutosDeBloqueo) {
+                                 PoliticaDeBloqueo bloqueo) {
         this.usuarios = usuarios;
         this.auditoria = auditoria;
+        this.sesiones = sesiones;
         this.reloj = reloj;
         this.intentosMaximos = intentosMaximos;
-        this.minutosDeBloqueo = minutosDeBloqueo;
+        this.bloqueo = bloqueo;
     }
 
     @Transactional(noRollbackFor = CredencialesInvalidasException.class)
@@ -66,7 +70,7 @@ public class ServicioAutenticacion {
         }
         // Al vencer el plazo la cuenta se limpia antes de mirar la clave: los
         // intentos vuelven a cero y un error no la bloquea de inmediato otra vez.
-        if (usuario.bloqueoVencido(ahora(), minutosDeBloqueo)) {
+        if (bloqueo.vencido(usuario, ahora())) {
             usuario.desbloquear();
         }
         if (usuario.isBloqueado()) {
@@ -129,17 +133,24 @@ public class ServicioAutenticacion {
      * revierte con esa excepción: si lo hiciera, el contador nunca
      * avanzaría y se podría adivinar sin límite.
      *
+     * Cambiar la clave y cerrar las demás sesiones (todas menos la del
+     * {@code tokenActual}) es una sola unidad: van en esta transacción, y
+     * {@link ServicioSesion#cerrarLasDemasDe} se une a ella. Si el cierre falla, la
+     * clave no cambia; de otro modo quedaría cambiada con abiertas las sesiones de
+     * quien la conocía, que es justo lo que el cierre quiere impedir.
+     *
      * Ningún mensaje ni registro lleva la contraseña, ni la actual ni la
      * nueva.
      */
     @Transactional(noRollbackFor = {ClaveActualIncorrectaException.class, CuentaBloqueadaException.class})
-    public void cambiarClave(Integer usuarioId, String actual, String nueva, String origen) {
+    public void cambiarClave(Integer usuarioId, String actual, String nueva, String origen,
+                             String tokenActual) {
         Usuario usuario = usuarios.findById(usuarioId)
                 .orElseThrow(() -> new RecursoNoEncontradoException("El usuario no existe."));
 
         // El mismo vencimiento que en el ingreso: al cumplirse el plazo, los
         // intentos vuelven a cero también por esta puerta.
-        if (usuario.bloqueoVencido(ahora(), minutosDeBloqueo)) {
+        if (bloqueo.vencido(usuario, ahora())) {
             usuario.desbloquear();
         }
         // El bloqueo no cierra las sesiones abiertas (ADR-0028), así que esta
@@ -150,7 +161,7 @@ public class ServicioAutenticacion {
         if (usuario.isBloqueado()) {
             auditoria.save(AuditoriaAcceso.fallido(usuario, usuario.getCorreo(),
                     MotivoRechazo.CUENTA_BLOQUEADA, origen));
-            throw new CuentaBloqueadaException(minutosDeBloqueo);
+            throw new CuentaBloqueadaException(bloqueo.minutos());
         }
         if (!Seguridad.verificar(actual, usuario.getClaveHash())) {
             usuario.registrarIntentoFallido(intentosMaximos, ahora());
@@ -171,6 +182,7 @@ public class ServicioAutenticacion {
 
         usuario.registrarIngresoExitoso();
         usuario.cambiarClave(Seguridad.derivar(nueva));
+        sesiones.cerrarLasDemasDe(usuarioId, tokenActual);
     }
 
     /**
@@ -194,7 +206,7 @@ public class ServicioAutenticacion {
 
     private void rechazar(Usuario usuario, String correo, MotivoRechazo motivo, String origen) {
         auditoria.save(AuditoriaAcceso.fallido(usuario, correo, motivo, origen));
-        throw new CredencialesInvalidasException(minutosDeBloqueo);
+        throw new CredencialesInvalidasException(bloqueo.minutos());
     }
 
     private LocalDateTime ahora() {

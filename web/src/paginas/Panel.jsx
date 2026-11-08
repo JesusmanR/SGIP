@@ -7,7 +7,7 @@ import GraficoMovimiento from '../componentes/GraficoMovimiento.jsx'
 import { useDatos } from '../hooks/useDatos.js'
 import { api } from '../servicios/api.js'
 import { NUMERO, PESOS, fechaCorta, pesosAbreviados } from '../servicios/formato.js'
-import { leerSesion } from '../servicios/sesion.js'
+import { esAdministrador } from '../servicios/sesion.js'
 import '../estilos/panel.css'
 
 /**
@@ -57,7 +57,7 @@ const PENDIENTES_VISIBLES = 1
 const DESCRIPCION = 'Resumen de operación'
 
 export default function Panel() {
-  if (leerSesion()?.rol !== 'ADMINISTRADOR') {
+  if (!esAdministrador()) {
     return (
       <div className="contenido panel-pagina">
         <EncabezadoPagina titulo="Panel" />

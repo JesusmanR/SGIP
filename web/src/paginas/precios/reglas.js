@@ -20,7 +20,7 @@ export const FORMAS_CALCULO = [
   },
   {
     valor: 'SOBRE_PRECIO',
-    etiqueta: 'Margen sobre el precio de venta',
+    etiqueta: 'Ganancia sobre el precio de venta',
     ayuda: 'El porcentaje es la parte del precio de venta que queda de ganancia.',
   },
 ]
@@ -70,7 +70,7 @@ export function porcentajeAFactor(texto, formaCalculo) {
   if (centesimas <= 0) return { error: 'El porcentaje tiene que ser mayor que cero.' }
   if (formaCalculo === 'SOBRE_PRECIO') {
     if (centesimas >= POR_PRECIO_TOPE) {
-      return { error: 'El margen sobre el precio tiene que ser menor que 100 %.' }
+      return { error: 'La ganancia sobre el precio tiene que ser menor que 100 %.' }
     }
   } else if (centesimas > POR_COSTO_MAXIMO) {
     return { error: 'El recargo sobre el costo no puede pasar de 9.899,99 %.' }

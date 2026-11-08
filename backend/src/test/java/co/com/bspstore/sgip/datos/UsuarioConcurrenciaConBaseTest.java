@@ -110,7 +110,7 @@ class UsuarioConcurrenciaConBaseTest {
 
             // ...y mientras tanto se confirma el cambio de contraseña.
             transaccionAparte.executeWithoutResult(b ->
-                    autenticacion.cambiarClave(usuarioId, CLAVE, NUEVA, "prueba"));
+                    autenticacion.cambiarClave(usuarioId, CLAVE, NUEVA, "prueba", "token-que-no-existe"));
 
             leido.registrarIntentoFallido(5, LocalDateTime.now());
             usuarios.saveAndFlush(leido);

@@ -9,8 +9,8 @@ import EstadoVacio from '../../componentes/comun/EstadoVacio.jsx'
 import TablaOTarjetas from '../../componentes/comun/TablaOTarjetas.jsx'
 import { useDatos } from '../../hooks/useDatos.js'
 import { verOrden } from '../../servicios/api/compras.js'
-import { fechaCorta } from '../../servicios/formato.js'
-import { InsigniaEstado, nombreDeEstado, pesos } from './EstadoOrden.jsx'
+import { costoEnPesos, fechaCorta } from '../../servicios/formato.js'
+import { InsigniaEstado, nombreDeEstado } from './EstadoOrden.jsx'
 import FormularioRecepcion from './FormularioRecepcion.jsx'
 
 const volver = <Link to="/compras">Volver a órdenes de compra</Link>
@@ -23,8 +23,8 @@ const COLUMNAS = [
   { clave: 'cantidad', titulo: 'Pedido', numerica: true },
   { clave: 'cantidadRecibida', titulo: 'Recibido', numerica: true },
   { clave: 'pendiente', titulo: 'Pendiente', numerica: true },
-  { clave: 'costoUnitario', titulo: 'Costo unitario', numerica: true, render: (l) => pesos(l.costoUnitario) },
-  { clave: 'subtotal', titulo: 'Subtotal', numerica: true, render: (l) => pesos(l.subtotal) },
+  { clave: 'costoUnitario', titulo: 'Costo unitario', numerica: true, render: (l) => costoEnPesos(l.costoUnitario) },
+  { clave: 'subtotal', titulo: 'Subtotal', numerica: true, render: (l) => costoEnPesos(l.subtotal) },
 ]
 
 /** La orden ya cargada. Se separa para que cada orden tenga su propio estado. */
@@ -71,7 +71,7 @@ function Orden({ inicial, creada }) {
         claveFila={(l) => l.itemId}
         columnas={COLUMNAS}
       />
-      <p className="total-vista"><span>Total de la orden</span> <strong>{pesos(orden.total)}</strong></p>
+      <p className="total-vista"><span>Total de la orden</span> <strong>{costoEnPesos(orden.total)}</strong></p>
 
       {(orden.estado === 'ABIERTA' || orden.estado === 'PARCIAL') && (
         <FormularioRecepcion orden={orden} alRecibir={alRecibir} alRechazar={alRechazar} />

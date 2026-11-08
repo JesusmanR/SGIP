@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { borrarSesion, guardarSesion, haySesion, inicioSegunRol, leerSesion } from './sesion.js'
+import {
+  borrarSesion, esAdministrador, guardarSesion, haySesion, inicioSegunRol, leerSesion,
+} from './sesion.js'
 
 describe('sesión del navegador', () => {
   beforeEach(() => { sessionStorage.clear() })
@@ -42,5 +44,29 @@ describe('inicio según el rol', () => {
 
   it('con la clave pendiente va a cambiarla, sea cual sea el rol', () => {
     expect(inicioSegunRol({ rol: 'SUPER_ADMIN', debeCambiarClave: true })).toBe('/cambiar-clave')
+  })
+})
+
+describe('esAdministrador', () => {
+  beforeEach(() => { sessionStorage.clear() })
+
+  it.each([
+    ['ADMINISTRADOR', true],
+    ['VENDEDOR', false],
+    ['CLIENTE', false],
+    // Quien administra la plataforma no es el administrador de una tienda: no ve costos.
+    ['SUPER_ADMIN', false],
+  ])('%s: %s', (rol, esperado) => {
+    expect(esAdministrador({ rol })).toBe(esperado)
+  })
+
+  it('sin sesión no lo es', () => {
+    expect(esAdministrador()).toBe(false)
+    expect(esAdministrador(null)).toBe(false)
+  })
+
+  it('por omisión mira la sesión abierta', () => {
+    guardarSesion({ token: 't', rol: 'ADMINISTRADOR' })
+    expect(esAdministrador()).toBe(true)
   })
 })

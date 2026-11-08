@@ -9,6 +9,10 @@ import {
 } from '../servicios/sesion.js'
 import EntradaClave from './acceso/EntradaClave.jsx'
 
+// El `type` del 400 «la contraseña actual no es correcta» (ManejadorErrores). Los demás
+// 400 de esta pantalla (los del DTO, la contraseña nueva) no lo llevan.
+const TIPO_ACTUAL_INCORRECTA = 'urn:sgip:clave-actual-incorrecta'
+
 // Los mismos que exige el backend (SolicitudCambioClave y ServicioAutenticacion).
 // El diseño muestra además mayúscula, minúscula y número: el servidor no los
 // pide, y un indicador que los exigiera sería una promesa falsa.
@@ -97,9 +101,9 @@ export default function CambiarClave() {
         navegar('/acceso', { replace: true })
         return
       }
-      // El servidor no distingue este 400 por tipo: solo por el texto, que empieza
-      // por «La contraseña actual» (ClaveActualIncorrectaException). Los del DTO llegan con el prefijo «actual: » y se quedan arriba.
-      if (e instanceof ErrorApi && e.estado === 400 && /^La contraseña actual/i.test(e.message)) {
+      // Este 400 se reconoce por su tipo y no por el texto. Los demás (los del DTO, la
+      // contraseña nueva) se quedan arriba, igual que el 423.
+      if (e instanceof ErrorApi && e.estado === 400 && e.tipo === TIPO_ACTUAL_INCORRECTA) {
         setClaveActualMal(e.message)
         campoActual.current?.focus()
         return

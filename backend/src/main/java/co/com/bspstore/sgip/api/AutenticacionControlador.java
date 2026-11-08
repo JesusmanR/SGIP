@@ -63,10 +63,11 @@ public class AutenticacionControlador {
      * que puede hacer quien aún tiene la inicial.
      *
      * La clave que se cambia es la de quien hace la petición, tomada de
-     * su sesión; la solicitud no lleva identificador. Al terminar se
-     * cierran las demás sesiones del usuario y se conserva esta: así
-     * quien tuviera la clave anterior pierde el acceso y quien la cambió
-     * sigue trabajando con el mismo token.
+     * su sesión; la solicitud no lleva identificador. El servicio cambia la
+     * clave y cierra las demás sesiones del usuario, conservando la de este
+     * token, en una sola transacción: así quien tuviera la clave anterior
+     * pierde el acceso, quien la cambió sigue trabajando con el mismo token,
+     * y si el cierre falla la clave no cambia.
      *
      * Los errores de contraseña son 400 y no 401: un 401 haría que el
      * cliente diera por expirada la sesión.
@@ -78,12 +79,11 @@ public class AutenticacionControlador {
             HttpServletRequest peticion) {
         UsuarioAutenticado quien = ContextoEmpresa.actual().orElseThrow(() ->
                 new IllegalStateException("No hay usuario autenticado en el contexto."));
-        servicio.cambiarClave(quien.usuarioId(), solicitud.claveActual(), solicitud.claveNueva(),
-                peticion.getRemoteAddr());
         String token = (cabecera != null && cabecera.startsWith(PREFIJO))
                 ? cabecera.substring(PREFIJO.length()).trim()
                 : null;
-        sesiones.cerrarLasDemasDe(quien.usuarioId(), token);
+        servicio.cambiarClave(quien.usuarioId(), solicitud.claveActual(), solicitud.claveNueva(),
+                peticion.getRemoteAddr(), token);
         return ResponseEntity.noContent().build();
     }
 }

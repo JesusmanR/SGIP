@@ -1,4 +1,4 @@
-import { porcentajeConDecimales } from '../../servicios/formato.js'
+import { fraccionComoPorcentaje } from '../../servicios/formato.js'
 
 /**
  * Lo que la pantalla sabe de los impuestos: cómo se llaman las cosas en
@@ -15,9 +15,6 @@ const TRATAMIENTOS = {
 }
 export const etiquetaDeTratamiento = (valor) => TRATAMIENTOS[valor] ?? 'Sin definir'
 
-/** La tarifa del catálogo es una fracción: 0,19 se lee 19,00 %. */
-export const tarifaComoPorcentaje = (fraccion) => porcentajeConDecimales(Math.round(Number(fraccion) * 1e6) / 1e4)
-
 /**
  * Qué cobra de verdad un tipo de impuesto, dicho con palabras. La exclusión
  * por tope lleva la tarifa 19 % en el catálogo, pero no se cobra hasta el
@@ -25,9 +22,9 @@ export const tarifaComoPorcentaje = (fraccion) => porcentajeConDecimales(Math.ro
  */
 export function descripcionDeImpuesto(tratamiento, tarifa) {
   if (tratamiento === 'EXCLUIDO_HASTA_UMBRAL') {
-    return `Sin IVA hasta el tope; sobre el tope, ${tarifaComoPorcentaje(tarifa)}`
+    return `Sin IVA hasta el tope; sobre el tope, ${fraccionComoPorcentaje(tarifa)}`
   }
-  if (tratamiento === 'GRAVADO') return `Con IVA, ${tarifaComoPorcentaje(tarifa)}`
+  if (tratamiento === 'GRAVADO') return `Con IVA, ${fraccionComoPorcentaje(tarifa)}`
   return etiquetaDeTratamiento(tratamiento)
 }
 

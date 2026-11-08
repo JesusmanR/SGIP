@@ -10,7 +10,7 @@ import { useDatos } from '../../hooks/useDatos.js'
 import { apiPrecios } from '../../servicios/api/precios.js'
 import { PESOS } from '../../servicios/formato.js'
 import Campo from '../../componentes/comun/Campo.jsx'
-import { fechaDia, hoyISO, sumarDias } from './fechas.js'
+import { fechaDia, hoyISO, sumarDias } from '../../servicios/fechas.js'
 import {
   etiquetaDePago, etiquetaDeTratamiento, factorAPorcentaje, FORMAS_CALCULO, FORMAS_PAGO,
   porcentajeAFactor, textoDeAlcance,

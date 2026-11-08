@@ -29,6 +29,9 @@ vi.mock('../servicios/api.js', async (original) => {
 
 const PENDIENTE = { token: 'abc', nombre: 'Ana', rol: 'VENDEDOR', debeCambiarClave: true }
 
+// El 400 de clave actual incorrecta se reconoce por el type del problema, no por el texto.
+const TIPO_ACTUAL_INCORRECTA = 'urn:sgip:clave-actual-incorrecta'
+
 function montar(ruta = '/cambiar-clave') {
   return render(<MemoryRouter initialEntries={[ruta]}><App /></MemoryRouter>)
 }
@@ -287,7 +290,7 @@ describe('cambio de contraseña obligatorio', () => {
     })
 
     it('la contraseña actual incorrecta (400) va junto a su campo y lo enfoca', async () => {
-      api.cambiarClave.mockRejectedValue(new ErrorApi(400, 'La contraseña actual no es correcta.'))
+      api.cambiarClave.mockRejectedValue(new ErrorApi(400, 'La contraseña actual no es correcta.', TIPO_ACTUAL_INCORRECTA))
       montar()
       await rellenar()
       const alerta = await screen.findByRole('alert')
@@ -298,6 +301,26 @@ describe('cambio de contraseña obligatorio', () => {
       expect(actual).toHaveFocus()
       // No se repite arriba, en el aviso del formulario.
       expect(screen.getAllByRole('alert')).toHaveLength(1)
+    })
+
+    it('la contraseña actual incorrecta se reconoce por el tipo aunque el texto no empiece por «La contraseña actual»', async () => {
+      api.cambiarClave.mockRejectedValue(new ErrorApi(400, 'Esa no es tu clave.', TIPO_ACTUAL_INCORRECTA))
+      montar()
+      await rellenar()
+      const alerta = await screen.findByRole('alert')
+      const actual = screen.getByLabelText('Contraseña actual')
+      expect(alerta).toHaveTextContent('Esa no es tu clave.')
+      expect(actual).toHaveAttribute('aria-invalid', 'true')
+      expect(actual).toHaveFocus()
+    })
+
+    it('un 400 sin tipo cuyo texto empieza por «La contraseña actual» va arriba y no marca el campo', async () => {
+      api.cambiarClave.mockRejectedValue(new ErrorApi(400, 'La contraseña actual no es correcta.'))
+      montar()
+      await rellenar()
+      const alerta = await screen.findByRole('alert')
+      expect(alerta.className).toMatch(/aviso-estado/)
+      expect(screen.getByLabelText('Contraseña actual')).not.toHaveAttribute('aria-invalid', 'true')
     })
 
     it('otros errores del servidor siguen arriba y no marcan la contraseña actual', async () => {

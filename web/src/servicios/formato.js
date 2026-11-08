@@ -1,3 +1,5 @@
+import { MESES } from './fechas.js'
+
 /**
  * Cómo se escriben los números en la aplicación.
  *
@@ -77,24 +79,52 @@ export function pesosAbreviados(valor) {
   return PESOS.format(n)
 }
 
-const DOS_DECIMALES = new Intl.NumberFormat('es-CO', {
-  minimumFractionDigits: 2, maximumFractionDigits: 2,
+/**
+ * Un porcentaje: `20,00 %`, o `—` si no hay. Nunca convierte «no hay» en cero:
+ * un cero es un dato, y uno ausente es un precio que falta. El valor ya viene
+ * en porcentaje (20 es el 20 %); para una fracción (0,19) véase
+ * `fraccionComoPorcentaje`.
+ *
+ * Es el único formateador de porcentajes: la ganancia, las tarifas y las
+ * variaciones de costo se leen igual. `decimales` cambia cuántos lleva y
+ * `conSigno` pone el «+» a lo que sube, para las variaciones.
+ */
+export function porcentaje(valor, { decimales = 2, conSigno = false } = {}) {
+  if (valor === null || valor === undefined || valor === '' || !Number.isFinite(Number(valor))) return '—'
+  const n = Number(valor)
+  const formato = new Intl.NumberFormat('es-CO', {
+    minimumFractionDigits: decimales, maximumFractionDigits: decimales,
+  })
+  const signo = conSigno && n > 0 ? '+' : ''
+  return `${signo}${formato.format(n)}${DURO}%`
+}
+
+/**
+ * Una tarifa que viaja como fracción (`0,19`) escrita como porcentaje
+ * (`19,00 %`). Redondea a cuatro decimales de la fracción para que la coma
+ * flotante no deje un `18,999999 %`.
+ */
+export const fraccionComoPorcentaje = (fraccion) => porcentaje(Math.round(Number(fraccion) * 1e6) / 1e4)
+
+const CON_CENTAVOS = new Intl.NumberFormat('es-CO', {
+  style: 'currency', currency: 'COP', minimumFractionDigits: 2, maximumFractionDigits: 2,
 })
 
 /**
- * Un margen: `20,00 %`, o `—` si no hay. Nunca convierte «no hay» en cero:
- * un margen de cero es un dato, y uno ausente es un precio que falta.
+ * Un costo en pesos. El costo admite centavos (el servidor guarda dos
+ * decimales): uno entero se escribe sin decimales y uno con centavos los
+ * conserva en lugar de redondearlos. Igual en compras y en el catálogo.
  */
-export function porcentajeConDecimales(valor) {
-  if (valor === null || valor === undefined || !Number.isFinite(Number(valor))) return '—'
-  return `${DOS_DECIMALES.format(Number(valor))}${DURO}%`
+export function costoEnPesos(valor) {
+  const n = Number(valor)
+  return Number.isInteger(n) ? PESOS.format(n) : CON_CENTAVOS.format(n)
 }
 
 /** Una cantidad de unidades: `1.248`. */
 export const NUMERO = new Intl.NumberFormat('es-CO')
 
 /**
- * Una fecha y hora corta: `18 sep 2026, 9:14`.
+ * Una fecha y hora corta: `18 sep 2026, 9:14 a. m.`.
  *
  * El backend entrega `LocalDateTime` sin zona, de modo que la cadena
  * llega como `2026-09-18T09:14:00` y el navegador la interpreta en la
@@ -106,16 +136,15 @@ export function fechaCorta(iso) {
   if (!iso) return '—'
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return '—'
-  return d.toLocaleString('es-CO', {
-    day: 'numeric', month: 'short', year: 'numeric',
-    hour: 'numeric', minute: '2-digit',
-  })
+  const hora = d.getHours()
+  const minutos = String(d.getMinutes()).padStart(2, '0')
+  const sufijo = hora < 12 ? 'a. m.' : 'p. m.'
+  return `${d.getDate()} ${MESES[d.getMonth()]} ${d.getFullYear()}, ${hora % 12 || 12}:${minutos} ${sufijo}`
 }
 
 /** Un día del eje del gráfico: `18 sep`. */
 export function diaCorto(iso) {
-  if (!iso) return ''
-  const d = new Date(`${iso}T00:00:00`)
-  if (Number.isNaN(d.getTime())) return ''
-  return d.toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })
+  const partes = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso ?? '')
+  const mes = partes && MESES[Number(partes[2]) - 1]
+  return mes ? `${Number(partes[3])} ${mes}` : ''
 }

@@ -42,9 +42,11 @@ class ServicioAutenticacionTest {
 
     private static final String CORREO = "admin@bspstore.com.co";
     private static final String CLAVE = "SgipDev2026";
+    private static final String TOKEN = "token-actual";
 
     @Mock UsuarioRepositorio usuarios;
     @Mock AuditoriaAccesoRepositorio auditoria;
+    @Mock ServicioSesion sesiones;
 
     ServicioAutenticacion servicio;
     Usuario usuario;
@@ -69,7 +71,7 @@ class ServicioAutenticacionTest {
     @BeforeEach
     void preparar() {
         reloj = new RelojAjustable();
-        servicio = new ServicioAutenticacion(usuarios, auditoria, reloj, 5, MINUTOS_DE_BLOQUEO);
+        servicio = new ServicioAutenticacion(usuarios, auditoria, sesiones, reloj, 5, new PoliticaDeBloqueo(MINUTOS_DE_BLOQUEO));
         Rol admin = new Rol("ADMINISTRADOR", "Administrador");
         usuario = new Usuario(admin, "Jesús Durán", CORREO, Seguridad.derivar(CLAVE));
     }
@@ -292,7 +294,7 @@ class ServicioAutenticacionTest {
 
     @Test
     void elPlazoSeConfiguraYNoEstaEscritoEnElCodigo() {
-        servicio = new ServicioAutenticacion(usuarios, auditoria, reloj, 5, 30);
+        servicio = new ServicioAutenticacion(usuarios, auditoria, sesiones, reloj, 5, new PoliticaDeBloqueo(30));
         bloquearConCincoErrores();
         reloj.adelantarMinutos(29);
         assertThrows(CredencialesInvalidasException.class,
@@ -405,7 +407,7 @@ class ServicioAutenticacionTest {
         when(usuarios.findById(20)).thenReturn(Optional.of(usuario));
         assertTrue(usuario.isCambioClaveRequerido(), "el usuario nace con el cambio pendiente");
 
-        servicio.cambiarClave(20, CLAVE, "NuevaClave2026", "10.0.0.5");
+        servicio.cambiarClave(20, CLAVE, "NuevaClave2026", "10.0.0.5", TOKEN);
 
         assertFalse(usuario.isCambioClaveRequerido());
         assertTrue(Seguridad.verificar("NuevaClave2026", usuario.getClaveHash()));
@@ -421,7 +423,7 @@ class ServicioAutenticacionTest {
         String hashAntes = usuario.getClaveHash();
 
         assertThrows(ClaveActualIncorrectaException.class,
-                () -> servicio.cambiarClave(20, "incorrecta", "NuevaClave2026", "10.0.0.5"));
+                () -> servicio.cambiarClave(20, "incorrecta", "NuevaClave2026", "10.0.0.5", TOKEN));
 
         assertEquals(1, usuario.getIntentosFallidos(),
                 "adivinar la actual desde una sesión robada no puede salir gratis");
@@ -435,7 +437,7 @@ class ServicioAutenticacionTest {
         when(usuarios.findById(20)).thenReturn(Optional.of(usuario));
 
         assertThrows(ClaveActualIncorrectaException.class,
-                () -> servicio.cambiarClave(20, "incorrecta-secreta", "NuevaClave2026", "10.0.0.5"));
+                () -> servicio.cambiarClave(20, "incorrecta-secreta", "NuevaClave2026", "10.0.0.5", TOKEN));
 
         verify(auditoria).save(argThat(a -> !a.isExitoso()
                 && "CLAVE_INCORRECTA".equals(a.getMotivo())
@@ -449,7 +451,7 @@ class ServicioAutenticacionTest {
         when(usuarios.findById(20)).thenReturn(Optional.of(usuario));
 
         assertThrows(ClaveNuevaInvalidaException.class,
-                () -> servicio.cambiarClave(20, CLAVE, "corta", "10.0.0.5"));
+                () -> servicio.cambiarClave(20, CLAVE, "corta", "10.0.0.5", TOKEN));
 
         verify(auditoria, never()).save(any());
     }
@@ -463,13 +465,13 @@ class ServicioAutenticacionTest {
         when(usuarios.findById(20)).thenReturn(Optional.of(usuario));
         for (int i = 0; i < 5; i++) {
             assertThrows(ClaveActualIncorrectaException.class,
-                    () -> servicio.cambiarClave(20, "incorrecta", "NuevaClave2026", "10.0.0.5"));
+                    () -> servicio.cambiarClave(20, "incorrecta", "NuevaClave2026", "10.0.0.5", TOKEN));
         }
         assertEquals(AHORA, usuario.getBloqueadoEn());
         reloj.adelantarMinutos(5);
 
         assertThrows(CuentaBloqueadaException.class,
-                () -> servicio.cambiarClave(20, "incorrecta", "NuevaClave2026", "10.0.0.5"));
+                () -> servicio.cambiarClave(20, "incorrecta", "NuevaClave2026", "10.0.0.5", TOKEN));
 
         assertEquals(AHORA, usuario.getBloqueadoEn(), "el plazo sigue contando desde el bloqueo");
         assertEquals(5, usuario.getIntentosFallidos(), "bloqueada, no sigue sumando");
@@ -487,7 +489,7 @@ class ServicioAutenticacionTest {
         String hashAntes = usuario.getClaveHash();
 
         var e = assertThrows(CuentaBloqueadaException.class,
-                () -> servicio.cambiarClave(20, CLAVE, "NuevaClave2026", "10.0.0.5"));
+                () -> servicio.cambiarClave(20, CLAVE, "NuevaClave2026", "10.0.0.5", TOKEN));
 
         assertEquals(MINUTOS_DE_BLOQUEO, e.getMinutosDeBloqueo());
         assertEquals(hashAntes, usuario.getClaveHash());
@@ -504,7 +506,7 @@ class ServicioAutenticacionTest {
         usuario.registrarIntentoFallido(1, AHORA);
         reloj.adelantarMinutos(MINUTOS_DE_BLOQUEO);
 
-        servicio.cambiarClave(20, CLAVE, "NuevaClave2026", "10.0.0.5");
+        servicio.cambiarClave(20, CLAVE, "NuevaClave2026", "10.0.0.5", TOKEN);
 
         assertFalse(usuario.isBloqueado());
         assertTrue(Seguridad.verificar("NuevaClave2026", usuario.getClaveHash()));
@@ -516,12 +518,12 @@ class ServicioAutenticacionTest {
         when(usuarios.findById(20)).thenReturn(Optional.of(usuario));
         for (int i = 0; i < 5; i++) {
             assertThrows(ClaveActualIncorrectaException.class,
-                    () -> servicio.cambiarClave(20, "incorrecta", "NuevaClave2026", "10.0.0.5"));
+                    () -> servicio.cambiarClave(20, "incorrecta", "NuevaClave2026", "10.0.0.5", TOKEN));
         }
         reloj.adelantarMinutos(MINUTOS_DE_BLOQUEO);
 
         assertThrows(ClaveActualIncorrectaException.class,
-                () -> servicio.cambiarClave(20, "incorrecta", "NuevaClave2026", "10.0.0.5"));
+                () -> servicio.cambiarClave(20, "incorrecta", "NuevaClave2026", "10.0.0.5", TOKEN));
 
         assertFalse(usuario.isBloqueado());
         assertEquals(1, usuario.getIntentosFallidos());
@@ -534,7 +536,7 @@ class ServicioAutenticacionTest {
 
         for (int i = 0; i < 5; i++) {
             assertThrows(ClaveActualIncorrectaException.class,
-                    () -> servicio.cambiarClave(20, "incorrecta", "NuevaClave2026", "10.0.0.5"));
+                    () -> servicio.cambiarClave(20, "incorrecta", "NuevaClave2026", "10.0.0.5", TOKEN));
         }
 
         assertTrue(usuario.isBloqueado());
@@ -546,7 +548,7 @@ class ServicioAutenticacionTest {
         String hashAntes = usuario.getClaveHash();
 
         assertThrows(ClaveNuevaInvalidaException.class,
-                () -> servicio.cambiarClave(20, CLAVE, CLAVE, "10.0.0.5"));
+                () -> servicio.cambiarClave(20, CLAVE, CLAVE, "10.0.0.5", TOKEN));
 
         assertEquals(hashAntes, usuario.getClaveHash());
         assertTrue(usuario.isCambioClaveRequerido(),
@@ -558,8 +560,33 @@ class ServicioAutenticacionTest {
         when(usuarios.findById(20)).thenReturn(Optional.of(usuario));
 
         assertThrows(ClaveNuevaInvalidaException.class,
-                () -> servicio.cambiarClave(20, CLAVE, "corta", "10.0.0.5"));
+                () -> servicio.cambiarClave(20, CLAVE, "corta", "10.0.0.5", TOKEN));
         assertTrue(usuario.isCambioClaveRequerido());
+    }
+
+    /**
+     * El cierre de las demás sesiones va dentro del mismo servicio transaccional que
+     * el cambio de clave (M16): lo hace aquí y no el controlador en otra transacción.
+     */
+    @Test
+    void alCambiarLaClaveCierraLasDemasSesionesConservandoLaDelToken() {
+        when(usuarios.findById(20)).thenReturn(Optional.of(usuario));
+
+        servicio.cambiarClave(20, CLAVE, "NuevaClave2026", "10.0.0.5", TOKEN);
+
+        verify(sesiones).cerrarLasDemasDe(20, TOKEN);
+    }
+
+    @Test
+    void siLaClaveNoCambiaNoSeCierraNingunaSesion() {
+        when(usuarios.findById(20)).thenReturn(Optional.of(usuario));
+
+        assertThrows(ClaveActualIncorrectaException.class,
+                () -> servicio.cambiarClave(20, "incorrecta", "NuevaClave2026", "10.0.0.5", TOKEN));
+        assertThrows(ClaveNuevaInvalidaException.class,
+                () -> servicio.cambiarClave(20, CLAVE, "corta", "10.0.0.5", TOKEN));
+
+        verify(sesiones, never()).cerrarLasDemasDe(any(), any());
     }
 
     @Test
@@ -567,6 +594,6 @@ class ServicioAutenticacionTest {
         when(usuarios.findById(99)).thenReturn(Optional.empty());
 
         assertThrows(RecursoNoEncontradoException.class,
-                () -> servicio.cambiarClave(99, CLAVE, "NuevaClave2026", "10.0.0.5"));
+                () -> servicio.cambiarClave(99, CLAVE, "NuevaClave2026", "10.0.0.5", TOKEN));
     }
 }

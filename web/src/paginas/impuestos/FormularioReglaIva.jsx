@@ -9,7 +9,7 @@ import { useDatos } from '../../hooks/useDatos.js'
 import { apiImpuestos } from '../../servicios/api/impuestos.js'
 import BuscadorProducto from './BuscadorProducto.jsx'
 import Campo from '../../componentes/comun/Campo.jsx'
-import { hoyISO } from './fechas.js'
+import { hoyISO } from '../../servicios/fechas.js'
 import { descripcionDeImpuesto } from './tributos.js'
 
 const FUNDAMENTO_MAXIMO = 160

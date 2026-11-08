@@ -6,9 +6,10 @@ import EstadoSinPermiso from '../../componentes/comun/EstadoSinPermiso.jsx'
 import EstadoVacio from '../../componentes/comun/EstadoVacio.jsx'
 import TablaOTarjetas from '../../componentes/comun/TablaOTarjetas.jsx'
 import { apiPlataformaTributario } from '../../servicios/api/plataforma-tributario.js'
-import { NUMERO } from '../../servicios/formato.js'
+import { NUMERO, fraccionComoPorcentaje } from '../../servicios/formato.js'
 import { erroresPorCampo, numeroEscrito, sinCampo } from './campos.js'
 import Campo from '../../componentes/comun/Campo.jsx'
+import Confirmacion from '../../componentes/comun/Confirmacion.jsx'
 
 const CON_TOPE = 'EXCLUIDO_HASTA_UMBRAL'
 const TRATAMIENTOS = {
@@ -17,11 +18,6 @@ const TRATAMIENTOS = {
   EXCLUIDO: 'Excluido',
 }
 const CAMPOS_DEL_SERVIDOR = ['tarifa', 'umbralUvt', 'fundamento', 'motivo']
-const PORCENTAJE = new Intl.NumberFormat('es-CO', { maximumFractionDigits: 2 })
-const DURO = String.fromCharCode(160)
-
-/** La tarifa viaja como fracción (0,19); a la vista va como porcentaje. */
-const comoPorcentaje = (tarifa) => `${PORCENTAJE.format(Number(tarifa) * 100)}${DURO}%`
 const aNumero = (texto) => Number(String(texto).trim().replace(',', '.'))
 
 // Los límites de SolicitudTipoImpuesto: la tarifa, una fracción con 4 decimales; el tope, 6 enteros y 2 decimales.
@@ -65,12 +61,10 @@ function EditarImpuesto({ impuesto, alGuardar, alCancelar }) {
   })
   const [intentos, setIntentos] = useState(0)
   const [confirmando, setConfirmando] = useState(false)
-  const [volverAlBoton, setVolverAlBoton] = useState(false)
   const [enviando, setEnviando] = useState(false)
   const [error, setError] = useState(null)
   const [camposServidor, setCamposServidor] = useState({})
   const formulario = useRef(null)
-  const caja = useRef(null)
   const botonGuardar = useRef(null)
   const enCurso = useRef(false)
 
@@ -84,15 +78,6 @@ function EditarImpuesto({ impuesto, alGuardar, alCancelar }) {
   useEffect(() => {
     if (intentos > 0) formulario.current?.querySelector('[aria-invalid="true"]')?.focus()
   }, [intentos])
-  useEffect(() => {
-    if (confirmando) caja.current?.focus()
-  }, [confirmando])
-  // El foco vuelve al botón cuando la confirmación ya se cerró y el botón ya está en pantalla.
-  useEffect(() => {
-    if (confirmando || !volverAlBoton) return
-    botonGuardar.current?.focus()
-    setVolverAlBoton(false)
-  }, [confirmando, volverAlBoton])
 
   const cambiar = (campo) => (e) => {
     const valor = e.target.value
@@ -107,11 +92,6 @@ function EditarImpuesto({ impuesto, alGuardar, alCancelar }) {
     setCamposServidor({})
     if (Object.values(fallos).some(Boolean)) return
     setConfirmando(true)
-  }
-
-  function volverAEditar() {
-    setVolverAlBoton(true)
-    setConfirmando(false)
   }
 
   async function guardar() {
@@ -133,7 +113,6 @@ function EditarImpuesto({ impuesto, alGuardar, alCancelar }) {
         setIntentos((n) => n + 1)
       } else {
         setError(err.message || 'No se pudo completar la operación.')
-        setVolverAlBoton(true)
       }
       setConfirmando(false)
       enCurso.current = false
@@ -168,18 +147,16 @@ function EditarImpuesto({ impuesto, alGuardar, alCancelar }) {
         </Campo>
       </fieldset>
       {confirmando ? (
-        <div className="confirmacion" role="group" aria-labelledby="impuesto-pregunta" tabIndex={-1} ref={caja}>
-          <p id="impuesto-pregunta" className="confirmacion-pregunta">{`¿Guardar los cambios de ${impuesto.nombre}?`}</p>
-          <p>
-            Este cambio afecta a todas las tiendas y rige al instante, sin esperar a nada más.
-          </p>
-          <div className="acciones">
-            <button type="button" className="boton" disabled={enviando} onClick={guardar}>Sí, guardar</button>
-            <button type="button" className="boton secundario" disabled={enviando} onClick={volverAEditar}>
-              Volver a editar
-            </button>
-          </div>
-        </div>
+        <Confirmacion
+          pregunta={`¿Guardar los cambios de ${impuesto.nombre}?`}
+          detalle="Este cambio afecta a todas las tiendas y rige al instante, sin esperar a nada más."
+          textoConfirmar="Sí, guardar"
+          textoCancelar="Volver a editar"
+          enviando={enviando}
+          volverA={() => botonGuardar.current}
+          alConfirmar={guardar}
+          alCancelar={() => setConfirmando(false)}
+        />
       ) : (
         <div className="acciones">
           <button type="submit" className="boton" ref={botonGuardar}>Guardar impuesto</button>
@@ -210,7 +187,7 @@ export default function SeccionImpuestos({ impuestos }) {
   const columnas = [
     { clave: 'nombre', titulo: 'Impuesto', principal: true },
     { clave: 'tratamiento', titulo: 'Tratamiento', render: (i) => TRATAMIENTOS[i.tratamiento] ?? i.tratamiento },
-    { clave: 'tarifa', titulo: 'Tarifa', numerica: true, render: (i) => comoPorcentaje(i.tarifa) },
+    { clave: 'tarifa', titulo: 'Tarifa', numerica: true, render: (i) => fraccionComoPorcentaje(i.tarifa) },
     {
       clave: 'umbralUvt', titulo: 'Tope en UVT', numerica: true,
       render: (i) => (i.umbralUvt == null ? '—' : NUMERO.format(i.umbralUvt)),
