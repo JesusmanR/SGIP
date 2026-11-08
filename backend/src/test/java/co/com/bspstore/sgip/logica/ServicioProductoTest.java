@@ -518,15 +518,38 @@ class ServicioProductoTest {
         verify(costos).registrarCambio(3, 11, new BigDecimal("3400.00"), HOY);
     }
 
+    /**
+     * Mismo orden que la importación: primero historico_costos y luego productos.
+     * Dos que editan a la vez toman los bloqueos en el mismo orden y no se cruzan.
+     */
     @Test
-    void elHistoricoSeEscribeDespuesDeGuardarElProducto() {
+    void elHistoricoSeEscribeAntesDeGuardarElProducto() {
         unaEdicionLista();
 
         servicio.actualizar(11, edicionConCosto("3400.00"));
 
         InOrder orden = inOrder(productos, costos);
-        orden.verify(productos).saveAndFlush(any());
         orden.verify(costos).registrarCambio(3, 11, new BigDecimal("3400.00"), HOY);
+        orden.verify(productos).saveAndFlush(any());
+    }
+
+    /** La columna es DECIMAL(14,2): lo que no se ve en centavos no es un cambio. */
+    @Test
+    void unDecimalMasAllaDeLosCentavosNoEsUnCambioDeCosto() {
+        unaEdicionLista();
+
+        servicio.actualizar(11, edicionConCosto("3100.004"));
+
+        verifyNoInteractions(costos);
+    }
+
+    @Test
+    void elCostoDelHistoricoSeRedondeaALosCentavosComoLaColumna() {
+        unaEdicionLista();
+
+        servicio.actualizar(11, edicionConCosto("3400.005"));
+
+        verify(costos).registrarCambio(3, 11, new BigDecimal("3400.01"), HOY);
     }
 
     /** La base devuelve 3100.00 y el formulario puede mandar 3100: es el mismo costo. */

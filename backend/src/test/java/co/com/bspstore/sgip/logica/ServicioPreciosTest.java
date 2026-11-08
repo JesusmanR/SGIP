@@ -122,6 +122,62 @@ class ServicioPreciosTest {
                 any(), any());
     }
 
+    /**
+     * Las tres escrituras de reglas de ámbito toman los bloqueos en el mismo orden,
+     * empresa y luego regla; si no, dos que se cruzan se esperan entre sí (I3).
+     */
+    @Test
+    void actualizarBloqueaLaEmpresaAntesDeLeerLaRegla() {
+        servicio.actualizar(50, solicitud("SOBRE_COSTO", "1.2000"));
+
+        InOrder orden = inOrder(precios);
+        orden.verify(precios).bloquearEmpresa(EMPRESA);
+        orden.verify(precios).buscar(EMPRESA, 50, HOY);
+    }
+
+    @Test
+    void reemplazarBloqueaLaEmpresaAntesQueLaRegla() {
+        laViejaRigeDesde(LocalDate.of(2026, 1, 1), null);
+
+        servicio.reemplazar(50, reemplazo(LocalDate.of(2026, 10, 20)));
+
+        InOrder orden = inOrder(precios);
+        orden.verify(precios).bloquearEmpresa(EMPRESA);
+        orden.verify(precios).bloquear(EMPRESA, 50);
+    }
+
+    @Test
+    void reemplazarUnaReglaQueNoExisteBloqueaLaEmpresaIgual() {
+        when(precios.bloquear(EMPRESA, 404)).thenReturn(Optional.empty());
+
+        assertTrue(servicio.reemplazar(404, reemplazo(LocalDate.of(2026, 10, 20))).isEmpty());
+
+        verify(precios).bloquearEmpresa(EMPRESA);
+    }
+
+    /**
+     * Un reloj que cruza la medianoche de Bogotá en mitad de la operación: todas las
+     * comprobaciones y consultas usan el «hoy» con el que empezó.
+     */
+    @Test
+    void reemplazarUsaUnSoloHoyAunqueElRelojCruceLaMedianoche() {
+        java.time.Instant antes = HOY.atTime(23, 59, 59).atZone(ZoneId.of("America/Bogota")).toInstant();
+        var llamadas = new java.util.concurrent.atomic.AtomicInteger();
+        Clock cruzaLaMedianoche = new Clock() {
+            @Override public ZoneId getZone() { return ZoneId.of("America/Bogota"); }
+            @Override public Clock withZone(ZoneId zona) { return this; }
+            @Override public java.time.Instant instant() {
+                return llamadas.getAndIncrement() == 0 ? antes : antes.plusSeconds(5);
+            }
+        };
+        var enLaMedianoche = new ServicioPrecios(precios, cruzaLaMedianoche);
+        laViejaRigeDesde(LocalDate.of(2026, 1, 1), null);
+
+        assertTrue(enLaMedianoche.reemplazar(50, reemplazo(HOY)).isPresent());
+
+        verify(precios, never()).buscar(anyInt(), anyInt(), eq(HOY.plusDays(1)));
+    }
+
     @Test
     void unaCategoriaDeOtraEmpresaNoSirveDeAmbito() {
         when(precios.categoriaPropia(EMPRESA, 99)).thenReturn(false);
