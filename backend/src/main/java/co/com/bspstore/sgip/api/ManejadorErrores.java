@@ -325,6 +325,15 @@ public class ManejadorErrores {
      * es una validación que faltó en la solicitud: {@code warn}, para que se
      * vea y se corrija. Lo demás no se esperaba y sigue en {@code error}.
      */
+    private static final java.util.regex.Pattern RESTRICCION =
+            java.util.regex.Pattern.compile("for key '([^']+)'");
+
+    /** El nombre de la restricción violada, sin el valor que la violó. */
+    private static String restriccion(Throwable e) {
+        var m = RESTRICCION.matcher(String.valueOf(e.getMessage()));
+        return m.find() ? m.group(1) : "desconocida";
+    }
+
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ProblemDetail integridad(DataIntegrityViolationException e) {
         // Hibernate envuelve el SQLException una o dos veces, así que
@@ -340,7 +349,9 @@ public class ManejadorErrores {
         ProblemDetail p;
         switch (motor) {
             case MYSQL_ENTRADA_DUPLICADA -> {
-                LOG.info("Operación rechazada por un dato repetido (código {}): {}", motor, e.getMessage());
+                // Solo la restricción: el valor repetido suele ser un correo o un NIT.
+                LOG.info("Operación rechazada por un dato repetido (código {}, restricción {})",
+                        motor, restriccion(e));
                 p = ProblemDetail.forStatus(HttpStatus.CONFLICT);
                 p.setTitle("Dato ya registrado");
                 p.setDetail("Ya existe un registro con esos datos.");
