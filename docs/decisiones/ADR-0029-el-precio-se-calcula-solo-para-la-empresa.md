@@ -24,17 +24,22 @@ consultada tenía 200 productos con dos reglas propias cada uno, reglas generale
 categoría, de proveedor y de impuesto. Las otras cinco empresas tenían 2.000 productos
 cada una, con la misma forma y los mismos códigos de barras. En total eran unas 10.500
 filas de productos y 21.000 de reglas. Cada cifra es la mediana de cinco ejecuciones de
-la sentencia de `ConsultaCatalogo`, en milisegundos.
+la sentencia de `ConsultaCatalogo`, en milisegundos, en un servidor recién creado y sin
+otra carga en la máquina.
 
 | Lectura | V37, solo la empresa | V37, con 10.000 en otras | V38, con 10.000 en otras |
 |---|---|---|---|
-| Un producto por identificador | 35 | 1.300–2.400 | 3–7 |
-| Un producto por código de barras | 35 | 1.350–2.400 | 3–6 |
-| Página de 50 | 67–96 | 1.400–2.500 | 70–107 |
+| Un producto por identificador | 12 | 770–790 | 2 |
+| Un producto por código de barras | 13 | 760 | 1,6–1,7 |
+| Página de 50 | 31 | 780–810 | 32–34 |
+
+Con V38, la empresa paga lo mismo que si estuviera sola en la base. Una primera ronda,
+hecha con otros procesos cargando la máquina, dio cifras de dos a tres veces mayores en
+los dos lados (antes, 1,3–2,5 s; después, 3–7 ms por producto y unos 100 ms por página).
 
 Planes con `EXPLAIN ANALYZE`:
 
-- **Antes:** tres `Materialize` sobre toda la base, de 49.798, 49.798 y 21.432 filas.
+- **Antes:** tres `Materialize` sobre toda la base, de unas 52.000, 52.000 y 19.400 filas.
   Son las reglas de margen de contado, las de crédito y las de IVA, de todas las
   empresas.
 - **Después:** las dos vistas se fusionan en `v_precios_producto`. Por cada producto ya
@@ -90,9 +95,9 @@ y rotación la leen igual, y con V38 todos ganan sin cambiar código.
    es la que da el rojo sin V38.
 2. Cada lectura de `ConsultaCatalogo` es una sola sentencia.
 3. Hay un tiempo máximo, como mediana de cinco:
-   - 250 ms por producto, unas cuarenta veces lo medido después y varias veces menos que
-     lo de antes;
-   - 1.000 ms por página.
+   - 250 ms por producto: más de cien veces lo medido después y unas tres veces menos
+     que lo de antes;
+   - 400 ms por página: unas doce veces lo de después y la mitad de lo de antes.
 
    Son cifras holgadas para un ejecutor de la CI lento. No prometen el tiempo de la caja:
    marcan lo que no debe volver a pasar.
@@ -112,11 +117,8 @@ La página todavía paga por todos los productos **de su propia empresa**:
   la subconsulta de `imagen_principal` en su lista de selección impide fusionarla.
 - Calcula `fn_valor_uvt(CURDATE())` unas quince veces por fila.
 
-Con una empresa de 10.000 productos, en una base que además tenía otros 10.500, la página
-tardó 5,5 s con V38 frente a 7,9 s con V37: en esa base mixta mejora. El caso de una base
-con una sola tienda grande no se midió. La búsqueda de reglas por producto cuesta del
-orden de lo que costaba la ventana sobre toda la base, así que ahí el tiempo puede quedar
-parecido al de V37. Leer un producto sí es
-constante (3–7 ms). Arreglarlo pide redefinir `v_precios_producto`: la UVT calculada una
+En una base que solo tiene una tienda de 10.000 productos, la página tarda lo mismo con
+V37 que con V38, unos 1,4 s. Leer un producto, en cambio, baja de 600 ms a 1,6 ms: es
+constante. Arreglar la página pide redefinir `v_precios_producto`: la UVT calculada una
 vez y la imagen con un `LEFT JOIN`, para que el `LIMIT` actúe antes de buscar reglas.
 Queda para cuando una tienda tenga un catálogo así. No bloquea la caja.

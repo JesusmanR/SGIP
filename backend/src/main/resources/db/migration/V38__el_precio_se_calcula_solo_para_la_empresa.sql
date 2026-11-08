@@ -13,8 +13,8 @@
 -- `ConsultaCatalogo` se queda fuera y el motor materializa las reglas de todas
 -- las empresas en cada lectura. Medido con 200 productos en la empresa que se
 -- consulta y 10.000 en otras cinco, con dos reglas propias por producto: leer un
--- producto pasaba de 30 ms a 1,3-1,9 s, y el paso mayor del plan de unas mil
--- filas a más de setenta mil. Añadir `empresa_id` al PARTITION BY no cambia nada:
+-- producto pasaba de 12 ms a unos 780 ms, y el paso mayor del plan de unas mil
+-- filas a más de setenta mil. Con este cambio, unos 2 ms. Añadir `empresa_id` al PARTITION BY no cambia nada:
 -- el filtro llega por el JOIN, no por un WHERE sobre la vista.
 --
 -- ## Lo que cambia

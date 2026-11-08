@@ -39,7 +39,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * El lector de código de barras de la caja hace una lectura por cada producto
  * que pasa. Si `v_regla_margen` y `v_regla_iva` se calculan para todas las
  * empresas antes de quedarse con la que pregunta, una tienda de 200 productos
- * espera un segundo y medio por cada lectura en cuanto la plataforma tiene
+ * espera casi un segundo por cada lectura en cuanto la plataforma tiene
  * 10.000 productos repartidos en otras tiendas.
  *
  * Carga primero la empresa que se consulta, 200 productos con sus dos reglas
@@ -50,7 +50,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *   1. Las filas que produce el paso mayor del plan, con `EXPLAIN ANALYZE`, no
  *      crecen con las otras empresas. Es la comprobación que no depende de la
  *      máquina, como en `EscalaDeReglasPropiasTest`, y la que pone la prueba en
- *      rojo sin el arreglo: el paso mayor pasaba de unas mil filas a más de veinte
+ *      rojo sin el arreglo: el paso mayor pasaba de unas mil filas a más de setenta
  *      mil, porque la vista materializaba las reglas de todas las empresas.
  *   2. Cada lectura es una sola sentencia, sea cual sea el volumen (manual §6).
  *   3. Un tiempo máximo, holgado para la CI (ver {@link #MS_PRODUCTO}).
@@ -70,30 +70,31 @@ class PreciosPorEmpresaConBaseTest {
     private static final int OTRAS_EMPRESAS = 5;
     private static final int PRODUCTOS_POR_OTRA = 2_000;
 
-    /** Sin depender de las otras empresas el paso mayor no cambia; sin el arreglo crece unas veinte veces. */
+    /** Sin depender de las otras empresas el paso mayor no cambia; sin el arreglo crece unas setenta veces. */
     private static final double CRECIMIENTO_MAXIMO = 1.5;
 
     /**
      * Presupuesto de una lectura de un producto, por identificador o por código
      * de barras, en milisegundos y como mediana de cinco.
      *
-     * Medido en un portátil contra MySQL 9.7 con este mismo volumen: antes del
-     * arreglo, entre 1.300 y 1.900 ms; después, entre 2 y 6 ms. La cifra queda
-     * unas cuarenta veces por encima de lo medido después, para que un ejecutor
-     * de la CI lento o cargado no la cruce, y varias veces por debajo de lo de
-     * antes, para que vuelva a fallar si la vista vuelve a calcular todas las
-     * empresas. No es la promesa de tiempo de la caja: es el piso de lo que no
-     * debe volver a pasar.
+     * Medido en un portátil sin otra carga contra MySQL 9.7, con este mismo
+     * volumen: antes del arreglo, unos 780 ms; después, unos 2 ms. La cifra queda
+     * más de cien veces por encima de lo medido después, para que un ejecutor de
+     * la CI lento o cargado no la cruce, y unas tres veces por debajo de lo de
+     * antes. No es la promesa de tiempo de la caja: es el piso de lo que no debe
+     * volver a pasar. Lo que pone la prueba en rojo de forma segura es el plan,
+     * no el reloj.
      */
     private static final long MS_PRODUCTO = 250;
 
     /**
-     * Presupuesto de una página de 50 del catálogo, mediana de cinco. Medido:
-     * antes, entre 1.400 y 2.500 ms; después, unos 100 ms. La página sí paga por
-     * los 200 productos de su empresa (la vista se materializa antes de ordenar),
-     * de ahí que la holgura sea menor que la del producto.
+     * Presupuesto de una página de 50 del catálogo, mediana de cinco. Medido igual:
+     * antes, unos 800 ms; después, unos 33 ms, lo mismo que sin las otras
+     * empresas. La página sí paga por los productos de su propia empresa (la
+     * vista se materializa antes de ordenar), de ahí una holgura de unas doce
+     * veces y no de cien.
      */
-    private static final long MS_PAGINA = 1_000;
+    private static final long MS_PAGINA = 400;
 
     private static final String BARRAS = "770000000100";
 
