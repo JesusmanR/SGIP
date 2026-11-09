@@ -116,6 +116,7 @@ class CrearReglaConcurrenteConBaseTest {
             resultados.add(otro.get(60, TimeUnit.SECONDS));
         } finally {
             hilos.shutdownNow();
+            hilos.awaitTermination(30, TimeUnit.SECONDS);
         }
 
         long creadas = resultados.stream().filter(r -> r == null).count();

@@ -40,14 +40,16 @@ import static org.mockito.Mockito.doAnswer;
  * (N1).
  *
  * Sin nada que las ponga en fila, las dos escriben su periodo en
- * {@code historico_costos} antes de guardar el producto: cada una toma sobre la fila
- * del producto el bloqueo compartido de la clave foránea y luego pide el exclusivo
- * del UPDATE, y se esperan entre sí. InnoDB resuelve el ciclo matando a una (1213),
- * que llegaría al cliente como un 500. Para que el entrelazado no dependa de la
- * suerte, la primera que termina de escribir el histórico espera (con tope) a que la
- * otra también lo haya escrito. Con el producto bloqueado antes del histórico, la
- * segunda se queda esperando ese bloqueo, la primera se cansa de esperar y confirma,
- * y la segunda se rechaza por la versión (409), sin interbloqueo.
+ * {@code historico_costos} antes de guardar el producto, y los bloqueos que cada una
+ * toma en esa escritura (por ejemplo, los de hueco del DELETE y del UPDATE sobre
+ * filas que aún no existen, y el compartido de la clave foránea sobre el producto)
+ * hacen que se esperen entre sí. InnoDB resuelve el ciclo matando a una (1213), que
+ * llegaría al cliente como un 500; en la prueba, la víctima fue el INSERT en el
+ * histórico. Para que el entrelazado no dependa de la suerte, la primera que termina
+ * de escribir el histórico espera (con tope) a que la otra también lo haya escrito.
+ * Con el producto bloqueado antes del histórico, la segunda se queda esperando ese
+ * bloqueo, la primera se cansa de esperar y confirma, y la segunda se rechaza por la
+ * versión (409), sin interbloqueo.
  *
  * Crea su propia empresa y lo borra todo al terminar.
  */
@@ -122,6 +124,7 @@ class EdicionDeCostoConcurrenteConBaseTest {
             resultados.add(otro.get(60, TimeUnit.SECONDS));
         } finally {
             hilos.shutdownNow();
+            hilos.awaitTermination(30, TimeUnit.SECONDS);
         }
 
         long guardadas = resultados.stream().filter(r -> r == null).count();
