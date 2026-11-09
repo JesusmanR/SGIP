@@ -1,0 +1,22 @@
+/* Contador de la prueba gratuita, dentro de la barra del armazón (RF-73).
+   Va sobre --chrome, como el resto de la barra; el color sale solo de tokens.css. */
+
+.contador-prueba {
+  display: flex; flex-wrap: wrap; align-items: baseline; column-gap: var(--espacio-3); row-gap: var(--espacio-1);
+  min-width: 0; font-size: var(--t-cuerpo); line-height: 20px; color: var(--sobre-acento);
+}
+.contador-prueba-tiempo { font-weight: 600; font-variant-numeric: tabular-nums; }
+.contador-prueba-ayuda { color: var(--salvia); }
+
+/* El último día y el modo consulta piden atención: van en la pastilla de aviso,
+   con texto que ya dice qué pasa, de modo que el color no es la única señal. */
+.contador-prueba--ultimo-dia .contador-prueba-tiempo,
+.contador-prueba--consulta .contador-prueba-tiempo {
+  background: var(--aviso-fondo); color: var(--aviso);
+  padding: 2px var(--espacio-2); border-radius: var(--radio-control);
+}
+
+@media (max-width: 48rem) {
+  /* En el celular ocupa su propia fila bajo la marca y el botón del menú. */
+  .contador-prueba { order: 3; flex-basis: 100%; }
+}

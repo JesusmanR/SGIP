@@ -4,6 +4,7 @@ import { api } from '../servicios/api.js'
 import { seccionDe } from '../secciones.js'
 import { borrarSesion, leerSesion } from '../servicios/sesion.js'
 import AvisoConexion from './comun/AvisoConexion.jsx'
+import ContadorPrueba from './ContadorPrueba.jsx'
 import ErrorBoundary from './ErrorBoundary.jsx'
 import MenuLateral from './MenuLateral.jsx'
 import '../estilos/armazon.css'
@@ -90,6 +91,7 @@ export default function Armazon() {
       <a className="saltar" href="#contenido-principal">Saltar al contenido</a>
       <header className="armazon-barra">
         <span className="marca">SGIP</span>
+        <ContadorPrueba rol={sesion?.rol} />
         <button
           ref={boton}
           type="button"

@@ -16,6 +16,10 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 
+import java.time.Clock;
+import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 
@@ -44,8 +48,18 @@ class FiltroEmpresaActivaTest {
 
     private final MockHttpServletResponse respuesta = new MockHttpServletResponse();
 
+    /** Último día de la prueba de la empresa 4 en las pruebas de vencimiento. */
+    private static final LocalDate FIN_PRUEBA = LocalDate.of(2026, 2, 28);
+
+    /** El reloj va en UTC, como la JVM de la CI: el día lo decide Bogotá. */
+    private Clock reloj = enBogota("2026-02-20T10:00:00-05:00");
+
+    private static Clock enBogota(String instante) {
+        return Clock.fixed(OffsetDateTime.parse(instante).toInstant(), ZoneOffset.UTC);
+    }
+
     private FiltroEmpresaActiva filtro() {
-        return new FiltroEmpresaActiva(plataforma);
+        return new FiltroEmpresaActiva(plataforma, reloj);
     }
 
     @AfterEach
@@ -163,11 +177,98 @@ class FiltroEmpresaActivaTest {
     void laEmpresaEnPruebaEscribe() throws Exception {
         comoUsuarioDe(4);
         when(plataforma.estadoDe(4)).thenReturn(Optional.of(EstadoEmpresa.PRUEBA));
+        when(plataforma.finDePruebaDe(4)).thenReturn(Optional.of(FIN_PRUEBA));
 
         filtro().doFilter(peticion("POST", "/api/v1/productos"), respuesta, cadena);
 
         verify(cadena).doFilter(any(), any());
         assertEquals(200, respuesta.getStatus());
+    }
+
+    // ------------------------------------- la prueba vencida (RF-04, ADR-0031)
+
+    @Test
+    void elUltimoDiaDeLaPruebaALas235959TodaviaEscribe() throws Exception {
+        reloj = enBogota("2026-02-28T23:59:59-05:00");
+        comoUsuarioDe(4);
+        when(plataforma.estadoDe(4)).thenReturn(Optional.of(EstadoEmpresa.PRUEBA));
+        when(plataforma.finDePruebaDe(4)).thenReturn(Optional.of(FIN_PRUEBA));
+
+        filtro().doFilter(peticion("POST", "/api/v1/productos"), respuesta, cadena);
+
+        verify(cadena).doFilter(any(), any());
+        assertEquals(200, respuesta.getStatus());
+    }
+
+    /**
+     * Sin tarea programada: el estado en la base sigue siendo PRUEBA, y es este
+     * filtro el que, con el reloj, la trata como sin escritura.
+     */
+    @Test
+    void unSegundoDespuesDelVencimientoLaPruebaNoRegistraNada() throws Exception {
+        reloj = enBogota("2026-03-01T00:00:00-05:00");
+        comoUsuarioDe(4);
+        when(plataforma.estadoDe(4)).thenReturn(Optional.of(EstadoEmpresa.PRUEBA));
+        when(plataforma.finDePruebaDe(4)).thenReturn(Optional.of(FIN_PRUEBA));
+
+        filtro().doFilter(peticion("POST", "/api/v1/productos"), respuesta, cadena);
+
+        verify(cadena, never()).doFilter(any(), any());
+        assertEquals(403, respuesta.getStatus());
+        assertTrue(respuesta.getContentType().startsWith("application/problem+json"));
+        assertTrue(respuesta.getContentAsString().contains(
+                        "\"detail\":\"La prueba gratuita terminó. Puedes consultar toda tu información, "
+                                + "pero no registrar cambios.\""),
+                "el detalle dice que terminó la prueba: " + respuesta.getContentAsString());
+        verify(plataforma, never()).cambiarEstado(anyInt(), any());
+    }
+
+    @Test
+    void laPruebaVencidaSigueConsultandoSinPreguntarNada() throws Exception {
+        reloj = enBogota("2026-03-10T10:00:00-05:00");
+        comoUsuarioDe(4);
+
+        filtro().doFilter(peticion("GET", "/api/v1/productos"), respuesta, cadena);
+
+        verify(cadena).doFilter(any(), any());
+        assertEquals(200, respuesta.getStatus());
+        verify(plataforma, never()).finDePruebaDe(anyInt());
+    }
+
+    @Test
+    void laPruebaVencidaPuedeCambiarLaClaveYSalir() throws Exception {
+        reloj = enBogota("2026-03-10T10:00:00-05:00");
+        comoUsuarioDe(4);
+        when(plataforma.estadoDe(4)).thenReturn(Optional.of(EstadoEmpresa.PRUEBA));
+        when(plataforma.finDePruebaDe(4)).thenReturn(Optional.of(FIN_PRUEBA));
+
+        filtro().doFilter(peticion("POST", "/api/v1/auth/clave"), respuesta, cadena);
+
+        verify(cadena).doFilter(any(), any());
+    }
+
+    /** Una empresa activa no paga la segunda consulta. */
+    @Test
+    void laEmpresaActivaNoPreguntaPorElFinDeLaPrueba() throws Exception {
+        comoUsuarioDe(4);
+        when(plataforma.estadoDe(4)).thenReturn(Optional.of(EstadoEmpresa.ACTIVA));
+
+        filtro().doFilter(peticion("POST", "/api/v1/productos"), respuesta, cadena);
+
+        verify(plataforma, never()).finDePruebaDe(anyInt());
+    }
+
+    /** Una prueba sin suscripción no es un caso que convenga dejar escribir. */
+    @Test
+    void unaPruebaSinSuscripcionNoEscribe() throws Exception {
+        comoUsuarioDe(4);
+        when(plataforma.estadoDe(4)).thenReturn(Optional.of(EstadoEmpresa.PRUEBA));
+        when(plataforma.finDePruebaDe(4)).thenReturn(Optional.empty());
+
+        filtro().doFilter(peticion("POST", "/api/v1/productos"), respuesta, cadena);
+
+        verify(cadena, never()).doFilter(any(), any());
+        assertEquals(403, respuesta.getStatus());
     }
 
     @Test

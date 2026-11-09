@@ -1,6 +1,7 @@
 package co.com.bspstore.sgip.config;
 
 import co.com.bspstore.sgip.datos.RepositorioPlataforma;
+import co.com.bspstore.sgip.logica.VigenciaDePrueba;
 import co.com.bspstore.sgip.modelo.EstadoEmpresa;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -13,11 +14,20 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.time.Clock;
+import java.time.LocalDate;
 import java.util.Optional;
 import java.util.Set;
 
 /**
  * El modo de consulta de la RN-15, en un solo punto (RF-03).
+ *
+ * Cubre dos casos con la misma respuesta: la empresa DESACTIVADA y la que
+ * sigue en PRUEBA con su prueba vencida (RF-04, ADR-0031). La segunda no
+ * cambia de estado en la base: no hay tarea programada que la pase a
+ * DESACTIVADA, y es este filtro, con el reloj y {@code fin_prueba}, el que la
+ * trata como sin escritura desde las 00:00:00 de Bogotá del día siguiente al
+ * último. Solo cambia el detalle del mensaje, para que el usuario sepa por qué.
  *
  * «Un usuario de empresa desactivada obtiene 200 en toda operación de
  * lectura y 403 en toda operación de escritura». La parte difícil de esa
@@ -47,7 +57,9 @@ import java.util.Set;
  *
  * ## Lo que cuesta
  *
- * Una consulta de una fila por cada petición de escritura. Las lecturas
+ * Una consulta de una fila por cada petición de escritura, y una segunda
+ * (el {@code fin_prueba} de su suscripción) solo si la empresa está en
+ * PRUEBA. Las lecturas
  * no consultan nada —el método se mira antes— de modo que el catálogo,
  * que es lo que más se pide, no paga nada. Se podría guardar el estado
  * en la sesión al ingresar y ahorrarse la consulta, y no se hace a
@@ -69,10 +81,23 @@ public class FiltroEmpresaActiva extends OncePerRequestFilter {
             HttpMethod.OPTIONS.name(),
             HttpMethod.TRACE.name());
 
-    private final RepositorioPlataforma plataforma;
+    /** Los dos detalles son textos fijos: no llevan eco de ningún dato. */
+    private static final String DETALLE_DESACTIVADA = "La empresa está desactivada. Puedes consultar "
+            + "toda tu información, y no registrar cambios, hasta que la plataforma la reactive.";
+    private static final String DETALLE_PRUEBA = "La prueba gratuita terminó. Puedes consultar "
+            + "toda tu información, pero no registrar cambios.";
 
-    public FiltroEmpresaActiva(RepositorioPlataforma plataforma) {
+    private final RepositorioPlataforma plataforma;
+    private final Clock reloj;
+
+    /**
+     * El reloj es el de la aplicación ({@code ConfiguracionSeguridad}): el
+     * vencimiento de una prueba se decide con el mismo instante con que el
+     * contador del encabezado lo calcula.
+     */
+    public FiltroEmpresaActiva(RepositorioPlataforma plataforma, Clock reloj) {
         this.plataforma = plataforma;
+        this.reloj = reloj;
     }
 
     @Override
@@ -110,12 +135,19 @@ public class FiltroEmpresaActiva extends OncePerRequestFilter {
         EstadoEmpresa estado = plataforma.estadoDe(empresa.get())
                 .orElse(EstadoEmpresa.DESACTIVADA);
 
-        if (estado.permiteEscritura()) {
+        // La prueba vence sin tarea programada (ADR-0031): el estado sigue en
+        // PRUEBA y es el reloj el que dice si ya terminó. Solo entonces se lee
+        // fin_prueba, de modo que una empresa activa no paga la segunda consulta.
+        LocalDate finPrueba = estado == EstadoEmpresa.PRUEBA
+                ? plataforma.finDePruebaDe(empresa.get()).orElse(null)
+                : null;
+
+        if (VigenciaDePrueba.permiteEscritura(estado, finPrueba, reloj.instant())) {
             cadena.doFilter(peticion, respuesta);
             return;
         }
 
-        rechazar(respuesta);
+        rechazar(respuesta, estado == EstadoEmpresa.PRUEBA ? DETALLE_PRUEBA : DETALLE_DESACTIVADA);
     }
 
     /**
@@ -128,7 +160,7 @@ public class FiltroEmpresaActiva extends OncePerRequestFilter {
      * devuelve, de modo que el cliente no tiene que distinguir de dónde
      * vino el error.
      */
-    private void rechazar(HttpServletResponse respuesta) throws IOException {
+    private void rechazar(HttpServletResponse respuesta, String detalle) throws IOException {
         respuesta.setStatus(HttpStatus.FORBIDDEN.value());
         respuesta.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
         respuesta.setCharacterEncoding("UTF-8");
@@ -136,9 +168,7 @@ public class FiltroEmpresaActiva extends OncePerRequestFilter {
                 {"type":"about:blank",\
                 "title":"Empresa en modo de consulta",\
                 "status":403,\
-                "detail":"La empresa está desactivada. Puedes consultar toda tu \
-                información, y no registrar cambios, hasta que la plataforma la \
-                reactive."}""");
+                "detail":"%s"}""".formatted(detalle));
     }
 
     /**

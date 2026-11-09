@@ -144,16 +144,16 @@ public class ServicioPlataforma {
                 texto(solicitud.ciudad()));
 
         LocalDate hoy = Hoy.de(reloj);
-        // En meses y no en días, que es lo que pide el RF-04: «hasta el
-        // mismo día del mes siguiente». `plusMonths` recorta solo cuando
-        // ese día no existe —el 31 de enero vence el 28 de febrero—, que
-        // es la única lectura posible del criterio en esos casos.
+        // Treinta días calendario contados desde mañana (RF-04 de la v4,
+        // ADR-0031): el alta del 31 de enero vence el 2 de marzo. El número
+        // sale del parámetro vigente hoy, y fin_prueba es el último día de
+        // prueba, completo.
         plataforma.insertarSuscripcion(
                 empresaId,
                 solicitud.plan() == null || solicitud.plan().isBlank()
                         ? PLAN_POR_OMISION : solicitud.plan().trim(),
                 hoy,
-                hoy.plusMonths(plataforma.mesesDePrueba(hoy)));
+                VigenciaDePrueba.finDePrueba(hoy, plataforma.diasDePrueba(hoy)));
 
         plataforma.insertarConfiguracion(empresaId);
 
