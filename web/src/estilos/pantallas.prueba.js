@@ -10,7 +10,7 @@ const leer = (nombre) => readFileSync(`src/estilos/${nombre}.css`, 'utf8')
 const sinComentarios = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '')
 const base = sinComentarios(leer('base'))
 
-const hojas = ['acceso', 'catalogo', 'producto', 'importacion', 'panel', 'empresa']
+const hojas = ['acceso', 'catalogo', 'producto', 'importacion', 'panel', 'empresa', 'contador-prueba']
 
 /** Los selectores de nivel superior y los de dentro de @media, sin duplicados. */
 function selectores(css) {

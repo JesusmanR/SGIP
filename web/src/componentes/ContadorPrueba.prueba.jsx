@@ -173,6 +173,10 @@ describe('el reloj', () => {
 
     responde('PRUEBA_VENCIDA', 0)
     pasan(95)
+    expect(screen.getByRole('status')).toHaveTextContent('Quedan 0 min de prueba')
+    // Un pequeño margen antes de volver a preguntar: en el último segundo el
+    // servidor todavía puede contestar PRUEBA con 0.
+    pasan(2)
     await esperarPeticion()
 
     expect(apiPrueba.estado).toHaveBeenCalledTimes(2)
