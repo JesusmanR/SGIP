@@ -12,6 +12,7 @@ import co.com.bspstore.sgip.modelo.AccionPlataforma;
 import co.com.bspstore.sgip.modelo.EstadoEmpresa;
 import co.com.bspstore.sgip.modelo.Rol;
 import co.com.bspstore.sgip.modelo.Usuario;
+import co.com.bspstore.sgip.util.Hoy;
 import co.com.bspstore.sgip.util.Seguridad;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -142,7 +143,7 @@ public class ServicioPlataforma {
                 texto(solicitud.telefono()),
                 texto(solicitud.ciudad()));
 
-        LocalDate hoy = LocalDate.now(reloj);
+        LocalDate hoy = Hoy.de(reloj);
         // En meses y no en días, que es lo que pide el RF-04: «hasta el
         // mismo día del mes siguiente». `plusMonths` recorta solo cuando
         // ese día no existe —el 31 de enero vence el 28 de febrero—, que
@@ -152,7 +153,7 @@ public class ServicioPlataforma {
                 solicitud.plan() == null || solicitud.plan().isBlank()
                         ? PLAN_POR_OMISION : solicitud.plan().trim(),
                 hoy,
-                hoy.plusMonths(plataforma.mesesDePrueba()));
+                hoy.plusMonths(plataforma.mesesDePrueba(hoy)));
 
         plataforma.insertarConfiguracion(empresaId);
 

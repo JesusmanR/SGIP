@@ -185,10 +185,10 @@ public class RepositorioPanel {
      *
      * El costo anterior sale de `historico_costos`. La V28 y el propio
      * `RepositorioImportacion` fijan la convención: aplicar una carga
-     * cierra el periodo vigente con `vigente_hasta = CURDATE() - 1 día`
-     * y abre uno nuevo con `vigente_desde = CURDATE()` y el `carga_id`
-     * de la carga. El periodo anterior es, por tanto, el que termina el
-     * día antes de que empiece el nuevo.
+     * cierra el periodo vigente con `vigente_hasta` = ayer y abre uno
+     * nuevo con `vigente_desde` = hoy y el `carga_id` de la carga, con el
+     * «hoy» de la aplicación (`Hoy.de`, ADR-0030). El periodo anterior es,
+     * por tanto, el que termina el día antes de que empiece el nuevo.
      *
      * Una referencia cuyo costo era el primero de su historia no tiene
      * periodo anterior y no aparece: no cambió de tratamiento, lo
@@ -218,6 +218,7 @@ public class RepositorioPanel {
                             ON v.empresa_id = nuevo.empresa_id
                            AND v.producto_id = nuevo.producto_id
                          WHERE nuevo.empresa_id = :empresa
+                           AND v.empresa_id = :empresa
                            AND nuevo.carga_id = :carga
                            AND v.tratamiento_iva = 'EXCLUIDO_HASTA_UMBRAL'
                            AND (%1$s > v.umbral_pesos) <> (v.tarifa_contado > 0)

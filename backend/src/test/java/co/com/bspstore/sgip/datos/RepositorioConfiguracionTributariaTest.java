@@ -40,6 +40,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class RepositorioConfiguracionTributariaTest {
 
     private static final LocalDate ENERO = LocalDate.of(2026, 1, 1);
+    /** El «hoy» que el servicio pasa a las consultas; fijo, para no depender del día de la base. */
+    private static final LocalDate HOY = LocalDate.of(2026, 11, 3);
+    /** Futura para el «hoy» de la prueba y para el día real del motor, cuando sea que corra. */
+    private static final LocalDate LEJANA = LocalDate.of(2099, 1, 1);
 
     @Autowired RepositorioConfiguracionTributaria repositorio;
     @Autowired RepositorioPlataforma plataforma;
@@ -78,13 +82,14 @@ class RepositorioConfiguracionTributariaTest {
     }
 
     /**
-     * Mueve el inicio de una regla respecto del día de la base, calculado en SQL
-     * y no con el reloj de la prueba: así no depende de la medianoche ni de que
-     * aplicación y base estén en zonas horarias distintas.
+     * Mueve el inicio de una regla a una fecha fija, escrita como {@code LocalDate}
+     * por JDBC, y las consultas reciben el mismo {@link #HOY}: así la prueba no
+     * depende de la medianoche ni de que aplicación y base estén en zonas
+     * horarias distintas.
      */
-    private void empiezaEn(Integer reglaId, String expresionSql) {
-        jdbc.sql("UPDATE reglas_iva SET vigente_desde = " + expresionSql
-                        + " WHERE regla_iva_id = :id")
+    private void empiezaEn(Integer reglaId, LocalDate desde) {
+        jdbc.sql("UPDATE reglas_iva SET vigente_desde = :desde WHERE regla_iva_id = :id")
+                .param("desde", desde)
                 .param("id", reglaId)
                 .update();
     }
@@ -185,7 +190,7 @@ class RepositorioConfiguracionTributariaTest {
 
         assertEquals(1, repositorio.cerrarRegla(empresa, id, LocalDate.of(2026, 12, 31)));
 
-        var r = repositorio.buscarRegla(empresa, id).orElseThrow();
+        var r = repositorio.buscarRegla(empresa, id, HOY).orElseThrow();
         assertEquals(LocalDate.of(2026, 12, 31), r.vigenteHasta());
         assertEquals("Prueba", r.categoria());
         assertEquals("IVA_19", r.codigoImpuesto());
@@ -194,38 +199,54 @@ class RepositorioConfiguracionTributariaTest {
 
     @Test
     void retirarBorraLaFilaDeLaEmpresaYNoLaDeOtra() {
-        // Solo se borra lo que todavía no empezó: mañana, según la base.
+        // Solo se borra lo que todavía no empezó, según el «hoy» que se pasa y según el
+        // día del motor (la segunda guarda): una fecha fija muy lejana cumple las dos.
         Integer propia = regla(empresa, null, null, ENERO, null);
-        empiezaEn(propia, "CURDATE() + INTERVAL 1 DAY");
+        empiezaEn(propia, LEJANA);
         Integer ajena = regla(otra, null, null, ENERO, null);
-        empiezaEn(ajena, "CURDATE() + INTERVAL 1 DAY");
+        empiezaEn(ajena, LEJANA);
 
         // Con el identificador de la otra empresa no borra nada.
-        assertEquals(0, repositorio.borrarRegla(empresa, ajena));
-        assertTrue(repositorio.buscarRegla(otra, ajena).isPresent());
+        assertEquals(0, repositorio.borrarRegla(empresa, ajena, HOY));
+        assertTrue(repositorio.buscarRegla(otra, ajena, HOY).isPresent());
 
-        assertEquals(1, repositorio.borrarRegla(empresa, propia));
-        assertTrue(repositorio.buscarRegla(empresa, propia).isEmpty());
-        assertTrue(repositorio.buscarRegla(otra, ajena).isPresent());
+        assertEquals(1, repositorio.borrarRegla(empresa, propia, HOY));
+        assertTrue(repositorio.buscarRegla(empresa, propia, HOY).isEmpty());
+        assertTrue(repositorio.buscarRegla(otra, ajena, HOY).isPresent());
     }
 
     /**
-     * El servicio decide con su reloj que una regla «aún no empieza»; si la base
-     * ya está en el día en que rige, el DELETE no puede borrarla: una regla que
-     * rige explica ventas.
+     * Si entre la lectura y el borrado la regla pasa a regir en el «hoy» de la
+     * sentencia, el DELETE no puede borrarla: una regla que rige explica ventas.
      */
     @Test
-    void retirarNoBorraUnaReglaQueLaBaseYaTieneVigente() {
+    void retirarNoBorraUnaReglaQueYaRigeSegunElHoyDeLaSentencia() {
         Integer queRigeHoy = regla(empresa, null, null, ENERO, null);
-        empiezaEn(queRigeHoy, "CURDATE()");
+        empiezaEn(queRigeHoy, HOY);
         Integer queRigeDesdeAyer = regla(empresa, categoria, null, ENERO, null);
-        empiezaEn(queRigeDesdeAyer, "CURDATE() - INTERVAL 1 DAY");
+        empiezaEn(queRigeDesdeAyer, HOY.minusDays(1));
 
-        assertEquals(0, repositorio.borrarRegla(empresa, queRigeHoy));
-        assertEquals(0, repositorio.borrarRegla(empresa, queRigeDesdeAyer));
+        assertEquals(0, repositorio.borrarRegla(empresa, queRigeHoy, HOY));
+        assertEquals(0, repositorio.borrarRegla(empresa, queRigeDesdeAyer, HOY));
 
-        assertTrue(repositorio.buscarRegla(empresa, queRigeHoy).isPresent());
-        assertTrue(repositorio.buscarRegla(empresa, queRigeDesdeAyer).isPresent());
+        assertTrue(repositorio.buscarRegla(empresa, queRigeHoy, HOY).isPresent());
+        assertTrue(repositorio.buscarRegla(empresa, queRigeDesdeAyer, HOY).isPresent());
+    }
+
+    /**
+     * La segunda guarda: aunque la aplicación pase un «hoy» anterior al del motor, el
+     * DELETE no borra una regla que el motor ya tiene vigente, que es la que las
+     * vistas aplican (ADR-0030). La fecha de la regla es fija y lejana al día de hoy,
+     * de modo que no depende de la hora a la que corra la prueba.
+     */
+    @Test
+    void retirarNoBorraUnaReglaQueElMotorYaTieneVigenteAunqueLaAplicacionDigaOtroDia() {
+        Integer regla = regla(empresa, null, null, ENERO, null);
+        empiezaEn(regla, LocalDate.of(2025, 1, 1));
+
+        assertEquals(0, repositorio.borrarRegla(empresa, regla, LocalDate.of(2020, 1, 1)));
+
+        assertTrue(repositorio.buscarRegla(empresa, regla, HOY).isPresent());
     }
 
     @Test
@@ -234,10 +255,10 @@ class RepositorioConfiguracionTributariaTest {
 
         assertEquals(0, repositorio.cerrarRegla(empresa, ajena, LocalDate.of(2026, 6, 30)));
 
-        assertTrue(repositorio.buscarRegla(otra, ajena).orElseThrow().vigenteHasta() == null);
-        assertTrue(repositorio.buscarRegla(empresa, ajena).isEmpty());
-        assertEquals(1, repositorio.listarReglas(otra).size());
-        assertTrue(repositorio.listarReglas(empresa).isEmpty());
+        assertTrue(repositorio.buscarRegla(otra, ajena, HOY).orElseThrow().vigenteHasta() == null);
+        assertTrue(repositorio.buscarRegla(empresa, ajena, HOY).isEmpty());
+        assertEquals(1, repositorio.listarReglas(otra, HOY).size());
+        assertTrue(repositorio.listarReglas(empresa, HOY).isEmpty());
     }
 
     // -------------------------------------------------------- el bloqueo

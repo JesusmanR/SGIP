@@ -10,6 +10,7 @@ import co.com.bspstore.sgip.config.UsuarioAutenticado;
 import co.com.bspstore.sgip.datos.RepositorioPlataforma;
 import co.com.bspstore.sgip.datos.RepositorioTributario;
 import co.com.bspstore.sgip.modelo.AccionPlataforma;
+import co.com.bspstore.sgip.util.Hoy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -86,7 +87,7 @@ public class ServicioTributario {
      */
     @Transactional(readOnly = true)
     public AlertaUvt alertaUvt() {
-        LocalDate hoy = LocalDate.now(reloj);
+        LocalDate hoy = Hoy.de(reloj);
         int anio = hoy.getYear();
 
         if (tributario.buscarUvt(anio).isEmpty()) {

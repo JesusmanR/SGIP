@@ -21,6 +21,9 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -33,6 +36,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -55,6 +59,10 @@ class ServicioImportacionTest {
     private static final int USUARIO = 7;
     private static final int PROVEEDOR = 3;
     private static final long CARGA = 55L;
+    private static final LocalDate HOY = LocalDate.of(2026, 11, 7);
+    /** A las 10 de la noche en Bogotá: para la JVM de la CI, en UTC, ya es mañana. */
+    private static final Clock RELOJ = Clock.fixed(
+            HOY.atTime(22, 0).atZone(ZoneId.of("America/Bogota")).toInstant(), ZoneId.of("UTC"));
 
     @Mock RepositorioImportacion importacion;
     @Captor ArgumentCaptor<List<FilaDeCarga>> detalles;
@@ -64,7 +72,7 @@ class ServicioImportacionTest {
 
     @BeforeEach
     void preparar() {
-        servicio = new ServicioImportacion(importacion, List.of(lector));
+        servicio = new ServicioImportacion(importacion, List.of(lector), RELOJ);
         var u = new UsuarioAutenticado(USUARIO, "ana@tienda.co", "ADMINISTRADOR", EMPRESA);
         SecurityContext c = SecurityContextHolder.createEmptyContext();
         c.setAuthentication(new UsernamePasswordAuthenticationToken(u, null, List.of()));
@@ -259,10 +267,12 @@ class ServicioImportacionTest {
 
     // ------------------------------------------------ aplicar (RF-27)
 
+    /** Aplicar lee la cabecera con bloqueo; el resumen final, sin él. */
     private void cargaEn(String estado, int aceptados) {
-        when(importacion.buscarCarga(EMPRESA, CARGA))
-                .thenReturn(Optional.of(new CabeceraCarga(CARGA, PROVEEDOR, "Proveedor",
-                        "lista.csv", estado, null, null, aceptados, aceptados, 0)));
+        var cabecera = Optional.of(new CabeceraCarga(CARGA, PROVEEDOR, "Proveedor",
+                "lista.csv", estado, null, null, aceptados, aceptados, 0));
+        when(importacion.bloquearCarga(EMPRESA, CARGA)).thenReturn(cabecera);
+        when(importacion.buscarCarga(EMPRESA, CARGA)).thenReturn(cabecera);
     }
 
     @Test
@@ -276,11 +286,32 @@ class ServicioImportacionTest {
         // hubiera abierto hoy, abrir lo nuevo y recién entonces escribir
         // el catálogo. Al revés, el costo anterior ya no se podría leer.
         var orden = org.mockito.Mockito.inOrder(importacion);
-        orden.verify(importacion).cerrarCostoVigente(EMPRESA, CARGA);
-        orden.verify(importacion).retirarCostoDeHoy(EMPRESA, CARGA);
-        orden.verify(importacion).abrirCostoDeHoy(EMPRESA, CARGA);
+        orden.verify(importacion).cerrarCostoVigente(EMPRESA, CARGA, HOY);
+        orden.verify(importacion).retirarCostoDeHoy(EMPRESA, CARGA, HOY);
+        orden.verify(importacion).abrirCostoDeHoy(EMPRESA, CARGA, HOY);
         orden.verify(importacion).aplicarCostos(EMPRESA, CARGA);
         orden.verify(importacion).marcarAplicada(EMPRESA, CARGA);
+    }
+
+    /**
+     * Orden total de bloqueos: carga, productos, histórico. La cabecera se bloquea y se
+     * vuelve a comprobar su estado ya bloqueada, de modo que dos aplicaciones de la misma
+     * carga no pasan las dos la comprobación (M-d); los productos van antes que el
+     * histórico, como al editar el costo de un producto, para que las dos escrituras no
+     * se esperen entre sí (N1).
+     */
+    @Test
+    void aplicarBloqueaLaCargaLuegoLosProductosYSoloDespuesTocaElHistorico() {
+        cargaEn("VALIDADA", 5);
+        when(importacion.aplicarCostos(EMPRESA, CARGA)).thenReturn(5);
+
+        servicio.aplicar(CARGA);
+
+        var orden = org.mockito.Mockito.inOrder(importacion);
+        orden.verify(importacion).bloquearCarga(EMPRESA, CARGA);
+        orden.verify(importacion).bloquearProductosDeLaCarga(EMPRESA, CARGA);
+        orden.verify(importacion).cerrarCostoVigente(EMPRESA, CARGA, HOY);
+        orden.verify(importacion).aplicarCostos(EMPRESA, CARGA);
     }
 
     @Test
@@ -346,8 +377,9 @@ class ServicioImportacionTest {
 
     @Test
     void unaCargaDeOtraEmpresaNoSeEncuentra() {
-        when(importacion.buscarCarga(EMPRESA, 999L)).thenReturn(Optional.empty());
+        when(importacion.bloquearCarga(EMPRESA, 999L)).thenReturn(Optional.empty());
         assertTrue(servicio.aplicar(999L).isEmpty());
+        verify(importacion, org.mockito.Mockito.never()).bloquearProductosDeLaCarga(anyInt(), anyLong());
     }
 
     @Test

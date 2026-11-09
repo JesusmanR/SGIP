@@ -5,7 +5,10 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -167,6 +170,66 @@ public class RepositorioCompras {
                 .param("orden", ordenId)
                 .query(OrdenDeCompra.LineaDeOrden.class)
                 .list();
+    }
+
+    /** Una línea con la orden a la que pertenece, para repartir las de varias órdenes. */
+    public record LineaConOrden(
+            Long ordenId,
+            Long itemId,
+            Integer productoId,
+            String codigo,
+            String producto,
+            Integer cantidad,
+            Integer cantidadRecibida,
+            Integer pendiente,
+            BigDecimal costoUnitario,
+            BigDecimal subtotal
+    ) {
+
+        OrdenDeCompra.LineaDeOrden comoLinea() {
+            return new OrdenDeCompra.LineaDeOrden(itemId, productoId, codigo, producto, cantidad,
+                    cantidadRecibida, pendiente, costoUnitario, subtotal);
+        }
+    }
+
+    /**
+     * Las líneas de varias órdenes en una sola consulta, repartidas por orden.
+     *
+     * Existe para el listado: pedir las líneas orden por orden hace que el número
+     * de consultas crezca con el de órdenes, y el listado trae hasta doscientas. La
+     * lista de órdenes llega ya acotada por empresa, y esta consulta se acota otra
+     * vez. Las líneas de cada orden salen en el mismo orden que en {@link #lineasDe}.
+     * Una orden sin líneas no aparece en el mapa, y una lista vacía no consulta
+     * (un {@code IN ()} no es SQL válido).
+     */
+    public Map<Long, List<OrdenDeCompra.LineaDeOrden>> lineasDeVarias(Integer empresaId,
+                                                                      List<Long> ordenes) {
+        if (ordenes.isEmpty()) {
+            return Map.of();
+        }
+        List<LineaConOrden> lineas = jdbc.sql("""
+                        SELECT i.orden_id, i.item_id, i.producto_id, p.codigo,
+                               p.nombre AS producto,
+                               i.cantidad, i.cantidad_recibida,
+                               i.cantidad - i.cantidad_recibida AS pendiente,
+                               i.costo_unitario,
+                               i.cantidad * i.costo_unitario AS subtotal
+                          FROM orden_compra_items i
+                          JOIN productos p ON p.producto_id = i.producto_id
+                                          AND p.empresa_id  = i.empresa_id
+                         WHERE i.empresa_id = :empresa AND i.orden_id IN (:ordenes)
+                         ORDER BY i.orden_id, p.nombre, i.item_id
+                        """)
+                .param("empresa", empresaId)
+                .param("ordenes", ordenes)
+                .query(LineaConOrden.class)
+                .list();
+        Map<Long, List<OrdenDeCompra.LineaDeOrden>> porOrden = new LinkedHashMap<>();
+        for (LineaConOrden linea : lineas) {
+            porOrden.computeIfAbsent(linea.ordenId(), orden -> new ArrayList<>())
+                    .add(linea.comoLinea());
+        }
+        return porOrden;
     }
 
     /**

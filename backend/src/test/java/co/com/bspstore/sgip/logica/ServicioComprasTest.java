@@ -321,6 +321,50 @@ class ServicioComprasTest {
         assertEquals("OC-001", una.get().consecutivo());
     }
 
+    // ── Listado sin una consulta por orden ───────────────────────────
+
+    private Cabecera cabeceraDe(long orden) {
+        return new Cabecera(orden, "OC-" + orden, 2, "Distribuidora", USUARIO, "Ana",
+                "ABIERTA", LocalDateTime.now(), null, new BigDecimal("1000.00"));
+    }
+
+    private OrdenDeCompra.LineaDeOrden lineaDe(long item, int producto) {
+        return new OrdenDeCompra.LineaDeOrden(item, producto, "COD-" + producto, "Producto " + producto,
+                5, 0, 5, new BigDecimal("200.00"), new BigDecimal("1000.00"));
+    }
+
+    /**
+     * Las líneas de todas las órdenes llegan en una sola consulta: una por orden
+     * haría crecer el número de consultas con el de órdenes.
+     */
+    @Test
+    void elListadoPideLasLineasDeTodasLasOrdenesDeUnaVezYCadaUnaRecibeLasSuyas() {
+        when(compras.listarCabeceras(EMPRESA, null, 50))
+                .thenReturn(List.of(cabeceraDe(10), cabeceraDe(11), cabeceraDe(12)));
+        when(compras.lineasDeVarias(EMPRESA, List.of(10L, 11L, 12L))).thenReturn(java.util.Map.of(
+                10L, List.of(lineaDe(1, PC), lineaDe(2, MON)),
+                12L, List.of(lineaDe(3, PC))));
+
+        List<OrdenDeCompra> listado = servicio.listar(null, 50);
+
+        assertEquals(List.of(10L, 11L, 12L), listado.stream().map(OrdenDeCompra::ordenId).toList());
+        assertEquals(2, listado.get(0).items().size());
+        assertEquals(List.of(), listado.get(1).items(), "una orden sin líneas lleva la lista vacía, no nula");
+        assertEquals(1, listado.get(2).items().size());
+        verify(compras).lineasDeVarias(EMPRESA, List.of(10L, 11L, 12L));
+        verify(compras, never()).lineasDe(anyInt(), anyLong());
+    }
+
+    @Test
+    void elListadoVacioNoPideLineasDeNadie() {
+        when(compras.listarCabeceras(EMPRESA, null, 50)).thenReturn(List.of());
+
+        assertTrue(servicio.listar(null, 50).isEmpty());
+
+        verify(compras, never()).lineasDeVarias(anyInt(), any());
+        verify(compras, never()).lineasDe(anyInt(), anyLong());
+    }
+
     @Test
     void elMotivoVacioYLaObservacionVaciaSeGuardanComoNulos() {
         when(compras.bloquearOrden(EMPRESA, ORDEN)).thenReturn(Optional.of("ABIERTA"));

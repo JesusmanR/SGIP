@@ -132,18 +132,19 @@ public class RepositorioPlataforma {
      *
      * La vigencia se filtra en la consulta, no en Java: la tabla guarda
      * el histórico y lo que importa es el valor que rige en la fecha de
-     * la operación. Si hubiera varias filas vigentes —la clave única lo
+     * la operación, que es la {@code hoy} que pasa quien llama. Si hubiera varias filas vigentes —la clave única lo
      * impide para la misma fecha de inicio— gana la más reciente.
      */
-    public int mesesDePrueba() {
+    public int mesesDePrueba(LocalDate hoy) {
         return jdbc.sql("""
                         SELECT valor FROM parametros_plataforma
                          WHERE clave = 'sgip.plataforma.prueba.meses'
-                           AND vigente_desde <= CURDATE()
-                           AND (vigente_hasta IS NULL OR vigente_hasta >= CURDATE())
+                           AND vigente_desde <= :hoy
+                           AND (vigente_hasta IS NULL OR vigente_hasta >= :hoy)
                          ORDER BY vigente_desde DESC
                          LIMIT 1
                         """)
+                .param("hoy", hoy)
                 .query(String.class)
                 .optional()
                 .map(RepositorioPlataforma::mesesOPorOmision)

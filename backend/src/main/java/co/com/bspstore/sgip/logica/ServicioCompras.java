@@ -60,15 +60,24 @@ public class ServicioCompras {
     @Transactional(readOnly = true)
     public List<OrdenDeCompra> listar(String estado, int limite) {
         Integer empresa = ContextoEmpresa.empresaActual();
-        return compras.listarCabeceras(empresa, estado, limite).stream()
-                .map(c -> armar(empresa, c))
+        List<RepositorioCompras.Cabecera> cabeceras = compras.listarCabeceras(empresa, estado, limite);
+        if (cabeceras.isEmpty()) {
+            return List.of();
+        }
+        // Las líneas de todas las órdenes juntas: una consulta por orden haría
+        // crecer el número de consultas con el de órdenes.
+        Map<Long, List<OrdenDeCompra.LineaDeOrden>> lineas = compras.lineasDeVarias(empresa,
+                cabeceras.stream().map(RepositorioCompras.Cabecera::ordenId).toList());
+        return cabeceras.stream()
+                .map(c -> armar(c, lineas.getOrDefault(c.ordenId(), List.of())))
                 .toList();
     }
 
     @Transactional(readOnly = true)
     public Optional<OrdenDeCompra> buscar(Long ordenId) {
         Integer empresa = ContextoEmpresa.empresaActual();
-        return compras.buscarCabecera(empresa, ordenId).map(c -> armar(empresa, c));
+        return compras.buscarCabecera(empresa, ordenId)
+                .map(c -> armar(c, compras.lineasDe(empresa, c.ordenId())));
     }
 
     /**
@@ -257,10 +266,10 @@ public class ServicioCompras {
         }
     }
 
-    private OrdenDeCompra armar(Integer empresa, RepositorioCompras.Cabecera c) {
+    private OrdenDeCompra armar(RepositorioCompras.Cabecera c, List<OrdenDeCompra.LineaDeOrden> lineas) {
         return new OrdenDeCompra(c.ordenId(), c.consecutivo(), c.proveedorId(), c.proveedor(),
                 c.usuarioId(), c.usuario(), c.estado(), c.fecha(), c.observacion(), c.total(),
-                compras.lineasDe(empresa, c.ordenId()));
+                lineas);
     }
 
     private Integer responsable() {

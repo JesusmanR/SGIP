@@ -28,6 +28,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -411,6 +412,25 @@ public class ManejadorErrores {
         p.setTitle("El producto cambió mientras lo editabas");
         p.setDetail("Otra persona o un proceso modificó este producto antes de que guardaras. "
                 + "Vuelve a abrirlo para ver los datos actuales y repite tu cambio.");
+        return p;
+    }
+
+    /**
+     * Dos escrituras se esperaron entre sí (interbloqueo, 1213) o una esperó demasiado
+     * un bloqueo (1205). Es una red de seguridad: el orden de bloqueos del código
+     * evita los ciclos conocidos, pero si aparece uno nuevo la persona no debe ver un
+     * 500, sino un aviso de que repita. 409: la petición es válida y fue el estado del
+     * momento lo que la impidió.
+     *
+     * No se reenvía ni se registra el mensaje de la excepción: trae la sentencia SQL
+     * con sus valores. Se registra solo la clase.
+     */
+    @ExceptionHandler(PessimisticLockingFailureException.class)
+    public ProblemDetail bloqueoPerdido(PessimisticLockingFailureException e) {
+        LOG.warn("Escritura rechazada por bloqueo en la base: {}", e.getClass().getSimpleName());
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.CONFLICT);
+        p.setTitle("Otra persona estaba guardando al mismo tiempo");
+        p.setDetail("Otra persona estaba guardando estos datos al mismo tiempo. Vuelve a intentarlo.");
         return p;
     }
 

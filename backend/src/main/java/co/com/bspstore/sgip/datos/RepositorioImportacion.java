@@ -9,6 +9,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -224,26 +225,130 @@ public class RepositorioImportacion {
     // ------------------------------------------------------------ aplicar
 
     /**
+     * La cabecera de la carga, leída con bloqueo, para aplicarla.
+     *
+     * Es lo primero que bloquea {@code ServicioImportacion.aplicar}: carga, luego
+     * productos, luego histórico. Dos aplicaciones de la misma carga leen las dos
+     * «validada» si la lectura no bloquea; con el bloqueo la segunda espera a que la
+     * primera confirme y, al volver a comprobar el estado ya con la carga bloqueada,
+     * ve «aplicada». {@code FOR UPDATE OF c} bloquea solo la fila de la carga y no la
+     * del proveedor. Acotada por empresa.
+     */
+    public Optional<CabeceraCarga> bloquearCarga(Integer empresaId, Long cargaId) {
+        return jdbc.sql("""
+                        SELECT c.carga_id, c.proveedor_id, p.razon_social AS proveedor,
+                               c.nombre_archivo, c.estado, c.fecha, c.fecha_aplicacion,
+                               c.registros_leidos   AS leidos,
+                               c.registros_aceptados AS aceptados,
+                               c.registros_rechazados AS rechazados
+                          FROM cargas_precios c
+                          JOIN proveedores p
+                            ON p.empresa_id = c.empresa_id
+                           AND p.proveedor_id = c.proveedor_id
+                         WHERE c.empresa_id = :empresa AND c.carga_id = :carga
+                           FOR UPDATE OF c
+                        """)
+                .param("empresa", empresaId)
+                .param("carga", cargaId)
+                .query(CabeceraCarga.class)
+                .optional();
+    }
+
+    /** Cuántos identificadores se bloquean por sentencia: un tope razonable para el IN. */
+    private static final int PRODUCTOS_POR_BLOQUEO = 1_000;
+
+    /**
+     * Bloquea las filas de {@code productos} que la carga va a cambiar, antes de tocar
+     * {@code historico_costos}.
+     *
+     * Orden de bloqueos: carga, productos y luego historico_costos, en la importación y
+     * en la edición de un producto ({@code ServicioProducto.actualizar}). Escribir en
+     * {@code historico_costos} toma bloqueos (el compartido de la clave foránea sobre el
+     * producto y los de hueco de sus DELETE y UPDATE) y el UPDATE de {@code productos} pide
+     * después el exclusivo: dos escritores que lleguen por caminos distintos se esperarían
+     * entre sí. Con el producto bloqueado primero, el que llega segundo espera antes de
+     * tocar nada.
+     *
+     * Dos pasos y no un JOIN. Un {@code SELECT ... JOIN ... ORDER BY ... FOR UPDATE}
+     * no fija el orden en que se bloquean las filas: InnoDB las bloquea según las recorre,
+     * y con un {@code filesort} las recorre en el orden del índice del detalle, que es el
+     * orden de las filas del archivo. Dos cargas con los mismos productos en distinto
+     * orden se interbloquearían. Aquí se leen sin bloquear los identificadores aceptados,
+     * se ordenan, y se bloquean con una sola tabla y un rango por la clave
+     * ({@code WHERE producto_id IN (...) AND empresa_id = ? ORDER BY producto_id} con la clave primaria forzada), de modo
+     * que el orden de bloqueo es el del índice, el mismo para todas las cargas; si hay
+     * más de {@value #PRODUCTOS_POR_BLOQUEO}, en tandas consecutivas de ese orden. No
+     * hace consulta si no hay nada que bloquear. Acotado por empresa como toda consulta.
+     */
+    public List<Integer> bloquearProductosDeLaCarga(Integer empresaId, Long cargaId) {
+        List<Integer> ids = jdbc.sql("""
+                        SELECT producto_id
+                          FROM detalle_carga_precios
+                         WHERE empresa_id = :empresa AND carga_id = :carga
+                           AND aceptado = TRUE
+                         ORDER BY producto_id
+                        """)
+                .param("empresa", empresaId)
+                .param("carga", cargaId)
+                .query(Integer.class)
+                .list();
+        List<Integer> bloqueados = new ArrayList<>(ids.size());
+        for (int desde = 0; desde < ids.size(); desde += PRODUCTOS_POR_BLOQUEO) {
+            List<Integer> tanda = ids.subList(desde, Math.min(desde + PRODUCTOS_POR_BLOQUEO, ids.size()));
+            bloqueados.addAll(jdbc.sql(SQL_BLOQUEAR_PRODUCTOS)
+                    .param("empresa", empresaId)
+                    .param("ids", tanda)
+                    .query(Integer.class)
+                    .list());
+        }
+        return bloqueados;
+    }
+
+    /**
+     * {@code FORCE INDEX (PRIMARY)}: con una tabla pequeña o una lista corta el
+     * optimizador elige a veces otro índice (el de la categoría, por ejemplo) y ordena
+     * después; las filas se bloquearían en el orden de ese índice y no en el de la
+     * clave primaria, y dos cargas con planes distintos podrían tomarlas en órdenes
+     * distintos. Forzada la clave primaria, el rango se recorre por producto_id, sin
+     * ordenar. El filtro por empresa se mantiene por si un identificador no fuera de la
+     * empresa: esa fila no cumple la condición.
+     */
+    static final String SQL_BLOQUEAR_PRODUCTOS = """
+            SELECT producto_id
+              FROM productos FORCE INDEX (PRIMARY)
+             WHERE producto_id IN (:ids) AND empresa_id = :empresa
+             ORDER BY producto_id
+               FOR UPDATE
+            """;
+
+    /**
      * Cierra ayer el periodo de costo que venía rigiendo (RF-28).
+     *
+     * «Hoy» es el que pasa quien llama, tomado del reloj de la aplicación
+     * ({@code Hoy.de}) y no el {@code CURDATE()} del motor, en esta sentencia y en
+     * las dos siguientes (M5). Una edición de costo escribe el mismo histórico
+     * con el mismo día ({@link RepositorioCostos}).
      *
      * Solo los que empezaron antes de hoy. Un periodo abierto hoy mismo
      * no se puede cerrar ayer: `ck_historico_rango` exige que el fin no
      * sea anterior al comienzo, y además no significaría nada.
      */
-    public int cerrarCostoVigente(Integer empresaId, Long cargaId) {
+    public int cerrarCostoVigente(Integer empresaId, Long cargaId, LocalDate hoy) {
         return jdbc.sql("""
                         UPDATE historico_costos h
                           JOIN detalle_carga_precios d
                             ON d.empresa_id = h.empresa_id
                            AND d.producto_id = h.producto_id
-                           SET h.vigente_hasta = CURDATE() - INTERVAL 1 DAY
+                           SET h.vigente_hasta = :ayer
                          WHERE d.empresa_id = :empresa AND d.carga_id = :carga
                            AND d.aceptado = TRUE
                            AND h.vigente_hasta IS NULL
-                           AND h.vigente_desde < CURDATE()
+                           AND h.vigente_desde < :hoy
                         """)
                 .param("empresa", empresaId)
                 .param("carga", cargaId)
+                .param("hoy", hoy)
+                .param("ayer", hoy.minusDays(1))
                 .update();
     }
 
@@ -261,7 +366,7 @@ public class RepositorioImportacion {
      * entre versiones de MySQL. Esto se entiende leyéndolo y funciona
      * igual en todas.
      */
-    public int retirarCostoDeHoy(Integer empresaId, Long cargaId) {
+    public int retirarCostoDeHoy(Integer empresaId, Long cargaId, LocalDate hoy) {
         return jdbc.sql("""
                         DELETE h FROM historico_costos h
                           JOIN detalle_carga_precios d
@@ -269,25 +374,27 @@ public class RepositorioImportacion {
                            AND d.producto_id = h.producto_id
                          WHERE d.empresa_id = :empresa AND d.carga_id = :carga
                            AND d.aceptado = TRUE
-                           AND h.vigente_desde = CURDATE()
+                           AND h.vigente_desde = :hoy
                         """)
                 .param("empresa", empresaId)
                 .param("carga", cargaId)
+                .param("hoy", hoy)
                 .update();
     }
 
     /** Abre el periodo que empieza hoy con el costo de la carga. */
-    public int abrirCostoDeHoy(Integer empresaId, Long cargaId) {
+    public int abrirCostoDeHoy(Integer empresaId, Long cargaId, LocalDate hoy) {
         return jdbc.sql("""
                         INSERT INTO historico_costos
                                (empresa_id, producto_id, costo, vigente_desde, carga_id)
-                        SELECT d.empresa_id, d.producto_id, d.costo, CURDATE(), d.carga_id
+                        SELECT d.empresa_id, d.producto_id, d.costo, :hoy, d.carga_id
                           FROM detalle_carga_precios d
                          WHERE d.empresa_id = :empresa AND d.carga_id = :carga
                            AND d.aceptado = TRUE
                         """)
                 .param("empresa", empresaId)
                 .param("carga", cargaId)
+                .param("hoy", hoy)
                 .update();
     }
 
@@ -391,6 +498,7 @@ public class RepositorioImportacion {
                             ON v.empresa_id = d.empresa_id
                            AND v.producto_id = d.producto_id
                          WHERE d.empresa_id = :empresa AND d.carga_id = :carga
+                           AND v.empresa_id = :empresa
                            AND d.aceptado = TRUE
                            AND v.tratamiento_iva = 'EXCLUIDO_HASTA_UMBRAL'
                            AND (v.tarifa_contado > 0) <> (%1$s > v.umbral_pesos)

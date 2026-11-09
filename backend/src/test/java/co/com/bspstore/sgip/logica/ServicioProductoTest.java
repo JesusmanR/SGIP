@@ -10,6 +10,7 @@ import co.com.bspstore.sgip.datos.CategoriaRepositorio;
 import co.com.bspstore.sgip.datos.ConsultaCatalogo;
 import co.com.bspstore.sgip.datos.ProductoRepositorio;
 import co.com.bspstore.sgip.datos.ProveedorRepositorio;
+import co.com.bspstore.sgip.datos.RepositorioCostos;
 import co.com.bspstore.sgip.datos.RepositorioPrecios;
 import co.com.bspstore.sgip.modelo.Categoria;
 import co.com.bspstore.sgip.modelo.Producto;
@@ -29,7 +30,9 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.time.Clock;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 
@@ -56,17 +59,21 @@ class ServicioProductoTest {
     @Mock ConsultaCatalogo catalogo;
     @Mock ServicioInventario inventario;
     @Mock RepositorioPrecios precios;
+    @Mock RepositorioCostos costos;
 
     /** Con el ServicioPrecios de verdad: la regla de qué se escribe y cuándo vive allí. */
     private ServicioProducto servicio;
 
+    private static final LocalDate HOY = LocalDate.of(2026, 11, 7);
     private static final int ID_GUARDADO = 55;
     private static final SolicitudPrecio VEINTE = new SolicitudPrecio(new BigDecimal("20"), null);
 
     @BeforeEach
     void elInventarioAceptaElSaldoInicial() {
+        Clock reloj = Clock.fixed(HOY.atTime(9, 0).atZone(ZoneId.of("America/Bogota")).toInstant(),
+                ZoneId.of("America/Bogota"));
         servicio = new ServicioProducto(productos, categorias, proveedores, catalogo, inventario,
-                new ServicioPrecios(precios, Clock.systemDefaultZone()));
+                new ServicioPrecios(precios, reloj), costos, reloj);
         // Tolerante porque solo las pruebas de alta con existencia llegan
         // a pedirlo; las de edición y las de rechazo no lo tocan.
         lenient().when(inventario.registrarSaldoInicial(any(), anyInt())).thenReturn(
@@ -487,6 +494,163 @@ class ServicioProductoTest {
         verify(productos).saveAndFlush(any());
     }
 
+    // ── Costo en el histórico (M15) ──────────────────────────────────
+
+    /** El costo guardado es 3100.00 (ver productoGuardado). */
+    private SolicitudEdicionProducto edicionConCosto(String costo) {
+        return new SolicitudEdicionProducto(4, 9, "ARZ-500", "ARZ-500", "7701234567890",
+                "Arroz Diana", "500 g", null, new BigDecimal(costo), 20, null, null, null, 0);
+    }
+
+    private void unaEdicionLista() {
+        comoEmpresa(3);
+        when(productos.findByEmpresaIdAndId(3, 11)).thenReturn(Optional.of(productoGuardado()));
+        referenciasPropias();
+        when(productos.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
+    }
+
+    @Test
+    void cambiarElCostoLoRegistraEnElHistoricoConElDiaDeBogota() {
+        unaEdicionLista();
+
+        servicio.actualizar(11, edicionConCosto("3400.00"));
+
+        verify(costos).registrarCambio(3, 11, new BigDecimal("3400.00"), HOY);
+    }
+
+    /**
+     * Mismo orden que la importación: primero historico_costos y luego productos.
+     * Dos que editan a la vez toman los bloqueos en el mismo orden y no se cruzan.
+     */
+    @Test
+    void elHistoricoSeEscribeAntesDeGuardarElProducto() {
+        unaEdicionLista();
+
+        servicio.actualizar(11, edicionConCosto("3400.00"));
+
+        InOrder orden = inOrder(productos, costos);
+        orden.verify(costos).registrarCambio(3, 11, new BigDecimal("3400.00"), HOY);
+        orden.verify(productos).saveAndFlush(any());
+    }
+
+    /** La columna es DECIMAL(14,2): lo que no se ve en centavos no es un cambio. */
+    @Test
+    void unDecimalMasAllaDeLosCentavosNoEsUnCambioDeCosto() {
+        unaEdicionLista();
+
+        servicio.actualizar(11, edicionConCosto("3100.004"));
+
+        verifyNoInteractions(costos);
+    }
+
+    @Test
+    void elCostoDelHistoricoSeRedondeaALosCentavosComoLaColumna() {
+        unaEdicionLista();
+
+        servicio.actualizar(11, edicionConCosto("3400.005"));
+
+        verify(costos).registrarCambio(3, 11, new BigDecimal("3400.01"), HOY);
+    }
+
+    /**
+     * El producto se bloquea antes de escribir su histórico: escribirlo toma sobre la
+     * fila del producto un bloqueo compartido y el UPDATE pide después el exclusivo; dos
+     * ediciones a la vez se esperarían entre sí (N1).
+     */
+    @Test
+    void elProductoSeBloqueaAntesDeEscribirElHistorico() {
+        unaEdicionLista();
+
+        servicio.actualizar(11, edicionConCosto("3400.00"));
+
+        InOrder orden = inOrder(precios, costos, productos);
+        orden.verify(precios).bloquearProducto(3, 11);
+        orden.verify(costos).registrarCambio(3, 11, new BigDecimal("3400.00"), HOY);
+        orden.verify(productos).saveAndFlush(any());
+    }
+
+    @Test
+    void sinCambioDeCostoNoSeBloqueaElProductoPorElHistorico() {
+        unaEdicionLista();
+
+        servicio.actualizar(11, edicionConCosto("3100"));
+
+        verify(precios, never()).bloquearProducto(anyInt(), anyInt());
+    }
+
+    /**
+     * Un solo «hoy» por operación: aunque el reloj cruce la medianoche de Bogotá en mitad
+     * de la edición, el histórico y los precios se fechan con el día con el que empezó.
+     */
+    @Test
+    void laEdicionUsaUnSoloHoyAunqueElRelojCruceLaMedianoche() {
+        unaEdicionLista();
+        ZoneId bogota = ZoneId.of("America/Bogota");
+        java.time.Instant antes = HOY.atTime(23, 59, 59).atZone(bogota).toInstant();
+        var llamadas = new java.util.concurrent.atomic.AtomicInteger();
+        Clock cruzaLaMedianoche = new Clock() {
+            @Override public ZoneId getZone() { return bogota; }
+            @Override public Clock withZone(ZoneId zona) { return this; }
+            @Override public java.time.Instant instant() {
+                return llamadas.getAndIncrement() == 0 ? antes : antes.plusSeconds(5);
+            }
+        };
+        var enLaMedianoche = new ServicioProducto(productos, categorias, proveedores, catalogo,
+                inventario, new ServicioPrecios(precios, cruzaLaMedianoche), costos, cruzaLaMedianoche);
+        var conPrecio = new SolicitudEdicionProducto(4, 9, "ARZ-500", "ARZ-500", "7701234567890",
+                "Arroz Diana", "500 g", null, new BigDecimal("3400.00"), 20,
+                new SolicitudPrecio(null, new BigDecimal("5000")), null, false, 0);
+
+        enLaMedianoche.actualizar(11, conPrecio);
+
+        verify(costos).registrarCambio(3, 11, new BigDecimal("3400.00"), HOY);
+        verify(precios).abrirReglaPropia(eq(3), eq(11), eq("CONTADO"), any(), eq(HOY));
+        verify(precios, never()).abrirReglaPropia(anyInt(), anyInt(), any(), any(), eq(HOY.plusDays(1)));
+    }
+
+    /** Lo que se comprueba y se escribe es el costo ya redondeado a los centavos de la columna. */
+    @Test
+    void losPreciosSeCompruebanYSeEscribenConElCostoRedondeado() {
+        unaEdicionLista();
+        var espia = org.mockito.Mockito.spy(new ServicioPrecios(precios, Clock.systemUTC()));
+        var conEspia = new ServicioProducto(productos, categorias, proveedores, catalogo,
+                inventario, espia, costos, Clock.systemUTC());
+        var conPrecio = new SolicitudEdicionProducto(4, 9, "ARZ-500", "ARZ-500", "7701234567890",
+                "Arroz Diana", "500 g", null, new BigDecimal("3400.005"), 20,
+                new SolicitudPrecio(new BigDecimal("20"), null), null, false, 0);
+
+        conEspia.actualizar(11, conPrecio);
+
+        // Se comprueba dos veces (antes de guardar y dentro de escribirPrecios), siempre
+        // con el costo redondeado.
+        verify(espia, org.mockito.Mockito.atLeastOnce())
+                .comprobarPrecios(eq(new BigDecimal("3400.01")), any(), any(), any());
+        verify(espia, never()).comprobarPrecios(eq(new BigDecimal("3400.005")), any(), any(), any());
+        verify(espia).escribirPrecios(eq(3), eq(11), eq(new BigDecimal("3400.01")), any(), any(),
+                any(), any(LocalDate.class));
+    }
+
+    /** La base devuelve 3100.00 y el formulario puede mandar 3100: es el mismo costo. */
+    @Test
+    void editarSinCambiarElCostoNoEscribeNadaEnElHistorico() {
+        unaEdicionLista();
+
+        servicio.actualizar(11, edicionConCosto("3100"));
+
+        verifyNoInteractions(costos);
+    }
+
+    @Test
+    void siLaEdicionSeRechazaNoQuedaNadaEnElHistorico() {
+        comoEmpresa(3);
+        when(productos.findByEmpresaIdAndId(3, 11)).thenReturn(Optional.of(productoEnLaVersion(3)));
+
+        assertThrows(org.springframework.orm.ObjectOptimisticLockingFailureException.class,
+                () -> servicio.actualizar(11, edicionConVersion(2)));
+
+        verifyNoInteractions(costos);
+    }
+
     // ── Cambio de categoría (M3) ─────────────────────────────────────
 
     /**
@@ -760,7 +924,7 @@ class ServicioProductoTest {
 
         servicio.crear(alta("1000.00", precio("123456789012"), null));
 
-        verify(precios).abrirReglaPropia(3, ID_GUARDADO, CONTADO, reglaDeCifra("123456789012"));
+        verify(precios).abrirReglaPropia(3, ID_GUARDADO, CONTADO, reglaDeCifra("123456789012"), HOY);
     }
 
     @Test
@@ -783,7 +947,7 @@ class ServicioProductoTest {
 
         servicio.crear(alta("1000.00", porcentaje("20"), null));
 
-        verify(precios).abrirReglaPropia(3, ID_GUARDADO, CONTADO, reglaDeFactor("1.2000"));
+        verify(precios).abrirReglaPropia(3, ID_GUARDADO, CONTADO, reglaDeFactor("1.2000"), HOY);
     }
 
     @Test
@@ -792,7 +956,7 @@ class ServicioProductoTest {
 
         servicio.crear(alta("1000.00", precio("1250"), null));
 
-        verify(precios).abrirReglaPropia(3, ID_GUARDADO, CONTADO, reglaDeCifra("1250"));
+        verify(precios).abrirReglaPropia(3, ID_GUARDADO, CONTADO, reglaDeCifra("1250"), HOY);
     }
 
     @Test
@@ -801,7 +965,7 @@ class ServicioProductoTest {
 
         servicio.crear(alta("1000.00", precio("1250.00"), null));
 
-        verify(precios).abrirReglaPropia(3, ID_GUARDADO, CONTADO, reglaDeCifra("1250"));
+        verify(precios).abrirReglaPropia(3, ID_GUARDADO, CONTADO, reglaDeCifra("1250"), HOY);
     }
 
     @Test
@@ -810,7 +974,7 @@ class ServicioProductoTest {
 
         servicio.crear(alta("1000.00", precio("900"), null));
 
-        verify(precios).abrirReglaPropia(3, ID_GUARDADO, CONTADO, reglaDeCifra("900"));
+        verify(precios).abrirReglaPropia(3, ID_GUARDADO, CONTADO, reglaDeCifra("900"), HOY);
     }
 
     @Test
@@ -819,7 +983,7 @@ class ServicioProductoTest {
 
         servicio.crear(alta("1000.00", precio("1200"), null));
 
-        verify(precios).abrirReglaPropia(3, ID_GUARDADO, CREDITO, reglaDeCifra("1200"));
+        verify(precios).abrirReglaPropia(3, ID_GUARDADO, CREDITO, reglaDeCifra("1200"), HOY);
     }
 
     @Test
@@ -828,8 +992,8 @@ class ServicioProductoTest {
 
         servicio.crear(alta("1000.00", porcentaje("20"), porcentaje("25")));
 
-        verify(precios).abrirReglaPropia(3, ID_GUARDADO, CONTADO, reglaDeFactor("1.2000"));
-        verify(precios).abrirReglaPropia(3, ID_GUARDADO, CREDITO, reglaDeFactor("1.2500"));
+        verify(precios).abrirReglaPropia(3, ID_GUARDADO, CONTADO, reglaDeFactor("1.2000"), HOY);
+        verify(precios).abrirReglaPropia(3, ID_GUARDADO, CREDITO, reglaDeFactor("1.2500"), HOY);
     }
 
     @Test
@@ -845,48 +1009,48 @@ class ServicioProductoTest {
     @Test
     void cambiarElPrecioCierraLaReglaAnteriorYAbreOtra() {
         prepararEdicion();
-        when(precios.reglaPropiaVigente(3, 11, CONTADO)).thenReturn(Optional.of(reglaDeCifra("1250")));
+        when(precios.reglaPropiaVigente(3, 11, CONTADO, HOY)).thenReturn(Optional.of(reglaDeCifra("1250")));
 
         servicio.actualizar(11, edicionDePrecio(precio("1300"), null, false));
 
         InOrder orden = inOrder(precios);
-        orden.verify(precios).corregirReglaPropiaDeHoy(3, 11, CONTADO, reglaDeCifra("1300"));
-        orden.verify(precios).cerrarReglaPropiaAyer(3, 11, CONTADO);
-        orden.verify(precios).abrirReglaPropia(3, 11, CONTADO, reglaDeCifra("1300"));
+        orden.verify(precios).corregirReglaPropiaDeHoy(3, 11, CONTADO, reglaDeCifra("1300"), HOY);
+        orden.verify(precios).cerrarReglaPropiaAyer(3, 11, CONTADO, HOY);
+        orden.verify(precios).abrirReglaPropia(3, 11, CONTADO, reglaDeCifra("1300"), HOY);
     }
 
     @Test
     void dosCambiosElMismoDiaCorrigenLaMismaRegla() {
         prepararEdicion();
-        when(precios.reglaPropiaVigente(3, 11, CONTADO)).thenReturn(Optional.of(reglaDeCifra("1250")));
-        when(precios.corregirReglaPropiaDeHoy(3, 11, CONTADO, reglaDeCifra("1300"))).thenReturn(1);
+        when(precios.reglaPropiaVigente(3, 11, CONTADO, HOY)).thenReturn(Optional.of(reglaDeCifra("1250")));
+        when(precios.corregirReglaPropiaDeHoy(3, 11, CONTADO, reglaDeCifra("1300"), HOY)).thenReturn(1);
 
         servicio.actualizar(11, edicionDePrecio(precio("1300"), null, false));
 
-        verify(precios, never()).cerrarReglaPropiaAyer(anyInt(), anyInt(), any());
-        verify(precios, never()).abrirReglaPropia(anyInt(), anyInt(), any(), any());
+        verify(precios, never()).cerrarReglaPropiaAyer(anyInt(), anyInt(), any(), any());
+        verify(precios, never()).abrirReglaPropia(anyInt(), anyInt(), any(), any(), any());
     }
 
     @Test
     void volverAEscribirLaMismaCifraNoDejaHistoria() {
         prepararEdicion();
-        when(precios.reglaPropiaVigente(3, 11, CONTADO)).thenReturn(Optional.of(reglaDeFactor("1.2000")));
+        when(precios.reglaPropiaVigente(3, 11, CONTADO, HOY)).thenReturn(Optional.of(reglaDeFactor("1.2000")));
 
         servicio.actualizar(11, edicionDePrecio(porcentaje("20.00"), null, false));
 
-        verify(precios, never()).corregirReglaPropiaDeHoy(anyInt(), anyInt(), any(), any());
-        verify(precios, never()).cerrarReglaPropiaAyer(anyInt(), anyInt(), any());
-        verify(precios, never()).abrirReglaPropia(anyInt(), anyInt(), any(), any());
+        verify(precios, never()).corregirReglaPropiaDeHoy(anyInt(), anyInt(), any(), any(), any());
+        verify(precios, never()).cerrarReglaPropiaAyer(anyInt(), anyInt(), any(), any());
+        verify(precios, never()).abrirReglaPropia(anyInt(), anyInt(), any(), any(), any());
     }
 
     @Test
     void pasarDePorcentajeAPrecioEsUnCambioAunqueDeLaMismaCifra() {
         prepararEdicion();
-        when(precios.reglaPropiaVigente(3, 11, CONTADO)).thenReturn(Optional.of(reglaDeFactor("1.2000")));
+        when(precios.reglaPropiaVigente(3, 11, CONTADO, HOY)).thenReturn(Optional.of(reglaDeFactor("1.2000")));
 
         servicio.actualizar(11, edicionDePrecio(precio("1200"), null, false));
 
-        verify(precios).abrirReglaPropia(3, 11, CONTADO, reglaDeCifra("1200"));
+        verify(precios).abrirReglaPropia(3, 11, CONTADO, reglaDeCifra("1200"), HOY);
     }
 
     @Test
@@ -896,8 +1060,10 @@ class ServicioProductoTest {
         servicio.actualizar(11, edicionDePrecio(null, null, null));
 
         // Un producto que sigue la regla general no se queda con una regla
-        // propia porque alguien le corrigió el nombre.
-        verifyNoInteractions(precios);
+        // propia porque alguien le corrigió el nombre. Solo se bloquea el producto, por
+        // el cambio de costo de la edición de prueba.
+        verify(precios).bloquearProducto(3, 11);
+        org.mockito.Mockito.verifyNoMoreInteractions(precios);
     }
 
     @Test
@@ -929,8 +1095,8 @@ class ServicioProductoTest {
 
         servicio.actualizar(11, edicionDePrecio(precio("1300"), null, null));
 
-        verify(precios).abrirReglaPropia(3, 11, CONTADO, reglaDeCifra("1300"));
-        verify(precios).abrirReglaPropia(3, 11, CREDITO, reglaDeCifra("1300"));
+        verify(precios).abrirReglaPropia(3, 11, CONTADO, reglaDeCifra("1300"), HOY);
+        verify(precios).abrirReglaPropia(3, 11, CREDITO, reglaDeCifra("1300"), HOY);
     }
 
     @Test
@@ -939,8 +1105,8 @@ class ServicioProductoTest {
 
         servicio.actualizar(11, edicionDePrecio(precio("1300"), null, false));
 
-        verify(precios).abrirReglaPropia(3, 11, CONTADO, reglaDeCifra("1300"));
-        verify(precios, never()).abrirReglaPropia(eq(3), eq(11), eq(CREDITO), any());
+        verify(precios).abrirReglaPropia(3, 11, CONTADO, reglaDeCifra("1300"), HOY);
+        verify(precios, never()).abrirReglaPropia(eq(3), eq(11), eq(CREDITO), any(), any());
     }
 
     @Test
@@ -952,8 +1118,8 @@ class ServicioProductoTest {
         servicio.actualizar(11, edicionDePrecio(null, null, true));
 
         verify(precios).abrirReglaPropia(3, 11, CREDITO,
-                new ReglaDePrecio(new BigDecimal("1.2000"), null, "SOBRE_PRECIO"));
-        verify(precios, never()).abrirReglaPropia(eq(3), eq(11), eq(CONTADO), any());
+                new ReglaDePrecio(new BigDecimal("1.2000"), null, "SOBRE_PRECIO"), HOY);
+        verify(precios, never()).abrirReglaPropia(eq(3), eq(11), eq(CONTADO), any(), any());
     }
 
     @Test
@@ -962,15 +1128,15 @@ class ServicioProductoTest {
         // aún ve la foto de antes y diría el contado viejo.
         prepararEdicion();
         ReglaDePrecio actual = new ReglaDePrecio(new BigDecimal("1.3000"), null, "SOBRE_COSTO");
-        when(precios.reglaPropiaVigente(3, 11, CONTADO)).thenReturn(Optional.of(actual));
+        when(precios.reglaPropiaVigente(3, 11, CONTADO, HOY)).thenReturn(Optional.of(actual));
 
         servicio.actualizar(11, edicionDePrecio(null, null, true));
 
-        verify(precios).abrirReglaPropia(3, 11, CREDITO, actual);
+        verify(precios).abrirReglaPropia(3, 11, CREDITO, actual, HOY);
         verify(precios, never()).reglaVigente(anyInt(), anyInt(), any());
         InOrder orden = inOrder(precios);
-        orden.verify(precios).bloquearProducto(3, 11);
-        orden.verify(precios).reglaPropiaVigente(3, 11, CONTADO);
+        orden.verify(precios, org.mockito.Mockito.atLeastOnce()).bloquearProducto(3, 11);
+        orden.verify(precios).reglaPropiaVigente(3, 11, CONTADO, HOY);
     }
 
     @Test
@@ -981,7 +1147,7 @@ class ServicioProductoTest {
                 () -> servicio.actualizar(11, edicionDePrecio(null, null, true)));
 
         assertTrue(e.getMessage().contains("de contado"), e.getMessage());
-        verify(precios, never()).abrirReglaPropia(anyInt(), anyInt(), any(), any());
+        verify(precios, never()).abrirReglaPropia(anyInt(), anyInt(), any(), any(), any());
     }
 
     @Test
@@ -1002,7 +1168,7 @@ class ServicioProductoTest {
 
         servicio.actualizar(11, edicionDePrecio(null, precio("1400"), null));
 
-        verify(precios).abrirReglaPropia(3, 11, CREDITO, reglaDeCifra("1400"));
-        verify(precios, never()).abrirReglaPropia(eq(3), eq(11), eq(CONTADO), any());
+        verify(precios).abrirReglaPropia(3, 11, CREDITO, reglaDeCifra("1400"), HOY);
+        verify(precios, never()).abrirReglaPropia(eq(3), eq(11), eq(CONTADO), any(), any());
     }
 }
