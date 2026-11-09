@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { apiPrueba } from '../servicios/api/prueba.js'
 import '../estilos/contador-prueba.css'
 
@@ -33,32 +33,62 @@ export function textoDePrueba(segundos) {
  *
  * Nunca estorba: con la empresa activa, con otro rol o si la petición falla,
  * no pinta nada. La escritura la decide el servidor, no esta pantalla.
+ *
+ * Solo vuelve a preguntar mientras la empresa está en PRUEBA: con ACTIVA o
+ * DESACTIVADA no hay nada que contar. Y esas preguntas no alargan la sesión
+ * (lo decide el servidor), de modo que una pestaña olvidada sigue caducando.
+ *
+ * El contador visible no es una región viva: el último día cambia cada
+ * minuto y un lector de pantalla lo leería cada vez. Lo que se anuncia, en una
+ * región aparte y oculta a la vista, es el cambio de estado (por ejemplo, que
+ * la prueba venció), una sola vez.
  */
 export default function ContadorPrueba({ rol }) {
   const pregunta = ROLES.has(rol)
   const [datos, setDatos] = useState(null)
   const [, setPulso] = useState(0)
+  const [anunciado, setAnunciado] = useState('')
+  // Si se sigue preguntando. Lo decide la última respuesta buena: un fallo
+  // pasajero en PRUEBA no apaga el sondeo, solo esconde el contador.
+  const [sondear, setSondear] = useState(false)
+  const estadoAnterior = useRef(null)
 
   const cargar = useCallback(async () => {
     try {
       const r = await apiPrueba.estado()
       setDatos(r ? { ...r, recibido: performance.now() } : null)
+      setSondear(r?.estado === 'PRUEBA')
     } catch {
       setDatos(null)
     }
   }, [])
 
   useEffect(() => {
-    if (!pregunta) return undefined
-    cargar()
+    if (pregunta) cargar()
+  }, [pregunta, cargar])
+
+  const estado = datos?.estado ?? null
+
+  useEffect(() => {
+    if (!sondear) return undefined
     const periodica = setInterval(cargar, CADA_CINCO_MINUTOS)
+    return () => clearInterval(periodica)
+  }, [sondear, cargar])
+
+  useEffect(() => {
+    if (estado !== 'PRUEBA') return undefined
     // Solo vuelve a pintar; la cuenta sale de performance.now() en cada pintada.
     const pulso = setInterval(() => setPulso((n) => n + 1), CADA_SEGUNDO)
-    return () => {
-      clearInterval(periodica)
-      clearInterval(pulso)
-    }
-  }, [pregunta, cargar])
+    return () => clearInterval(pulso)
+  }, [estado])
+
+  // Se anuncia el paso de un estado a otro, no la primera carga ni el minuto.
+  useEffect(() => {
+    const anterior = estadoAnterior.current
+    estadoAnterior.current = estado
+    if (anterior === null || estado === null || anterior === estado) return
+    if (estado === 'PRUEBA_VENCIDA' || estado === 'DESACTIVADA') setAnunciado(MODO_CONSULTA)
+  }, [estado])
 
   const enPrueba = datos?.estado === 'PRUEBA' && typeof datos.segundosRestantes === 'number'
   const restante = enPrueba
@@ -74,25 +104,32 @@ export default function ContadorPrueba({ rol }) {
 
   if (!pregunta || !datos) return null
   const administrador = rol === 'ADMINISTRADOR'
+  const region = <p className="oculto-visualmente" role="status">{anunciado}</p>
 
   if (enPrueba) {
     const ultimoDia = restante < DIA
     return (
-      <div className={`contador-prueba${ultimoDia ? ' contador-prueba--ultimo-dia' : ''}`} role="status">
-        <span className="contador-prueba-tiempo">{textoDePrueba(restante)}</span>
-        {administrador && <span className="contador-prueba-ayuda">{ACTIVAR}</span>}
-      </div>
+      <>
+        <div className={`contador-prueba${ultimoDia ? ' contador-prueba--ultimo-dia' : ''}`}>
+          <span className="contador-prueba-tiempo">{textoDePrueba(restante)}</span>
+          {administrador && <span className="contador-prueba-ayuda">{ACTIVAR}</span>}
+        </div>
+        {region}
+      </>
     )
   }
 
   if (datos.estado === 'PRUEBA_VENCIDA' || datos.estado === 'DESACTIVADA') {
     return (
-      <div className="contador-prueba contador-prueba--consulta" role="status">
-        <span className="contador-prueba-tiempo">{MODO_CONSULTA}</span>
-        {administrador && datos.estado === 'PRUEBA_VENCIDA' && (
-          <span className="contador-prueba-ayuda">{ACTIVAR}</span>
-        )}
-      </div>
+      <>
+        <div className="contador-prueba contador-prueba--consulta">
+          <span className="contador-prueba-tiempo">{MODO_CONSULTA}</span>
+          {administrador && datos.estado === 'PRUEBA_VENCIDA' && (
+            <span className="contador-prueba-ayuda">{ACTIVAR}</span>
+          )}
+        </div>
+        {region}
+      </>
     )
   }
 

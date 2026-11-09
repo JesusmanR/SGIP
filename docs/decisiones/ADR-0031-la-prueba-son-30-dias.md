@@ -69,8 +69,18 @@ de fallo, y no hay que deshacer nada si la plataforma activa la cuenta.
 - En ACTIVA y DESACTIVADA los dos últimos son nulos. Es un GET, así que
   responde también en modo consulta.
 
+**El contador no mantiene viva la sesión (RNF-09).** La sesión caduca por
+inactividad y cada petición autenticada la alarga. El contador pregunta solo,
+sin que la persona toque nada, así que `FiltroSesion` reconoce exactamente
+`GET /api/v1/empresa/prueba` y la valida con `ServicioSesion.validarSinRenovar`:
+una sesión caducada responde 401, pero una viva no se alarga. Lo decide la ruta
+en el servidor, no una cabecera del cliente; cualquier otra ruta o método
+renueva como siempre.
+
 **El front cuenta con un reloj monótono.** `ContadorPrueba` pide el endpoint
-al cargar y cada 5 minutos, y entre una petición y otra descuenta con
+al cargar y, solo mientras la última respuesta fue PRUEBA, cada 5 minutos (un
+fallo pasajero no apaga el sondeo; con ACTIVA, DESACTIVADA o PRUEBA_VENCIDA no
+vuelve a preguntar hasta recargar). Entre una petición y otra descuenta con
 `performance.now()`, nunca con `Date.now()`. `Date.now()` es la hora del
 equipo: si el usuario la adelanta, el contador saltaría; si la atrasa, ganaría
 tiempo en pantalla. `performance.now()` solo mide cuánto tiempo pasó desde que
@@ -79,6 +89,11 @@ se abrió la página y no cambia cuando alguien toca la hora del sistema. Lo
 escritura la decide el filtro, no la pantalla. Al llegar a cero vuelve a pedir
 el endpoint (con un pequeño margen, porque en el último segundo el servidor
 puede contestar todavía PRUEBA con 0).
+
+**Accesibilidad.** El contador visible no es una región viva: el último día
+cambia cada minuto y un lector de pantalla lo leería cada vez. Al lado hay una
+región `role="status"` oculta a la vista que solo recibe texto cuando cambia el
+estado (por ejemplo, de PRUEBA a PRUEBA_VENCIDA anuncia el modo consulta).
 
 ## Consecuencias
 

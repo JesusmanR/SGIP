@@ -235,6 +235,22 @@ describe('el reloj', () => {
     expect(apiPrueba.estado).toHaveBeenCalledTimes(1)
   })
 
+  it('en PRUEBA, un fallo pasajero esconde el contador pero no apaga el sondeo', async () => {
+    responde('PRUEBA', 12 * DIA)
+    render(<ContadorPrueba rol="VENDEDOR" />)
+    await esperarPeticion()
+
+    vi.mocked(apiPrueba.estado).mockRejectedValueOnce(new Error('sin red'))
+    pasan(5 * 60)
+    await esperarPeticion()
+    expect(contador()).toBeNull()
+
+    pasan(5 * 60)
+    await esperarPeticion()
+    expect(apiPrueba.estado).toHaveBeenCalledTimes(3)
+    expect(contador()).toHaveTextContent('Quedan 12 días de prueba')
+  })
+
   it('al llegar a cero vuelve a preguntar y muestra lo que diga el servidor', async () => {
     responde('PRUEBA', 90)
     render(<ContadorPrueba rol="VENDEDOR" />)
