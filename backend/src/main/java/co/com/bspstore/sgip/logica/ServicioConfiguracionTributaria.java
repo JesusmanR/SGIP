@@ -189,8 +189,9 @@ public class ServicioConfiguracionTributaria {
 
         if (hasta == null && regla.vigenteDesde().isAfter(hoy)) {
             if (repositorio.borrarRegla(empresa, reglaId, hoy) == 0) {
-                // Otra petición hizo cambiar la regla entre la lectura y el
-                // borrado: no se borró y no se puede decir que se retiró.
+                // La regla ya rige para el motor (otra petición, o su día va por
+                // delante del de la aplicación; ver ADR-0030): no se borró y no se
+                // puede decir que se retiró.
                 throw new DatoTributarioInvalidoException(
                         "La regla ya empezó a regir y no se puede retirar. "
                                 + "Para cerrarla, indica «hasta» con una fecha.");

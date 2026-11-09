@@ -42,6 +42,8 @@ class RepositorioConfiguracionTributariaTest {
     private static final LocalDate ENERO = LocalDate.of(2026, 1, 1);
     /** El «hoy» que el servicio pasa a las consultas; fijo, para no depender del día de la base. */
     private static final LocalDate HOY = LocalDate.of(2026, 11, 3);
+    /** Futura para el «hoy» de la prueba y para el día real del motor, cuando sea que corra. */
+    private static final LocalDate LEJANA = LocalDate.of(2099, 1, 1);
 
     @Autowired RepositorioConfiguracionTributaria repositorio;
     @Autowired RepositorioPlataforma plataforma;
@@ -197,11 +199,12 @@ class RepositorioConfiguracionTributariaTest {
 
     @Test
     void retirarBorraLaFilaDeLaEmpresaYNoLaDeOtra() {
-        // Solo se borra lo que todavía no empezó: mañana, según el «hoy» que se pasa.
+        // Solo se borra lo que todavía no empezó, según el «hoy» que se pasa y según el
+        // día del motor (la segunda guarda): una fecha fija muy lejana cumple las dos.
         Integer propia = regla(empresa, null, null, ENERO, null);
-        empiezaEn(propia, HOY.plusDays(1));
+        empiezaEn(propia, LEJANA);
         Integer ajena = regla(otra, null, null, ENERO, null);
-        empiezaEn(ajena, HOY.plusDays(1));
+        empiezaEn(ajena, LEJANA);
 
         // Con el identificador de la otra empresa no borra nada.
         assertEquals(0, repositorio.borrarRegla(empresa, ajena, HOY));

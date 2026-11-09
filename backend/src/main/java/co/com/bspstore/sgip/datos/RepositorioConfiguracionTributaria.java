@@ -254,15 +254,22 @@ public class RepositorioConfiguracionTributaria {
      * Ninguna tabla apunta a {@code reglas_iva}.
      *
      * Que «aún no empieza» se vuelve a comprobar en la sentencia, contra el mismo
-     * {@code hoy} con el que el servicio lo decidió, y no contra otro reloj: sin
-     * esa condición, entre la lectura y el borrado una regla que ya regía y con la
-     * que se explican ventas podía borrarse (M4). Devuelve 0 si no borró nada.
+     * {@code hoy} con el que el servicio lo decidió: sin esa condición, entre la
+     * lectura y el borrado una regla que ya regía y con la que se explican ventas
+     * podía borrarse (M4).
+     *
+     * La segunda guarda, {@code CURDATE()}, es un cinturón. Con la sesión de la base
+     * en la hora de Bogotá es el mismo día que {@code hoy}; si alguna vez no lo
+     * fuera, una regla que el motor ya tiene vigente (la que aplican las vistas) no
+     * se borra aunque la aplicación crea que aún no empieza (ADR-0030). Devuelve 0
+     * si no borró nada.
      */
     public int borrarRegla(Integer empresaId, Integer reglaId, LocalDate hoy) {
         return jdbc.sql("""
                         DELETE FROM reglas_iva
                          WHERE empresa_id = :empresa AND regla_iva_id = :regla
                            AND vigente_desde > :hoy
+                           AND vigente_desde > CURDATE()
                         """)
                 .param("empresa", empresaId)
                 .param("regla", reglaId)
