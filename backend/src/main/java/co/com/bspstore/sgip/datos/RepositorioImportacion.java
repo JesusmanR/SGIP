@@ -9,6 +9,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -235,7 +236,7 @@ public class RepositorioImportacion {
      * no se puede cerrar ayer: `ck_historico_rango` exige que el fin no
      * sea anterior al comienzo, y además no significaría nada.
      */
-    public int cerrarCostoVigente(Integer empresaId, Long cargaId, java.time.LocalDate hoy) {
+    public int cerrarCostoVigente(Integer empresaId, Long cargaId, LocalDate hoy) {
         return jdbc.sql("""
                         UPDATE historico_costos h
                           JOIN detalle_carga_precios d
@@ -268,7 +269,7 @@ public class RepositorioImportacion {
      * entre versiones de MySQL. Esto se entiende leyéndolo y funciona
      * igual en todas.
      */
-    public int retirarCostoDeHoy(Integer empresaId, Long cargaId, java.time.LocalDate hoy) {
+    public int retirarCostoDeHoy(Integer empresaId, Long cargaId, LocalDate hoy) {
         return jdbc.sql("""
                         DELETE h FROM historico_costos h
                           JOIN detalle_carga_precios d
@@ -285,7 +286,7 @@ public class RepositorioImportacion {
     }
 
     /** Abre el periodo que empieza hoy con el costo de la carga. */
-    public int abrirCostoDeHoy(Integer empresaId, Long cargaId, java.time.LocalDate hoy) {
+    public int abrirCostoDeHoy(Integer empresaId, Long cargaId, LocalDate hoy) {
         return jdbc.sql("""
                         INSERT INTO historico_costos
                                (empresa_id, producto_id, costo, vigente_desde, carga_id)
@@ -400,6 +401,7 @@ public class RepositorioImportacion {
                             ON v.empresa_id = d.empresa_id
                            AND v.producto_id = d.producto_id
                          WHERE d.empresa_id = :empresa AND d.carga_id = :carga
+                           AND v.empresa_id = :empresa
                            AND d.aceptado = TRUE
                            AND v.tratamiento_iva = 'EXCLUIDO_HASTA_UMBRAL'
                            AND (v.tarifa_contado > 0) <> (%1$s > v.umbral_pesos)

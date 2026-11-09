@@ -135,7 +135,7 @@ public class RepositorioPlataforma {
      * la operación, que es la {@code hoy} que pasa quien llama. Si hubiera varias filas vigentes —la clave única lo
      * impide para la misma fecha de inicio— gana la más reciente.
      */
-    public int mesesDePrueba(java.time.LocalDate hoy) {
+    public int mesesDePrueba(LocalDate hoy) {
         return jdbc.sql("""
                         SELECT valor FROM parametros_plataforma
                          WHERE clave = 'sgip.plataforma.prueba.meses'
