@@ -42,7 +42,7 @@ export default function TablaMovimientos({ movimientos, porProducto = false, eti
     },
     {
       clave: 'variacion', titulo: 'Cambio', numerica: true,
-      render: (m) => <span className={`cambio ${variacion(m) < 0 ? 'baja' : ''}`}>{conSigno(variacion(m))}</span>,
+      render: (m) => <span className={`cambio ${variacion(m) < 0 ? 'cambio-baja' : ''}`}>{conSigno(variacion(m))}</span>,
     },
     {
       clave: 'existencia', titulo: 'Existencia', numerica: true,

@@ -39,6 +39,16 @@ export function haySesion() {
 }
 
 /**
+ * Si la sesión es de un administrador de tienda. Solo él ve costo,
+ * proveedores, kárdex y ganancia; está aquí para que ninguna pantalla
+ * compare el rol por su cuenta. El administrador de la plataforma
+ * (`SUPER_ADMIN`) no lo es: no pertenece a una tienda.
+ */
+export function esAdministrador(sesion = leerSesion()) {
+  return sesion?.rol === 'ADMINISTRADOR'
+}
+
+/**
  * A dónde lleva entrar, según el rol.
  *
  * La especificación de P-02 dice que el panel «es la primera pantalla
@@ -59,7 +69,7 @@ export function inicioSegunRol(sesion = leerSesion()) {
   if (sesion?.debeCambiarClave) return '/cambiar-clave'
   // SUPER_ADMIN no pertenece a una empresa: el catálogo no le sirve datos.
   if (sesion?.rol === 'SUPER_ADMIN') return '/plataforma/empresas'
-  return sesion?.rol === 'ADMINISTRADOR' ? '/panel' : '/catalogo'
+  return esAdministrador(sesion) ? '/panel' : '/catalogo'
 }
 
 /** Si quien tiene la sesión abierta aún debe cambiar su contraseña inicial. */

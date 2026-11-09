@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import Aviso from '../../componentes/comun/Aviso.jsx'
 import EncabezadoPagina from '../../componentes/comun/EncabezadoPagina.jsx'
@@ -10,6 +10,7 @@ import { useDatos } from '../../hooks/useDatos.js'
 import { apiPlataformaEmpresas } from '../../servicios/api/plataforma-empresas.js'
 import { fechaCorta, NUMERO } from '../../servicios/formato.js'
 import Campo from '../../componentes/comun/Campo.jsx'
+import Confirmacion from '../../componentes/comun/Confirmacion.jsx'
 import EstadoEmpresa from './EstadoEmpresa.jsx'
 import UsuariosEmpresa from './UsuariosEmpresa.jsx'
 
@@ -54,24 +55,20 @@ function Ficha({ empresa, usuarios, recargar, avisoInicial }) {
   const [enviando, setEnviando] = useState(false)
   const [exito, setExito] = useState(avisoInicial ?? null)
   const [error, setError] = useState(null)
-  const [foco, setFoco] = useState(null)
-  const caja = useRef(null)
+  // A dónde vuelve el foco al cerrarse la confirmación: un botón, o 'estable'.
+  const destino = useRef(null)
   const datos = useRef(null)
   const botonActivar = useRef(null)
   const botonDesactivar = useRef(null)
   const enCurso = useRef(false)
 
-  useEffect(() => {
-    if (confirmando) caja.current?.focus()
-  }, [confirmando])
-
-  // El foco vuelve cuando la confirmación ya se cerró y los botones ya están en pantalla.
-  useEffect(() => {
-    if (confirmando || !foco) return
-    const destino = { activar: botonActivar, desactivar: botonDesactivar }[foco]?.current ?? datos.current
-    destino?.focus()
-    setFoco(null)
-  }, [confirmando, foco])
+  // Los botones se vuelven a crear al cerrarse la confirmación: el foco va al nuevo, o a los datos
+  // si el botón que la abrió ya no existe (tras confirmar cambia el estado).
+  function volverA() {
+    const quien = destino.current ?? confirmando
+    destino.current = null
+    return { activar: botonActivar, desactivar: botonDesactivar }[quien]?.current ?? datos.current
+  }
 
   const activos = usuarios.datos ? usuarios.datos.filter((u) => u.activo).length : null
 
@@ -87,13 +84,13 @@ function Ficha({ empresa, usuarios, recargar, avisoInicial }) {
     try {
       await llamar(empresa.empresaId, motivo.trim())
       // El botón que abrió la confirmación cambia con el nuevo estado: el foco va a un lugar estable.
-      setFoco('estable')
+      destino.current = 'estable'
       setConfirmando(null)
       setMotivo('')
       setExito(mensaje)
       recargar()
     } catch (e) {
-      setFoco(accion)
+      destino.current = accion
       setConfirmando(null)
       setError(e.message || 'No se pudo completar la operación.')
     } finally {
@@ -107,11 +104,6 @@ function Ficha({ empresa, usuarios, recargar, avisoInicial }) {
     setExito(null)
     setMotivo('')
     setConfirmando(accion)
-  }
-
-  function cancelar() {
-    setFoco(confirmando)
-    setConfirmando(null)
   }
 
   const pedida = confirmando ? confirmacionDe(confirmando, empresa, activos) : null
@@ -137,19 +129,19 @@ function Ficha({ empresa, usuarios, recargar, avisoInicial }) {
       </section>
 
       {pedida ? (
-        <div className="confirmacion" role="group" aria-labelledby="confirmacion-pregunta" tabIndex={-1} ref={caja}>
-          <p id="confirmacion-pregunta" className="confirmacion-pregunta">{pedida.pregunta}</p>
-          <p>{pedida.detalle}</p>
+        <Confirmacion
+          pregunta={pedida.pregunta}
+          detalle={pedida.detalle}
+          textoConfirmar={pedida.boton}
+          enviando={enviando}
+          volverA={volverA}
+          alConfirmar={cambiarEstado}
+          alCancelar={() => setConfirmando(null)}
+        >
           <Campo etiqueta="Motivo (opcional)" ayuda="Queda en la bitácora de la plataforma.">
             <input type="text" maxLength={200} autoComplete="off" value={motivo} onChange={(e) => setMotivo(e.target.value)} />
           </Campo>
-          <div className="acciones">
-            <button type="button" className="boton" disabled={enviando} onClick={cambiarEstado}>{pedida.boton}</button>
-            <button type="button" className="boton secundario" disabled={enviando} onClick={cancelar}>
-              Cancelar
-            </button>
-          </div>
-        </div>
+        </Confirmacion>
       ) : (
         <div className="acciones">
           {empresa.estado !== 'ACTIVA' && (

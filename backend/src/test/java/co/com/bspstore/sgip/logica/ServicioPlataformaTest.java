@@ -77,7 +77,7 @@ class ServicioPlataformaTest {
         Clock reloj = Clock.fixed(
                 ZonedDateTime.of(HOY.atTime(10, 0), ZoneId.of("America/Bogota")).toInstant(),
                 ZoneId.of("America/Bogota"));
-        servicio = new ServicioPlataforma(plataforma, usuarios, roles, reloj, MINUTOS_DE_BLOQUEO);
+        servicio = new ServicioPlataforma(plataforma, usuarios, roles, reloj, new PoliticaDeBloqueo(MINUTOS_DE_BLOQUEO));
         comoSuperAdmin();
     }
 
@@ -209,7 +209,7 @@ class ServicioPlataformaTest {
         Clock reloj = Clock.fixed(
                 ZonedDateTime.of(dia.atTime(10, 0), ZoneId.of("America/Bogota")).toInstant(),
                 ZoneId.of("America/Bogota"));
-        return new ServicioPlataforma(plataforma, usuarios, roles, reloj, MINUTOS_DE_BLOQUEO);
+        return new ServicioPlataforma(plataforma, usuarios, roles, reloj, new PoliticaDeBloqueo(MINUTOS_DE_BLOQUEO));
     }
 
     /**
@@ -312,7 +312,7 @@ class ServicioPlataformaTest {
     void rechazaLaIdentificacionTributariaYaRegistrada() {
         when(plataforma.existeNit("900123456-1")).thenReturn(true);
 
-        RegistroRepetidoException e = assertThrows(RegistroRepetidoException.class,
+        RegistroRepetidoException e = assertThrows(NitRepetidoException.class,
                 () -> servicio.darDeAlta(solicitud()));
 
         assertTrue(e.getMessage().contains("900123456-1"),
@@ -327,7 +327,7 @@ class ServicioPlataformaTest {
         when(plataforma.existeNit(anyString())).thenReturn(false);
         when(usuarios.existsByCorreo("ana@tornillo.co")).thenReturn(true);
 
-        RegistroRepetidoException e = assertThrows(RegistroRepetidoException.class,
+        RegistroRepetidoException e = assertThrows(CorreoRepetidoException.class,
                 () -> servicio.darDeAlta(solicitud()));
 
         assertTrue(e.getMessage().contains("ana@tornillo.co"));

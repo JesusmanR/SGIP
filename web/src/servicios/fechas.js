@@ -1,4 +1,9 @@
 /**
+ * Todas las fechas de la aplicación se escriben desde aquí, con los meses
+ * escritos a mano (`6 nov 2026`) y no con `Intl`: según el motor, el mes sale
+ * con punto, con «de» o como «sept», y la pantalla mostraría la misma fecha
+ * escrita de dos formas.
+ *
  * Fechas de vigencia: el backend manda y recibe `LocalDate` (`2026-11-06`),
  * un día sin hora ni zona.
  *
@@ -21,13 +26,9 @@ export function sumarDias(iso, n) {
   return `${f.getUTCFullYear()}-${dos(f.getUTCMonth() + 1)}-${dos(f.getUTCDate())}`
 }
 
-const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
+export const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
 
-/**
- * `6 nov 2026`, o `—` si no hay fecha. Los meses van escritos aquí y no salen
- * de `Intl`: según el motor, el mes sale con punto o con «de», y la pantalla
- * mostraría la misma fecha escrita de dos formas.
- */
+/** `6 nov 2026`, o `—` si no hay fecha. */
 export function fechaDia(iso) {
   const partes = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso ?? '')
   if (!partes) return '—'

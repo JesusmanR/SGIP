@@ -9,7 +9,6 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockHttpServletRequest;
@@ -22,12 +21,9 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.inOrder;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 @ExtendWith(MockitoExtension.class)
 class AutenticacionControladorTest {
@@ -54,26 +50,33 @@ class AutenticacionControladorTest {
     }
 
     @Test
-    void cambiaLaClaveDeQuienPideYCierraLasDemasSesionesConservandoLaActual() {
+    void cambiaLaClaveDeQuienPideEnUnaSolaLlamadaDelServicioConElTokenDeLaSesionActual() {
         var respuesta = controlador.cambiarClave(
                 new SolicitudCambioClave("Inicial2026", "Nueva2026xyz"), "Bearer token-actual", peticion);
 
         assertEquals(204, respuesta.getStatusCode().value());
-        // El identificador sale de la sesión autenticada, no de la solicitud.
-        InOrder orden = inOrder(servicio, sesiones);
-        orden.verify(servicio).cambiarClave(7, "Inicial2026", "Nueva2026xyz", "10.0.0.5");
-        orden.verify(sesiones).cerrarLasDemasDe(7, "token-actual");
+        // El identificador sale de la sesión autenticada, no de la solicitud. El cierre de las
+        // demás sesiones lo hace el servicio, en la misma transacción: el controlador no lo toca.
+        verify(servicio).cambiarClave(7, "Inicial2026", "Nueva2026xyz", "10.0.0.5", "token-actual");
+        verifyNoInteractions(sesiones);
     }
 
     @Test
-    void siLaClaveActualEstaMalNoSeCierraNingunaSesion() {
+    void sinCabeceraDeAutorizacionElTokenViajaNulo() {
+        controlador.cambiarClave(new SolicitudCambioClave("Inicial2026", "Nueva2026xyz"), null, peticion);
+
+        verify(servicio).cambiarClave(7, "Inicial2026", "Nueva2026xyz", "10.0.0.5", null);
+    }
+
+    @Test
+    void siLaClaveActualEstaMalElErrorSubeSinTocarLasSesiones() {
         doThrow(new ClaveActualIncorrectaException()).when(servicio)
-                .cambiarClave(7, "mala", "Nueva2026xyz", "10.0.0.5");
+                .cambiarClave(7, "mala", "Nueva2026xyz", "10.0.0.5", "token-actual");
 
         assertThrows(ClaveActualIncorrectaException.class, () -> controlador.cambiarClave(
                 new SolicitudCambioClave("mala", "Nueva2026xyz"), "Bearer token-actual", peticion));
 
-        verify(sesiones, never()).cerrarLasDemasDe(any(), anyString());
+        verifyNoInteractions(sesiones);
     }
 
     @Test

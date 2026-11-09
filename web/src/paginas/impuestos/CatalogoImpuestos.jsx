@@ -5,12 +5,13 @@ import TablaOTarjetas from '../../componentes/comun/TablaOTarjetas.jsx'
 import { useDatos } from '../../hooks/useDatos.js'
 import { apiImpuestos } from '../../servicios/api/impuestos.js'
 import { NUMERO } from '../../servicios/formato.js'
-import { etiquetaDeTratamiento, tarifaComoPorcentaje } from './tributos.js'
+import { fraccionComoPorcentaje } from '../../servicios/formato.js'
+import { etiquetaDeTratamiento } from './tributos.js'
 
 const COLUMNAS = [
   { clave: 'nombre', titulo: 'Impuesto', principal: true },
   { clave: 'tratamiento', titulo: 'Cómo se trata', render: (i) => etiquetaDeTratamiento(i.tratamiento) },
-  { clave: 'tarifa', titulo: 'Tarifa', numerica: true, render: (i) => tarifaComoPorcentaje(i.tarifa) },
+  { clave: 'tarifa', titulo: 'Tarifa', numerica: true, render: (i) => fraccionComoPorcentaje(i.tarifa) },
   {
     clave: 'detalle', titulo: 'Detalle',
     render: (i) => (i.umbralUvt == null

@@ -8,7 +8,7 @@ import SubirImagen from '../componentes/SubirImagen.jsx'
 import { useDatos } from '../hooks/useDatos.js'
 import { api } from '../servicios/api.js'
 import { prepararImagen } from '../servicios/imagenes.js'
-import { leerSesion } from '../servicios/sesion.js'
+import { esAdministrador } from '../servicios/sesion.js'
 import '../estilos/empresa.css'
 
 /**
@@ -29,7 +29,7 @@ export default function Empresa() {
   const [reemplazo, setReemplazo] = useState(null)
   const [fallo, setFallo] = useState(null)
   const [aviso, setAviso] = useState(null)
-  const esAdministrador = leerSesion()?.rol === 'ADMINISTRADOR'
+  const esAdmin = esAdministrador()
   const empresa = reemplazo ?? datos
 
   /**
@@ -76,21 +76,21 @@ export default function Empresa() {
               alt={`Logo de ${empresa.razonSocial}`}
               onSubir={subirLogo}
               onFallo={fallar}
-              puedeEditar={esAdministrador}
+              puedeEditar={esAdmin}
               redondo
             />
             <div className="empresa-datos">
               <p className="titulo-empresa">{empresa.razonSocial}</p>
               <p className="sub-linea">NIT {empresa.nit}</p>
               <p className="sub-linea">
-                {esAdministrador
+                {esAdmin
                   ? 'Toca el logo para subir o reemplazarlo. JPEG, PNG o WebP; se ajusta solo, sin recortarlo ni deformarlo.'
                   : 'Solo el administrador puede cambiar el logo.'}
               </p>
             </div>
           </section>
 
-          {esAdministrador && (
+          {esAdmin && (
             <section className="tarjeta empresa-impuestos" aria-labelledby="t-impuestos">
               <h2 id="t-impuestos">Impuestos</h2>
               <p>
