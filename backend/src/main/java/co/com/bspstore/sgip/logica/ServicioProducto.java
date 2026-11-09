@@ -15,6 +15,8 @@ import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Clock;
 import java.util.List;
 import java.util.Locale;
@@ -227,21 +229,27 @@ public class ServicioProducto {
         // El costo de antes, para saber si esta edición lo cambia. Se compara el
         // valor y no la escritura: la base devuelve 3100.00 y el formulario puede
         // mandar 3100, y eso no es un cambio.
-        boolean cambiaElCosto = p.getCosto().compareTo(s.costo()) != 0;
+        // Con los centavos de la columna, DECIMAL(14,2): un 3100.004 no es un cambio, y
+        // lo que se escribe en el histórico es lo mismo que guardará el producto.
+        BigDecimal costo = s.costo().setScale(2, RoundingMode.HALF_UP);
+        boolean cambiaElCosto = p.getCosto().compareTo(costo) != 0;
+
+        if (cambiaElCosto) {
+            // Igual que al aplicar una lista de precios: un cambio de costo no deja
+            // rastro en el kárdex, y sin el histórico no habría forma de saber con
+            // qué costo se vendió algo el mes pasado (M15). Va antes de guardar el
+            // producto, como en la importación (historico_costos y luego productos):
+            // el mismo orden de bloqueos evita que dos escrituras se esperen entre sí.
+            costos.registrarCambio(empresa, productoId, costo, Hoy.de(reloj));
+        }
 
         p.reemplazarDatos(s.categoriaId(), s.proveedorId(), codigo, sku, s.nombre(),
-                s.presentacion(), s.descripcion(), barras, s.costo(),
+                s.presentacion(), s.descripcion(), barras, costo,
                 s.existenciaMinima() == null ? p.getExistenciaMinima() : s.existenciaMinima());
         // Se vacía a la base antes de escribir los precios: las reglas se leen de la
         // vista, que junta el producto con la regla de su categoría, y con la
         // categoría nueva sin escribir seguiría viendo la vieja (M3).
         productos.saveAndFlush(p);
-        if (cambiaElCosto) {
-            // Igual que al aplicar una lista de precios: un cambio de costo no deja
-            // rastro en el kárdex, y sin el histórico no habría forma de saber con
-            // qué costo se vendió algo el mes pasado (M15).
-            costos.registrarCambio(empresa, productoId, s.costo(), Hoy.de(reloj));
-        }
         // Sin tocar `version`: la regla es una fila aparte, y un cambio solo de
         // precio no le quita a nadie los datos del producto que tenía abiertos.
         precios.escribirPrecios(empresa, productoId, s.costo(), s.contado(), s.credito(),
