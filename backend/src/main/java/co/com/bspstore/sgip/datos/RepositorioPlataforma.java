@@ -1,6 +1,7 @@
 package co.com.bspstore.sgip.datos;
 
 import co.com.bspstore.sgip.api.dto.EmpresaEnPlataforma;
+import co.com.bspstore.sgip.api.dto.MedioDePago;
 import co.com.bspstore.sgip.modelo.AccionPlataforma;
 import co.com.bspstore.sgip.modelo.EstadoEmpresa;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -243,7 +244,7 @@ public class RepositorioPlataforma {
     }
 
     /**
-     * Los cuatro medios de pago con los que nace toda empresa.
+     * Siembra los medios de pago con los que nace toda empresa (RF-43, M17).
      *
      * Es lo único que se siembra al dar de alta, aparte de la fila de
      * configuración. Una venta exige un medio de pago, de modo que sin
@@ -251,21 +252,24 @@ public class RepositorioPlataforma {
      * márgenes y los impuestos, en cambio, los decide el comercio y no
      * se siembran (ADR-0024).
      *
-     * Los nombres y los tipos son los que la V10 sembró para la empresa
-     * 1. No hay {@code INSERT IGNORE} a propósito: la clave única
+     * Qué medios son lo decide {@code ServicioMediosPago.MEDIOS_DEL_ALTA}
+     * y llega como argumento: este repositorio solo escribe. No hay
+     * {@code INSERT IGNORE} a propósito: la clave única
      * {@code (empresa_id, nombre)} existe para que una siembra repetida
      * falle a la vista y deshaga el alta, no para que se calle.
      */
-    public void sembrarMediosDePago(Integer empresaId) {
-        jdbc.sql("""
-                        INSERT INTO medios_pago (empresa_id, nombre, tipo) VALUES
-                               (:empresa, 'Efectivo',      'EFECTIVO'),
-                               (:empresa, 'Transferencia', 'TRANSFERENCIA'),
-                               (:empresa, 'Tarjeta',       'TARJETA'),
-                               (:empresa, 'Crédito',       'CREDITO')
-                        """)
-                .param("empresa", empresaId)
-                .update();
+    public void sembrarMediosDePago(Integer empresaId, List<MedioDePago> medios) {
+        for (MedioDePago medio : medios) {
+            jdbc.sql("""
+                            INSERT INTO medios_pago (empresa_id, nombre, tipo, activo)
+                            VALUES (:empresa, :nombre, :tipo, :activo)
+                            """)
+                    .param("empresa", empresaId)
+                    .param("nombre", medio.nombre())
+                    .param("tipo", medio.tipo().name())
+                    .param("activo", medio.activo())
+                    .update();
+        }
     }
 
     /** Devuelve las filas afectadas: cero si la empresa no existe. */

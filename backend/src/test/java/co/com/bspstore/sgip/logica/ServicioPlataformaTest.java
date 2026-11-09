@@ -1,6 +1,7 @@
 package co.com.bspstore.sgip.logica;
 
 import co.com.bspstore.sgip.api.dto.EmpresaEnPlataforma;
+import co.com.bspstore.sgip.api.dto.MedioDePago;
 import co.com.bspstore.sgip.api.dto.SolicitudAltaEmpresa;
 import co.com.bspstore.sgip.api.dto.UsuarioEnPlataforma;
 import co.com.bspstore.sgip.config.UsuarioAutenticado;
@@ -10,6 +11,7 @@ import co.com.bspstore.sgip.datos.UsuarioRepositorio;
 import co.com.bspstore.sgip.modelo.AccionPlataforma;
 import co.com.bspstore.sgip.modelo.EstadoEmpresa;
 import co.com.bspstore.sgip.modelo.Rol;
+import co.com.bspstore.sgip.modelo.TipoMedio;
 import co.com.bspstore.sgip.modelo.Usuario;
 import co.com.bspstore.sgip.util.Seguridad;
 import org.junit.jupiter.api.AfterEach;
@@ -138,9 +140,9 @@ class ServicioPlataformaTest {
 
     /**
      * Una empresa nueva tiene que poder cobrar desde el primer día, y el
-     * punto de venta pide un medio de pago en cada venta. Sin estas cuatro
-     * filas el comercio abre su primera pantalla de venta con la lista
-     * vacía y nada que hacer.
+     * punto de venta pide un medio de pago en cada venta. Sin estas filas el
+     * comercio abre su primera pantalla de venta con la lista vacía y nada
+     * que hacer (RF-43, M17).
      */
     @Test
     void elAltaSiembraLosMediosDePago() {
@@ -148,7 +150,36 @@ class ServicioPlataformaTest {
 
         servicio.darDeAlta(solicitud());
 
-        verify(plataforma).sembrarMediosDePago(12);
+        verify(plataforma).sembrarMediosDePago(12, ServicioMediosPago.MEDIOS_DEL_ALTA);
+    }
+
+    @Test
+    void elAltaSiembraEfectivoTarjetaYTransferencia() {
+        altaViable(12, 30);
+
+        servicio.darDeAlta(solicitud());
+
+        ArgumentCaptor<List<MedioDePago>> sembrados = ArgumentCaptor.captor();
+        verify(plataforma).sembrarMediosDePago(eq(12), sembrados.capture());
+        assertEquals(List.of(
+                        new MedioDePago(null, "Efectivo", TipoMedio.EFECTIVO, true),
+                        new MedioDePago(null, "Tarjeta", TipoMedio.TARJETA, true),
+                        new MedioDePago(null, "Transferencia", TipoMedio.TRANSFERENCIA, true)),
+                sembrados.getValue().stream().filter(MedioDePago::activo).toList(),
+                "los activos del alta son exactamente estos tres");
+    }
+
+    @Test
+    void elAltaSiembraElSaldoAFavorInactivo() {
+        altaViable(12, 30);
+
+        servicio.darDeAlta(solicitud());
+
+        ArgumentCaptor<List<MedioDePago>> sembrados = ArgumentCaptor.captor();
+        verify(plataforma).sembrarMediosDePago(eq(12), sembrados.capture());
+        assertEquals(List.of(new MedioDePago(null, "Saldo a favor", TipoMedio.SALDO_A_FAVOR, false)),
+                sembrados.getValue().stream().filter(m -> !m.activo()).toList());
+        assertEquals(4, sembrados.getValue().size());
     }
 
     /**
@@ -187,7 +218,7 @@ class ServicioPlataformaTest {
     void siLaSiembraFallaElAltaSePropagaYNoSeAudita() {
         altaViable(12, 1);
         doThrow(new IllegalStateException("siembra rota"))
-                .when(plataforma).sembrarMediosDePago(12);
+                .when(plataforma).sembrarMediosDePago(eq(12), any());
 
         IllegalStateException e = assertThrows(IllegalStateException.class,
                 () -> servicio.darDeAlta(solicitud()));

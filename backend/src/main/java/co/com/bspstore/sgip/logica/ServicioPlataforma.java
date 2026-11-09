@@ -163,7 +163,7 @@ public class ServicioPlataforma {
         // opcionales, y una empresa sin reglas de IVA vende al precio
         // (ADR-0024). Sembrar «valores por omisión» aquí le impondría al
         // comercio un cobro que nadie le pidió.
-        plataforma.sembrarMediosDePago(empresaId);
+        plataforma.sembrarMediosDePago(empresaId, ServicioMediosPago.MEDIOS_DEL_ALTA);
 
         Rol rolAdministrador = roles.findByNombre(ROL_ADMINISTRADOR)
                 .orElseThrow(() -> new IllegalStateException(

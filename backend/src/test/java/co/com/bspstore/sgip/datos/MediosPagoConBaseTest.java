@@ -4,6 +4,7 @@ import co.com.bspstore.sgip.api.dto.SolicitudAltaEmpresa;
 import co.com.bspstore.sgip.config.UsuarioAutenticado;
 import co.com.bspstore.sgip.logica.PoliticaDeBloqueo;
 import co.com.bspstore.sgip.logica.ServicioPlataforma;
+import co.com.bspstore.sgip.modelo.TipoMedio;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
@@ -108,8 +109,8 @@ class MediosPagoConBaseTest {
     void borrarLoQueCreo() {
         SecurityContextHolder.clearContext();
         jdbc.sql("DROP DATABASE IF EXISTS " + esquema).update();
-        List<Integer> empresas = jdbc.sql("SELECT empresa_id FROM empresas WHERE nit = :nit")
-                .param("nit", nit()).query(Integer.class).list();
+        List<Integer> empresas = jdbc.sql("SELECT empresa_id FROM empresas WHERE nit IN (:nit, :otro)")
+                .param("nit", nit()).param("otro", nit() + "-B").query(Integer.class).list();
         // De las hojas a la raíz: la bitácora y lo sembrado cuelgan de la empresa.
         for (Integer empresa : empresas) {
             for (String tabla : List.of("auditoria_plataforma", "medios_pago", "empresa_config",
@@ -218,6 +219,55 @@ class MediosPagoConBaseTest {
 
         assertEquals(List.of(SALDO_A_FAVOR), deSistemaDe(nit()));
         assertEquals(3, activosDe(nit()).size());
+    }
+
+    // ------------------------------------------------- el repositorio, con SQL real
+
+    @Test
+    void elRepositorioListaCreaBuscaYActualizaSoloLoDeSuEmpresa() {
+        darDeAlta();
+        Integer empresa = empresaDelAlta();
+        Integer otra = otraEmpresa();
+        var repositorio = new RepositorioMediosPago(jdbc);
+
+        // «Saldo a favor» existe pero no se ofrece: son tres de cuatro.
+        assertEquals(3, repositorio.listarActivos(empresa).size());
+        assertEquals(4, repositorio.listar(empresa).size());
+        assertEquals(4, repositorio.bloquearDeLaEmpresa(empresa).size());
+        assertEquals(List.of(), repositorio.listar(otra));
+
+        // La comparación del nombre es la de la clave única: sin mayúsculas ni tildes.
+        assertTrue(repositorio.existeNombre(empresa, "EFECTIVO"));
+        assertFalse(repositorio.existeNombre(otra, "Efectivo"));
+
+        Integer id = repositorio.insertar(empresa, "Nequi", TipoMedio.TRANSFERENCIA);
+        var creado = repositorio.buscar(empresa, id).orElseThrow();
+        assertEquals("Nequi", creado.nombre());
+        assertEquals(TipoMedio.TRANSFERENCIA, creado.tipo());
+        assertTrue(creado.activo());
+        assertEquals(4, repositorio.listarActivos(empresa).size());
+
+        // Un medio de la empresa A no se ve ni se toca desde la B.
+        assertTrue(repositorio.buscar(otra, id).isEmpty());
+        repositorio.actualizarActivo(otra, id, false);
+        assertTrue(repositorio.buscar(empresa, id).orElseThrow().activo());
+
+        repositorio.actualizarActivo(empresa, id, false);
+        assertFalse(repositorio.buscar(empresa, id).orElseThrow().activo());
+        assertEquals(3, repositorio.listarActivos(empresa).size());
+    }
+
+    private Integer empresaDelAlta() {
+        return jdbc.sql("SELECT empresa_id FROM empresas WHERE nit = :nit")
+                .param("nit", nit()).query(Integer.class).single();
+    }
+
+    /** Otra empresa, sin medios, para comprobar que no ve los de la primera. */
+    private Integer otraEmpresa() {
+        jdbc.sql("INSERT INTO empresas (nit, razon_social, estado) VALUES (:nit, 'Otra', 'PRUEBA')")
+                .param("nit", nit() + "-B").update();
+        return jdbc.sql("SELECT empresa_id FROM empresas WHERE nit = :nit")
+                .param("nit", nit() + "-B").query(Integer.class).single();
     }
 
     private void darDeAlta() {
