@@ -30,14 +30,14 @@ nueva. La decisión original se deja tal como se escribió.
 | 0012 | Operación sin conexión con cola e idempotencia | vigente |
 | 0013 | Las cantidades son enteras: la presentación es la unidad | vigente |
 | 0014 | La existencia negativa es la deuda de reposición | vigente · ver nota |
-| 0015 | Suscripción: un mes gratis y tres estados de empresa | vigente |
+| 0015 | Suscripción: un mes gratis y tres estados de empresa | vigente · ver nota |
 | 0016 | La tributación se reparte en dos capas | vigente · ver nota |
 | 0017 | Las imágenes se normalizan al subirlas y se sirven por direcciones inmutables | vigente · ver nota |
 | 0018 | Java 25 y Spring Boot 4.1 en el backend | vigente · ver nota |
 | 0019 | La deuda de reposición se declara aparte, no se resta del inventario | vigente |
 | 0020 | La plataforma administra las empresas desde fuera, y no entra en ellas | vigente |
 | 0021 | La simulación del umbral repite la fórmula de la vista, y una prueba la sostiene | vigente |
-| 0022 | El mes de prueba es un mes de calendario, no treinta días | vigente |
+| 0022 | El mes de prueba es un mes de calendario, no treinta días | sustituida por 0031 |
 | 0023 | Flyway gobierna las migraciones desde la V32 | vigente |
 | 0024 | Los impuestos son opcionales: una empresa vende sin configurarlos | vigente |
 | 0025 | El precio de venta y el porcentaje se escriben por producto | vigente |
@@ -46,6 +46,7 @@ nueva. La decisión original se deja tal como se escribió.
 | 0028 | El bloqueo de una cuenta caduca y la plataforma puede levantarlo | vigente |
 | 0029 | El precio se calcula solo para la empresa que pregunta | vigente |
 | 0030 | «Hoy» lo pone la aplicación, en la hora de Bogotá, y se pasa a cada consulta | vigente |
+| 0031 | La prueba son 30 días | vigente |
 
 ## Las cuatro que conviene leer antes de escribir código
 

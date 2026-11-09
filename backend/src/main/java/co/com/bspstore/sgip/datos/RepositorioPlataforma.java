@@ -44,15 +44,15 @@ public class RepositorioPlataforma {
     /**
      * El valor por omisión si el parámetro no está cargado.
      *
-     * Coincide con el que la V22 inserta. Está duplicado a propósito: sin
+     * Coincide con el que la V39 inserta. Está duplicado a propósito: sin
      * él, una base a la que le falte la fila daría un periodo de prueba
      * nulo y la suscripción no se podría crear, de modo que el alta
      * fallaría por una razón que no tiene nada que ver con el alta.
      */
-    private static final int MESES_PRUEBA_POR_OMISION = 1;
+    private static final int DIAS_PRUEBA_POR_OMISION = 30;
 
-    /** Tope de sensatez: un periodo de prueba de más de dos años no lo es. */
-    private static final int MESES_PRUEBA_MAXIMO = 24;
+    /** El mismo tope que la V26 pone en la base: más de un año no es una prueba. */
+    private static final int DIAS_PRUEBA_MAXIMO = 365;
 
     /**
      * Los nombres de columna van en snake_case y no en camelCase porque
@@ -122,23 +122,23 @@ public class RepositorioPlataforma {
     }
 
     /**
-     * Los meses de prueba vigentes hoy (RN-14).
+     * Los días de prueba vigentes hoy (RN-14, RF-04 de la v4, ADR-0031).
      *
-     * En meses y no en días. El RF-04 pide que una empresa creada hoy
-     * quede en prueba «hasta el mismo día del mes siguiente», y eso no es
-     * lo mismo que treinta días: solo coinciden en los cuatro meses que
-     * los tienen. Medido sobre un año, 240 de las 365 fechas de alta
-     * posibles daban una fecha distinta de la que el criterio pide.
+     * En días y no en meses: la v4 de los requisitos fija treinta días
+     * calendario contados desde el día siguiente al alta. El parámetro de
+     * meses de la V27 sigue en la tabla con su vigencia cerrada, y una
+     * suscripción creada bajo él se explica con él.
      *
-     * La vigencia se filtra en la consulta, no en Java: la tabla guarda
-     * el histórico y lo que importa es el valor que rige en la fecha de
-     * la operación, que es la {@code hoy} que pasa quien llama. Si hubiera varias filas vigentes —la clave única lo
-     * impide para la misma fecha de inicio— gana la más reciente.
+     * La vigencia se filtra en la consulta, no en Java: la tabla guarda el
+     * histórico y lo que importa es el valor que rige en la fecha de la
+     * operación, que es la {@code hoy} que pasa quien llama (ADR-0030). Si
+     * hubiera varias filas vigentes —la clave única lo impide para la misma
+     * fecha de inicio— gana la más reciente.
      */
-    public int mesesDePrueba(LocalDate hoy) {
+    public int diasDePrueba(LocalDate hoy) {
         return jdbc.sql("""
                         SELECT valor FROM parametros_plataforma
-                         WHERE clave = 'sgip.plataforma.prueba.meses'
+                         WHERE clave = 'sgip.plataforma.prueba.dias'
                            AND vigente_desde <= :hoy
                            AND (vigente_hasta IS NULL OR vigente_hasta >= :hoy)
                          ORDER BY vigente_desde DESC
@@ -147,31 +147,38 @@ public class RepositorioPlataforma {
                 .param("hoy", hoy)
                 .query(String.class)
                 .optional()
-                .map(RepositorioPlataforma::mesesOPorOmision)
-                .orElse(MESES_PRUEBA_POR_OMISION);
+                .map(RepositorioPlataforma::diasOPorOmision)
+                .orElse(DIAS_PRUEBA_POR_OMISION);
     }
 
     /**
-     * El valor leído como número de meses, o el de omisión si no lo es.
+     * El valor leído como número de días, o el de omisión si no lo es.
      *
-     * La V27 impide guardar aquí algo que no sea un entero entre 1 y 24,
-     * de modo que esto no debería hacer falta. Está igualmente, y por el
-     * mismo motivo que el valor por omisión de arriba: esta consulta es
-     * la que decide el periodo de prueba de cada empresa que se da de
-     * alta, y un `parseInt` suelto convierte una fila rara en un alta
-     * fallida por una razón que no tiene nada que ver con el alta.
-     *
-     * Una base anterior a la V27 puede no tener la fila. Degradar al
-     * valor por omisión deja el alta en pie; reventar, no.
+     * La V26 impide guardar aquí algo que no sea un entero entre 1 y 365, de
+     * modo que esto no debería hacer falta. Está igualmente: esta consulta
+     * decide el periodo de prueba de cada empresa que se da de alta, y un
+     * {@code parseInt} suelto convierte una fila rara en un alta fallida por
+     * una razón que no tiene nada que ver con el alta.
      */
-    private static int mesesOPorOmision(String valor) {
+    private static int diasOPorOmision(String valor) {
         try {
-            int meses = Integer.parseInt(valor.trim());
-            return meses >= 1 && meses <= MESES_PRUEBA_MAXIMO
-                    ? meses : MESES_PRUEBA_POR_OMISION;
+            int dias = Integer.parseInt(valor.trim());
+            return dias >= 1 && dias <= DIAS_PRUEBA_MAXIMO ? dias : DIAS_PRUEBA_POR_OMISION;
         } catch (NumberFormatException e) {
-            return MESES_PRUEBA_POR_OMISION;
+            return DIAS_PRUEBA_POR_OMISION;
         }
+    }
+
+    /**
+     * El último día de prueba de la empresa ({@code suscripciones.fin_prueba}).
+     * Vacío si no tiene suscripción. Es un DATE: se lee como {@code LocalDate},
+     * sin pasar por ninguna zona horaria.
+     */
+    public Optional<LocalDate> finDePruebaDe(Integer empresaId) {
+        return jdbc.sql("SELECT fin_prueba FROM suscripciones WHERE empresa_id = :empresa")
+                .param("empresa", empresaId)
+                .query(LocalDate.class)
+                .optional();
     }
 
     // ---------------------------------------------------------------- escritura

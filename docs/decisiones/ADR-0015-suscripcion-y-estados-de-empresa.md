@@ -75,3 +75,11 @@ esté, conviene verificar ante la DIAN qué comprobante puede emitir
 legalmente un comercio pequeño —las condiciones del documento
 equivalente POS— porque eso condiciona lo que la plataforma debe generar
 en el entretanto. Está sin verificar.
+
+## Nota posterior
+
+La ADR-0031 cambia dos cosas de esta decisión sin reemplazarla. El periodo
+gratuito son 30 días calendario contados desde el día siguiente al alta, no
+un mes. Y una empresa en PRUEBA escribe solo hasta las 23:59:59 de Bogotá de su
+último día: desde entonces el filtro la trata como en modo consulta, sin que
+nadie cambie su estado. Los tres estados de la base siguen siendo los mismos.
