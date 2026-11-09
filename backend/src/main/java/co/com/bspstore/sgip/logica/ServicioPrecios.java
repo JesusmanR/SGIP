@@ -328,8 +328,8 @@ public class ServicioPrecios {
      * Bloquea la fila del producto hasta el final de la transacción.
      *
      * Quien además escribe {@code historico_costos} lo llama antes (ver
-     * {@code RepositorioImportacion.bloquearProductosDeLaCarga}): productos primero,
-     * histórico después, en todos los caminos. Volver a bloquear lo ya bloqueado en la
+     * {@code RepositorioImportacion.bloquearProductosDeLaCarga}): carga, productos y
+     * histórico, en ese orden, en todos los caminos. Volver a bloquear lo ya bloqueado en la
      * misma transacción no cuesta nada.
      */
     @Transactional

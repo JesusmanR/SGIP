@@ -241,7 +241,8 @@ public class ServicioProducto {
             // qué costo se vendió algo el mes pasado (M15). Va antes de guardar el
             // producto, como en la importación (historico_costos y luego productos).
             // Antes de escribir el histórico se bloquea la fila del producto: escribirlo
-            // toma sobre ella, por la clave foránea, un bloqueo compartido, y el UPDATE
+            // toma bloqueos (por ejemplo, el compartido de la clave foránea sobre el
+            // producto y los de hueco de sus DELETE y UPDATE) y el UPDATE de productos
             // pide después el exclusivo; dos ediciones a la vez se esperarían entre sí
             // (N1). La importación bloquea sus productos primero por la misma razón.
             precios.bloquearProducto(empresa, productoId);

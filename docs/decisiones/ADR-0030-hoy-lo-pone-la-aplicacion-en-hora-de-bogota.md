@@ -107,15 +107,30 @@ lo resolvería, pero mueve la autenticación y se deja para otra decisión.
 
 ## Orden de bloqueos (N1)
 
-Orden único: empresa (reglas de ámbito) → producto → `historico_costos` / reglas propias
-del producto. `ServicioProducto.actualizar` bloquea la fila del producto antes de escribir
-`historico_costos` (escribirlo toma sobre el producto, por la clave foránea, un bloqueo
-compartido y el UPDATE pide después el exclusivo: dos ediciones a la vez se interbloqueaban),
-y `ServicioImportacion.aplicar` bloquea los productos de la carga (por identificador, con
-`FOR UPDATE OF p`) antes de cerrar el periodo vigente. Así la edición y la importación toman
-producto antes que histórico y no forman ciclo. Como red de seguridad, `ManejadorErrores`
-traduce un interbloqueo (1213) o una espera agotada (1205) a 409 con un texto fijo, sin eco
-de datos.
+Orden único: empresa (reglas de ámbito) → carga → producto → `historico_costos` / reglas
+propias del producto.
+
+- `ServicioProducto.actualizar` bloquea la fila del producto antes de escribir
+  `historico_costos`. Escribir en el histórico toma bloqueos (por ejemplo, el compartido de
+  la clave foránea sobre el producto y los de hueco de sus DELETE y UPDATE) y el UPDATE de
+  `productos` pide después el exclusivo: dos ediciones a la vez se interbloqueaban.
+- `ServicioImportacion.aplicar` bloquea primero la cabecera de la carga (`FOR UPDATE OF c`,
+  por empresa) y vuelve a comprobar ya bloqueada que está VALIDADA: dos aplicaciones de la
+  misma carga no pasan las dos, la segunda recibe el mismo error que al aplicar una carga que
+  no está validada. Luego bloquea los productos aceptados y por último toca el histórico.
+- El bloqueo de los productos de la carga son dos pasos: se leen sin bloquear los
+  identificadores aceptados y se bloquean con `SELECT producto_id FROM productos FORCE INDEX
+  (PRIMARY) WHERE producto_id IN (...) AND empresa_id = ? ORDER BY producto_id FOR UPDATE`
+  (en tandas de mil, también en orden). Un `SELECT ... JOIN ... ORDER BY ... FOR UPDATE` no
+  fija el orden de bloqueo: InnoDB bloquea las filas según las recorre, y con un filesort las
+  recorre en el orden del índice del detalle, que es el del archivo, así que dos cargas con
+  los mismos productos en distinto orden se interbloqueaban (lo reproduce
+  `AplicacionDeCargasConcurrentesConBaseTest`). La clave primaria se fuerza porque con una
+  lista corta el optimizador elige a veces otro índice y ordena después; con ella el plan es
+  siempre un rango por `PRIMARY` sin ordenar, que comprueba un `EXPLAIN` en
+  `BloqueoDeProductosDeCargaConBaseTest`.
+- Como red de seguridad, `ManejadorErrores` traduce un interbloqueo (1213) o una espera
+  agotada (1205) a 409 con un texto fijo, sin eco de datos.
 
 ## Bloqueos de reglas de ganancia (M14)
 
