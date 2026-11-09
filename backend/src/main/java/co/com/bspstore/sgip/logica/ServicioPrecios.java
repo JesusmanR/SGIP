@@ -69,7 +69,7 @@ public class ServicioPrecios {
         this.reloj = reloj;
     }
 
-    /** El día de Bogotá según el reloj de la aplicación: la única fuente de «hoy» (ADR-0029). */
+    /** El día de Bogotá según el reloj de la aplicación: la única fuente de «hoy» (ADR-0030). */
     private LocalDate hoy() {
         return Hoy.de(reloj);
     }
@@ -130,6 +130,7 @@ public class ServicioPrecios {
     public ReglaDeMargen crear(SolicitudReglaMargen solicitud) {
         Integer empresa = ContextoEmpresa.empresaActual();
         precios.bloquearEmpresa(empresa);
+        LocalDate hoy = hoy();
         exigirAmbitoPropio(empresa, solicitud.categoriaId(), solicitud.proveedorId());
         exigirFactorCoherente(solicitud.formaCalculo(), solicitud.factor());
         exigirRangoCoherente(solicitud.vigenteDesde(), solicitud.vigenteHasta());
@@ -143,7 +144,7 @@ public class ServicioPrecios {
         Integer id = precios.insertar(empresa, solicitud.categoriaId(), solicitud.proveedorId(),
                 solicitud.formaPago(), solicitud.formaCalculo(), solicitud.factor(),
                 solicitud.vigenteDesde(), solicitud.vigenteHasta());
-        return precios.buscar(empresa, id, hoy()).orElseThrow(() -> new IllegalStateException(
+        return precios.buscar(empresa, id, hoy).orElseThrow(() -> new IllegalStateException(
                 "La regla " + id + " no se encontró justo después de crearla."));
     }
 
@@ -159,7 +160,11 @@ public class ServicioPrecios {
     @Transactional
     public Optional<ReglaDeMargen> actualizar(Integer reglaId, SolicitudReglaMargen solicitud) {
         Integer empresa = ContextoEmpresa.empresaActual();
-        Optional<ReglaDeMargen> actual = precios.buscar(empresa, reglaId, hoy());
+        // Empresa primero y regla después, en el mismo orden que `crear` y
+        // `reemplazar`: si no, dos escrituras que se cruzan se esperan entre sí.
+        precios.bloquearEmpresa(empresa);
+        LocalDate hoy = hoy();
+        Optional<ReglaDeMargen> actual = precios.buscar(empresa, reglaId, hoy);
         if (actual.isEmpty()) {
             return Optional.empty();
         }
@@ -176,7 +181,7 @@ public class ServicioPrecios {
 
         precios.actualizar(empresa, reglaId, solicitud.formaCalculo(), solicitud.factor(),
                 solicitud.vigenteDesde(), solicitud.vigenteHasta());
-        return precios.buscar(empresa, reglaId, hoy());
+        return precios.buscar(empresa, reglaId, hoy);
     }
 
     /**
@@ -193,18 +198,19 @@ public class ServicioPrecios {
     @Transactional
     public Optional<ReglaDeMargen> cerrar(Integer reglaId, LocalDate hasta) {
         Integer empresa = ContextoEmpresa.empresaActual();
-        Optional<ReglaDeMargen> actual = precios.buscar(empresa, reglaId, hoy());
+        LocalDate hoy = hoy();
+        Optional<ReglaDeMargen> actual = precios.buscar(empresa, reglaId, hoy);
         if (actual.isEmpty()) {
             return Optional.empty();
         }
-        LocalDate fin = hasta != null ? hasta : hoy().minusDays(1);
+        LocalDate fin = hasta != null ? hasta : hoy.minusDays(1);
         if (fin.isBefore(actual.get().vigenteDesde())) {
             throw new ReglaInvalidaException(
                     "La regla empezó a regir el " + actual.get().vigenteDesde()
                             + " y no puede cerrarse antes de esa fecha.");
         }
         precios.cerrar(empresa, reglaId, fin);
-        return precios.buscar(empresa, reglaId, hoy());
+        return precios.buscar(empresa, reglaId, hoy);
     }
 
     /**
@@ -226,6 +232,9 @@ public class ServicioPrecios {
     @Transactional
     public Optional<ReglaDeMargen> reemplazar(Integer reglaId, SolicitudReglaMargen s) {
         Integer empresa = ContextoEmpresa.empresaActual();
+        // Empresa antes que regla: el mismo orden que `crear` y `actualizar`.
+        precios.bloquearEmpresa(empresa);
+        LocalDate hoy = hoy();
         Optional<RepositorioPrecios.ReglaBloqueada> encontrada = precios.bloquear(empresa, reglaId);
         if (encontrada.isEmpty()) {
             return Optional.empty();
@@ -241,7 +250,7 @@ public class ServicioPrecios {
                     "Al reemplazar una regla no cambian su alcance ni su forma de pago: "
                             + "para eso, crea otra regla.");
         }
-        if (vieja.vigenteHasta() != null && vieja.vigenteHasta().isBefore(hoy())) {
+        if (vieja.vigenteHasta() != null && vieja.vigenteHasta().isBefore(hoy)) {
             throw new ReglaInvalidaException(
                     "La regla ya terminó el " + vieja.vigenteHasta() + " y no se puede reemplazar.");
         }
@@ -250,7 +259,7 @@ public class ServicioPrecios {
                     "La nueva regla tiene que empezar después del " + vieja.vigenteDesde()
                             + ", que es cuando empezó la que reemplaza.");
         }
-        if (s.vigenteDesde().isBefore(hoy())) {
+        if (s.vigenteDesde().isBefore(hoy)) {
             throw new ReglaInvalidaException(
                     "La nueva regla no puede empezar antes de hoy: una fecha pasada "
                             + "cambiaría el precio de ventas que ya se hicieron.");
@@ -269,7 +278,7 @@ public class ServicioPrecios {
         precios.cerrar(empresa, reglaId, cierre);
         Integer id = precios.insertar(empresa, s.categoriaId(), s.proveedorId(), s.formaPago(),
                 s.formaCalculo(), s.factor(), s.vigenteDesde(), s.vigenteHasta());
-        return Optional.of(precios.buscar(empresa, id, hoy()).orElseThrow(() -> new IllegalStateException(
+        return Optional.of(precios.buscar(empresa, id, hoy).orElseThrow(() -> new IllegalStateException(
                 "La regla " + id + " no se encontró justo después de reemplazar la " + reglaId + ".")));
     }
 
@@ -320,15 +329,18 @@ public class ServicioPrecios {
         }
 
         precios.bloquearProducto(empresa, productoId);
+        // Un solo «hoy» para todo lo que esta escritura lee y escribe.
+        LocalDate hoy = hoy();
         ReglaDePrecio reglaContado = reglaEscrita(costo, contado, "de contado");
         if (reglaContado != null) {
-            fijarReglaPropia(empresa, productoId, CONTADO, reglaContado);
+            fijarReglaPropia(empresa, productoId, CONTADO, reglaContado, hoy);
         }
         if (credito != null) {
-            fijarReglaPropia(empresa, productoId, CREDITO, reglaEscrita(costo, credito, "a crédito"));
+            fijarReglaPropia(empresa, productoId, CREDITO, reglaEscrita(costo, credito, "a crédito"), hoy);
         } else if (igualar) {
             fijarReglaPropia(empresa, productoId, CREDITO,
-                    reglaContado != null ? reglaContado : reglaVigenteDeContado(empresa, productoId));
+                    reglaContado != null ? reglaContado : reglaVigenteDeContado(empresa, productoId, hoy),
+                    hoy);
         }
     }
 
@@ -336,11 +348,11 @@ public class ServicioPrecios {
      * El contado que rige hoy, aunque venga de la regla general: volver a «igual
      * que el contado» sin tocar el contado no tiene otra cosa que copiar.
      */
-    private ReglaDePrecio reglaVigenteDeContado(Integer empresa, Integer productoId) {
+    private ReglaDePrecio reglaVigenteDeContado(Integer empresa, Integer productoId, LocalDate hoy) {
         // Primero la propia, que se lee con bloqueo. La vista es una lectura normal
         // y ve la foto de cuando empezó la transacción: tras esperar a
         // `bloquearProducto`, podría copiar el contado que otro acaba de cambiar.
-        return precios.reglaPropiaVigente(empresa, productoId, CONTADO, hoy())
+        return precios.reglaPropiaVigente(empresa, productoId, CONTADO, hoy)
                 .or(() -> precios.reglaVigente(empresa, productoId, CONTADO))
                 .orElseThrow(() -> new ReglaInvalidaException(
                         "Este producto no tiene precio de contado que copiar. "
@@ -356,10 +368,7 @@ public class ServicioPrecios {
      * que alguien tocó, y tocar un campo sin cambiarlo no merece una fila.
      */
     private void fijarReglaPropia(Integer empresa, Integer productoId, String formaPago,
-                                  ReglaDePrecio regla) {
-        // Un solo «hoy» para las cuatro sentencias: si el reloj cruzara la
-        // medianoche entre una y otra, mezclarían dos días.
-        LocalDate hoy = hoy();
+                                  ReglaDePrecio regla, LocalDate hoy) {
         boolean igual = precios.reglaPropiaVigente(empresa, productoId, formaPago, hoy)
                 .filter(actual -> dicenLoMismo(actual, regla))
                 .isPresent();
