@@ -280,6 +280,34 @@ class ManejadorErroresTest {
     }
 
     /**
+     * Un interbloqueo (1213) o una espera agotada (1205) no pueden llegar como un 500:
+     * la persona solo tiene que repetir. El texto de la excepción trae la sentencia con
+     * sus valores y no se reenvía ni se registra.
+     */
+    @Test
+    void unInterbloqueoOUnaEsperaAgotadaSonUn409ConUnTextoFijoYSinEco() {
+        String delMotor = "PreparedStatementCallback; SQL [INSERT INTO historico_costos (costo) VALUES ('SECRETO-123')]; "
+                + "Deadlock found when trying to get lock; try restarting transaction";
+        for (var e : java.util.List.<org.springframework.dao.PessimisticLockingFailureException>of(
+                new org.springframework.dao.DeadlockLoserDataAccessException(delMotor, null),
+                new org.springframework.dao.CannotAcquireLockException(delMotor))) {
+            registro.list.clear();
+
+            ProblemDetail p = manejador.bloqueoPerdido(e);
+
+            assertEquals(409, p.getStatus());
+            assertEquals("Otra persona estaba guardando estos datos al mismo tiempo. Vuelve a intentarlo.",
+                    p.getDetail());
+            sinTextoDelMotor(p, "SECRETO-123", "historico_costos", "Deadlock", "INSERT");
+            registro.list.forEach(evento -> {
+                assertFalse(evento.getFormattedMessage().contains("SECRETO-123"), evento.getFormattedMessage());
+                assertFalse(evento.getFormattedMessage().contains("historico_costos"));
+            });
+            assertFalse(registro.list.isEmpty(), "queda constancia en el registro, sin valores");
+        }
+    }
+
+    /**
      * El 409 tiene varias causas (nombre repetido, carga en otro estado, dato
      * ya registrado) y el cliente no puede deducir cuál mirando el estado. Este
      * lleva un tipo propio: es el único que justifica ofrecer «ver los datos
