@@ -9,6 +9,7 @@ import co.com.bspstore.sgip.logica.ServicioProducto;
 import co.com.bspstore.sgip.modelo.Categoria;
 import co.com.bspstore.sgip.modelo.Producto;
 import co.com.bspstore.sgip.modelo.Proveedor;
+import co.com.bspstore.sgip.util.Hoy;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
@@ -22,6 +23,7 @@ import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
@@ -32,7 +34,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 
@@ -214,11 +215,10 @@ class ReemplazoDeReglaTest {
         Integer vieja = reglaGeneral("CONTADO", "1.2000", DESDE_VIEJA, null);
         reglaGeneral("CREDITO", "1.2000", DESDE_VIEJA, null);
         Integer id = producto("1000");
-        // La vista compara con CURDATE() de la base y el servicio con el reloj de la JVM:
-        // si difieren (UTC contra Bogota, de noche) la nueva aún no rige en la vista.
-        LocalDate hoy = LocalDate.now();
-        assumeTrue(hoy.equals(jdbc.sql("SELECT CURDATE()").query(LocalDate.class).single()),
-                "la JVM y la base no coinciden en el día de hoy");
+        // La vista compara con CURDATE() de la sesión, que va en la hora de Bogotá
+        // (ADR-0030), y el servicio con el día de Bogotá del reloj: son el mismo día
+        // a cualquier hora, así que no hace falta saltarse la prueba de noche.
+        LocalDate hoy = Hoy.de(Clock.systemUTC());
         assertEquals(0, new BigDecimal("1200").compareTo(productos.buscar(id).orElseThrow().precioContado()));
 
         reemplazar(vieja, nueva("1.5000", hoy));
