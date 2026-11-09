@@ -310,31 +310,37 @@ jobs:
              VALUES ('sgip.plataforma.prueba.dias','45','ENTERO','2027-01-01');
              DELETE FROM parametros_plataforma WHERE vigente_desde='2027-01-01';"
 
-      # El RF-04 pide que la prueba venza «el mismo día del mes
-      # siguiente». Lo que esto comprueba es que el parámetro que el alta
-      # lee sea el de meses y esté vigente: si la V27 no corriera, la
-      # consulta del backend no encontraría fila y el alta caería al
-      # valor por omisión sin que nada lo dijera.
-      - name: Verificar que el periodo de prueba se mide en meses (V27)
+      # La v4 del RF-04 fija la prueba en treinta días (ADR-0031). Lo que
+      # esto comprueba es que el parámetro que el alta lee sea el de días y
+      # esté vigente: si la V39 no corriera, la consulta del backend no
+      # encontraría fila y el alta caería al valor por omisión sin que nada
+      # lo dijera. Va después de las migraciones nuevas, que es donde vive.
+      - name: Verificar que la prueba se mide en días (V39)
         run: |
           consulta () { mysql -h 127.0.0.1 -u root -psgip_ci -N -B sgip -e "$1"; }
           vigente=$(consulta "SELECT valor FROM parametros_plataforma
-                               WHERE clave = 'sgip.plataforma.prueba.meses'
-                                 AND vigente_desde <= CURDATE()
-                                 AND (vigente_hasta IS NULL OR vigente_hasta >= CURDATE());")
-          test "$vigente" = "1" || {
-            echo "::error::el parámetro de meses no rige · valor leído: '$vigente'"; exit 1; }
-          # Y el de días tiene que haber dejado de regir, o habría dos
-          # respuestas vivas para la misma pregunta.
-          abierto=$(consulta "SELECT COUNT(*) FROM parametros_plataforma
                                WHERE clave = 'sgip.plataforma.prueba.dias'
-                                 AND (vigente_hasta IS NULL OR vigente_hasta >= CURDATE());")
+                                 AND vigente_desde <= CURDATE()
+                                 AND (vigente_hasta IS NULL OR vigente_hasta >= CURDATE())
+                               ORDER BY vigente_desde DESC LIMIT 1;")
+          test "$vigente" = "30" || {
+            echo "::error::el parámetro de días no rige · valor leído: '$vigente'"; exit 1; }
+          # El de meses tiene que quedar cerrado, no borrado: sigue
+          # explicando las suscripciones que se crearon bajo él. En esta base
+          # nueva la V27 y la V39 corren el mismo día, de modo que se cierra
+          # en hoy y no en ayer (ver la cabecera de la V39).
+          abierto=$(consulta "SELECT COUNT(*) FROM parametros_plataforma
+                               WHERE clave = 'sgip.plataforma.prueba.meses'
+                                 AND vigente_hasta IS NULL;")
           test "$abierto" -eq 0 || {
-            echo "::error::el parámetro de días sigue vigente"; exit 1; }
-          if mysql -h 127.0.0.1 -u root -psgip_ci sgip -e \
-              "INSERT INTO parametros_plataforma (clave,valor,tipo_dato,vigente_desde)
-               VALUES ('sgip.plataforma.prueba.meses','25','ENTERO','2028-01-01');" 2>/dev/null
-          then echo "::error::entró un periodo de prueba de 25 meses"; exit 1; fi
+            echo "::error::el parámetro de meses sigue abierto"; exit 1; }
+          conservado=$(consulta "SELECT COUNT(*) FROM parametros_plataforma
+                                  WHERE clave = 'sgip.plataforma.prueba.meses';")
+          test "$conservado" -eq 1 || {
+            echo "::error::el parámetro de meses se borró"; exit 1; }
+          if mysql -h 127.0.0.1 -u root -psgip_ci sgip -e               "INSERT INTO parametros_plataforma (clave,valor,tipo_dato,vigente_desde)
+               VALUES ('sgip.plataforma.prueba.dias','366','ENTERO','2028-01-01');" 2>/dev/null
+          then echo "::error::entró un periodo de prueba de 366 días"; exit 1; fi
 
       # Lo que la puesta a punto cambió en el esquema, visto rechazar:
       # una restricción que nunca se ha visto negar nada solo da

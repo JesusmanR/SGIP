@@ -1,6 +1,6 @@
 # ADR-0022 · El mes de prueba es un mes de calendario, no treinta días
 
-Estado: aceptada · 2026 · resuelve una incoherencia de la RN-14
+Estado: sustituida por la ADR-0031 · 2026-11-09 (antes: aceptada · 2026 · resuelve una incoherencia de la RN-14)
 
 ## Contexto
 

@@ -18,7 +18,11 @@ package co.com.bspstore.sgip.modelo;
  */
 public enum EstadoEmpresa {
 
-    /** Recién dada de alta, con su mes de prueba corriendo (RN-14). */
+    /**
+     * Recién dada de alta, con su prueba gratuita de treinta días (RN-14,
+     * ADR-0031). Sigue en PRUEBA aunque la prueba haya vencido: el
+     * vencimiento lo decide el reloj, no un cambio de estado.
+     */
     PRUEBA,
 
     /** Operación completa. */
@@ -32,8 +36,10 @@ public enum EstadoEmpresa {
      *
      * Es la única pregunta que el resto del sistema le hace a este tipo,
      * y vive aquí para que la respuesta no quede repartida en cada sitio
-     * que la necesite. PRUEBA escribe: el mes gratuito es para usar el
-     * producto, no para mirarlo.
+     * que la necesite. PRUEBA escribe: la prueba gratuita es para usar el
+     * producto, no para mirarlo. Pero solo mientras no venza, y eso no lo
+     * sabe el estado solo: hace falta la fecha y el reloj, y lo decide
+     * {@code logica.VigenciaDePrueba}, que es a quien pregunta el filtro.
      */
     public boolean permiteEscritura() {
         return this != DESACTIVADA;

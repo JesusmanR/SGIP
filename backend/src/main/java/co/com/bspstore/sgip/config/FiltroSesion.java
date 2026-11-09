@@ -32,6 +32,13 @@ public class FiltroSesion extends OncePerRequestFilter {
 
     private static final String PREFIJO = "Bearer ";
 
+    /**
+     * El contador de la prueba (RF-73). Pregunta solo, cada cinco minutos,
+     * y por eso no cuenta como actividad: valida la sesión pero no la alarga
+     * (RNF-09, ADR-0031). Es la única ruta así, y se compara exacta.
+     */
+    private static final String RUTA_CONTADOR_PRUEBA = "/api/v1/empresa/prueba";
+
     private final ServicioSesion sesiones;
 
     public FiltroSesion(ServicioSesion sesiones) {
@@ -46,7 +53,7 @@ public class FiltroSesion extends OncePerRequestFilter {
 
         String token = extraerToken(peticion);
         if (token != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-            sesiones.validar(token)
+            (noRenuevaLaSesion(peticion) ? sesiones.validarSinRenovar(token) : sesiones.validar(token))
                     .map(Sesion::getUsuario)
                     // Una cuenta desactivada después del ingreso deja de valer
                     // de inmediato, sin esperar a que expire. El bloqueo por
@@ -75,6 +82,26 @@ public class FiltroSesion extends OncePerRequestFilter {
     @Override
     protected boolean shouldNotFilterErrorDispatch() {
         return false;
+    }
+
+    /**
+     * Si la petición es exactamente el GET del contador de la prueba. Lo
+     * decide la ruta que pidió el cliente, no algo que el cliente declare:
+     * cualquier otra ruta, método o variante renueva, que es lo seguro.
+     */
+    static boolean noRenuevaLaSesion(HttpServletRequest peticion) {
+        if (!"GET".equals(peticion.getMethod())) {
+            return false;
+        }
+        String uri = peticion.getRequestURI();
+        if (uri == null) {
+            return false;
+        }
+        String contexto = peticion.getContextPath();
+        String ruta = (contexto != null && !contexto.isEmpty() && uri.startsWith(contexto))
+                ? uri.substring(contexto.length())
+                : uri;
+        return RUTA_CONTADOR_PRUEBA.equals(ruta);
     }
 
     private String extraerToken(HttpServletRequest peticion) {

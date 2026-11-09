@@ -52,14 +52,33 @@ public class ServicioSesion {
      */
     @Transactional
     public Optional<Sesion> validar(String token) {
+        LocalDateTime ahora = LocalDateTime.now(reloj);
+        Optional<Sesion> sesion = vigente(token, ahora);
+        sesion.ifPresent(s -> s.renovar(ahora, minutos));
+        return sesion;
+    }
+
+    /**
+     * Como {@link #validar}, pero sin correr la expiración: una sesión
+     * caducada sigue sin valer, y una viva no se alarga.
+     *
+     * Es para las peticiones que el cliente hace solo, sin que la persona
+     * toque nada —el contador de la prueba pregunta cada cinco minutos—. La
+     * expiración es por inactividad (RNF-09), y si esas peticiones contaran
+     * como actividad, una pestaña olvidada no caducaría nunca. Quién la usa
+     * lo decide el servidor ({@code FiltroSesion}), no una cabecera del cliente.
+     */
+    @Transactional(readOnly = true)
+    public Optional<Sesion> validarSinRenovar(String token) {
+        return vigente(token, LocalDateTime.now(reloj));
+    }
+
+    private Optional<Sesion> vigente(String token, LocalDateTime ahora) {
         if (token == null || token.isBlank()) {
             return Optional.empty();
         }
-        LocalDateTime ahora = LocalDateTime.now(reloj);
-        Optional<Sesion> sesion = sesiones.findByTokenHash(Seguridad.hashToken(token))
+        return sesiones.findByTokenHash(Seguridad.hashToken(token))
                 .filter(s -> s.estaVigente(ahora));
-        sesion.ifPresent(s -> s.renovar(ahora, minutos));
-        return sesion;
     }
 
     /**

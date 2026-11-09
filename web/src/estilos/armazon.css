@@ -4,9 +4,12 @@
 /* Alto real de la barra móvil: botón de 44 px más el relleno vertical. */
 :root { --alto-barra-movil: 3.75rem; }
 
-.armazon { min-height: 100vh; display: grid; grid-template-columns: 15rem minmax(0, 1fr); }
+.armazon {
+  min-height: 100vh; display: grid; grid-template-columns: 15rem minmax(0, 1fr);
+  grid-template-rows: auto 1fr;
+}
 .armazon-barra { display: none; }
-.armazon-contenido { grid-column: 2; min-width: 0; }
+.armazon-contenido { grid-column: 2; grid-row: 2; min-width: 0; }
 .armazon-contenido:focus { outline: none; }
 /* El aviso de conexión va arriba del contenido, con el mismo margen lateral que la página.
    La región existe siempre (así se anuncia el cambio); vacía no ocupa sitio. */
@@ -23,7 +26,7 @@
 .saltar:focus { top: var(--espacio-2); }
 
 .menu-lateral {
-  grid-column: 1; grid-row: 1; background: var(--chrome); color: var(--sobre-acento);
+  grid-column: 1; grid-row: 1 / span 2; background: var(--chrome); color: var(--sobre-acento);
   display: flex; flex-direction: column; gap: var(--espacio-4);
   padding: var(--espacio-4) var(--espacio-3); position: sticky; top: 0; height: 100vh; overflow-y: auto;
 }
@@ -51,6 +54,18 @@
   border-radius: var(--radio-control); font-size: var(--t-cuerpo); font-weight: 600;
 }
 
+/* En escritorio la barra solo aparece si lleva el contador de la prueba (RF-73):
+   una franja fija sobre el contenido. La marca y el botón del menú son del celular. */
+@media (min-width: 48.0625rem) {
+  .armazon-barra:has(.contador-prueba) {
+    display: flex; align-items: center; grid-column: 2; grid-row: 1;
+    position: sticky; top: 0; z-index: 10; min-height: var(--alto-control);
+    padding: var(--espacio-2) var(--espacio-5); background: var(--chrome); color: var(--sobre-acento);
+  }
+  .armazon-barra .marca,
+  .armazon-barra .armazon-boton-menu { display: none; }
+}
+
 @media (max-width: 48rem) {
   .armazon { display: block; }
   .armazon-barra {
@@ -59,6 +74,12 @@
     padding: 0 var(--espacio-4); position: sticky; top: 0; z-index: 20;
   }
   .armazon-barra .marca { font-weight: 700; }
+  /* Con el contador la barra crece una fila; el menú abierto la tapa desde
+     --alto-barra-movil, que sigue siendo la altura de la primera fila. */
+  .armazon-barra:has(.contador-prueba) {
+    height: auto; min-height: var(--alto-barra-movil); flex-wrap: wrap;
+    padding-top: var(--espacio-2); padding-bottom: var(--espacio-2);
+  }
   /* Cerrado, el menú sale del árbol de accesibilidad: no se enfoca ni se lee.
      Abierto, cubre el resto de la pantalla y es lo único que se desplaza. */
   .menu-lateral { display: none; }
