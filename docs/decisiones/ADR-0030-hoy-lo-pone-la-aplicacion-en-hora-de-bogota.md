@@ -69,6 +69,18 @@ sola vez. **Todavía no hay datos de producción**, solo bases de desarrollo y d
 por eso se acepta sin migrar. Los instantes que escribe la aplicación (`LocalDateTime`
 con el `Clock`) no cambian.
 
+**Desfase permanente entre Java y los valores por omisión.** El `Clock` es el de la JVM
+(UTC en la CI y en un servidor típico, `Clock.systemDefaultZone()`), así que los
+`LocalDateTime` que escribe Java (sesiones, bloqueo de cuentas, instantes de auditoría
+de la aplicación) van en esa zona, y los `DEFAULT CURRENT_TIMESTAMP`/`NOW()` que pone la
+base ahora van en hora de Bogotá, cinco horas por detrás. El desfase es permanente, no solo
+de las filas viejas: dos columnas de la misma tabla pueden estar en horas distintas.
+Hoy ninguna consulta las compara entre sí ni con el reloj de la aplicación (el bloqueo de
+cuentas y las sesiones comparan siempre instantes escritos y leídos por Java), de modo que
+no tiene efecto visible. Quien escriba una consulta que cruce una columna escrita por Java
+con una por omisión de la base debe convertir una de las dos. Igualar el `Clock` a Bogotá
+lo resolvería, pero mueve la autenticación y se deja para otra decisión.
+
 ## Consecuencias
 
 - Las pruebas de servicio fijan el reloj en cualquier instante y comprueban el día de
@@ -92,6 +104,18 @@ con el `Clock`) no cambian.
 - El alta de un producto no escribe el histórico: la primera edición de un producto sin
   historia no tiene periodo anterior que cerrar y deja un único periodo desde hoy. Si debe
   sembrarse en el alta es una decisión de producto, no se tomó aquí.
+
+## Orden de bloqueos (N1)
+
+Orden único: empresa (reglas de ámbito) → producto → `historico_costos` / reglas propias
+del producto. `ServicioProducto.actualizar` bloquea la fila del producto antes de escribir
+`historico_costos` (escribirlo toma sobre el producto, por la clave foránea, un bloqueo
+compartido y el UPDATE pide después el exclusivo: dos ediciones a la vez se interbloqueaban),
+y `ServicioImportacion.aplicar` bloquea los productos de la carga (por identificador, con
+`FOR UPDATE OF p`) antes de cerrar el periodo vigente. Así la edición y la importación toman
+producto antes que histórico y no forman ciclo. Como red de seguridad, `ManejadorErrores`
+traduce un interbloqueo (1213) o una espera agotada (1205) a 409 con un texto fijo, sin eco
+de datos.
 
 ## Bloqueos de reglas de ganancia (M14)
 
