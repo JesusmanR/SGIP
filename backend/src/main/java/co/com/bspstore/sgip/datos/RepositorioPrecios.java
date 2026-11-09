@@ -345,11 +345,8 @@ public class RepositorioPrecios {
      * «Hoy» es el que pasa quien llama, tomado del reloj de la aplicación en la
      * hora de Bogotá ({@code Hoy.de}), en esta sentencia y en las dos siguientes.
      * Ya no es el `CURDATE()` del motor. La vista que decide qué regla rige sí lo
-     * usa, de modo que las dos coinciden solo mientras la sesión de la base vaya
-     * en la hora de Bogotá: si la base fuera por delante de la aplicación, una
-     * regla fechada «hoy» por la aplicación todavía no regiría para la vista y el
-     * producto se quedaría sin precio. Por eso la sesión se fija en esa hora
-     * (ADR-0029).
+     * usa, y coincide con este día porque la sesión de la base se fija en la hora
+     * de Bogotá ({@code ConfiguracionZonaDeLaBase}, ADR-0030).
      */
     public int corregirReglaPropiaDeHoy(Integer empresaId, Integer productoId, String formaPago,
                                         ReglaDePrecio regla, LocalDate hoy) {

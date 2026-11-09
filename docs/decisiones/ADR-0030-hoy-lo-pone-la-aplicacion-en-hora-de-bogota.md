@@ -1,6 +1,6 @@
-# ADR-0029 · «Hoy» lo pone la aplicación, en la hora de Bogotá
+# ADR-0030 · «Hoy» lo pone la aplicación, en la hora de Bogotá
 
-Estado: aceptada · 2026-11-07
+Estado: aceptada · 2026-11-09
 
 ## Contexto
 
@@ -26,8 +26,8 @@ sentencia de Java usa `CURDATE()` para decidir una vigencia. Pasan a parámetro:
 `RepositorioPrecios` (marca `vigente`, regla propia vigente, corregir/cerrar/abrir la
 regla propia, alcance), `RepositorioConfiguracionTributaria` (marca `vigente`, retirar
 una regla que aún no empieza), `RepositorioImportacion` (los tres pasos del histórico de
-costos), `RepositorioPlataforma.mesesDePrueba` y el nuevo `RepositorioCostos`. Dentro de
-una operación se calcula un único `hoy` y se pasa a todas sus sentencias.
+costos), `RepositorioPlataforma.mesesDePrueba` y `RepositorioCostos`. Dentro de una
+operación se calcula un único `hoy` y se pasa a todas sus sentencias.
 
 **Lo que se queda como estaba, a propósito:**
 
@@ -36,34 +36,38 @@ una operación se calcula un único `hoy` y se pasa a todas sus sentencias.
 - La ventana de 30 días del panel (`movimientosPorDia`, `CURDATE() - 29 DAY`): es solo una
   ventana de lectura de un gráfico; a lo sumo recorta o añade un día en el borde.
 
-## Lo que esta decisión no resuelve: las vistas
+## Las vistas: la sesión de la base va en la hora de Bogotá
 
-`v_precios_producto`, `v_regla_margen`, `v_regla_iva` y las demás vistas del esquema deciden
-la vigencia con `CURDATE()`, y una vista de MySQL no admite parámetros ni variables de
-usuario o de sistema. No se pueden reescribir aquí sin pisar la V36, que es de otra rama.
+`v_precios_producto`, `v_regla_margen` y `v_regla_iva` deciden la vigencia con
+`CURDATE()` y una vista de MySQL no admite parámetros ni variables de usuario o de
+sistema. Las definiciones vigentes de `v_regla_margen` y `v_regla_iva` son las de la
+**V38** (la V36 las definió antes y la V38 las reemplaza); no se reescriben aquí.
 
-Mientras la sesión de la base esté en un día distinto al de Bogotá, las dos fuentes discrepan:
+Para que su «hoy» sea el de la aplicación, **cada conexión del pool arranca con
+`SET time_zone = '-05:00'`**. Lo hace `config/ConfiguracionZonaDeLaBase`, un
+post-procesador que pone `connectionInitSql` al `HikariDataSource`. Está en código y no
+en el `application.yml` por la misma razón de `ConfiguracionMigraciones`: ese archivo no
+se versiona, así que la CI no probaría lo mismo que producción. Colombia no tiene horario
+de verano: el desplazamiento fijo basta y no exige tener cargadas las tablas de zonas
+horarias del servidor. `ZonaDeLaSesionConBaseTest` comprueba la zona de la sesión y que
+`SELECT CURDATE()` sea `Hoy.de(Clock.systemUTC())`.
 
-- Con la base **por delante** (MySQL en UTC, de 7 de la tarde a medianoche): una regla que la
-  aplicación fecha «hoy» ya rige para la vista, y una que cierra «ayer» ya estaba cerrada.
-  No pierde precios: la vista va un día adelantada.
-- Con la base **por detrás** (no ocurre con UTC, que nunca va detrás de Bogotá, pero sí con
-  una zona al oeste): una regla fechada «hoy» por la aplicación todavía no rige para la
-  vista, y el producto se quedaría sin precio hasta la madrugada siguiente.
+**Doble guarda al retirar una regla de IVA.** El `DELETE` de `borrarRegla` exige
+`vigente_desde > :hoy` y, además, `vigente_desde > CURDATE()`. Con la sesión en Bogotá son
+el mismo día; la segunda es un cinturón por si alguna vez no lo fueran: una regla que el
+motor ya tiene vigente (la que aplican las vistas) no se borra aunque la aplicación crea que
+aún no empieza, y el servicio responde que ya empezó.
 
-**Propuesta, que requiere configuración del despliegue y no se aplica desde el código:**
-fijar la zona de la sesión de MySQL en la hora de Bogotá, de modo que `CURDATE()` sea el
-mismo día que `Hoy.de(reloj)`. Colombia no tiene horario de verano, de modo que el
-desplazamiento fijo `-05:00` basta y no exige tener cargadas las tablas de zonas horarias:
+### Lo que cambia para lo ya guardado
 
-- `spring.datasource.hikari.connection-init-sql: SET time_zone = '-05:00'` en el
-  `application.yml` de cada máquina (ese archivo no se versiona), o
-- el parámetro `time_zone` / `default-time-zone=-05:00` del servidor MySQL.
-
-Con eso las vistas y la aplicación comparten día y la discrepancia desaparece. Si se
-prefiere no depender de configuración, la alternativa es que una migración posterior reescriba
-las vistas para leer «hoy» de una función que la sesión fija al abrirse, pero eso es un
-cambio de esquema que debe coordinar la rama dueña de las vistas.
+La sesión pasa de la zona del servidor (UTC en la CI y en un servidor típico) a `-05:00`.
+Eso afecta a lo que el motor calcula con la hora: `NOW()` y `CURRENT_TIMESTAMP`, incluidos
+los valores por omisión de columnas `DATETIME` y `TIMESTAMP`. Las filas ya existentes se
+escribieron cinco horas «adelantadas» (en UTC) y las nuevas se escriben en hora de Bogotá,
+de modo que un `ORDER BY` o una comparación entre unas y otras tiene un salto de 5 h una
+sola vez. **Todavía no hay datos de producción**, solo bases de desarrollo y demostración,
+por eso se acepta sin migrar. Los instantes que escribe la aplicación (`LocalDateTime`
+con el `Clock`) no cambian.
 
 ## Consecuencias
 
@@ -72,6 +76,29 @@ cambio de esquema que debe coordinar la rama dueña de las vistas.
   año distinto al de la base para que los dos días difieran siempre, sin depender de la
   hora a la que corra la CI.
 - Las pruebas con base que mueven fechas de reglas propias usan el día de Bogotá (no
-  `CURDATE()`), porque esas reglas ahora se fechan con él.
+  `CURDATE()`), porque esas reglas se fechan con él.
 - Quien añada una consulta de vigencia debe recibir `hoy` por parámetro. Un `CURDATE()` nuevo
-  en el Java es, desde esta decisión, un defecto.
+  en el Java es, desde esta decisión, un defecto (salvo la segunda guarda de arriba).
+- Si se despliega con otra forma de crear el pool que no sea Hikari, hay que repetir
+  `SET time_zone = '-05:00'` allí; el test de la sesión lo delata.
+
+## Histórico de costos al editar un producto (M15): lo que debe saberse
+
+- El origen de una fila escrita por una edición es `carga_id` nulo; la importación la
+  llena. No hay columna de origen y no se añadió una migración.
+- Editar el costo el mismo día en que se aplicó una carga **reemplaza** la fila de hoy
+  (también la de la carga), igual que dos cargas el mismo día: una vigencia de cero días no
+  explica nada. Esa referencia deja de salir en `cruzaronEnLaCarga` de esa carga.
+- El alta de un producto no escribe el histórico: la primera edición de un producto sin
+  historia no tiene periodo anterior que cerrar y deja un único periodo desde hoy. Si debe
+  sembrarse en el alta es una decisión de producto, no se tomó aquí.
+
+## Bloqueos de reglas de ganancia (M14)
+
+`crear`, `actualizar` y `reemplazar` bloquean primero la fila de la empresa y luego la
+regla, siempre en ese orden. Riesgos que quedan: la empresa se bloquea durante toda la
+transacción, así que dos escrituras de reglas de la misma empresa se serializan (es
+aceptable: son raras y manuales); y `escribirPrecios` bloquea el producto y no la empresa,
+de modo que las reglas propias y las de ámbito no se esperan entre sí (no comparten filas).
+`bloquearEmpresa` existe también en `RepositorioConfiguracionTributaria` con el mismo SQL;
+no se unificó porque obligaría a tocar el constructor de dos servicios por una línea.

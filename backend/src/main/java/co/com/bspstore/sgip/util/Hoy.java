@@ -18,9 +18,9 @@ import java.time.ZoneId;
  * que un reloj con otra zona (el de la JVM en UTC, o uno fijo en una prueba) dé
  * el mismo día de Bogotá.
  *
- * Lo que esto no alcanza son las vistas del esquema, que llaman a
- * {@code CURDATE()} y no admiten parámetros. Para que coincidan con este día la
- * sesión de la base tiene que ir en la hora de Bogotá (ADR-0029).
+ * Las vistas del esquema, que llaman a {@code CURDATE()} y no admiten parámetros,
+ * coinciden con este día porque cada sesión de la base va en la hora de Bogotá
+ * ({@code ConfiguracionZonaDeLaBase}, ADR-0030).
  */
 public final class Hoy {
 
