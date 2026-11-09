@@ -240,7 +240,7 @@ Decisión del usuario: **solo el administrador.**
   - el número de consultas por venta es constante y no crece con el número de líneas más allá de lo inevitable; se protege con pruebas;
   - PDF: menos de 3 s.
 - **«Hoy» y la hora** salen del `Clock` de la aplicación, en hora de Bogotá (ADR-0030).
-- **Bloqueos.** Se respeta el orden empresa → carga → productos → histórico (ADR-0030) y se bloquean los productos de una venta en orden ascendente de id.
+- **Bloqueos.** La caja no toma el bloqueo de empresa. Su orden es turno → venta → productos (id ascendente) → saldo del cliente → consecutivo → kárdex. Es compatible con el de ADR-0030 (empresa → carga → productos → histórico), porque ningún camino de la caja toma la empresa ni una carga. (Decisión del orquestador.)
 - **Proceso.** TDD, una rama por entrega, `code-reviewer` antes de cada merge y ADR para el PIN y para el saldo a favor.
 - **UI.** Skill `impeccable` en modo Operate. `tokens.css` es la única fuente de color. Morado como acento (ADR-0026). Pesos colombianos. Fechas según RNF-16. En el celular, tarjetas en vez de tablas cortadas.
 
