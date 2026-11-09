@@ -291,6 +291,23 @@ class ServicioImportacionTest {
         orden.verify(importacion).marcarAplicada(EMPRESA, CARGA);
     }
 
+    /**
+     * Productos primero, histórico después: el mismo orden de bloqueos que la edición
+     * del costo de un producto, para que las dos escrituras no se esperen entre sí (N1).
+     */
+    @Test
+    void aplicarBloqueaLosProductosAntesDeTocarElHistorico() {
+        cargaEn("VALIDADA", 5);
+        when(importacion.aplicarCostos(EMPRESA, CARGA)).thenReturn(5);
+
+        servicio.aplicar(CARGA);
+
+        var orden = org.mockito.Mockito.inOrder(importacion);
+        orden.verify(importacion).bloquearProductosDeLaCarga(EMPRESA, CARGA);
+        orden.verify(importacion).cerrarCostoVigente(EMPRESA, CARGA, HOY);
+        orden.verify(importacion).aplicarCostos(EMPRESA, CARGA);
+    }
+
     @Test
     void unaCargaYaAplicadaNoSeAplicaDosVeces() {
         cargaEn("APLICADA", 5);

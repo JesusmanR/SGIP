@@ -552,6 +552,84 @@ class ServicioProductoTest {
         verify(costos).registrarCambio(3, 11, new BigDecimal("3400.01"), HOY);
     }
 
+    /**
+     * El producto se bloquea antes de escribir su histórico: escribirlo toma sobre la
+     * fila del producto un bloqueo compartido y el UPDATE pide después el exclusivo; dos
+     * ediciones a la vez se esperarían entre sí (N1).
+     */
+    @Test
+    void elProductoSeBloqueaAntesDeEscribirElHistorico() {
+        unaEdicionLista();
+
+        servicio.actualizar(11, edicionConCosto("3400.00"));
+
+        InOrder orden = inOrder(precios, costos, productos);
+        orden.verify(precios).bloquearProducto(3, 11);
+        orden.verify(costos).registrarCambio(3, 11, new BigDecimal("3400.00"), HOY);
+        orden.verify(productos).saveAndFlush(any());
+    }
+
+    @Test
+    void sinCambioDeCostoNoSeBloqueaElProductoPorElHistorico() {
+        unaEdicionLista();
+
+        servicio.actualizar(11, edicionConCosto("3100"));
+
+        verify(precios, never()).bloquearProducto(anyInt(), anyInt());
+    }
+
+    /**
+     * Un solo «hoy» por operación: aunque el reloj cruce la medianoche de Bogotá en mitad
+     * de la edición, el histórico y los precios se fechan con el día con el que empezó.
+     */
+    @Test
+    void laEdicionUsaUnSoloHoyAunqueElRelojCruceLaMedianoche() {
+        unaEdicionLista();
+        ZoneId bogota = ZoneId.of("America/Bogota");
+        java.time.Instant antes = HOY.atTime(23, 59, 59).atZone(bogota).toInstant();
+        var llamadas = new java.util.concurrent.atomic.AtomicInteger();
+        Clock cruzaLaMedianoche = new Clock() {
+            @Override public ZoneId getZone() { return bogota; }
+            @Override public Clock withZone(ZoneId zona) { return this; }
+            @Override public java.time.Instant instant() {
+                return llamadas.getAndIncrement() == 0 ? antes : antes.plusSeconds(5);
+            }
+        };
+        var enLaMedianoche = new ServicioProducto(productos, categorias, proveedores, catalogo,
+                inventario, new ServicioPrecios(precios, cruzaLaMedianoche), costos, cruzaLaMedianoche);
+        var conPrecio = new SolicitudEdicionProducto(4, 9, "ARZ-500", "ARZ-500", "7701234567890",
+                "Arroz Diana", "500 g", null, new BigDecimal("3400.00"), 20,
+                new SolicitudPrecio(null, new BigDecimal("5000")), null, false, 0);
+
+        enLaMedianoche.actualizar(11, conPrecio);
+
+        verify(costos).registrarCambio(3, 11, new BigDecimal("3400.00"), HOY);
+        verify(precios).abrirReglaPropia(eq(3), eq(11), eq("CONTADO"), any(), eq(HOY));
+        verify(precios, never()).abrirReglaPropia(anyInt(), anyInt(), any(), any(), eq(HOY.plusDays(1)));
+    }
+
+    /** Lo que se comprueba y se escribe es el costo ya redondeado a los centavos de la columna. */
+    @Test
+    void losPreciosSeCompruebanYSeEscribenConElCostoRedondeado() {
+        unaEdicionLista();
+        var espia = org.mockito.Mockito.spy(new ServicioPrecios(precios, Clock.systemUTC()));
+        var conEspia = new ServicioProducto(productos, categorias, proveedores, catalogo,
+                inventario, espia, costos, Clock.systemUTC());
+        var conPrecio = new SolicitudEdicionProducto(4, 9, "ARZ-500", "ARZ-500", "7701234567890",
+                "Arroz Diana", "500 g", null, new BigDecimal("3400.005"), 20,
+                new SolicitudPrecio(new BigDecimal("20"), null), null, false, 0);
+
+        conEspia.actualizar(11, conPrecio);
+
+        // Se comprueba dos veces (antes de guardar y dentro de escribirPrecios), siempre
+        // con el costo redondeado.
+        verify(espia, org.mockito.Mockito.atLeastOnce())
+                .comprobarPrecios(eq(new BigDecimal("3400.01")), any(), any(), any());
+        verify(espia, never()).comprobarPrecios(eq(new BigDecimal("3400.005")), any(), any(), any());
+        verify(espia).escribirPrecios(eq(3), eq(11), eq(new BigDecimal("3400.01")), any(), any(),
+                any(), any(LocalDate.class));
+    }
+
     /** La base devuelve 3100.00 y el formulario puede mandar 3100: es el mismo costo. */
     @Test
     void editarSinCambiarElCostoNoEscribeNadaEnElHistorico() {
@@ -982,8 +1060,10 @@ class ServicioProductoTest {
         servicio.actualizar(11, edicionDePrecio(null, null, null));
 
         // Un producto que sigue la regla general no se queda con una regla
-        // propia porque alguien le corrigió el nombre.
-        verifyNoInteractions(precios);
+        // propia porque alguien le corrigió el nombre. Solo se bloquea el producto, por
+        // el cambio de costo de la edición de prueba.
+        verify(precios).bloquearProducto(3, 11);
+        org.mockito.Mockito.verifyNoMoreInteractions(precios);
     }
 
     @Test
@@ -1055,7 +1135,7 @@ class ServicioProductoTest {
         verify(precios).abrirReglaPropia(3, 11, CREDITO, actual, HOY);
         verify(precios, never()).reglaVigente(anyInt(), anyInt(), any());
         InOrder orden = inOrder(precios);
-        orden.verify(precios).bloquearProducto(3, 11);
+        orden.verify(precios, org.mockito.Mockito.atLeastOnce()).bloquearProducto(3, 11);
         orden.verify(precios).reglaPropiaVigente(3, 11, CONTADO, HOY);
     }
 

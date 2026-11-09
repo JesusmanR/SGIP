@@ -225,6 +225,38 @@ public class RepositorioImportacion {
     // ------------------------------------------------------------ aplicar
 
     /**
+     * Bloquea las filas de {@code productos} que la carga va a cambiar, antes de tocar
+     * {@code historico_costos}.
+     *
+     * Orden de bloqueos: productos y luego historico_costos, en la importación y en la
+     * edición de un producto ({@code ServicioProducto.actualizar}). Escribir una fila
+     * de {@code historico_costos} toma, por su clave foránea, el bloqueo compartido de
+     * la fila del producto, y el UPDATE de {@code productos} pide después el
+     * exclusivo: dos escritores que lleguen por caminos distintos se esperarían entre
+     * sí. Con el producto bloqueado primero, el que llega segundo espera antes de
+     * tocar nada. Va ordenado por identificador para que dos cargas que comparten
+     * productos los tomen en el mismo orden, y acotado por empresa como toda consulta.
+     * {@code FOR UPDATE OF p} bloquea solo los productos y no el detalle de la carga.
+     */
+    public List<Integer> bloquearProductosDeLaCarga(Integer empresaId, Long cargaId) {
+        return jdbc.sql("""
+                        SELECT p.producto_id
+                          FROM productos p
+                          JOIN detalle_carga_precios d
+                            ON d.empresa_id = p.empresa_id
+                           AND d.producto_id = p.producto_id
+                         WHERE d.empresa_id = :empresa AND d.carga_id = :carga
+                           AND d.aceptado = TRUE
+                         ORDER BY p.producto_id
+                           FOR UPDATE OF p
+                        """)
+                .param("empresa", empresaId)
+                .param("carga", cargaId)
+                .query(Integer.class)
+                .list();
+    }
+
+    /**
      * Cierra ayer el periodo de costo que venía rigiendo (RF-28).
      *
      * «Hoy» es el que pasa quien llama, tomado del reloj de la aplicación

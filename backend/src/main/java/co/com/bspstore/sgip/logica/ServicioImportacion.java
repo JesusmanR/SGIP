@@ -140,6 +140,10 @@ public class ServicioImportacion {
                             + " y solo se puede aplicar una carga validada.");
         }
 
+        // Los productos primero, el histórico después: el mismo orden de bloqueos que
+        // al editar el costo de un producto, para que las dos escrituras no se esperen
+        // entre sí (N1).
+        importacion.bloquearProductosDeLaCarga(empresa, cargaId);
         // Un solo «hoy» para los tres pasos del histórico (M5).
         LocalDate hoy = Hoy.de(reloj);
         importacion.cerrarCostoVigente(empresa, cargaId, hoy);

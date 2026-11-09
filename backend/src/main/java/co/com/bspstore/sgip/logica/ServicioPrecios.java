@@ -321,6 +321,27 @@ public class ServicioPrecios {
     public void escribirPrecios(Integer empresa, Integer productoId, BigDecimal costo,
                                 SolicitudPrecio contado, SolicitudPrecio credito,
                                 Boolean creditoIgualAlContado) {
+        escribirPrecios(empresa, productoId, costo, contado, credito, creditoIgualAlContado, hoy());
+    }
+
+    /**
+     * Bloquea la fila del producto hasta el final de la transacción.
+     *
+     * Quien además escribe {@code historico_costos} lo llama antes (ver
+     * {@code RepositorioImportacion.bloquearProductosDeLaCarga}): productos primero,
+     * histórico después, en todos los caminos. Volver a bloquear lo ya bloqueado en la
+     * misma transacción no cuesta nada.
+     */
+    @Transactional
+    public void bloquearProducto(Integer empresa, Integer productoId) {
+        precios.bloquearProducto(empresa, productoId);
+    }
+
+    /** Igual, con el «hoy» que ya decidió quien llama: una operación, un solo día. */
+    @Transactional
+    public void escribirPrecios(Integer empresa, Integer productoId, BigDecimal costo,
+                                SolicitudPrecio contado, SolicitudPrecio credito,
+                                Boolean creditoIgualAlContado, LocalDate hoy) {
         comprobarPrecios(costo, contado, credito, creditoIgualAlContado);
         boolean igualar = Boolean.TRUE.equals(creditoIgualAlContado)
                 || (creditoIgualAlContado == null && contado != null && credito == null);
@@ -329,8 +350,6 @@ public class ServicioPrecios {
         }
 
         precios.bloquearProducto(empresa, productoId);
-        // Un solo «hoy» para todo lo que esta escritura lee y escribe.
-        LocalDate hoy = hoy();
         ReglaDePrecio reglaContado = reglaEscrita(costo, contado, "de contado");
         if (reglaContado != null) {
             fijarReglaPropia(empresa, productoId, CONTADO, reglaContado, hoy);

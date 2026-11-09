@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Clock;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
@@ -224,23 +225,27 @@ public class ServicioProducto {
             throw new NombreRepetidoException(
                     "Ya existe un producto con el código de barras " + barras + ".");
         }
-        precios.comprobarPrecios(s.costo(), s.contado(), s.credito(), s.creditoIgualAlContado());
-
-        // El costo de antes, para saber si esta edición lo cambia. Se compara el
-        // valor y no la escritura: la base devuelve 3100.00 y el formulario puede
-        // mandar 3100, y eso no es un cambio.
-        // Con los centavos de la columna, DECIMAL(14,2): un 3100.004 no es un cambio, y
-        // lo que se escribe en el histórico es lo mismo que guardará el producto.
+        // Con los centavos de la columna, DECIMAL(14,2): un 3100.004 no es un cambio, y lo
+        // que se comprueba, se escribe en el histórico y se guarda es lo mismo. Se compara
+        // el valor y no la escritura: la base devuelve 3100.00 y el formulario puede mandar
+        // 3100.
         BigDecimal costo = s.costo().setScale(2, RoundingMode.HALF_UP);
+        precios.comprobarPrecios(costo, s.contado(), s.credito(), s.creditoIgualAlContado());
+        // Un solo «hoy» para el histórico y para los precios de esta edición.
+        LocalDate hoy = Hoy.de(reloj);
         boolean cambiaElCosto = p.getCosto().compareTo(costo) != 0;
 
         if (cambiaElCosto) {
             // Igual que al aplicar una lista de precios: un cambio de costo no deja
             // rastro en el kárdex, y sin el histórico no habría forma de saber con
             // qué costo se vendió algo el mes pasado (M15). Va antes de guardar el
-            // producto, como en la importación (historico_costos y luego productos):
-            // el mismo orden de bloqueos evita que dos escrituras se esperen entre sí.
-            costos.registrarCambio(empresa, productoId, costo, Hoy.de(reloj));
+            // producto, como en la importación (historico_costos y luego productos).
+            // Antes de escribir el histórico se bloquea la fila del producto: escribirlo
+            // toma sobre ella, por la clave foránea, un bloqueo compartido, y el UPDATE
+            // pide después el exclusivo; dos ediciones a la vez se esperarían entre sí
+            // (N1). La importación bloquea sus productos primero por la misma razón.
+            precios.bloquearProducto(empresa, productoId);
+            costos.registrarCambio(empresa, productoId, costo, hoy);
         }
 
         p.reemplazarDatos(s.categoriaId(), s.proveedorId(), codigo, sku, s.nombre(),
@@ -252,8 +257,8 @@ public class ServicioProducto {
         productos.saveAndFlush(p);
         // Sin tocar `version`: la regla es una fila aparte, y un cambio solo de
         // precio no le quita a nadie los datos del producto que tenía abiertos.
-        precios.escribirPrecios(empresa, productoId, s.costo(), s.contado(), s.credito(),
-                s.creditoIgualAlContado());
+        precios.escribirPrecios(empresa, productoId, costo, s.contado(), s.credito(),
+                s.creditoIgualAlContado(), hoy);
         return Optional.of(p);
     }
 
