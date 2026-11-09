@@ -267,10 +267,12 @@ class ServicioImportacionTest {
 
     // ------------------------------------------------ aplicar (RF-27)
 
+    /** Aplicar lee la cabecera con bloqueo; el resumen final, sin él. */
     private void cargaEn(String estado, int aceptados) {
-        when(importacion.buscarCarga(EMPRESA, CARGA))
-                .thenReturn(Optional.of(new CabeceraCarga(CARGA, PROVEEDOR, "Proveedor",
-                        "lista.csv", estado, null, null, aceptados, aceptados, 0)));
+        var cabecera = Optional.of(new CabeceraCarga(CARGA, PROVEEDOR, "Proveedor",
+                "lista.csv", estado, null, null, aceptados, aceptados, 0));
+        when(importacion.bloquearCarga(EMPRESA, CARGA)).thenReturn(cabecera);
+        when(importacion.buscarCarga(EMPRESA, CARGA)).thenReturn(cabecera);
     }
 
     @Test
@@ -292,17 +294,21 @@ class ServicioImportacionTest {
     }
 
     /**
-     * Productos primero, histórico después: el mismo orden de bloqueos que la edición
-     * del costo de un producto, para que las dos escrituras no se esperen entre sí (N1).
+     * Orden total de bloqueos: carga, productos, histórico. La cabecera se bloquea y se
+     * vuelve a comprobar su estado ya bloqueada, de modo que dos aplicaciones de la misma
+     * carga no pasan las dos la comprobación (M-d); los productos van antes que el
+     * histórico, como al editar el costo de un producto, para que las dos escrituras no
+     * se esperen entre sí (N1).
      */
     @Test
-    void aplicarBloqueaLosProductosAntesDeTocarElHistorico() {
+    void aplicarBloqueaLaCargaLuegoLosProductosYSoloDespuesTocaElHistorico() {
         cargaEn("VALIDADA", 5);
         when(importacion.aplicarCostos(EMPRESA, CARGA)).thenReturn(5);
 
         servicio.aplicar(CARGA);
 
         var orden = org.mockito.Mockito.inOrder(importacion);
+        orden.verify(importacion).bloquearCarga(EMPRESA, CARGA);
         orden.verify(importacion).bloquearProductosDeLaCarga(EMPRESA, CARGA);
         orden.verify(importacion).cerrarCostoVigente(EMPRESA, CARGA, HOY);
         orden.verify(importacion).aplicarCostos(EMPRESA, CARGA);
@@ -371,8 +377,9 @@ class ServicioImportacionTest {
 
     @Test
     void unaCargaDeOtraEmpresaNoSeEncuentra() {
-        when(importacion.buscarCarga(EMPRESA, 999L)).thenReturn(Optional.empty());
+        when(importacion.bloquearCarga(EMPRESA, 999L)).thenReturn(Optional.empty());
         assertTrue(servicio.aplicar(999L).isEmpty());
+        verify(importacion, org.mockito.Mockito.never()).bloquearProductosDeLaCarga(anyInt(), anyLong());
     }
 
     @Test

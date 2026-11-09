@@ -16,6 +16,8 @@ import java.math.BigDecimal;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * El SQL que bloquea los productos de una carga antes de tocar el histórico (N1):
@@ -78,5 +80,27 @@ class BloqueoDeProductosDeCargaConBaseTest {
                 estado -> importacion.bloquearProductosDeLaCarga(empresa.empresaId, carga));
 
         assertEquals(List.of(a, b), bloqueados);
+    }
+
+    /**
+     * Lo que hace que el orden de bloqueo sea el de la clave y no el del archivo: una
+     * sola tabla, recorrida por un índice y sin ordenar en memoria. Con un
+     * {@code filesort} las filas se bloquean según se recorren y el ORDER BY no manda.
+     */
+    @Test
+    void elBloqueoRecorreLosProductosPorUnIndiceYSinOrdenarEnMemoria() {
+        Integer a = producto("A");
+        Integer b = producto("B");
+
+        // MySQL 9 explica en formato de árbol, en una sola columna.
+        String plan = jdbc.sql("EXPLAIN " + RepositorioImportacion.SQL_BLOQUEAR_PRODUCTOS)
+                .param("empresa", empresa.empresaId)
+                .param("ids", List.of(a, b))
+                .query(String.class)
+                .single();
+
+        assertTrue(plan.toLowerCase().contains("range scan on productos using primary"),
+                "rango por la clave primaria: " + plan);
+        assertFalse(plan.toLowerCase().contains("sort"), "sin ordenar en memoria: " + plan);
     }
 }

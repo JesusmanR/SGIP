@@ -126,7 +126,10 @@ public class ServicioImportacion {
     @Transactional
     public Optional<ResumenCarga> aplicar(Long cargaId) {
         Integer empresa = ContextoEmpresa.empresaActual();
-        Optional<CabeceraCarga> cabecera = importacion.buscarCarga(empresa, cargaId);
+        // Orden de bloqueos: carga, productos, histórico. La cabecera se lee con
+        // bloqueo y el estado se comprueba ya con ella bloqueada: dos aplicaciones de
+        // la misma carga no pasan las dos la comprobación, la segunda ve «aplicada».
+        Optional<CabeceraCarga> cabecera = importacion.bloquearCarga(empresa, cargaId);
         if (cabecera.isEmpty()) {
             return Optional.empty();
         }
