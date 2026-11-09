@@ -58,8 +58,10 @@ Decisión del usuario: **escanear con cualquiera de los dos medios; si no aparec
    - **Cámara del celular.**
    - Las dos formas buscan por `codigo_barras`. RNF-03 pide menos de 500 ms en el servidor.
 2. **Búsqueda manual** por nombre o código, con resultados mientras se escribe.
-3. **Producto no registrado.** Solo con la autorización del administrador (apartado 9), la caja permite crearlo en ese momento con los datos mínimos: nombre, precio de venta y el código escaneado si lo hay.
+3. **Producto no registrado.** Solo con la autorización del administrador (apartado 9), la caja permite agregarlo a la venta con los datos mínimos: nombre, precio de venta (sin IVA, como los demás precios) y el código escaneado si lo hay.
+   - **Decisión del orquestador:** el producto se crea **dentro de la misma venta**, en la misma transacción que ella, y no con una operación aparte. Un solo PIN autoriza a la vez el producto nuevo y el encargo (apartado 9). Si la venta falla, el producto no queda creado.
    - El producto queda creado para la próxima vez.
+   - **Decisión del orquestador:** nace con existencia 0, con un costo provisional de 1,00 marcado como «costo pendiente de registrar» (el catálogo del administrador lo avisa), con el proveedor «Sin proveedor» y la categoría «Sin categoría» de la empresa, y con un código `RAP-<n>`. El precio de venta queda como precio fijo propio del producto.
    - Como su existencia es 0, venderlo pasa por la venta sin existencia (apartado 5).
    - Sin autorización no se vende.
 
@@ -87,7 +89,8 @@ Decisión del usuario: **solo el administrador**, porque es quien sabe los tiemp
 - El kárdex guarda quién autorizó.
 - La venta aparece en el reporte de pendientes (RF-69) hasta que entre la mercancía.
 - El recibo muestra «Encargo — entrega estimada: <fecha>».
-- Si el vendedor intenta vender sin existencia sin autorización, recibe 403. El super administrador recibe 403 siempre.
+- **Decisión del orquestador:** si el vendedor manda los datos de un encargo (motivo o fecha de entrega) sin una autorización válida del administrador, recibe 403 y no se guarda nada. Si el producto no tiene existencia suficiente y el vendedor **no** pidió el encargo, recibe 409 («No hay existencia suficiente de …»): la venta simplemente no se puede hacer así. El super administrador y el cliente reciben 403 siempre.
+- **Decisión del orquestador:** el motivo se guarda una vez por venta (en la marca de venta sin existencia que ya existe, ADR-0014) y la fecha estimada de entrega se guarda en cada línea. El kárdex guarda quién autorizó.
 
 ## 6. Cliente de la venta (RF-66)
 
@@ -178,6 +181,9 @@ Decisión del usuario: **solo el administrador.**
   - Lo que se devuelve en efectivo sale del turno abierto en ese momento y se resta del efectivo esperado del cierre.
   - Una devolución por tarjeta o por transferencia se hace por fuera (en el datáfono o en el banco) y se anota con su referencia.
   - El total devuelto nunca supera lo pagado por las unidades devueltas.
+  - **Decisión del orquestador:** el dinero que se reembolsa es exactamente lo que se pagó por esas unidades. En una venta a domicilio **por cobrar** (todavía sin pagar) no se pagó nada: el reembolso es 0, la anulación no mueve dinero y por eso no exige un turno abierto. Una devolución parcial de esa venta rebaja lo que queda por cobrar, y el cobro posterior es por ese saldo; si se devuelve todo, la venta queda anulada.
+  - **Decisión del orquestador:** al devolver parte de una línea, el valor de las unidades es proporcional al total de la línea (ya descontado), redondeado al peso, y la devolución que completa la línea toma el resto, de modo que lo devuelto en total es exactamente lo que se pagó por la línea.
+  - Un reembolso por tarjeta o transferencia exige su referencia.
   - El saldo a favor es nuevo. Queda ligado al cliente identificado, nunca a Consumidor final, y se puede usar como forma de pago en una compra posterior.
 - La devolución descuenta del turno abierto de quien la registra (RF-45).
 - Queda registrado quién, cuándo y por qué.
