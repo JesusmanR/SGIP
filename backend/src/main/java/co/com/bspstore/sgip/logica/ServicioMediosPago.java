@@ -60,7 +60,7 @@ public class ServicioMediosPago {
         Integer empresa = ContextoEmpresa.empresaActual();
         String nombre = solicitud.nombre().trim();
         if (medios.existeNombre(empresa, nombre)) {
-            throw new NombreRepetidoException("Ya existe un medio de pago llamado «" + nombre + "».");
+            throw new NombreRepetidoException("Ya existe un medio de pago con ese nombre.");
         }
         Integer id = medios.insertar(empresa, nombre, solicitud.tipo());
         return medios.buscar(empresa, id).orElseThrow(() -> new IllegalStateException(

@@ -63,7 +63,10 @@ public class RepositorioMediosPago {
      * Sirve para decidir sin carreras si un medio se puede desactivar: dos
      * administradores que desactivan a la vez los dos últimos medios activos
      * pasarían ambos la comprobación si cada uno mirara sin bloquear. Son pocas
-     * filas, y las toma en el mismo orden ({@code medio_id}) quien las pida.
+     * filas, de una sola empresa. Quien las pide ejecuta esta misma sentencia, así
+     * que el motor recorre el mismo índice y las bloquea en el mismo orden; el
+     * {@code ORDER BY} fija el orden del resultado, no el de los bloqueos, y por
+     * eso no se invoca este bloqueo junto con otro sobre las mismas filas.
      */
     public List<MedioDePago> bloquearDeLaEmpresa(Integer empresa) {
         return jdbc.sql("""
