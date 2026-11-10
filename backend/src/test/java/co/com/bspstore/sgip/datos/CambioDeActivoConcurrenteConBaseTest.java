@@ -81,7 +81,7 @@ class CambioDeActivoConcurrenteConBaseTest {
         List<Integer> empresas = jdbc.sql("SELECT empresa_id FROM empresas WHERE nit = :nit")
                 .param("nit", nit()).query(Integer.class).list();
         for (Integer empresa : empresas) {
-            for (String tabla : List.of("auditoria_plataforma", "medios_pago", "empresa_config",
+            for (String tabla : List.of("auditoria_plataforma", "clientes", "medios_pago", "empresa_config",
                     "suscripciones", "usuarios", "empresas")) {
                 jdbc.sql("DELETE FROM " + tabla + " WHERE empresa_id = :empresa")
                         .param("empresa", empresa).update();

@@ -15,6 +15,9 @@ import co.com.bspstore.sgip.logica.FiltroInvalidoException;
 import co.com.bspstore.sgip.logica.ImpuestoNoDisponibleException;
 import co.com.bspstore.sgip.logica.AlmacenArchivos;
 import co.com.bspstore.sgip.logica.ArchivoInvalidoException;
+import co.com.bspstore.sgip.logica.ClienteNoEditableException;
+import co.com.bspstore.sgip.logica.DatoDeClienteInvalidoException;
+import co.com.bspstore.sgip.logica.DatosDeDomicilioIncompletosException;
 import co.com.bspstore.sgip.logica.MedioDePagoInvalidoException;
 import co.com.bspstore.sgip.logica.MovimientoInvalidoException;
 import co.com.bspstore.sgip.logica.NombreRepetidoException;
@@ -219,6 +222,37 @@ public class ManejadorErrores {
         // puede crearlo, activarlo ni desactivarlo, en el estado que esté.
         ProblemDetail p = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
         p.setTitle("Medio de pago no modificable");
+        p.setDetail(e.getMessage());
+        return p;
+    }
+
+    @ExceptionHandler(DatoDeClienteInvalidoException.class)
+    public ProblemDetail datoDeClienteInvalido(DatoDeClienteInvalidoException e) {
+        // 400: el cuerpo está bien formado, pero el consentimiento y la ciudad
+        // dependen de la empresa y de la decisión del cliente, que una
+        // anotación no puede mirar.
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
+        p.setTitle("Datos del cliente inválidos");
+        p.setDetail(e.getMessage());
+        return p;
+    }
+
+    @ExceptionHandler(DatosDeDomicilioIncompletosException.class)
+    public ProblemDetail datosDeDomicilioIncompletos(DatosDeDomicilioIncompletosException e) {
+        // 400: la venta a domicilio está mal armada para este cliente; con
+        // otro cliente, o con sus datos completos, la misma petición funciona.
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
+        p.setTitle("Datos de domicilio incompletos");
+        p.setDetail(e.getMessage());
+        return p;
+    }
+
+    @ExceptionHandler(ClienteNoEditableException.class)
+    public ProblemDetail clienteNoEditable(ClienteNoEditableException e) {
+        // 409: la petición es válida y es la naturaleza del cliente genérico,
+        // que lo gestiona el sistema, lo que impide atenderla.
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.CONFLICT);
+        p.setTitle("Cliente no editable");
         p.setDetail(e.getMessage());
         return p;
     }

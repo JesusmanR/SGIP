@@ -435,7 +435,7 @@ jobs:
           n=$(mysql -h 127.0.0.1 -N -B sgip -e \
             "SELECT (SELECT COUNT(*) FROM usuarios)
                   + (SELECT COUNT(*) FROM productos)
-                  + (SELECT COUNT(*) FROM clientes)
+                  + (SELECT COUNT(*) FROM clientes WHERE NOT consumidor_final)
                   + (SELECT COUNT(*) FROM proveedores);")
           echo "filas de demostración: $n"
           test "$n" -eq 0 || {

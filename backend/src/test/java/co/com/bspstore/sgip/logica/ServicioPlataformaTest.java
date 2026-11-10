@@ -11,6 +11,7 @@ import co.com.bspstore.sgip.datos.UsuarioRepositorio;
 import co.com.bspstore.sgip.modelo.AccionPlataforma;
 import co.com.bspstore.sgip.modelo.EstadoEmpresa;
 import co.com.bspstore.sgip.modelo.Rol;
+import co.com.bspstore.sgip.modelo.TipoDocumento;
 import co.com.bspstore.sgip.modelo.TipoMedio;
 import co.com.bspstore.sgip.modelo.Usuario;
 import co.com.bspstore.sgip.util.Seguridad;
@@ -183,6 +184,45 @@ class ServicioPlataformaTest {
     }
 
     /**
+     * La primera venta del mostrador suele ser sin datos del comprador, y la venta
+     * exige un cliente: el alta deja el «Consumidor final» (CC 222222222222, el
+     * documento genérico de la DIAN) con la ciudad de la empresa (RF-66).
+     */
+    @Test
+    void elAltaSiembraElConsumidorFinalConLaCiudadDeLaEmpresa() {
+        altaViable(12, 30);
+
+        servicio.darDeAlta(solicitud());
+
+        verify(plataforma).sembrarConsumidorFinal(12, "Consumidor final", TipoDocumento.CC,
+                "222222222222", "Bucaramanga");
+    }
+
+    @Test
+    void elAltaSinCiudadSiembraElConsumidorFinalSinCiudad() {
+        altaViable(12, 30);
+        var sinCiudad = new SolicitudAltaEmpresa(
+                "900123456-1", "Ferretería El Tornillo S.A.S.", "contacto@tornillo.co",
+                "3001234567", "  ", null, "Ana Pérez", "Ana@Tornillo.CO", "clave-de-prueba");
+
+        servicio.darDeAlta(sinCiudad);
+
+        verify(plataforma).sembrarConsumidorFinal(12, "Consumidor final", TipoDocumento.CC,
+                "222222222222", null);
+    }
+
+    @Test
+    void siElConsumidorFinalFallaElAltaSePropagaYNoSeAudita() {
+        altaViable(12, 1);
+        doThrow(new IllegalStateException("siembra rota"))
+                .when(plataforma).sembrarConsumidorFinal(eq(12), any(), any(), any(), any());
+
+        assertThrows(IllegalStateException.class, () -> servicio.darDeAlta(solicitud()));
+
+        verify(plataforma, never()).registrar(any(), any(), any(), any(), any(), any(), any(), any());
+    }
+
+    /**
      * Lo que el alta deliberadamente NO siembra. El margen lo decide el
      * comercio producto por producto y el impuesto es opcional (ADR-0024):
      * sembrar reglas «por omisión» pondría a la empresa nueva a cobrar un
@@ -202,10 +242,10 @@ class ServicioPlataformaTest {
                 .toList();
         assertEquals(
                 List.of("insertarEmpresa", "insertarSuscripcion", "insertarConfiguracion",
-                        "sembrarMediosDePago"),
+                        "sembrarMediosDePago", "sembrarConsumidorFinal"),
                 escrituras,
-                "el alta solo escribe la empresa, la suscripción, la configuración vacía "
-                        + "y los medios de pago; ni márgenes ni reglas de IVA");
+                "el alta solo escribe la empresa, la suscripción, la configuración vacía, "
+                        + "los medios de pago y el consumidor final; ni márgenes ni reglas de IVA");
     }
 
     /**

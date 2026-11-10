@@ -1,9 +1,16 @@
 package co.com.bspstore.sgip.datos;
 
+import co.com.bspstore.sgip.api.dto.Cliente;
 import co.com.bspstore.sgip.api.dto.SolicitudAltaEmpresa;
+import co.com.bspstore.sgip.api.dto.SolicitudCliente;
 import co.com.bspstore.sgip.config.UsuarioAutenticado;
+import co.com.bspstore.sgip.logica.ClienteNoEditableException;
 import co.com.bspstore.sgip.logica.PoliticaDeBloqueo;
+import co.com.bspstore.sgip.logica.RecursoNoEncontradoException;
+import co.com.bspstore.sgip.logica.RegistroRepetidoException;
+import co.com.bspstore.sgip.logica.ServicioClientes;
 import co.com.bspstore.sgip.logica.ServicioPlataforma;
+import co.com.bspstore.sgip.modelo.TipoDocumento;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
@@ -12,6 +19,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.support.EncodedResource;
+import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.jdbc.datasource.SingleConnectionDataSource;
@@ -25,10 +33,15 @@ import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.Clock;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -101,8 +114,8 @@ class ClientesConBaseTest {
         SecurityContextHolder.clearContext();
         jdbc.sql("DROP DATABASE IF EXISTS " + esquema).update();
         jdbc.sql("DELETE FROM clientes WHERE nit = :nit AND empresa_id = 1").param("nit", "X" + marca).update();
-        List<Integer> empresas = jdbc.sql("SELECT empresa_id FROM empresas WHERE nit = :nit")
-                .param("nit", nit()).query(Integer.class).list();
+        List<Integer> empresas = jdbc.sql("SELECT empresa_id FROM empresas WHERE nit IN (:nit, :otro)")
+                .param("nit", nit()).param("otro", nit() + "-B").query(Integer.class).list();
         // De las hojas a la raíz: lo sembrado cuelga de la empresa.
         for (Integer empresa : empresas) {
             for (String tabla : List.of("auditoria_plataforma", "clientes", "medios_pago", "empresa_config",
@@ -179,7 +192,7 @@ class ClientesConBaseTest {
         }
         try (Escritorio e = escritorio()) {
             // Marcar a otro cliente de la empresa: el marcado ha de ser el del documento genérico.
-            assertThrows(DataIntegrityViolationException.class, () -> e.jdbc().sql("""
+            assertThrows(DataAccessException.class, () -> e.jdbc().sql("""
                     UPDATE clientes SET consumidor_final = 1
                      WHERE empresa_id = :e AND nit = '1000'
                     """).param("e", CON_OTROS).update());
@@ -216,7 +229,13 @@ class ClientesConBaseTest {
     void laBaseRealNoAdmiteUnSegundoConsumidorFinalEnLaMismaEmpresa() {
         exigirLaMigracion();
 
+        // Con el documento genérico choca con la clave única del documento.
         assertThrows(DataIntegrityViolationException.class, () -> jdbc.sql("""
+                INSERT INTO clientes (empresa_id, razon_social, tipo_documento, nit, consumidor_final)
+                VALUES (1, 'Otro genérico', 'CC', '222222222222', 1)
+                """).update());
+        // Con cualquier otro, la marca no cabe: solo es del documento genérico.
+        assertThrows(DataAccessException.class, () -> jdbc.sql("""
                 INSERT INTO clientes (empresa_id, razon_social, tipo_documento, nit, consumidor_final)
                 VALUES (1, 'Otro genérico', 'CC', :nit, 1)
                 """).param("nit", "X" + marca).update());
@@ -263,6 +282,186 @@ class ClientesConBaseTest {
         new ServicioPlataforma(plataforma, usuarios, roles, Clock.systemUTC(), new PoliticaDeBloqueo(15))
                 .darDeAlta(new SolicitudAltaEmpresa(nit(), "Clientes " + marca, null, null, ciudad,
                         null, "Administración", "admin-" + marca + "@ejemplo.co", "ClaveDePrueba2026"));
+    }
+
+    // ------------------------------------- el servicio y el repositorio, con SQL real
+
+    private static final ZoneId ZONA = ZoneId.of("America/Bogota");
+    private static final LocalDateTime PRIMERA_VEZ = LocalDateTime.of(2026, 11, 9, 10, 30);
+    private static final LocalDateTime SEGUNDA_VEZ = LocalDateTime.of(2026, 11, 20, 16, 5);
+
+    private ServicioClientes servicioA(LocalDateTime ahora) {
+        return new ServicioClientes(new RepositorioClientes(jdbc),
+                Clock.fixed(ZonedDateTime.of(ahora, ZONA).toInstant(), ZONA));
+    }
+
+    private void comoEmpresa(Integer empresa) {
+        var u = new UsuarioAutenticado(superAdminId, "ventas-" + marca + "@ejemplo.co", "VENDEDOR", empresa);
+        SecurityContext c = SecurityContextHolder.createEmptyContext();
+        c.setAuthentication(new UsernamePasswordAuthenticationToken(u, null, List.of()));
+        SecurityContextHolder.setContext(c);
+    }
+
+    private SolicitudCliente maria(String identificacion) {
+        return new SolicitudCliente("María Pérez", TipoDocumento.CC, identificacion, "maria@correo.co",
+                "3001234567", "Calle 5 # 6-7", null, true);
+    }
+
+    private record Autorizacion(LocalDateTime cuando, String medio) {}
+
+    private Autorizacion autorizacionDe(Integer cliente) {
+        return jdbc.sql("SELECT autorizacion_datos AS cuando, medio_autorizacion AS medio "
+                        + "FROM clientes WHERE cliente_id = :id")
+                .param("id", cliente).query(Autorizacion.class).single();
+    }
+
+    @Test
+    void crearGuardaElMedioDeAutorizacionCaja() {
+        exigirLaMigracion();
+        darDeAlta("Cúcuta");
+        comoEmpresa(empresaDelAlta());
+
+        Cliente creado = servicioA(PRIMERA_VEZ).crear(maria("1098765432"));
+
+        // La fila entró sin chocar con ck_clientes_autorizacion, con la hora del reloj.
+        assertEquals(new Autorizacion(PRIMERA_VEZ, "CAJA"), autorizacionDe(creado.id()));
+        assertEquals("Cúcuta", creado.ciudad(), "sin ciudad propia toma la de la empresa");
+        assertFalse(creado.consumidorFinal());
+    }
+
+    @Test
+    void laIdentificacionEsUnicaPorEmpresa() {
+        exigirLaMigracion();
+        darDeAlta("Cúcuta");
+        Integer empresa = empresaDelAlta();
+        Integer otra = otraEmpresa("Girón");
+        ServicioClientes servicio = servicioA(PRIMERA_VEZ);
+
+        comoEmpresa(empresa);
+        servicio.crear(maria("1098765432"));
+        assertThrows(RegistroRepetidoException.class, () -> servicio.crear(maria("1098765432")));
+
+        // En otra empresa el mismo documento es otro cliente.
+        comoEmpresa(otra);
+        Cliente enLaOtra = servicio.crear(maria("1098765432"));
+        assertEquals("Girón", enLaOtra.ciudad());
+    }
+
+    @Test
+    void laBaseNoDejaRepetirElDocumentoAunqueDosPeticionesPasenLaComprobacionALaVez() {
+        exigirLaMigracion();
+        darDeAlta("Cúcuta");
+        Integer empresa = empresaDelAlta();
+        var repositorio = new RepositorioClientes(jdbc);
+        var datos = new Cliente(null, "Ana", TipoDocumento.CC, "555", "a@b.co", null, null, "Cúcuta", false);
+
+        repositorio.insertar(empresa, datos, PRIMERA_VEZ, "CAJA");
+
+        assertThrows(DataIntegrityViolationException.class,
+                () -> repositorio.insertar(empresa, datos, PRIMERA_VEZ, "CAJA"));
+    }
+
+    @Test
+    void porIdentificacionDevuelveLosDatosGuardadosYSoloLosDeLaEmpresa() {
+        exigirLaMigracion();
+        darDeAlta("Cúcuta");
+        Integer empresa = empresaDelAlta();
+        Integer otra = otraEmpresa("Girón");
+        ServicioClientes servicio = servicioA(PRIMERA_VEZ);
+        comoEmpresa(empresa);
+        Cliente creado = servicio.crear(maria("1098765432"));
+
+        assertEquals(Optional.of(creado), servicio.porIdentificacion(TipoDocumento.CC, "1098765432"));
+        assertEquals(Optional.empty(), servicio.porIdentificacion(TipoDocumento.CE, "1098765432"),
+                "el tipo de documento también cuenta");
+
+        comoEmpresa(otra);
+        assertEquals(Optional.empty(), servicio.porIdentificacion(TipoDocumento.CC, "1098765432"));
+    }
+
+    @Test
+    void editarConservaLaAutorizacionOriginalYCambiaLosDemasDatos() {
+        exigirLaMigracion();
+        darDeAlta("Cúcuta");
+        comoEmpresa(empresaDelAlta());
+        Cliente creado = servicioA(PRIMERA_VEZ).crear(maria("1098765432"));
+
+        Cliente editado = servicioA(SEGUNDA_VEZ).actualizar(creado.id(), new SolicitudCliente(
+                "María P. Gómez", TipoDocumento.CC, "1098765432", "nueva@correo.co", "3109998877",
+                "Carrera 9 # 1-2", "Girón", true));
+
+        assertEquals("María P. Gómez", editado.nombre());
+        assertEquals("nueva@correo.co", editado.correo());
+        assertEquals("Girón", editado.ciudad());
+        assertEquals(new Autorizacion(PRIMERA_VEZ, "CAJA"), autorizacionDe(creado.id()),
+                "editar no vuelve a firmar el consentimiento");
+    }
+
+    @Test
+    void editarUnClienteSinAutorizacionPreviaLaRegistraConElMedioCaja() {
+        exigirLaMigracion();
+        darDeAlta("Cúcuta");
+        Integer empresa = empresaDelAlta();
+        comoEmpresa(empresa);
+        jdbc.sql("""
+                INSERT INTO clientes (empresa_id, razon_social, tipo_documento, nit, correo)
+                VALUES (:e, 'Heredado', 'CC', '777', 'h@correo.co')
+                """).param("e", empresa).update();
+        Integer id = jdbc.sql("SELECT cliente_id FROM clientes WHERE empresa_id = :e AND nit = '777'")
+                .param("e", empresa).query(Integer.class).single();
+
+        servicioA(SEGUNDA_VEZ).actualizar(id, maria("777"));
+
+        assertEquals(new Autorizacion(SEGUNDA_VEZ, "CAJA"), autorizacionDe(id));
+    }
+
+    @Test
+    void elConsumidorFinalSeLeeYNoSeEdita() {
+        exigirLaMigracion();
+        darDeAlta("Cúcuta");
+        Integer empresa = empresaDelAlta();
+        comoEmpresa(empresa);
+        ServicioClientes servicio = servicioA(PRIMERA_VEZ);
+
+        Cliente consumidor = servicio.consumidorFinal();
+
+        assertTrue(consumidor.consumidorFinal());
+        assertEquals("222222222222", consumidor.identificacion());
+        assertThrows(ClienteNoEditableException.class,
+                () -> servicio.actualizar(consumidor.id(), maria("1098765432")));
+        // Y el SQL tampoco lo toca aunque alguien se saltara la comprobación del servicio.
+        new RepositorioClientes(jdbc).actualizar(empresa, consumidor.id(),
+                new Cliente(null, "Otro nombre", TipoDocumento.CC, "999", "x@y.co", null, null, "Cali", false),
+                SEGUNDA_VEZ, "CAJA");
+        assertEquals(consumidor, servicio.consumidorFinal());
+    }
+
+    @Test
+    void unClienteDeOtraEmpresaNoSeEditaEs404() {
+        exigirLaMigracion();
+        darDeAlta("Cúcuta");
+        Integer empresa = empresaDelAlta();
+        Integer otra = otraEmpresa("Girón");
+        ServicioClientes servicio = servicioA(PRIMERA_VEZ);
+        comoEmpresa(empresa);
+        Cliente creado = servicio.crear(maria("1098765432"));
+
+        comoEmpresa(otra);
+        assertThrows(RecursoNoEncontradoException.class,
+                () -> servicio.actualizar(creado.id(), maria("1098765432")));
+    }
+
+    private Integer empresaDelAlta() {
+        return jdbc.sql("SELECT empresa_id FROM empresas WHERE nit = :nit")
+                .param("nit", nit()).query(Integer.class).single();
+    }
+
+    /** Otra empresa, sin clientes, para comprobar que no ve los de la primera. */
+    private Integer otraEmpresa(String ciudad) {
+        jdbc.sql("INSERT INTO empresas (nit, razon_social, ciudad, estado) VALUES (:nit, 'Otra', :ciudad, 'PRUEBA')")
+                .param("nit", nit() + "-B").param("ciudad", ciudad).update();
+        return jdbc.sql("SELECT empresa_id FROM empresas WHERE nit = :nit")
+                .param("nit", nit() + "-B").query(Integer.class).single();
     }
 
     // ------------------------------------------- el esquema desechable de la V41

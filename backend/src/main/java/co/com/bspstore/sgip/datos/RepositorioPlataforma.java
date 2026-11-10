@@ -4,6 +4,7 @@ import co.com.bspstore.sgip.api.dto.EmpresaEnPlataforma;
 import co.com.bspstore.sgip.api.dto.MedioDePago;
 import co.com.bspstore.sgip.modelo.AccionPlataforma;
 import co.com.bspstore.sgip.modelo.EstadoEmpresa;
+import co.com.bspstore.sgip.modelo.TipoDocumento;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
@@ -270,6 +271,31 @@ public class RepositorioPlataforma {
                     .param("activo", medio.activo())
                     .update();
         }
+    }
+
+    /**
+     * Siembra el «Consumidor final» de una empresa recién creada (RF-66).
+     *
+     * Es el cliente genérico con que se vende sin pedir datos al comprador. Sin él
+     * la primera venta del mostrador no tendría cliente al cual atribuirse. Los
+     * datos (nombre y documento de la DIAN) llegan como argumento, igual que los
+     * medios de pago: este repositorio solo escribe. La ciudad es la de la empresa,
+     * o ninguna si el alta no la trajo. No hay {@code INSERT IGNORE}: una siembra
+     * repetida debe fallar a la vista y deshacer el alta.
+     */
+    public void sembrarConsumidorFinal(Integer empresaId, String nombre, TipoDocumento tipo,
+                                       String identificacion, String ciudad) {
+        jdbc.sql("""
+                        INSERT INTO clientes (empresa_id, razon_social, tipo_documento, nit, ciudad,
+                                              activo, consumidor_final)
+                        VALUES (:empresa, :nombre, :tipo, :identificacion, :ciudad, 1, 1)
+                        """)
+                .param("empresa", empresaId)
+                .param("nombre", nombre)
+                .param("tipo", tipo.name())
+                .param("identificacion", identificacion)
+                .param("ciudad", ciudad)
+                .update();
     }
 
     /** Devuelve las filas afectadas: cero si la empresa no existe. */

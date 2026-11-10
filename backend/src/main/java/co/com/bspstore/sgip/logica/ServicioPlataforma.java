@@ -107,8 +107,8 @@ public class ServicioPlataforma {
     /**
      * Da de alta una empresa con su administrador inicial (RF-01).
      *
-     * Las seis escrituras —empresa, suscripción, configuración, medios
-     * de pago, usuario y bitácora— van en una sola transacción, y no es
+     * Las siete escrituras —empresa, suscripción, configuración, medios
+     * de pago, consumidor final, usuario y bitácora— van en una sola transacción, y no es
      * celo: a medias queda una empresa en la que nadie puede entrar, o
      * que no puede cobrar, y nadie de fuera puede crearle el primer
      * usuario, porque crear usuarios es cosa de su propio administrador
@@ -164,6 +164,14 @@ public class ServicioPlataforma {
         // (ADR-0024). Sembrar «valores por omisión» aquí le impondría al
         // comercio un cobro que nadie le pidió.
         plataforma.sembrarMediosDePago(empresaId, ServicioMediosPago.MEDIOS_DEL_ALTA);
+
+        // Y el cliente genérico: la primera venta del mostrador suele ser sin
+        // datos del comprador y la venta exige un cliente (RF-66).
+        plataforma.sembrarConsumidorFinal(empresaId,
+                ServicioClientes.NOMBRE_CONSUMIDOR_FINAL,
+                ServicioClientes.TIPO_CONSUMIDOR_FINAL,
+                ServicioClientes.IDENTIFICACION_CONSUMIDOR_FINAL,
+                texto(solicitud.ciudad()));
 
         Rol rolAdministrador = roles.findByNombre(ROL_ADMINISTRADOR)
                 .orElseThrow(() -> new IllegalStateException(
