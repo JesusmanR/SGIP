@@ -43,7 +43,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *      de antes (el ENUM de la V10 con CREDITO, empresas con y sin medios, una
  *      venta que apunta a «Crédito») en un esquema desechable y se ejecuta el
  *      guion que vive en {@code db/migration}. Las tablas del esquema
- *      desechable llevan solo las columnas que la V40 toca: lo que esas
+ *      desechable llevan solo las columnas que la V40 toca, más las claves de la
+ *      V11 (la compuesta de {@code ventas} a {@code medios_pago}, que impide borrar
+ *      un medio mientras una venta lo use): lo que esas
  *      pruebas afirman es lo que el guion hace con ellas, y que el guion corre
  *      sobre las tablas de verdad lo demuestra Flyway al arrancar.
  *   2. El alta de una empresa, con el {@code darDeAlta} de verdad: qué medios
@@ -373,14 +375,18 @@ class MediosPagoConBaseTest {
                       tipo       %s NOT NULL,
                       activo     BOOL        NOT NULL DEFAULT 1,
                       CONSTRAINT pk_medios_pago PRIMARY KEY (medio_id),
-                      CONSTRAINT uq_medios_pago UNIQUE (empresa_id, nombre)
+                      CONSTRAINT uq_medios_pago UNIQUE (empresa_id, nombre),
+                      CONSTRAINT uq_medios_empresa UNIQUE (empresa_id, medio_id)
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
                     """.formatted(ENUM_DE_ANTES)).update();
             bd.sql("""
                     CREATE TABLE ventas (
                       venta_id   BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
                       empresa_id INT    NOT NULL,
-                      medio_id   INT    NULL
+                      medio_id   INT    NULL,
+                      CONSTRAINT fk_ventas_medio_emp FOREIGN KEY (empresa_id, medio_id)
+                        REFERENCES medios_pago (empresa_id, medio_id)
+                        ON DELETE RESTRICT ON UPDATE RESTRICT
                     ) ENGINE=InnoDB
                     """).update();
             for (int empresa : List.of(SIN_MEDIOS, CON_UN_MEDIO, CON_CREDITO_Y_VENTA, SOLO_CREDITO)) {

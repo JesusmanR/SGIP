@@ -95,8 +95,10 @@ class ServicioMediosPagoTest {
     void unNombreRepetidoEnLaEmpresaEsUnConflicto() {
         when(medios.existeNombre(EMPRESA, "Efectivo")).thenReturn(true);
 
-        assertThrows(NombreRepetidoException.class,
+        NombreRepetidoException e = assertThrows(NombreRepetidoException.class,
                 () -> servicio.crear(new SolicitudMedioPago("Efectivo", TipoMedio.EFECTIVO)));
+        // Sin eco del dato enviado.
+        assertEquals("Ya existe un medio de pago con ese nombre.", e.getMessage());
         verify(medios, never()).insertar(anyInt(), any(), any());
     }
 
