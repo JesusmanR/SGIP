@@ -25,8 +25,9 @@ import java.util.Optional;
  * el cliente reciba un instante sin ambigüedad.
  *
  * Quién tiene un turno abierto lo dice {@code abierto_de}, la columna generada de la
- * V43 que lleva el índice único: buscar por ella usa ese índice y, al bloquear, toma
- * solo la fila de ese turno y no el historial del cajero.
+ * V43 que lleva el índice único: buscar por ella usa ese índice y no recorre el
+ * historial del cajero. Esa búsqueda no bloquea nunca; los bloqueos de la caja sobre
+ * el turno van por la clave primaria (véase {@link #bloquearAbiertoDe}).
  */
 @Repository
 public class RepositorioTurnos {
@@ -59,21 +60,41 @@ public class RepositorioTurnos {
      * tome hasta que la operación termine. Fuera de una transacción el bloqueo se
      * soltaría al acabar la sentencia, así que solo se llama dentro de una.
      *
-     * Se pide también {@code usuario_id}, que no está en el índice único, a propósito:
-     * con solo {@code cierre_id} el índice cubriría la lectura y, en modo compartido,
-     * InnoDB bloquearía únicamente la entrada del índice y no la fila del turno. El
-     * cierre toma esa fila con {@code FOR UPDATE} por su clave primaria y no esperaría.
-     * Leer una columna más obliga a ir a la fila y a bloquearla.
+     * Son dos pasos, y el orden importa. Primero se averigua cuál es el turno sin
+     * bloquear nada, por {@code abierto_de}. Después se toma <b>solo la fila</b>, por su
+     * clave primaria, y se repite {@code cierre IS NULL}: es una lectura actual, de modo
+     * que un turno que se cerró después del primer paso ya no aparece y la operación
+     * recibe el «sin turno abierto».
+     *
+     * No se toma el bloqueo por el índice único {@code uq_cierres_abierto}. El cierre
+     * bloquea la fila por su clave primaria y después escribe {@code cierre}, lo que
+     * cambia {@code abierto_de} y le obliga a tocar ese índice. Si una operación hubiera
+     * tomado antes la entrada del índice y esperara la fila, el cierre esperaría a la
+     * operación para tocar el índice y la operación al cierre para leer la fila: un
+     * interbloqueo, y el motor mata a una de las dos. Bloqueando solo la fila, las dos
+     * piden lo mismo en el mismo orden y no hay ciclo. Tampoco queda un bloqueo de hueco
+     * sobre una clave única que no existe cuando el cajero no tiene turno.
      */
     public Optional<Long> bloquearAbiertoDe(Integer empresa, Integer cajero) {
-        return jdbc.sql("""
-                        SELECT cierre_id, usuario_id FROM cierres_caja
+        Optional<Long> turno = jdbc.sql("""
+                        SELECT cierre_id FROM cierres_caja
                          WHERE empresa_id = :empresa AND abierto_de = :cajero
-                           FOR SHARE
                         """)
                 .param("empresa", empresa)
                 .param("cajero", cajero)
-                .query((fila, numero) -> fila.getLong("cierre_id"))
+                .query(Long.class)
+                .optional();
+        if (turno.isEmpty()) {
+            return Optional.empty();
+        }
+        return jdbc.sql("""
+                        SELECT cierre_id FROM cierres_caja FORCE INDEX (PRIMARY)
+                         WHERE cierre_id = :turno AND empresa_id = :empresa AND cierre IS NULL
+                           FOR SHARE
+                        """)
+                .param("turno", turno.get())
+                .param("empresa", empresa)
+                .query(Long.class)
                 .optional();
     }
 

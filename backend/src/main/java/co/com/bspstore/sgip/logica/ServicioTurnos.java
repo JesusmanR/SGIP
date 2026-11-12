@@ -55,6 +55,12 @@ import java.util.Optional;
  * </ol>
  * Quien toma uno de la lista no toma después uno anterior. La caja no toma la fila de la
  * empresa.
+ *
+ * El turno se bloquea siempre <b>por su clave primaria</b> ({@code cierre_id}), en las dos
+ * puntas: {@code FOR SHARE} aquí y {@code FOR UPDATE} en el cierre. Nadie debe tomar un
+ * bloqueo por el índice único {@code uq_cierres_abierto}: el cierre escribe {@code cierre}
+ * y con ello cambia {@code abierto_de}, de modo que tiene que tocar ese índice, y una
+ * operación que lo tuviera tomado y esperara la fila lo llevaría a un interbloqueo.
  */
 @Service
 public class ServicioTurnos {
