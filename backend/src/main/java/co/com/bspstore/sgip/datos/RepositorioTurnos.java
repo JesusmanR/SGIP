@@ -66,14 +66,24 @@ public class RepositorioTurnos {
      * que un turno que se cerró después del primer paso ya no aparece y la operación
      * recibe el «sin turno abierto».
      *
-     * No se toma el bloqueo por el índice único {@code uq_cierres_abierto}. El cierre
-     * bloquea la fila por su clave primaria y después escribe {@code cierre}, lo que
-     * cambia {@code abierto_de} y le obliga a tocar ese índice. Si una operación hubiera
-     * tomado antes la entrada del índice y esperara la fila, el cierre esperaría a la
-     * operación para tocar el índice y la operación al cierre para leer la fila: un
-     * interbloqueo, y el motor mata a una de las dos. Bloqueando solo la fila, las dos
-     * piden lo mismo en el mismo orden y no hay ciclo. Tampoco queda un bloqueo de hueco
-     * sobre una clave única que no existe cuando el cajero no tiene turno.
+     * No se toma ningún bloqueo por un índice secundario. El cierre bloquea la fila por su
+     * clave primaria y después escribe {@code cierre}, lo que cambia {@code abierto_de} y le
+     * obliga a tocar {@code uq_cierres_abierto}; y toda inserción que referencia el turno
+     * comprueba la clave foránea compuesta {@code fk_ventas_cierre_emp} (V11), que toma un
+     * bloqueo compartido sobre la entrada de {@code uq_cierres_empresa}. Si una operación
+     * tuviera una entrada así y esperara la fila, el cierre esperaría a la operación para
+     * tocarla y la operación al cierre para leer la fila: un interbloqueo, y el motor mata a
+     * una de las dos. Con las dos puntas en {@code PRIMARY} piden lo mismo en el mismo orden y
+     * no hay ciclo. <b>Por eso el cierre (tarea 10) debe tomar el turno solo por
+     * {@code PRIMARY}, con {@code FORCE INDEX (PRIMARY)}</b>, ni por {@code uq_cierres_abierto}
+     * ni por {@code uq_cierres_empresa}. Tampoco queda un bloqueo de hueco sobre una clave única
+     * que no existe cuando el cajero no tiene turno.
+     *
+     * Caso seguro del 409: si entre los dos pasos el turno se cierra y el mismo cajero abre
+     * otro, el segundo paso no encuentra el turno que averiguó el primero y la operación
+     * recibe el 409 de «sin turno abierto» aunque ya exista el turno nuevo. Es una ventana
+     * de milisegundos y el error es hacia el lado seguro: nada se registra contra un turno
+     * que no era el que la operación vio; el cajero repite la operación.
      */
     public Optional<Long> bloquearAbiertoDe(Integer empresa, Integer cajero) {
         Optional<Long> turno = jdbc.sql("""

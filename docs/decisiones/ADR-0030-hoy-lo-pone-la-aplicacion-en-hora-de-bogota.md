@@ -141,3 +141,18 @@ aceptable: son raras y manuales); y `escribirPrecios` bloquea el producto y no l
 de modo que las reglas propias y las de ámbito no se esperan entre sí (no comparten filas).
 `bloquearEmpresa` existe también en `RepositorioConfiguracionTributaria` con el mismo SQL;
 no se unificó porque obligaría a tocar el constructor de dos servicios por una línea.
+
+## La caja: las horas se escriben en hora de Bogotá (Sprint 9)
+
+Las horas que escribe la caja en una columna DATETIME (la apertura y el cierre del turno y,
+más adelante, la fecha de las ventas, las devoluciones y los cobros) se calculan con
+`Hoy.ahora(Clock)`: la hora de pared de Bogotá, truncada al segundo. Se leen con
+`.atZone(Hoy.ZONA)`. Es la misma hora que ve la sesión de la base y su día es `Hoy.de(Clock)`.
+Con `LocalDateTime.now(reloj)` una JVM en UTC guardaría una hora 5 horas adelantada sin
+que nada falle.
+
+`ServicioAutorizacion` (tarea 3, PIN) y las demás marcas anteriores siguen con
+`LocalDateTime.now(reloj)`, es decir, en la zona de la JVM. No se cambian aquí: lo que
+escriben (bloqueos del PIN, sesiones) se compara siempre con ese mismo reloj, y hoy ninguna
+consulta cruza esas marcas con las de la caja. Si alguna vez una consulta las compara, hay
+que unificarlas antes.

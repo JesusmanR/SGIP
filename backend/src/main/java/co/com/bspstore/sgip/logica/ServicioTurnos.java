@@ -13,7 +13,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDateTime;
-import java.time.temporal.ChronoUnit;
 import java.util.Optional;
 
 /**
@@ -25,13 +24,14 @@ import java.util.Optional;
  *
  * <h2>La hora</h2>
  *
- * La apertura sale del {@code Clock} de la aplicación y se guarda como la hora de pared
- * de Bogotá ({@code LocalDateTime.ofInstant(reloj.instant(), Hoy.ZONA)}), al segundo,
- * que es lo que ve la sesión de la base (ADR-0030). No se usa {@code LocalDateTime.now(reloj)}:
- * ese reloj es el de la JVM, que en la CI y en un servidor es UTC. Tampoco el
- * {@code CURRENT_TIMESTAMP} del motor. <b>El cierre (tarea 10) debe escribir {@code cierre}
- * del mismo modo</b>: con otra zona, {@code ck_cierre_fechas} ({@code cierre >= apertura})
- * podría fallar y la petición acabaría en un 500.
+ * La apertura sale del {@code Clock} de la aplicación con {@link Hoy#ahora(Clock)}: la hora de
+ * pared de Bogotá, al segundo, que es la que ve la sesión de la base (ADR-0030). No se usa
+ * {@code LocalDateTime.now(reloj)}: ese reloj es el de la JVM, que en la CI y en un servidor es
+ * UTC, y guardaría una hora 5 horas adelantada sin que nada falle. Tampoco el
+ * {@code CURRENT_TIMESTAMP} del motor. <b>El cierre (tarea 10) debe escribir {@code cierre} del
+ * mismo modo</b>: con la zona de la JVM, el turno se cerraría «5 horas en el futuro» en silencio
+ * (el {@code ck_cierre_fechas}, {@code cierre >= apertura}, solo saltaría con una JVM al oeste
+ * de Bogotá).
  *
  * <h2>Una apertura por cajero</h2>
  *
@@ -57,10 +57,16 @@ import java.util.Optional;
  * empresa.
  *
  * El turno se bloquea siempre <b>por su clave primaria</b> ({@code cierre_id}), en las dos
- * puntas: {@code FOR SHARE} aquí y {@code FOR UPDATE} en el cierre. Nadie debe tomar un
- * bloqueo por el índice único {@code uq_cierres_abierto}: el cierre escribe {@code cierre}
- * y con ello cambia {@code abierto_de}, de modo que tiene que tocar ese índice, y una
- * operación que lo tuviera tomado y esperara la fila lo llevaría a un interbloqueo.
+ * puntas: {@code FOR SHARE} aquí y {@code FOR UPDATE} en el cierre. <b>El cierre debe tomar el
+ * turno solo por {@code PRIMARY}, con {@code FORCE INDEX (PRIMARY)}</b>, y nunca por
+ * {@code uq_cierres_abierto} ni por {@code uq_cierres_empresa}. Dos razones, la misma
+ * enfermedad: (1) el cierre escribe {@code cierre} y con ello cambia {@code abierto_de}, de
+ * modo que tiene que tocar {@code uq_cierres_abierto}; (2) toda inserción que referencia el
+ * turno (venta, devolución, cobro) comprueba la clave foránea compuesta
+ * {@code fk_ventas_cierre_emp} (V11), y para ello InnoDB toma un bloqueo compartido sobre la
+ * entrada de {@code uq_cierres_empresa}. Un cierre que ya tuviera una de esas entradas, y una
+ * operación que tuviera el turno y fuera por la entrada, se esperarían mutuamente: un
+ * interbloqueo, y el motor mata a una de las dos.
  */
 @Service
 public class ServicioTurnos {
@@ -93,7 +99,7 @@ public class ServicioTurnos {
         }
         Long id;
         try {
-            id = turnos.insertar(empresa, cajero, apertura(), base);
+            id = turnos.insertar(empresa, cajero, Hoy.ahora(reloj), base);
         } catch (DuplicateKeyException e) {
             // Ganó otra apertura del mismo cajero entre la lectura y este INSERT.
             throw new TurnoYaAbiertoException();
@@ -148,10 +154,5 @@ public class ServicioTurnos {
     private static Integer cajeroEnSesion() {
         return ContextoEmpresa.actual().orElseThrow(() -> new IllegalStateException(
                 "No hay usuario autenticado en el contexto. Revise la cadena de seguridad.")).usuarioId();
-    }
-
-    /** La hora de pared de Bogotá, al segundo: la columna es un DATETIME sin fracción. */
-    private LocalDateTime apertura() {
-        return LocalDateTime.ofInstant(reloj.instant(), Hoy.ZONA).truncatedTo(ChronoUnit.SECONDS);
     }
 }

@@ -206,10 +206,12 @@ class TurnosAutorizacionTest {
             "{\"baseEfectivo\":null}",
             // negativa
             "{\"baseEfectivo\":-1}",
-            // con centavos: el dinero va en pesos enteros
-            "{\"baseEfectivo\":50000.5}",
+            // más de dos decimales: no cabe en la columna (los centavos distintos de cero con uno o
+            // dos decimales los rechaza el servicio, véase ServicioTurnosTest)
+            "{\"baseEfectivo\":50000.001}",
             // más grande que la columna
             "{\"baseEfectivo\":1000000000000}",
+            "{\"baseEfectivo\":1E+20}",
             // no es un número
             "{\"baseEfectivo\":\"mucho\"}",
             // cuerpo vacío
