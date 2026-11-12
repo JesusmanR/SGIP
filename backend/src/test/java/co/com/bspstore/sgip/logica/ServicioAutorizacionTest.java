@@ -632,6 +632,33 @@ class ServicioAutorizacionTest {
         assertEquals(0, pines.cuenta(NUEVO).intentos);
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"", "   ", "\t"})
+    void laPrimeraVezUnPinActualVacioOSoloEspaciosSeTrataComoNulo(String vacio) {
+        como(NUEVO);
+
+        servicio.fijarPin(vacio, "483920");
+
+        assertTrue(Seguridad.verificar("483920", pines.cuenta(NUEVO).pinHash));
+        assertEquals(0, pines.cuenta(NUEVO).intentos);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"", "   ", "\t"})
+    void conPinUnActualVacioDaElMismoErrorQueSiFaltara(String vacio) {
+        como(ANA);
+        String antes = pines.cuenta(ANA).pinHash;
+        PinNuevoInvalidoException siFaltara = assertThrows(PinNuevoInvalidoException.class,
+                () -> servicio.fijarPin(null, "1111"));
+
+        PinNuevoInvalidoException e = assertThrows(PinNuevoInvalidoException.class,
+                () -> servicio.fijarPin(vacio, "1111"));
+
+        assertEquals(siFaltara.getMessage(), e.getMessage());
+        assertEquals(antes, pines.cuenta(ANA).pinHash);
+        assertEquals(0, pines.cuenta(ANA).intentos, "vacío no es un intento");
+    }
+
     @Test
     void paraCambiarElPinHaceFaltaElActual() {
         como(ANA);

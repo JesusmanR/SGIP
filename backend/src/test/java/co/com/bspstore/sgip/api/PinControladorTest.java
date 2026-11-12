@@ -115,6 +115,19 @@ class PinControladorTest {
         verify(servicio).fijarPin("4821", "9999");
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "{\"pinActual\":\"\",\"pinNuevo\":\"9999\"}",
+            "{\"pinActual\":\"   \",\"pinNuevo\":\"9999\"}",
+            "{\"pinActual\":null,\"pinNuevo\":\"9999\"}"})
+    void unPinActualVacioNoEsUnErrorDeFormato(String cuerpo) throws Exception {
+        // Qué hacer con él (la primera vez se ignora; para cambiar el PIN falta) lo
+        // decide el servicio, no la validación del cuerpo.
+        fijar(cuerpo).andExpect(status().isNoContent());
+
+        verify(servicio).fijarPin(any(), org.mockito.ArgumentMatchers.eq("9999"));
+    }
+
     // ------------------------------------------------------------- la validación
 
     @ParameterizedTest

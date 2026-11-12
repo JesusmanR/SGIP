@@ -310,29 +310,110 @@ class PinConBaseTest {
         for (int i = 0; i < hilos; i++) {
             vendedores.add(insertarUsuario(empresaId, "VENDEDOR", "paralelo", true, null));
         }
-        ExecutorService pool = Executors.newFixedThreadPool(hilos);
-        CountDownLatch salida = new CountDownLatch(1);
-        List<Future<Object>> futuros = new ArrayList<>();
-        for (Integer vendedor : vendedores) {
-            futuros.add(pool.submit(() -> {
-                como(vendedor, "VENDEDOR", empresaId);
-                try {
-                    salida.await();
-                    return servicio.autorizar(new SolicitudAutorizacion(adminId, pin), DESCUENTO);
-                } catch (RuntimeException e) {
-                    return e;
-                } finally {
-                    SecurityContextHolder.clearContext();
-                }
-            }));
+        return enParalelo(vendedores, adminId, pin);
+    }
+
+    /**
+     * Lanza un intento por cada elemento de {@code quienes}, todos a la vez (una
+     * barrera con tiempos acotados), y devuelve lo que cada hilo obtuvo: la
+     * autorización o la excepción. Los hilos se cierran siempre. Un vendedor repetido
+     * en la lista son varios intentos simultáneos del mismo vendedor.
+     */
+    private List<Object> enParalelo(List<Integer> quienes, int objetivo, String pin) throws Exception {
+        ExecutorService pool = Executors.newFixedThreadPool(quienes.size());
+        try {
+            CountDownLatch listos = new CountDownLatch(quienes.size());
+            CountDownLatch salida = new CountDownLatch(1);
+            List<Future<Object>> futuros = new ArrayList<>();
+            for (Integer vendedor : quienes) {
+                futuros.add(pool.submit(() -> {
+                    como(vendedor, "VENDEDOR", empresaId);
+                    try {
+                        listos.countDown();
+                        if (!salida.await(30, TimeUnit.SECONDS)) {
+                            throw new IllegalStateException("la salida no se dio a tiempo");
+                        }
+                        return servicio.autorizar(new SolicitudAutorizacion(objetivo, pin), DESCUENTO);
+                    } catch (RuntimeException e) {
+                        return e;
+                    } finally {
+                        SecurityContextHolder.clearContext();
+                    }
+                }));
+            }
+            assertTrue(listos.await(30, TimeUnit.SECONDS), "los hilos no llegaron a la barrera");
+            salida.countDown();
+            List<Object> resultados = new ArrayList<>();
+            for (Future<Object> f : futuros) {
+                resultados.add(f.get(60, TimeUnit.SECONDS));
+            }
+            return resultados;
+        } finally {
+            pool.shutdownNow();
         }
-        salida.countDown();
-        List<Object> resultados = new ArrayList<>();
-        for (Future<Object> f : futuros) {
-            resultados.add(f.get(60, TimeUnit.SECONDS));
-        }
-        pool.shutdown();
-        return resultados;
+    }
+
+    @Test
+    void variosIntentosDelMismoVendedorContraUnObjetivoInvalidoNoSePierden() throws Exception {
+        // El contador de quien pide se protege con el bloqueo de su propia fila: cuatro
+        // intentos simultáneos del MISMO vendedor son cuatro fallos, no uno.
+        List<Object> resultados = enParalelo(List.of(vendedorId, vendedorId, vendedorId, vendedorId),
+                ajenoId, PIN);
+
+        assertEquals(4, resultados.stream().filter(r -> r instanceof PinInvalidoException).count());
+        assertEquals(4, entero("pin_errados_emitidos", vendedorId), "ningún fallo se perdió");
+        assertNull(instante("pin_emision_bloqueada_en", vendedorId));
+        assertEquals(0, entero("pin_intentos", ajenoId));
+    }
+
+    @Test
+    void alLlegarAlMaximoElBloqueoDeEmisionQuedaPuestoYNoPasaDelTope() throws Exception {
+        List<Object> resultados = enParalelo(List.of(vendedorId, vendedorId, vendedorId,
+                vendedorId, vendedorId, vendedorId), ajenoId, PIN);
+
+        assertEquals(5, resultados.stream().filter(r -> r instanceof PinInvalidoException).count());
+        assertEquals(1, resultados.stream().filter(r -> r instanceof PinBloqueadoException).count());
+        assertEquals(5, entero("pin_errados_emitidos", vendedorId), "el tope es el máximo");
+        assertNotNull(instante("pin_emision_bloqueada_en", vendedorId));
+        assertEquals(2, rechazos(vendedorId, "PIN_BLOQUEADO"),
+                "una fila por el bloqueo y otra por el intento contra lo bloqueado");
+    }
+
+    // ------------------------------------------- un objetivo que dejó de valer
+
+    private String fila(Integer usuario) {
+        return jdbc.sql("SELECT pin_hash, pin_intentos, pin_bloqueado_en FROM usuarios WHERE usuario_id = :id")
+                .param("id", usuario).query().singleRow().toString();
+    }
+
+    private void exigirQueYaNoAutoriza(Integer antiguo) {
+        String antes = fila(antiguo);
+        comoVendedor();
+
+        // Con el PIN correcto: el objetivo ya no es un administrador activo.
+        assertThrows(PinInvalidoException.class,
+                () -> servicio.autorizar(new SolicitudAutorizacion(antiguo, PIN), DESCUENTO));
+
+        assertEquals(1, entero("pin_errados_emitidos", vendedorId), "el fallo cuenta contra quien pidió");
+        assertEquals(1, rechazos(vendedorId, "PIN_OBJETIVO_INVALIDO"));
+        assertEquals(antes, fila(antiguo), "la fila del antiguo administrador no cambia");
+    }
+
+    @Test
+    void unAdministradorDegradadoAVendedorYaNoAutorizaAunqueElPinSeaCorrecto() {
+        Integer antiguo = insertarUsuario(empresaId, "ADMINISTRADOR", "degradado", true, Seguridad.derivar(PIN));
+        jdbc.sql("UPDATE usuarios SET rol_id = (SELECT rol_id FROM roles WHERE nombre = 'VENDEDOR') "
+                + "WHERE usuario_id = :id").param("id", antiguo).update();
+
+        exigirQueYaNoAutoriza(antiguo);
+    }
+
+    @Test
+    void unAdministradorDesactivadoYaNoAutorizaAunqueElPinSeaCorrecto() {
+        Integer antiguo = insertarUsuario(empresaId, "ADMINISTRADOR", "desactivado", true, Seguridad.derivar(PIN));
+        jdbc.sql("UPDATE usuarios SET activo = 0 WHERE usuario_id = :id").param("id", antiguo).update();
+
+        exigirQueYaNoAutoriza(antiguo);
     }
 
     @Test
