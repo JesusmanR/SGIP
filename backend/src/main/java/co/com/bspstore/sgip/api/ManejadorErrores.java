@@ -21,6 +21,9 @@ import co.com.bspstore.sgip.logica.AlmacenArchivos;
 import co.com.bspstore.sgip.logica.ArchivoInvalidoException;
 import co.com.bspstore.sgip.logica.ClienteNoEditableException;
 import co.com.bspstore.sgip.logica.DatoDeClienteInvalidoException;
+import co.com.bspstore.sgip.logica.DatoDeTurnoInvalidoException;
+import co.com.bspstore.sgip.logica.SinTurnoAbiertoException;
+import co.com.bspstore.sgip.logica.TurnoYaAbiertoException;
 import co.com.bspstore.sgip.logica.DatosDeDomicilioIncompletosException;
 import co.com.bspstore.sgip.logica.MedioDePagoInvalidoException;
 import co.com.bspstore.sgip.logica.MovimientoInvalidoException;
@@ -305,6 +308,36 @@ public class ManejadorErrores {
         // que lo gestiona el sistema, lo que impide atenderla.
         ProblemDetail p = ProblemDetail.forStatus(HttpStatus.CONFLICT);
         p.setTitle("Cliente no editable");
+        p.setDetail(e.getMessage());
+        return p;
+    }
+
+    @ExceptionHandler(DatoDeTurnoInvalidoException.class)
+    public ProblemDetail datoDeTurnoInvalido(DatoDeTurnoInvalidoException e) {
+        // 400: el cuerpo está bien formado, pero la base de efectivo no es un monto
+        // que el turno admita. Texto fijo: no repite lo enviado.
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
+        p.setTitle("Turno no válido");
+        p.setDetail(e.getMessage());
+        return p;
+    }
+
+    @ExceptionHandler(TurnoYaAbiertoException.class)
+    public ProblemDetail turnoYaAbierto(TurnoYaAbiertoException e) {
+        // 409: la petición es válida y es el estado del cajero, que ya tiene su turno
+        // abierto, lo que impide atenderla.
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.CONFLICT);
+        p.setTitle("Ya hay un turno abierto");
+        p.setDetail(e.getMessage());
+        return p;
+    }
+
+    @ExceptionHandler(SinTurnoAbiertoException.class)
+    public ProblemDetail sinTurnoAbierto(SinTurnoAbiertoException e) {
+        // 409: la operación es válida y falta el turno abierto que la ampara, o se
+        // cerró mientras tanto.
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.CONFLICT);
+        p.setTitle("Sin turno abierto");
         p.setDetail(e.getMessage());
         return p;
     }

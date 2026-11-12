@@ -115,7 +115,8 @@ class TurnosEsquemaConBaseTest {
 
         assertEquals("decimal(14,2)", columna.get("tipo"));
         assertEquals("NO", columna.get("nulo"));
-        assertEquals("0", columna.get("defecto"));
+        // El motor devuelve el defecto con la escala de la columna ("0.00").
+        assertEquals(0, new BigDecimal(String.valueOf(columna.get("defecto"))).compareTo(BigDecimal.ZERO));
 
         abrir(empresaId, cajeroId);
         BigDecimal base = jdbc.sql("SELECT base_efectivo FROM cierres_caja WHERE usuario_id = :cajero")

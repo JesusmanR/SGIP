@@ -22,7 +22,7 @@ final class EmpresaDePrueba {
     private static final List<String> TABLAS = List.of("recepciones", "orden_compra_items",
             "ordenes_compra", "historico_costos", "detalle_carga_precios", "cargas_precios",
             "movimientos_inventario", "reglas_iva", "reglas_margen", "productos", "proveedores",
-            "categorias", "usuarios", "empresa_config", "empresas");
+            "categorias", "cierres_caja", "usuarios", "empresa_config", "empresas");
 
     final Integer empresaId;
     final Integer usuarioId;
