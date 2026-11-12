@@ -63,8 +63,63 @@ class PoliticaDeBloqueoTest {
         assertFalse(new PoliticaDeBloqueo(30).vencido(u, AHORA));
     }
 
+    // El PIN del administrador (ADR-0032) no es un Usuario: guarda «marcado» y «desde»
+    // en sus propias columnas, y mide el plazo con la misma regla.
+
+    @Test
+    void sinMarcaNuncaEstaVencidoNiBloqueado() {
+        var politica = new PoliticaDeBloqueo(15);
+
+        assertFalse(politica.vencido(false, null, AHORA));
+        assertFalse(politica.vencido(false, AHORA.minusMinutes(60), AHORA));
+        assertFalse(politica.bloqueadoHoy(false, null, AHORA));
+        assertFalse(politica.bloqueadoHoy(false, AHORA.minusMinutes(5), AHORA));
+    }
+
+    @Test
+    void marcadoYDentroDelPlazoEstaBloqueado() {
+        var politica = new PoliticaDeBloqueo(15);
+
+        assertFalse(politica.vencido(true, AHORA.minusMinutes(14), AHORA));
+        assertTrue(politica.bloqueadoHoy(true, AHORA.minusMinutes(14), AHORA));
+        assertTrue(politica.bloqueadoHoy(true, AHORA, AHORA));
+    }
+
+    @Test
+    void alCumplirseElPlazoElInstanteExactoYaVencio() {
+        var politica = new PoliticaDeBloqueo(15);
+
+        assertTrue(politica.vencido(true, AHORA.minusMinutes(15), AHORA));
+        assertFalse(politica.bloqueadoHoy(true, AHORA.minusMinutes(15), AHORA));
+        assertTrue(politica.vencido(true, AHORA.minusMinutes(15).minusSeconds(1), AHORA));
+        assertFalse(politica.vencido(true, AHORA.minusMinutes(15).plusSeconds(1), AHORA));
+    }
+
+    @Test
+    void marcadoSinInstanteSeTomaPorVencido() {
+        var politica = new PoliticaDeBloqueo(15);
+
+        assertTrue(politica.vencido(true, null, AHORA));
+        assertFalse(politica.bloqueadoHoy(true, null, AHORA));
+    }
+
+    @Test
+    void lasDosFormasDeAsomarseALaReglaContestanLoMismo() {
+        var politica = new PoliticaDeBloqueo(15);
+
+        for (int minutos : new int[]{0, 1, 14, 15, 16, 60}) {
+            Usuario u = bloqueadoHace(minutos);
+            LocalDateTime desde = AHORA.minusMinutes(minutos);
+
+            assertEquals(politica.vencido(u, AHORA), politica.vencido(true, desde, AHORA),
+                    "vencido a los " + minutos);
+            assertEquals(politica.bloqueadoHoy(u, AHORA), politica.bloqueadoHoy(true, desde, AHORA),
+                    "bloqueado hoy a los " + minutos);
+        }
+    }
+
     /**
-     * Solo la política lee la propiedad y escribe su valor por omisión. Los dos
+     * Solo la política lee la propiedad y escribe su valor por omisión. Los
      * servicios la reciben ya resuelta: así no hay un segundo «15» que corregir.
      */
     @Test
@@ -72,6 +127,7 @@ class PoliticaDeBloqueoTest {
         assertTrue(leeLaPropiedad(PoliticaDeBloqueo.class));
         assertFalse(leeLaPropiedad(ServicioAutenticacion.class));
         assertFalse(leeLaPropiedad(ServicioPlataforma.class));
+        assertFalse(leeLaPropiedad(ServicioAutorizacion.class));
     }
 
     private static boolean leeLaPropiedad(Class<?> clase) {

@@ -111,15 +111,6 @@ public class Usuario {
         }
     }
 
-    /**
-     * Si el bloqueo ya cumplió su plazo. Sin instante (un bloqueo anterior a
-     * la V37) no hay desde cuándo contar, y se toma por vencido.
-     */
-    public boolean bloqueoVencido(LocalDateTime ahora, int minutosDeBloqueo) {
-        return bloqueado
-                && (bloqueadoEn == null || !ahora.isBefore(bloqueadoEn.plusMinutes(minutosDeBloqueo)));
-    }
-
     public void registrarIngresoExitoso() {
         intentosFallidos = 0;
     }

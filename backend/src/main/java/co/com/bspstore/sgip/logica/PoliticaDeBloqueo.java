@@ -32,11 +32,24 @@ public class PoliticaDeBloqueo {
 
     /** Marcada como bloqueada y con el plazo cumplido (o sin instante que contar). */
     public boolean vencido(Usuario usuario, LocalDateTime ahora) {
-        return usuario.bloqueoVencido(ahora, minutos);
+        return vencido(usuario.isBloqueado(), usuario.getBloqueadoEn(), ahora);
     }
 
     /** Lo que el ingreso diría hoy: marcada y con el plazo sin vencer. */
     public boolean bloqueadoHoy(Usuario usuario, LocalDateTime ahora) {
-        return usuario.isBloqueado() && !vencido(usuario, ahora);
+        return bloqueadoHoy(usuario.isBloqueado(), usuario.getBloqueadoEn(), ahora);
+    }
+
+    /**
+     * La misma regla para quien no es un {@link Usuario}: el PIN del administrador
+     * guarda su «marcado» y su «desde» en columnas propias (ADR-0032). Sin instante
+     * (un bloqueo anterior a la V37) no hay desde cuándo contar y se toma por vencido.
+     */
+    public boolean vencido(boolean marcado, LocalDateTime desde, LocalDateTime ahora) {
+        return marcado && (desde == null || !ahora.isBefore(desde.plusMinutes(minutos)));
+    }
+
+    public boolean bloqueadoHoy(boolean marcado, LocalDateTime desde, LocalDateTime ahora) {
+        return marcado && !vencido(marcado, desde, ahora);
     }
 }

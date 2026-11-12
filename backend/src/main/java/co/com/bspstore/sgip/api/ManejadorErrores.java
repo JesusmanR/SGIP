@@ -1,6 +1,10 @@
 package co.com.bspstore.sgip.api;
 
 import co.com.bspstore.sgip.config.SinEmpresaException;
+import co.com.bspstore.sgip.logica.AutorizacionRequeridaException;
+import co.com.bspstore.sgip.logica.PinBloqueadoException;
+import co.com.bspstore.sgip.logica.PinInvalidoException;
+import co.com.bspstore.sgip.logica.PinNuevoInvalidoException;
 import co.com.bspstore.sgip.logica.CategoriaEnUsoException;
 import co.com.bspstore.sgip.logica.ClaveActualIncorrectaException;
 import co.com.bspstore.sgip.logica.ClaveNuevaInvalidaException;
@@ -132,6 +136,54 @@ public class ManejadorErrores {
     public ProblemDetail claveNuevaInvalida(ClaveNuevaInvalidaException e) {
         ProblemDetail p = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
         p.setTitle("Contraseña nueva no válida");
+        p.setDetail(e.getMessage());
+        return p;
+    }
+
+    @ExceptionHandler(PinNuevoInvalidoException.class)
+    public ProblemDetail pinNuevoInvalido(PinNuevoInvalidoException e) {
+        // 400 como la contraseña nueva: es un dato del cuerpo. El texto es fijo y
+        // nunca lleva el PIN.
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
+        p.setTitle("PIN nuevo no válido");
+        p.setDetail(e.getMessage());
+        return p;
+    }
+
+    @ExceptionHandler(PinInvalidoException.class)
+    public ProblemDetail pinInvalido(PinInvalidoException e) {
+        // 403 y no 401: el cliente trata todo 401 como «la sesión expiró». Un solo
+        // texto para un PIN errado y para un administrador que no vale (de otra
+        // empresa, sin PIN, inactivo): quien tantea no debe poder distinguirlos
+        // (ADR-0032).
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.FORBIDDEN);
+        p.setTitle("PIN incorrecto");
+        int minutos = e.getMinutosDeBloqueo();
+        p.setDetail("El administrador o el PIN no son correctos. Si te equivocas varias veces, "
+                + "la autorización se bloquea durante " + minutos
+                + (minutos == 1 ? " minuto." : " minutos."));
+        return p;
+    }
+
+    @ExceptionHandler(PinBloqueadoException.class)
+    public ProblemDetail pinBloqueado(PinBloqueadoException e) {
+        // 403 por la misma razón que el PIN errado. No distingue quién está
+        // bloqueado, si el administrador o quien pide: a los dos les sirve esperar.
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.FORBIDDEN);
+        p.setTitle("Autorización bloqueada");
+        int minutos = e.getMinutosDeBloqueo();
+        p.setDetail("Se superó el número de intentos con el PIN. Espera " + minutos
+                + (minutos == 1 ? " minuto" : " minutos")
+                + " desde el bloqueo e inténtalo de nuevo.");
+        return p;
+    }
+
+    @ExceptionHandler(AutorizacionRequeridaException.class)
+    public ProblemDetail autorizacionRequerida(AutorizacionRequeridaException e) {
+        // 403: se sabe quién pide y aun así no puede. Texto fijo: no dice qué se
+        // quería hacer ni qué datos llegaron.
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.FORBIDDEN);
+        p.setTitle("Autorización requerida");
         p.setDetail(e.getMessage());
         return p;
     }
