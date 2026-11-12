@@ -94,10 +94,7 @@ class TurnosConBaseTest {
     }
 
     private void entrarComo(Integer usuario) {
-        var u = new UsuarioAutenticado(usuario, "prueba@ejemplo.co", "VENDEDOR", empresa.empresaId);
-        SecurityContext c = SecurityContextHolder.createEmptyContext();
-        c.setAuthentication(new UsernamePasswordAuthenticationToken(u, null, List.of()));
-        SecurityContextHolder.setContext(c);
+        SecurityContextHolder.setContext(contextoDe(usuario));
     }
 
     private SecurityContext contextoDe(Integer usuario) {
@@ -228,11 +225,17 @@ class TurnosConBaseTest {
                     "queda el turno del primero, con su base");
         } finally {
             soltarAlPrimero.countDown();
-            hilos.shutdownNow();
+            cerrar(hilos);
         }
     }
 
     // ------------------------------------------------------- exigirTurnoAbierto
+
+    @Test
+    void exigirTurnoAbiertoSinNingunTurnoEs409() {
+        assertThrows(SinTurnoAbiertoException.class,
+                () -> dentroDeUnaTransaccion(servicio::exigirTurnoAbierto));
+    }
 
     @Test
     void exigirTurnoAbiertoConElTurnoCerradoEs409() {
@@ -302,7 +305,7 @@ class TurnosConBaseTest {
                     "al terminar la operación el FOR UPDATE ya no espera");
         } finally {
             soltar.countDown();
-            hilos.shutdownNow();
+            cerrar(hilos);
         }
     }
 
@@ -338,7 +341,7 @@ class TurnosConBaseTest {
             assertEquals(turno.id(), primera.get(ESPERA_MAXIMA_EN_SEGUNDOS, TimeUnit.SECONDS));
         } finally {
             soltar.countDown();
-            hilos.shutdownNow();
+            cerrar(hilos);
         }
     }
 
@@ -392,16 +395,94 @@ class TurnosConBaseTest {
                     "la operación que llega durante el cierre recibe el 409 de sin turno: " + fallo.getCause());
         } finally {
             seguirConElCierre.countDown();
-            hilos.shutdownNow();
+            cerrar(hilos);
+        }
+    }
+
+    /**
+     * La clave foránea compuesta de las inserciones (venta, devolución, cobro) toma un bloqueo
+     * compartido sobre la entrada de {@code uq_cierres_empresa} DESPUÉS de {@code exigirTurnoAbierto}.
+     * Mientras tanto el cierre espera la fila por su clave primaria. Como el cierre no ha tocado
+     * ningún índice secundario, la operación termina su inserción, confirma, y solo entonces el
+     * cierre sigue: sin interbloqueo. Si el cierre tomara el turno por {@code uq_cierres_empresa}
+     * (o por {@code uq_cierres_abierto}), tendría ya esa entrada y la operación la esperaría a
+     * él mientras él espera a la operación.
+     *
+     * El bloqueo de la clave foránea se simula con la lectura compartida de esa entrada, que es
+     * lo que InnoDB hace al comprobar la referencia; no se toca la tabla {@code ventas}, que es
+     * de otra tarea. Cuando la venta exista, la tarea 7 debe repetir esta prueba con la inserción real.
+     */
+    @Test
+    void laClaveForaneaDeLasInsercionesNoSeInterbloqueaConElCierre() throws Exception {
+        Turno turno = servicio.abrir(base("0"));
+        SecurityContext contexto = contextoDe(empresa.usuarioId);
+        ExecutorService hilos = Executors.newFixedThreadPool(2);
+        CountDownLatch operacionTieneElTurno = new CountDownLatch(1);
+        CountDownLatch tomarLaClaveForanea = new CountDownLatch(1);
+        try {
+            Future<Long> operacion = hilos.submit(() -> {
+                SecurityContextHolder.setContext(contexto);
+                try {
+                    return new TransactionTemplate(transacciones).execute(estado -> {
+                        Long id = servicio.exigirTurnoAbierto();
+                        operacionTieneElTurno.countDown();
+                        esperar(tomarLaClaveForanea);
+                        jdbc.sql("""
+                                        SELECT cierre_id FROM cierres_caja FORCE INDEX (uq_cierres_empresa)
+                                         WHERE empresa_id = :e AND cierre_id = :id FOR SHARE
+                                        """)
+                                .param("e", empresa.empresaId).param("id", id).query(Long.class).single();
+                        return id;
+                    });
+                } finally {
+                    SecurityContextHolder.clearContext();
+                }
+            });
+            assertTrue(operacionTieneElTurno.await(ESPERA_MAXIMA_EN_SEGUNDOS, TimeUnit.SECONDS));
+
+            Future<Integer> cierre = hilos.submit(() -> new TransactionTemplate(transacciones).execute(estado -> {
+                tomarElTurnoComoElCierre(turno.id());
+                return jdbc.sql("""
+                                UPDATE cierres_caja SET cierre = apertura
+                                 WHERE empresa_id = :e AND cierre_id = :id
+                                """)
+                        .param("e", empresa.empresaId).param("id", turno.id()).update();
+            }));
+            esperarAQueSeQuedeBloqueado(cierre);
+
+            tomarLaClaveForanea.countDown();
+            assertEquals(turno.id(), operacion.get(ESPERA_MAXIMA_EN_SEGUNDOS, TimeUnit.SECONDS),
+                    "la operación debe poder tomar la clave foránea mientras el cierre espera");
+            assertEquals(1, cierre.get(ESPERA_MAXIMA_EN_SEGUNDOS, TimeUnit.SECONDS),
+                    "el cierre sigue cuando la operación confirma");
+        } finally {
+            tomarLaClaveForanea.countDown();
+            cerrar(hilos);
         }
     }
 
     // ------------------------------------------------------- ayudas
 
-    /** Lo que hará el cierre (tarea 10): leer el turno por su clave primaria con FOR UPDATE. */
+    /**
+     * Lo que hará el cierre (tarea 10): leer el turno por su clave primaria con FOR UPDATE.
+     * {@code FORCE INDEX (PRIMARY)} no es adorno: la clave foránea compuesta de las inserciones
+     * ({@code fk_ventas_cierre_emp}, V11) toma un bloqueo compartido sobre la entrada de
+     * {@code uq_cierres_empresa}; un cierre que tomara el turno por ese índice (o por
+     * {@code uq_cierres_abierto}) volvería al interbloqueo por otro camino.
+     */
     private Long tomarElTurnoComoElCierre(Long turno) {
-        return jdbc.sql("SELECT cierre_id FROM cierres_caja WHERE empresa_id = :e AND cierre_id = :id FOR UPDATE")
+        return jdbc.sql("""
+                        SELECT cierre_id FROM cierres_caja FORCE INDEX (PRIMARY)
+                         WHERE empresa_id = :e AND cierre_id = :id FOR UPDATE
+                        """)
                 .param("e", empresa.empresaId).param("id", turno).query(Long.class).single();
+    }
+
+    /** Cierra los hilos y espera, con tiempo máximo, a que terminen: ninguno queda vivo tras la prueba. */
+    private static void cerrar(ExecutorService hilos) throws InterruptedException {
+        hilos.shutdownNow();
+        assertTrue(hilos.awaitTermination(ESPERA_MAXIMA_EN_SEGUNDOS, TimeUnit.SECONDS),
+                "un hilo de la prueba no terminó");
     }
 
     private <T> T dentroDeUnaTransaccion(java.util.function.Supplier<T> trabajo) {

@@ -132,6 +132,16 @@ class TurnosAutorizacionTest {
     }
 
     @ParameterizedTest
+    @ValueSource(strings = {"50000.00", "50000.0", "5E+4", "0.00"})
+    void unaBaseEnPesosEnterosConCerosDecimalesSeAcepta(String base) throws Exception {
+        // Lo que manda un formulario que formatea el monto con dos decimales: son pesos enteros.
+        when(servicio.abrir(any())).thenReturn(ABIERTO);
+
+        mvc.perform(abrir("{\"baseEfectivo\":" + base + "}").with(como("VENDEDOR")))
+                .andExpect(status().isCreated());
+    }
+
+    @ParameterizedTest
     @ValueSource(strings = {"ADMINISTRADOR", "VENDEDOR"})
     void elAdministradorYElVendedorConsultanSuTurnoActual(String rol) throws Exception {
         when(servicio.actual()).thenReturn(Optional.of(ABIERTO));
