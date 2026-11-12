@@ -29,7 +29,6 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
-import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -343,6 +342,60 @@ class TurnosConBaseTest {
         }
     }
 
+    /**
+     * Una operación que llega cuando el cierre ya tiene el turno recibe el 409 de «sin turno
+     * abierto»: ni espera para siempre ni cae como perdedora de un interbloqueo.
+     *
+     * El cierre (tarea 10) tomará el turno con FOR UPDATE por su clave primaria y después
+     * escribirá {@code cierre}, lo que cambia {@code abierto_de} y obliga a tocar el índice
+     * único. Si la operación hubiera tomado antes una entrada de ese índice, el cierre
+     * esperaría a la operación para tocarla y la operación esperaría al cierre para leer la
+     * fila: un interbloqueo, y el motor mata a una de las dos. Aquí el cierre debe terminar
+     * y la operación debe enterarse, al recibir el bloqueo, de que el turno ya se cerró.
+     */
+    @Test
+    void unaOperacionQueLlegaDuranteElCierreRecibeSinTurnoYNoUnInterbloqueo() throws Exception {
+        Turno turno = servicio.abrir(base("0"));
+        SecurityContext contexto = contextoDe(empresa.usuarioId);
+        ExecutorService hilos = Executors.newFixedThreadPool(2);
+        CountDownLatch cierreTomoElTurno = new CountDownLatch(1);
+        CountDownLatch seguirConElCierre = new CountDownLatch(1);
+        try {
+            Future<Integer> cierre = hilos.submit(() -> new TransactionTemplate(transacciones).execute(estado -> {
+                tomarElTurnoComoElCierre(turno.id());
+                cierreTomoElTurno.countDown();
+                esperar(seguirConElCierre);
+                return jdbc.sql("""
+                                UPDATE cierres_caja SET cierre = apertura
+                                 WHERE empresa_id = :e AND cierre_id = :id
+                                """)
+                        .param("e", empresa.empresaId).param("id", turno.id()).update();
+            }));
+            assertTrue(cierreTomoElTurno.await(ESPERA_MAXIMA_EN_SEGUNDOS, TimeUnit.SECONDS));
+
+            Future<Long> operacion = hilos.submit(() -> {
+                SecurityContextHolder.setContext(contexto);
+                try {
+                    return dentroDeUnaTransaccion(servicio::exigirTurnoAbierto);
+                } finally {
+                    SecurityContextHolder.clearContext();
+                }
+            });
+            esperarAQueSeQuedeBloqueado(operacion);
+
+            seguirConElCierre.countDown();
+            assertEquals(1, cierre.get(ESPERA_MAXIMA_EN_SEGUNDOS, TimeUnit.SECONDS),
+                    "el cierre debe terminar: no puede esperar a la operación");
+            ExecutionException fallo = assertThrows(ExecutionException.class,
+                    () -> operacion.get(ESPERA_MAXIMA_EN_SEGUNDOS, TimeUnit.SECONDS));
+            assertInstanceOf(SinTurnoAbiertoException.class, fallo.getCause(),
+                    "la operación que llega durante el cierre recibe el 409 de sin turno: " + fallo.getCause());
+        } finally {
+            seguirConElCierre.countDown();
+            hilos.shutdownNow();
+        }
+    }
+
     // ------------------------------------------------------- ayudas
 
     /** Lo que hará el cierre (tarea 10): leer el turno por su clave primaria con FOR UPDATE. */
@@ -365,7 +418,7 @@ class TurnosConBaseTest {
             try {
                 return trabajo.get();
             } finally {
-                jdbc.sql("SET SESSION innodb_lock_wait_timeout = 50").update();
+                jdbc.sql("SET SESSION innodb_lock_wait_timeout = DEFAULT").update();
             }
         });
     }
