@@ -112,6 +112,17 @@ public class ServicioAutorizacion {
      * Sin nada que autorizar no valida ni cuenta nada y devuelve una autorización
      * vacía. Si quien pide es administrador se autoriza a sí mismo, sin PIN. Si no,
      * la solicitud es obligatoria (403 si falta).
+     *
+     * <b>Contrato de quien la llama.</b> Se llama ANTES de abrir la transacción de la
+     * operación, y sin que el hilo tenga bloqueada, escrita ni referenciada por una
+     * clave foránea (una venta con {@code autorizada_por}, por ejemplo) la fila de
+     * {@code usuarios} del solicitante o del administrador. Esta transacción es
+     * independiente de la de fuera: si la de fuera ya tomó una de esas filas, la de
+     * dentro espera a la de fuera hasta el tiempo límite de InnoDB, falla, y el
+     * intento no se cuenta. No hay una guarda aquí a propósito (la prueba
+     * {@code losIntentosPersistenAunqueLaOperacionFalle} la llama desde un bean
+     * transaccional que no toca esas filas); la guarda está en las fachadas de la venta
+     * y de la devolución, que son las que no son transaccionales.
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW,
             noRollbackFor = {PinInvalidoException.class, PinBloqueadoException.class})

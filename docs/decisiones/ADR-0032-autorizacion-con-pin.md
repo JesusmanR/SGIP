@@ -125,6 +125,12 @@ convivan.
 - La contraseña de un administrador antigua, de menos de ocho caracteres, podría ser de
   dígitos: por eso se compara el PIN nuevo contra ella aunque hoy el mínimo de ocho lo
   haga imposible.
+- **Riesgo residual: «distinto de tu contraseña» es un pequeño oráculo.** Con una sesión de
+  administrador robada, quien intenta fijar un PIN y recibe «debe ser distinto de tu
+  contraseña» sabe que su contraseña es ese número de 4 a 6 dígitos. Solo afecta a
+  contraseñas más cortas que el mínimo actual de ocho caracteres, que ya no se pueden
+  crear. Al cambiar un PIN existente la comprobación va después de verificar el PIN
+  actual; la primera vez no hay PIN que verificar.
 - Quien llame a `autorizar` desde una operación nueva debe hacerlo en su fachada, antes de
   su transacción, y consumir el `Autorizacion` con `exigir`. La prueba de que los intentos
   sobreviven a la reversión se repite por `POST /caja/ventas` en la venta.
