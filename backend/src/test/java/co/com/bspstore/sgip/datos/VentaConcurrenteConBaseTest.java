@@ -46,6 +46,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doCallRealMethod;
 
 /**
  * La venta contra dos hilos: la última unidad, el reintento en paralelo, los números seguidos y
@@ -175,7 +176,12 @@ class VentaConcurrenteConBaseTest {
                 return null;
             }));
             try {
-                assertTrue(tomado.await(ESPERA_MAXIMA_EN_SEGUNDOS, TimeUnit.SECONDS), "no se tomó el bloqueo");
+                long limite = System.nanoTime() + TimeUnit.SECONDS.toNanos(ESPERA_MAXIMA_EN_SEGUNDOS);
+                while (!tomado.await(20, TimeUnit.MILLISECONDS)) {
+                    if (transaccion.isDone() || System.nanoTime() > limite) {
+                        fail("no se tomó el bloqueo: " + comoTermino(transaccion));
+                    }
+                }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 throw new IllegalStateException(e);
@@ -206,7 +212,7 @@ class VentaConcurrenteConBaseTest {
 
     private Bloqueo bloquearElProducto(Integer producto) {
         return new Bloqueo(() -> jdbc.sql("""
-                SELECT existencia FROM productos WHERE empresa_id = :e AND bloqueoid = :p FOR UPDATE
+                SELECT existencia FROM productos WHERE empresa_id = :e AND producto_id = :p FOR UPDATE
                 """).param("e", caja.empresa.empresaId).param("p", producto).query(Integer.class).single());
     }
 
@@ -318,6 +324,7 @@ class VentaConcurrenteConBaseTest {
                 rechazo = e.getCause();
             }
         }
+        doCallRealMethod().when(consecutivos).tomarSiguiente(any(), any());
         assertEquals(1, vendidas);
         assertNotNull(rechazo);
         assertInstanceOf(ClaveDeIdempotenciaEnUsoException.class, rechazo,
@@ -334,10 +341,36 @@ class VentaConcurrenteConBaseTest {
 
     @Test
     void ventasSimultaneasTienenConsecutivosDistintosYSeguidos() throws Exception {
+        // La empresa todavía no tiene su fila de consecutivos: la primera vez los dos intentan crearla.
         Integer a = caja.producto("A", 5, "10000");
         Integer b = caja.producto("B", 5, "10000");
-        // Los dos llegan juntos al consecutivo, y la empresa todavía no tiene su fila: la primera
-        // vez los dos intentan crearla.
+
+        assertEquals(List.of("V-00000001", "V-00000002"), dosVentasJuntas(a, b), "sin huecos ni repetidos");
+
+        assertEquals(2, caja.cuantas("ventas"));
+        assertEquals(3L, jdbc.sql("SELECT siguiente FROM consecutivos WHERE empresa_id = :e AND tipo = 'VENTA'")
+                .param("e", caja.empresa.empresaId).query(Long.class).single());
+        assertEquals(1, caja.cuantas("consecutivos"), "una sola fila, aunque los dos intentaron crearla");
+    }
+
+    @Test
+    void ventasSimultaneasConLaFilaYaCreadaTambienTienenConsecutivosDistintosYSeguidos() throws Exception {
+        // Con la fila ya creada, los dos leen el mismo número a la vez: solo el bloqueo del consecutivo
+        // hace que el segundo espere al primero y tome el siguiente. Sin él, los dos numerarían igual.
+        Integer a = caja.producto("A", 5, "10000");
+        Integer b = caja.producto("B", 5, "10000");
+        caja.entrarComoAdministrador();
+        assertEquals("V-00000001", ventas.registrar(venta(UUID.randomUUID(), a, 1, "10000")).consecutivo());
+
+        assertEquals(List.of("V-00000002", "V-00000003"), dosVentasJuntas(a, b), "sin huecos ni repetidos");
+
+        assertEquals(3, caja.cuantas("ventas"));
+        assertEquals(4L, jdbc.sql("SELECT siguiente FROM consecutivos WHERE empresa_id = :e AND tipo = 'VENTA'")
+                .param("e", caja.empresa.empresaId).query(Long.class).single());
+    }
+
+    /** Dos ventas de dos cajeros que llegan juntas al consecutivo; devuelve sus números, ordenados. */
+    private List<String> dosVentasJuntas(Integer a, Integer b) throws Exception {
         CyclicBarrier juntas = new CyclicBarrier(2);
         doAnswer(llamada -> {
             juntas.await(ESPERA_MAXIMA_EN_SEGUNDOS, TimeUnit.SECONDS);
@@ -350,12 +383,8 @@ class VentaConcurrenteConBaseTest {
         List<String> numeros = new ArrayList<>(List.of(resultado(uno).venta().consecutivo(),
                 resultado(otro).venta().consecutivo()));
         numeros.sort(String::compareTo);
-
-        assertEquals(List.of("V-00000001", "V-00000002"), numeros, "sin huecos ni repetidos");
-        assertEquals(2, caja.cuantas("ventas"));
-        assertEquals(3L, jdbc.sql("SELECT siguiente FROM consecutivos WHERE empresa_id = :e AND tipo = 'VENTA'")
-                .param("e", caja.empresa.empresaId).query(Long.class).single());
-        assertEquals(1, caja.cuantas("consecutivos"), "una sola fila, aunque los dos intentaron crearla");
+        doCallRealMethod().when(consecutivos).tomarSiguiente(any(), any());
+        return numeros;
     }
 
     // ------------------------------------------------------- la transacción y su aislamiento
@@ -416,7 +445,8 @@ class VentaConcurrenteConBaseTest {
         Future<ResultadoDeVenta> venta;
         Future<Integer> cierre;
         try (Bloqueo medio = new Bloqueo(() -> jdbc.sql("""
-                SELECT nombre FROM medios_pago WHERE empresa_id = :e AND medio_id = :m FOR UPDATE
+                SELECT nombre FROM medios_pago FORCE INDEX (uq_medios_empresa)
+                 WHERE empresa_id = :e AND medio_id = :m FOR UPDATE
                 """).param("e", caja.empresa.empresaId).param("m", caja.efectivoId).query(String.class).single())) {
             venta = comoAdministrador(() -> ventas.procesar(venta(UUID.randomUUID(), producto, 1, "10000")));
             esperarAQueEsperen("medios_pago", 1, venta);

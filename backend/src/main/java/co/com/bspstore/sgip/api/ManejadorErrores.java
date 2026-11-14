@@ -25,6 +25,9 @@ import co.com.bspstore.sgip.logica.DatoDeTurnoInvalidoException;
 import co.com.bspstore.sgip.logica.DescuentoInvalidoException;
 import co.com.bspstore.sgip.logica.EfectivoRecibidoInvalidoException;
 import co.com.bspstore.sgip.logica.SinTurnoAbiertoException;
+import co.com.bspstore.sgip.logica.ClaveDeIdempotenciaEnUsoException;
+import co.com.bspstore.sgip.logica.ExistenciaInsuficienteException;
+import co.com.bspstore.sgip.logica.VentaInvalidaException;
 import co.com.bspstore.sgip.logica.TurnoYaAbiertoException;
 import co.com.bspstore.sgip.logica.DatosDeDomicilioIncompletosException;
 import co.com.bspstore.sgip.logica.MedioDePagoInvalidoException;
@@ -359,6 +362,34 @@ public class ManejadorErrores {
         // cerró mientras tanto.
         ProblemDetail p = ProblemDetail.forStatus(HttpStatus.CONFLICT);
         p.setTitle("Sin turno abierto");
+        p.setDetail(e.getMessage());
+        return p;
+    }
+
+    @ExceptionHandler(VentaInvalidaException.class)
+    public ProblemDetail ventaInvalida(VentaInvalidaException e) {
+        // 400: el cuerpo está bien formado, pero la regla que incumple depende de la base (el
+        // precio, los medios, el total) o de algo que aún no está disponible. Texto fijo.
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
+        p.setTitle("Venta no válida");
+        p.setDetail(e.getMessage());
+        return p;
+    }
+
+    @ExceptionHandler(ExistenciaInsuficienteException.class)
+    public ProblemDetail existenciaInsuficiente(ExistenciaInsuficienteException e) {
+        // 409: la venta es válida y es el estado del inventario lo que impide atenderla.
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.CONFLICT);
+        p.setTitle("Existencia insuficiente");
+        p.setDetail(e.getMessage());
+        return p;
+    }
+
+    @ExceptionHandler(ClaveDeIdempotenciaEnUsoException.class)
+    public ProblemDetail claveDeIdempotenciaEnUso(ClaveDeIdempotenciaEnUsoException e) {
+        // 409: la clave ya registró otra venta. Texto fijo, sin la clave.
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.CONFLICT);
+        p.setTitle("Clave de idempotencia en uso");
         p.setDetail(e.getMessage());
         return p;
     }

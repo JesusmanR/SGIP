@@ -25,7 +25,8 @@ final class EmpresaDePrueba {
             "consecutivos", "recepciones", "orden_compra_items",
             "ordenes_compra", "historico_costos", "detalle_carga_precios", "cargas_precios",
             "movimientos_inventario", "reglas_iva", "reglas_margen", "productos", "proveedores",
-            "categorias", "cierres_caja", "clientes", "medios_pago", "usuarios", "empresa_config",
+            "categorias", "cierres_caja", "clientes", "medios_pago", "usuarios", "suscripciones",
+            "empresa_config",
             "empresas");
 
     final Integer empresaId;

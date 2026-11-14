@@ -2,9 +2,11 @@ package co.com.bspstore.sgip.datos;
 
 import co.com.bspstore.sgip.api.dto.MovimientoDeInventario;
 import co.com.bspstore.sgip.modelo.TipoMovimiento;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -32,9 +34,11 @@ import java.util.Optional;
 public class RepositorioInventario {
 
     private final JdbcClient jdbc;
+    private final JdbcTemplate plantilla;
 
-    public RepositorioInventario(JdbcClient jdbc) {
+    public RepositorioInventario(JdbcClient jdbc, JdbcTemplate plantilla) {
         this.jdbc = jdbc;
+        this.plantilla = plantilla;
     }
 
     /**
@@ -85,13 +89,26 @@ public class RepositorioInventario {
                                    TipoMovimiento tipo, int cantidad,
                                    int anterior, int posterior,
                                    String documento, String motivo, Long recepcionId) {
+        return insertarMovimiento(empresaId, productoId, usuarioId, tipo, cantidad, anterior, posterior,
+                documento, motivo, recepcionId, null);
+    }
+
+    /**
+     * Lo mismo, con quién autorizó el movimiento (un egreso que deja la existencia en negativo,
+     * por ejemplo). La firma anterior se conserva y delega aquí con {@code null}.
+     */
+    public Long insertarMovimiento(Integer empresaId, Integer productoId, Integer usuarioId,
+                                   TipoMovimiento tipo, int cantidad,
+                                   int anterior, int posterior,
+                                   String documento, String motivo, Long recepcionId,
+                                   Integer autorizadoPor) {
         jdbc.sql("""
                         INSERT INTO movimientos_inventario
                                (empresa_id, producto_id, usuario_id, tipo, cantidad,
                                 existencia_anterior, existencia_posterior,
-                                documento, motivo, recepcion_id)
+                                documento, motivo, recepcion_id, autorizado_por)
                         VALUES (:empresa, :producto, :usuario, :tipo, :cantidad,
-                                :anterior, :posterior, :documento, :motivo, :recepcion)
+                                :anterior, :posterior, :documento, :motivo, :recepcion, :autoriza)
                         """)
                 .param("empresa", empresaId)
                 .param("producto", productoId)
@@ -103,19 +120,51 @@ public class RepositorioInventario {
                 .param("documento", documento)
                 .param("motivo", motivo)
                 .param("recepcion", recepcionId)
+                .param("autoriza", autorizadoPor)
                 .update();
         // LAST_INSERT_ID() va en la misma conexión y la misma transacción
         // que el INSERT, de modo que no puede devolver el de otra sesión.
         return jdbc.sql("SELECT LAST_INSERT_ID()").query(Long.class).single();
     }
 
-    /** Un egreso de una venta: lo que sale, y el saldo antes y después. */
-    public record Egreso(Integer productoId, int cantidad, int anterior, int posterior) {}
+    /**
+     * Un egreso de una venta: lo que sale de un producto, su saldo antes y después y quién autorizó
+     * que la existencia quedara en negativo (nulo en una venta normal).
+     */
+    public record Egreso(Integer productoId, int cantidad, int anterior, int posterior, Integer autorizadoPor) {}
 
-    /** Firma vacía: la implementación llega con el commit de la tarea. */
-    public void registrarEgresos(Integer empresaId, Integer usuarioId, Integer autorizadoPor, String documento,
-                                 List<Egreso> egresos) {
-        throw new UnsupportedOperationException("pendiente");
+    private static final String INSERTAR_EGRESO = """
+            INSERT INTO movimientos_inventario
+                   (empresa_id, producto_id, usuario_id, tipo, cantidad,
+                    existencia_anterior, existencia_posterior, documento, autorizado_por)
+            VALUES (?, ?, ?, 'EGRESO', ?, ?, ?, ?, ?)
+            """;
+
+    private static final String FIJAR_SALDO = """
+            UPDATE productos SET existencia = ?
+             WHERE empresa_id = ? AND producto_id = ?
+            """;
+
+    /**
+     * Los egresos de una venta: un movimiento por producto y el saldo nuevo en cada uno, cada
+     * cosa en un solo lote. Es lo mismo que hace {@code ServicioInventario} con un movimiento (las
+     * dos escrituras juntas, el saldo con el valor que el movimiento declara como posterior), pero
+     * sin una ida y vuelta por producto: las consultas de una venta no crecen con sus líneas.
+     *
+     * Quien llama tiene los productos bloqueados ({@code FOR UPDATE}) y es de ahí de donde salen
+     * {@code anterior} y {@code posterior}; la restricción {@code ck_movimientos_coherencia} rechaza
+     * una fila que no cuadre.
+     */
+    public void registrarEgresos(Integer empresaId, Integer usuarioId, String documento, List<Egreso> egresos) {
+        List<Object[]> movimientos = new ArrayList<>(egresos.size());
+        List<Object[]> saldos = new ArrayList<>(egresos.size());
+        for (Egreso e : egresos) {
+            movimientos.add(new Object[]{empresaId, e.productoId(), usuarioId, e.cantidad(), e.anterior(),
+                    e.posterior(), documento, e.autorizadoPor()});
+            saldos.add(new Object[]{e.posterior(), empresaId, e.productoId()});
+        }
+        plantilla.batchUpdate(INSERTAR_EGRESO, movimientos);
+        plantilla.batchUpdate(FIJAR_SALDO, saldos);
     }
 
     /**

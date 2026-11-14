@@ -875,10 +875,11 @@ class VentaConBaseTest {
     @Test
     void siFallaElKardexNoQuedaVentaNiExistenciaCambiadaNiConsecutivoConsumido() {
         Integer producto = caja.producto("A", 5, "10000");
-        doThrow(new IllegalStateException("falla el kárdex")).when(kardex)
-                .registrarEgresos(any(), any(), any(), any(), any());
+        doThrow(new org.springframework.dao.DataAccessResourceFailureException("falla el kárdex")).when(kardex)
+                .registrarEgresos(any(), any(), any(), any());
 
-        assertThrows(IllegalStateException.class, () -> ventas.procesar(venta(linea(producto, 2), efectivo("20000"))));
+        assertThrows(org.springframework.dao.DataAccessException.class,
+                () -> ventas.procesar(venta(linea(producto, 2), efectivo("20000"))));
 
         nadaGuardado(producto);
         assertEquals(5, caja.existencia(producto));
