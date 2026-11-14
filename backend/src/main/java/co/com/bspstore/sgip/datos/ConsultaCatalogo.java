@@ -157,7 +157,22 @@ public class ConsultaCatalogo {
                 .optional();
     }
 
+    /**
+     * El producto de la empresa con ese código interno, para la caja. Va por la vista y con el
+     * filtro de empresa, igual que {@link #porCodigoBarras}: la vista solo muestra productos
+     * activos, y {@code (empresa_id, codigo)} es único (V10), así que hay a lo sumo una fila.
+     * La comparación usa la intercalación de la columna, que no distingue mayúsculas: lo que se
+     * teclea en el mostrador no tiene que coincidir con cómo se guardó.
+     */
     public Optional<ProductoEnCatalogo> porCodigo(Integer empresaId, String codigo) {
-        throw new UnsupportedOperationException();
+        return jdbc.sql("""
+                        SELECT %s FROM v_precios_producto v
+                         WHERE empresa_id = :empresa
+                           AND codigo = :codigo
+                        """.formatted(COLUMNAS))
+                .param("empresa", empresaId)
+                .param("codigo", codigo)
+                .query(ProductoEnCatalogo.class)
+                .optional();
     }
 }
