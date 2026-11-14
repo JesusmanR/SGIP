@@ -109,6 +109,15 @@ public class RepositorioInventario {
         return jdbc.sql("SELECT LAST_INSERT_ID()").query(Long.class).single();
     }
 
+    /** Un egreso de una venta: lo que sale, y el saldo antes y después. */
+    public record Egreso(Integer productoId, int cantidad, int anterior, int posterior) {}
+
+    /** Firma vacía: la implementación llega con el commit de la tarea. */
+    public void registrarEgresos(Integer empresaId, Integer usuarioId, Integer autorizadoPor, String documento,
+                                 List<Egreso> egresos) {
+        throw new UnsupportedOperationException("pendiente");
+    }
+
     /**
      * Deja el saldo nuevo en el producto.
      *
