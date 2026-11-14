@@ -341,8 +341,8 @@ acepta "una línea de venta con NO_GRAVADO se guarda" \
    SELECT 1, 'PAP-V1', (SELECT cliente_id FROM clientes WHERE empresa_id = 1 LIMIT 1),
           (SELECT usuario_id FROM usuarios WHERE empresa_id = 1 LIMIT 1), 'CONTADO';
    INSERT INTO venta_items (venta_id, empresa_id, producto_id, cantidad, precio_unitario,
-                            costo_unitario, tarifa_iva, tratamiento_iva)
-   VALUES (LAST_INSERT_ID(), 1, $PIDB, 1, 1500, 1000, 0, 'NO_GRAVADO');
+                            costo_unitario, tarifa_iva, tratamiento_iva, subtotal, valor_iva, utilidad)
+   VALUES (LAST_INSERT_ID(), 1, $PIDB, 1, 1500, 1000, 0, 'NO_GRAVADO', 1500, 0, 500);
    ROLLBACK;"
 acepta "una línea de cotización con NO_GRAVADO se guarda" \
   "START TRANSACTION;
@@ -359,8 +359,8 @@ rechaza "y un tratamiento inventado sigue rechazado" 1265 tratamiento_iva \
    SELECT 1, 'PAP-V2', (SELECT cliente_id FROM clientes WHERE empresa_id = 1 LIMIT 1),
           (SELECT usuario_id FROM usuarios WHERE empresa_id = 1 LIMIT 1), 'CONTADO';
    INSERT INTO venta_items (venta_id, empresa_id, producto_id, cantidad, precio_unitario,
-                            costo_unitario, tarifa_iva, tratamiento_iva)
-   VALUES (LAST_INSERT_ID(), 1, $PIDB, 1, 1500, 1000, 0, 'INVENTADO');
+                            costo_unitario, tarifa_iva, tratamiento_iva, subtotal, valor_iva, utilidad)
+   VALUES (LAST_INSERT_ID(), 1, $PIDB, 1, 1500, 1000, 0, 'INVENTADO', 1500, 0, 500);
    ROLLBACK;"
 
 # ── Un año sin UVT avisa y no impide vender (V35) ───────────────────────

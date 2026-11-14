@@ -492,13 +492,16 @@ else
   else
     rechaza "un renglón de venta con el producto de otra empresa" fk_venitems_producto_emp \
       "INSERT INTO venta_items (venta_id, empresa_id, producto_id, cantidad,
-                                 precio_unitario, costo_unitario, tarifa_iva, tratamiento_iva)
-       VALUES ($VENTA, $ID, $PROD_DE_OTRA, 1, 2500000, 2000, 0.19, 'GRAVADO');"
+                                 precio_unitario, costo_unitario, tarifa_iva, tratamiento_iva,
+                                 subtotal, valor_iva, utilidad)
+       VALUES ($VENTA, $ID, $PROD_DE_OTRA, 1, 2500000, 2000, 0.19, 'GRAVADO',
+               2500000, 475000, 2498000);"
 
     salida=$(ejecutar "INSERT INTO venta_items (venta_id, empresa_id, producto_id, cantidad,
                                                  precio_unitario, costo_unitario, tarifa_iva,
-                                                 tratamiento_iva)
-                       VALUES ($VENTA, $ID, $PROD_PROPIO, 1, 2500000, 2000, 0.19, 'GRAVADO');")
+                                                 tratamiento_iva, subtotal, valor_iva, utilidad)
+                       VALUES ($VENTA, $ID, $PROD_PROPIO, 1, 2500000, 2000, 0.19, 'GRAVADO',
+                               2500000, 475000, 2498000);")
     [[ -z "$salida" ]] && ok "el renglón con producto propio entra" \
                        || falla "el renglón propio fue rechazado: $(solo_error "$salida")"
   fi

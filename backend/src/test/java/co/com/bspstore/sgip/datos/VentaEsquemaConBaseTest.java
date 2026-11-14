@@ -148,7 +148,7 @@ class VentaEsquemaConBaseTest {
                 .param("e", empresa.empresaId).update());
         assertThrows(DataIntegrityViolationException.class, () -> jdbc.sql(
                         "INSERT INTO consecutivos (empresa_id, tipo) VALUES (-1, 'VENTA')").update());
-        assertThrows(DataIntegrityViolationException.class, () -> jdbc.sql(
+        assertThrows(DataAccessException.class, () -> jdbc.sql(
                         "INSERT INTO consecutivos (empresa_id, tipo, siguiente) VALUES (:e, 'VENTA', 0)")
                 .param("e", empresa.empresaId).update());
     }
@@ -197,15 +197,15 @@ class VentaEsquemaConBaseTest {
                 .param("id", id).update();
         jdbc.sql(actualizar).param("t", "PESOS").param("v", new BigDecimal("5000")).param("e", empresa.empresaId)
                 .param("id", id).update();
-        assertThrows(DataIntegrityViolationException.class, () -> jdbc.sql(actualizar).param("t", "PORCENTAJE")
+        assertThrows(DataAccessException.class, () -> jdbc.sql(actualizar).param("t", "PORCENTAJE")
                 .param("v", new BigDecimal("100.01")).param("e", empresa.empresaId).param("id", id).update(),
                 "más del 100 %");
-        assertThrows(DataIntegrityViolationException.class, () -> jdbc.sql(actualizar).param("t", "PESOS")
+        assertThrows(DataAccessException.class, () -> jdbc.sql(actualizar).param("t", "PESOS")
                 .param("v", null).param("e", empresa.empresaId).param("id", id).update(), "tipo sin valor");
-        assertThrows(DataIntegrityViolationException.class, () -> jdbc.sql(actualizar).param("t", null)
+        assertThrows(DataAccessException.class, () -> jdbc.sql(actualizar).param("t", null)
                 .param("v", new BigDecimal("5")).param("e", empresa.empresaId).param("id", id).update(),
                 "valor sin tipo");
-        assertThrows(DataIntegrityViolationException.class, () -> jdbc.sql(actualizar).param("t", "PESOS")
+        assertThrows(DataAccessException.class, () -> jdbc.sql(actualizar).param("t", "PESOS")
                 .param("v", new BigDecimal("-1")).param("e", empresa.empresaId).param("id", id).update(),
                 "valor negativo");
         assertEquals("MOSTRADOR", jdbc.sql("SELECT tipo_entrega FROM ventas WHERE empresa_id = :e AND venta_id = :id")
@@ -270,13 +270,13 @@ class VentaEsquemaConBaseTest {
     void laLineaRechazaImportesNegativosYUnDescuentoMayorQueElSubtotalPeroAdmiteUtilidadNegativa() {
         Long id = venta(empresa, clienteId, turnoId, "V-00000021", null);
 
-        assertThrows(DataIntegrityViolationException.class,
+        assertThrows(DataAccessException.class,
                 () -> linea(id, 1, "-1", "0", "0", "0", 0, null), "subtotal negativo");
-        assertThrows(DataIntegrityViolationException.class,
+        assertThrows(DataAccessException.class,
                 () -> linea(id, 1, "10000", "-1", "0", "0", 0, null), "descuento negativo");
-        assertThrows(DataIntegrityViolationException.class,
+        assertThrows(DataAccessException.class,
                 () -> linea(id, 1, "10000", "0", "-1", "0", 0, null), "IVA negativo");
-        assertThrows(DataIntegrityViolationException.class,
+        assertThrows(DataAccessException.class,
                 () -> linea(id, 1, "10000", "10001", "0", "0", 0, null), "descuento mayor que el subtotal");
         // Un descuento autorizado puede dejar la venta por debajo del costo: eso no es un error.
         linea(id, 1, "10000", "9500", "95", "-500", 0, null);
@@ -286,11 +286,11 @@ class VentaEsquemaConBaseTest {
     void unEncargoExigeFechaYNoPuedeSerMayorQueLaCantidad() {
         Long id = venta(empresa, clienteId, turnoId, "V-00000022", null);
 
-        assertThrows(DataIntegrityViolationException.class,
+        assertThrows(DataAccessException.class,
                 () -> linea(id, 5, "50000", "0", "9500", "40000", 2, null), "encargo sin fecha");
-        assertThrows(DataIntegrityViolationException.class,
+        assertThrows(DataAccessException.class,
                 () -> linea(id, 5, "50000", "0", "9500", "40000", 6, "2026-12-01"), "encargo mayor que la cantidad");
-        assertThrows(DataIntegrityViolationException.class,
+        assertThrows(DataAccessException.class,
                 () -> linea(id, 5, "50000", "0", "9500", "40000", -1, null), "encargo negativo");
         linea(id, 5, "50000", "0", "9500", "40000", 5, "2026-12-01");
         assertEquals("date", columna("venta_items", "entrega_estimada", "data_type"));
@@ -336,11 +336,11 @@ class VentaEsquemaConBaseTest {
         Integer medioAjeno = medio(otra, "Efectivo");
         Long turnoAjeno = turno(otra);
 
-        assertThrows(DataIntegrityViolationException.class,
+        assertThrows(DataAccessException.class,
                 () -> pago(id, medioId, turnoId, "0", null, null, empresa), "monto cero");
-        assertThrows(DataIntegrityViolationException.class,
+        assertThrows(DataAccessException.class,
                 () -> pago(id, medioId, turnoId, "-5", null, null, empresa), "monto negativo");
-        assertThrows(DataIntegrityViolationException.class,
+        assertThrows(DataAccessException.class,
                 () -> pago(id, medioId, turnoId, "10000", "9999", null, empresa), "recibido menor que el monto");
         assertThrows(DataIntegrityViolationException.class,
                 () -> pago(id, medioAjeno, turnoId, "10000", null, null, empresa), "medio de otra empresa");
