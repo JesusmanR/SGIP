@@ -314,13 +314,23 @@ public class ManejadorErrores {
         return p;
     }
 
-    // Firmas mínimas para que la prueba compile; el manejo llega en el commit siguiente.
+    @ExceptionHandler(DescuentoInvalidoException.class)
     public ProblemDetail descuentoInvalido(DescuentoInvalidoException e) {
-        throw new UnsupportedOperationException("pendiente");
+        // 400: el descuento pedido no cabe en la regla (negativo, más del 100 %, mayor que el
+        // valor). El texto lo fija el cálculo y no repite lo enviado.
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
+        p.setTitle("Descuento no válido");
+        p.setDetail(e.getMessage());
+        return p;
     }
 
+    @ExceptionHandler(EfectivoRecibidoInvalidoException.class)
     public ProblemDetail efectivoRecibidoInvalido(EfectivoRecibidoInvalidoException e) {
-        throw new UnsupportedOperationException("pendiente");
+        // 400: el efectivo recibido no sirve para dar cambio. Texto fijo, sin eco del monto.
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
+        p.setTitle("Efectivo recibido no válido");
+        p.setDetail(e.getMessage());
+        return p;
     }
 
     @ExceptionHandler(DatoDeTurnoInvalidoException.class)

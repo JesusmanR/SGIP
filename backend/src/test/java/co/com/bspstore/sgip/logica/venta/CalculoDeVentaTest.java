@@ -226,6 +226,17 @@ class CalculoDeVentaTest {
     }
 
     @Test
+    void siLaLineaMayorNoAbsorbeElResiduoSigueLaSiguiente() {
+        // Cuatro líneas de 1 peso y 2 de descuento: cada parte es 0,5 y sube a 1 (suman 4), y el residuo
+        // de −2 no cabe en una sola línea sin dejarla en −1. Se resta a las dos de menor productoId.
+        VentaCalculada v = CalculoDeVenta.calcular(
+                List.of(simple(1, 1, 1), simple(2, 1, 1), simple(3, 1, 1), simple(4, 1, 1)), pesos(2));
+
+        assertEquals(List.of(0L, 0L, 1L, 1L), descuentos(v));
+        igual(2, v.descuento(), "la suma sigue siendo el descuento total");
+    }
+
+    @Test
     void elEmpateDelResiduoLoGanaElMenorProductoIdAunqueNoVayaPrimero() {
         VentaCalculada v = CalculoDeVenta.calcular(
                 List.of(simple(3, 1, 100), simple(2, 1, 100), simple(1, 1, 100)), pesos(50));

@@ -1,18 +1,243 @@
 package co.com.bspstore.sgip.logica.venta;
 
+import co.com.bspstore.sgip.logica.DescuentoInvalidoException;
+import co.com.bspstore.sgip.logica.EfectivoRecibidoInvalidoException;
+
 import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
-/** Firmas mínimas para que la prueba compile; la lógica llega en el commit siguiente. */
+/**
+ * Cuánto se cobra por una venta: descuentos, IVA, total y cambio. Es lógica pura, sin base de datos;
+ * el servicio de ventas solo la orquesta dentro de su transacción.
+ *
+ * <p>Reglas (diseño de la caja):
+ * <ul>
+ *   <li>El descuento de una línea se aplica antes que el de toda la compra.
+ *   <li>Un descuento en porcentaje se redondea a pesos enteros con HALF_UP.
+ *   <li>El descuento sobre toda la compra se reparte en proporción al valor de cada línea después de su
+ *       propio descuento, al peso con HALF_UP. El residuo del redondeo, positivo o negativo, va a la
+ *       línea de mayor valor y, si empatan, a la de menor {@code productoId}; así lo repartido suma
+ *       exactamente el descuento total.
+ *   <li>El IVA de cada línea es {@code base · tarifa} redondeado a pesos con HALF_UP, sobre la base ya
+ *       descontada, y la venta suma los IVA de las líneas. {@code CalculoDePrecio} no sirve aquí:
+ *       solo convierte ganancia en precio.
+ * </ul>
+ *
+ * <p>Los importes salen en pesos enteros con escala 2, la de {@code DECIMAL(14,2)} de
+ * {@code venta_items}, para guardarlos sin conversión.
+ *
+ * <p>Entradas inválidas: lo que tiene que ver con un descuento lanza
+ * {@link DescuentoInvalidoException} (400) y el efectivo recibido que no sirve,
+ * {@link EfectivoRecibidoInvalidoException} (400). Cualquier otro dato fuera de regla (lista vacía,
+ * cantidad no positiva, precio o tarifa inválidos, tratamiento desconocido) lanza
+ * {@link IllegalArgumentException}: son datos que el servicio de ventas debe haber validado o sacado
+ * de la base, así que si llegan aquí es un error de programación y no un 400 para el cliente.
+ */
 public final class CalculoDeVenta {
+
+    private static final int ESCALA = 2;
+    private static final int ESCALA_TARIFA = 4;
+    private static final BigDecimal CIEN = BigDecimal.valueOf(100);
+
+    private static final String DESCUENTO_SIN_VALOR = "El descuento debe tener un tipo y un valor.";
+    private static final String DESCUENTO_NEGATIVO = "El descuento no puede ser negativo.";
+    private static final String DESCUENTO_PORCENTAJE = "Un descuento en porcentaje no puede pasar de 100.";
+    private static final String DESCUENTO_CON_CENTAVOS = "Un descuento en pesos debe ser un monto entero.";
+    private static final String DESCUENTO_MAYOR = "El descuento no puede ser mayor que el valor al que se aplica.";
+    private static final String EFECTIVO_RECIBIDO =
+            "El efectivo recibido debe ser un monto en pesos enteros que cubra el total en efectivo.";
 
     private CalculoDeVenta() {}
 
-    public static VentaCalculada calcular(List<LineaPedida> lineas, Descuento descuentoTotal) {
-        throw new UnsupportedOperationException("pendiente");
+    public static VentaCalculada calcular(List<LineaPedida> pedidas, Descuento descuentoTotal) {
+        if (pedidas == null || pedidas.isEmpty()) {
+            throw new IllegalArgumentException("La venta necesita al menos una línea.");
+        }
+        int n = pedidas.size();
+        List<BigDecimal> subtotales = new ArrayList<>(n);
+        List<BigDecimal> propios = new ArrayList<>(n);
+        List<BigDecimal> bases = new ArrayList<>(n);
+        // Cuenta el descuento pedido y no el que salió en pesos: uno del 1 % sobre 10 pesos redondea a
+        // cero, pero el vendedor lo pidió y la autorización con PIN se decide por eso.
+        boolean tieneDescuento = false;
+        BigDecimal sumaDeBases = BigDecimal.ZERO;
+
+        for (LineaPedida p : pedidas) {
+            validarLinea(p);
+            BigDecimal subtotal = p.precioUnitario().multiply(BigDecimal.valueOf(p.cantidad()));
+            BigDecimal propio = importeDelDescuento(p.descuento(), subtotal);
+            BigDecimal base = subtotal.subtract(propio);
+            subtotales.add(subtotal);
+            propios.add(propio);
+            bases.add(base);
+            sumaDeBases = sumaDeBases.add(base);
+            tieneDescuento |= p.descuento() != null && p.descuento().valor().signum() > 0;
+        }
+
+        BigDecimal totalADescontar = importeDelDescuento(descuentoTotal, sumaDeBases);
+        tieneDescuento |= descuentoTotal != null && descuentoTotal.valor().signum() > 0;
+        List<BigDecimal> repartido = repartir(pedidas, bases, sumaDeBases, totalADescontar);
+
+        List<LineaCalculada> lineas = new ArrayList<>(n);
+        BigDecimal subtotal = BigDecimal.ZERO;
+        BigDecimal descuento = BigDecimal.ZERO;
+        BigDecimal iva = BigDecimal.ZERO;
+        for (int i = 0; i < n; i++) {
+            LineaPedida p = pedidas.get(i);
+            BigDecimal descuentoDeLinea = propios.get(i).add(repartido.get(i));
+            BigDecimal base = subtotales.get(i).subtract(descuentoDeLinea);
+            BigDecimal ivaDeLinea = base.multiply(p.tarifaIva()).setScale(0, RoundingMode.HALF_UP);
+            lineas.add(new LineaCalculada(
+                    p.productoId(),
+                    p.cantidad(),
+                    pesos(p.precioUnitario()),
+                    pesos(subtotales.get(i)),
+                    pesos(descuentoDeLinea),
+                    pesos(base),
+                    p.tarifaIva().setScale(ESCALA_TARIFA, RoundingMode.UNNECESSARY),
+                    tratamientoGuardado(p),
+                    pesos(ivaDeLinea),
+                    pesos(base.add(ivaDeLinea))));
+            subtotal = subtotal.add(subtotales.get(i));
+            descuento = descuento.add(descuentoDeLinea);
+            iva = iva.add(ivaDeLinea);
+        }
+        BigDecimal total = subtotal.subtract(descuento).add(iva);
+        return new VentaCalculada(List.copyOf(lineas), pesos(subtotal), pesos(descuento), pesos(iva), pesos(total),
+                tieneDescuento);
     }
 
+    /**
+     * Lo que hay que devolver al cliente: lo recibido menos el total que se cobra en efectivo.
+     * El efectivo recibido viene del cliente de la API, así que un valor ausente, con centavos o que
+     * no cubre el total es un 400; el total en efectivo lo calcula el servidor.
+     */
     public static BigDecimal cambio(BigDecimal totalEfectivo, BigDecimal recibido) {
-        throw new UnsupportedOperationException("pendiente");
+        if (totalEfectivo == null || totalEfectivo.signum() < 0) {
+            throw new IllegalArgumentException("El total en efectivo debe ser un monto no negativo.");
+        }
+        if (recibido == null || tieneCentavos(recibido) || recibido.compareTo(totalEfectivo) < 0) {
+            throw new EfectivoRecibidoInvalidoException(EFECTIVO_RECIBIDO);
+        }
+        return pesos(recibido.subtract(totalEfectivo));
+    }
+
+    private static void validarLinea(LineaPedida p) {
+        if (p == null || p.productoId() == null) {
+            throw new IllegalArgumentException("Cada línea necesita un producto.");
+        }
+        if (p.cantidad() <= 0) {
+            throw new IllegalArgumentException("La cantidad debe ser mayor que cero.");
+        }
+        BigDecimal precio = p.precioUnitario();
+        if (precio == null || precio.signum() < 0 || tieneCentavos(precio)) {
+            throw new IllegalArgumentException("El precio debe ser un monto en pesos enteros no negativo.");
+        }
+        BigDecimal tarifa = p.tarifaIva();
+        if (tarifa == null || tarifa.signum() < 0 || tarifa.compareTo(BigDecimal.ONE) > 0
+                || tarifa.stripTrailingZeros().scale() > ESCALA_TARIFA) {
+            throw new IllegalArgumentException("La tarifa de IVA debe estar entre 0 y 1, con hasta cuatro decimales.");
+        }
+        tratamientoGuardado(p);
+    }
+
+    /**
+     * Cuántos pesos descuenta {@code descuento} de {@code valor}. Un descuento nulo no descuenta nada.
+     * El 100 % y un monto igual al valor son válidos; uno mayor no.
+     */
+    private static BigDecimal importeDelDescuento(Descuento descuento, BigDecimal valor) {
+        if (descuento == null) {
+            return BigDecimal.ZERO;
+        }
+        if (descuento.tipo() == null || descuento.valor() == null) {
+            throw new DescuentoInvalidoException(DESCUENTO_SIN_VALOR);
+        }
+        BigDecimal pedido = descuento.valor();
+        if (pedido.signum() < 0) {
+            throw new DescuentoInvalidoException(DESCUENTO_NEGATIVO);
+        }
+        BigDecimal importe;
+        if (descuento.tipo() == TipoDescuento.PORCENTAJE) {
+            if (pedido.compareTo(CIEN) > 0) {
+                throw new DescuentoInvalidoException(DESCUENTO_PORCENTAJE);
+            }
+            importe = valor.multiply(pedido).divide(CIEN, 0, RoundingMode.HALF_UP);
+        } else {
+            if (tieneCentavos(pedido)) {
+                throw new DescuentoInvalidoException(DESCUENTO_CON_CENTAVOS);
+            }
+            importe = pedido.setScale(0, RoundingMode.UNNECESSARY);
+        }
+        if (importe.compareTo(valor) > 0) {
+            throw new DescuentoInvalidoException(DESCUENTO_MAYOR);
+        }
+        return importe;
+    }
+
+    /**
+     * Reparte {@code total} entre las líneas en proporción a su base. Cada parte es
+     * {@code total · base / suma} al peso con HALF_UP, y el residuo va a la línea de mayor base (a igual
+     * base, la de menor {@code productoId}). Si esa línea no puede absorberlo sin pasarse de su base ni
+     * quedar en negativo, lo que falte sigue a la siguiente del mismo orden: así ninguna línea queda
+     * con un descuento imposible.
+     */
+    private static List<BigDecimal> repartir(List<LineaPedida> pedidas, List<BigDecimal> bases,
+            BigDecimal sumaDeBases, BigDecimal total) {
+        int n = bases.size();
+        BigDecimal[] partes = new BigDecimal[n];
+        BigDecimal repartido = BigDecimal.ZERO;
+        for (int i = 0; i < n; i++) {
+            partes[i] = sumaDeBases.signum() == 0
+                    ? BigDecimal.ZERO
+                    : total.multiply(bases.get(i)).divide(sumaDeBases, 0, RoundingMode.HALF_UP);
+            repartido = repartido.add(partes[i]);
+        }
+        BigDecimal residuo = total.subtract(repartido);
+        if (residuo.signum() != 0) {
+            List<Integer> orden = new ArrayList<>(n);
+            for (int i = 0; i < n; i++) {
+                orden.add(i);
+            }
+            // sort es estable: a igual base y producto manda el orden de entrada.
+            orden.sort(Comparator
+                    .comparing((Integer i) -> bases.get(i)).reversed()
+                    .thenComparing(i -> pedidas.get(i).productoId()));
+            for (int i : orden) {
+                if (residuo.signum() == 0) {
+                    break;
+                }
+                BigDecimal cabe = residuo.signum() > 0
+                        ? bases.get(i).subtract(partes[i]).min(residuo)
+                        : partes[i].negate().max(residuo);
+                partes[i] = partes[i].add(cabe);
+                residuo = residuo.subtract(cabe);
+            }
+        }
+        return List.of(partes);
+    }
+
+    /** El tratamiento que se guarda en {@code venta_items.tratamiento_iva} (M6, ADR-0024). */
+    private static String tratamientoGuardado(LineaPedida p) {
+        String tratamiento = p.tratamientoIva();
+        if (tratamiento == null) {
+            return "NO_GRAVADO";
+        }
+        return switch (tratamiento) {
+            // La vista ya pone la tarifa en 0 bajo el umbral: eso decide si fue excluido o gravado.
+            case "EXCLUIDO_HASTA_UMBRAL" -> p.tarifaIva().signum() == 0 ? "EXCLUIDO" : "GRAVADO";
+            case "GRAVADO", "EXCLUIDO", "EXENTO", "NO_GRAVADO" -> tratamiento;
+            default -> throw new IllegalArgumentException("Tratamiento de IVA desconocido.");
+        };
+    }
+
+    private static boolean tieneCentavos(BigDecimal valor) {
+        return valor.stripTrailingZeros().scale() > 0;
+    }
+
+    private static BigDecimal pesos(BigDecimal valor) {
+        return valor.setScale(ESCALA, RoundingMode.UNNECESSARY);
     }
 }
