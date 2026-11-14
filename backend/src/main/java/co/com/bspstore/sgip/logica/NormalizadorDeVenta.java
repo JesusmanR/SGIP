@@ -43,12 +43,42 @@ final class NormalizadorDeVenta {
 
     private NormalizadorDeVenta() {}
 
+    /** Hasta cuándo puede prometerse un encargo, contado desde hoy. */
+    private static final int ANOS_MAXIMOS_DE_ENTREGA = 1;
+
     /**
-     * La solicitud validada y normalizada: líneas fusionadas y ordenadas por producto, textos sin
-     * espacios sobrantes (vacío es nulo) y el motivo del encargo recortado. {@code hoy} es el día
-     * de Bogotá, contra el que se compara la fecha de entrega.
+     * La solicitud validada y normalizada, con todas las reglas: la forma ({@link #forma}) y las que
+     * dependen del día ({@link #fechas}). {@code hoy} es el día de Bogotá.
      */
     static SolicitudVenta normalizar(SolicitudVenta s, LocalDate hoy) {
+        return fechas(forma(s), hoy);
+    }
+
+    /**
+     * Las reglas que dependen del día: la fecha de entrega de un encargo va de hoy a un año. Se
+     * separan de la forma porque un reintento de una venta ya registrada tiene que reconocerse
+     * aunque su fecha de entrega ya sea de ayer; solo una venta nueva las cumple.
+     */
+    static SolicitudVenta fechas(SolicitudVenta s, LocalDate hoy) {
+        LocalDate limite = hoy.plusYears(ANOS_MAXIMOS_DE_ENTREGA);
+        for (LineaSolicitada l : s.lineas()) {
+            LocalDate entrega = l.entregaEstimada();
+            if (entrega != null && entrega.isBefore(hoy)) {
+                throw invalida("La fecha estimada de entrega no puede ser anterior a hoy.");
+            }
+            if (entrega != null && entrega.isAfter(limite)) {
+                throw invalida("La fecha estimada de entrega no puede pasar de un año desde hoy.");
+            }
+        }
+        return s;
+    }
+
+    /**
+     * La solicitud validada y normalizada en su forma, sin las reglas que dependen del día: líneas
+     * fusionadas y ordenadas por producto, textos sin espacios sobrantes (vacío es nulo) y el motivo
+     * del encargo recortado. Es lo que la huella necesita.
+     */
+    static SolicitudVenta forma(SolicitudVenta s) {
         if (s == null) {
             throw invalida("La venta está vacía.");
         }
@@ -66,25 +96,15 @@ final class NormalizadorDeVenta {
             throw invalida("El motivo del encargo admite hasta " + LimitesDeVenta.MOTIVO_DEL_ENCARGO + " caracteres.");
         }
         validar(s.descuentoTotal());
-        List<LineaSolicitada> lineas = fusionar(s.lineas(), hoy);
+        List<LineaSolicitada> lineas = fusionar(s.lineas());
         List<PagoSolicitado> pagos = limpiar(s.pagos());
         return new SolicitudVenta(s.claveIdempotencia(), s.clienteId(), lineas, s.descuentoTotal(), pagos, motivo,
                 s.autorizacion(), null);
     }
 
-    /** Firma vacía de la ronda 1. */
-    static SolicitudVenta forma(SolicitudVenta s) {
-        throw new UnsupportedOperationException("pendiente");
-    }
-
-    /** Firma vacía de la ronda 1. */
-    static SolicitudVenta fechas(SolicitudVenta s, LocalDate hoy) {
-        throw new UnsupportedOperationException("pendiente");
-    }
-
     // ------------------------------------------------------------ líneas
 
-    private static List<LineaSolicitada> fusionar(List<LineaSolicitada> pedidas, LocalDate hoy) {
+    private static List<LineaSolicitada> fusionar(List<LineaSolicitada> pedidas) {
         if (pedidas == null || pedidas.isEmpty()) {
             throw invalida("La venta necesita al menos una línea.");
         }
@@ -109,9 +129,6 @@ final class NormalizadorDeVenta {
                 throw invalida("La cantidad de una línea va de 1 a " + LimitesDeVenta.CANTIDAD + " unidades.");
             }
             validar(l.descuento());
-            if (l.entregaEstimada() != null && l.entregaEstimada().isBefore(hoy)) {
-                throw invalida("La fecha estimada de entrega no puede ser anterior a hoy.");
-            }
             LineaSolicitada previa = porProducto.get(l.productoId());
             if (previa == null) {
                 porProducto.put(l.productoId(), l);

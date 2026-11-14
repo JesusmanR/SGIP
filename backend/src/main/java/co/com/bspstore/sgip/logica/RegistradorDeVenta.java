@@ -72,11 +72,21 @@ import java.util.Optional;
  *
  * <h2>READ COMMITTED</h2>
  *
- * La transacción corre en READ COMMITTED. Con REPEATABLE READ la lectura de la clave de idempotencia
- * vería la instantánea que se tomó al comprobar el turno, no la venta que la petición hermana acaba
- * de confirmar mientras esta esperaba los productos; y una lectura con bloqueo de una clave que no
- * existe toma un bloqueo de hueco, con el que dos ventas distintas se interbloquean. En READ
- * COMMITTED la lectura ve lo último confirmado y no hay bloqueos de hueco.
+ * La transacción corre en READ COMMITTED, y la razón de fondo es el precio. El costo y la existencia
+ * salen frescos de la fila bloqueada ({@code FOR UPDATE} lee lo último confirmado), pero el precio
+ * sale de la vista de precios con una lectura sin bloqueo. Con REPEATABLE READ esa lectura vendría de
+ * la instantánea que se toma al leer el turno, antes de esperar los productos: una carga de precios
+ * confirmada durante la espera daría el precio viejo con el costo nuevo. En READ COMMITTED todo se
+ * lee en el mismo estado.
+ *
+ * Además, con REPEATABLE READ la lectura de la clave de idempotencia no vería la venta que la
+ * petición hermana acaba de confirmar mientras esta esperaba, y una lectura con bloqueo de una clave
+ * que no existe toma un bloqueo de hueco con el que dos ventas distintas se interbloquean.
+ *
+ * <h2>Un producto inactivo</h2>
+ *
+ * La vista de precios solo muestra productos activos, así que uno inactivo no trae precio y es «no
+ * vendible» (400) sin necesidad de leer {@code productos.activo}.
  *
  * <h2>Idempotencia</h2>
  *
@@ -210,9 +220,20 @@ public class RegistradorDeVenta {
                 List.copyOf(calculada.lineas())), false);
     }
 
-    /** Firma vacía de la ronda 1: la implementación llega con el commit del arreglo. */
+    /**
+     * La venta ya registrada con la clave de idempotencia de la solicitud, si la hay: la devuelve (el
+     * 200 del reintento) o lanza el 409 de «la misma clave con otra carga». Es lo primero que hace la
+     * fachada, antes de pedir un PIN y antes de mirar el turno o el día: un reintento de una venta
+     * confirmada devuelve esa venta pase lo que pase después, y no cuenta un intento de PIN. Solo lee.
+     * La comprobación bajo bloqueo de {@link #registrar} sigue siendo la que cubre la carrera.
+     */
+    @Transactional(readOnly = true, isolation = Isolation.READ_COMMITTED)
     public Optional<ResultadoDeVenta> siYaExiste(SolicitudVenta pedida) {
-        throw new UnsupportedOperationException("pendiente");
+        Integer empresa = ContextoEmpresa.empresaActual();
+        SolicitudVenta s = NormalizadorDeVenta.forma(pedida);
+        String huella = NormalizadorDeVenta.huella(s);
+        return ventas.buscarPorClave(empresa, s.claveIdempotencia().toString())
+                .map(existente -> repetida(empresa, existente, huella));
     }
 
     /**
@@ -221,12 +242,8 @@ public class RegistradorDeVenta {
      */
     @Transactional(readOnly = true, isolation = Isolation.READ_COMMITTED)
     public ResultadoDeVenta existente(SolicitudVenta pedida) {
-        Integer empresa = ContextoEmpresa.empresaActual();
-        SolicitudVenta s = NormalizadorDeVenta.normalizar(pedida, Hoy.de(reloj));
-        VentaPorClave encontrada = ventas.buscarPorClave(empresa, s.claveIdempotencia().toString())
-                .orElseThrow(() -> new IllegalStateException(
-                        "La venta de la clave de idempotencia no aparece después de que otra la confirmara."));
-        return repetida(empresa, encontrada, NormalizadorDeVenta.huella(s));
+        return siYaExiste(pedida).orElseThrow(() -> new IllegalStateException(
+                "La venta de la clave de idempotencia no aparece después de que otra la confirmara."));
     }
 
     private ResultadoDeVenta repetida(Integer empresa, VentaPorClave existente, String huella) {

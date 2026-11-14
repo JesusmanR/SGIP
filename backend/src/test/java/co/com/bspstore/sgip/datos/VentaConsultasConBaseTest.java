@@ -37,7 +37,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @SpringBootTest
 class VentaConsultasConBaseTest {
 
-    /** Una venta de un administrador sin nada que autorizar cuesta 10 (medido); el tope deja un margen corto. */
+    /** Una venta de un administrador sin nada que autorizar cuesta 11 (medido: la lectura del reintento, la transacción de la venta y su cierre); el tope deja un margen corto. */
     private static final int TOPE_DE_SENTENCIAS = 12;
 
     @Autowired ServicioVentas ventas;

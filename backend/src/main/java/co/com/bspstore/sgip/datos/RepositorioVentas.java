@@ -25,6 +25,14 @@ import java.util.Optional;
  * {@code pagos_venta}, más las lecturas que la venta necesita de {@code productos},
  * {@code v_precios_producto} y {@code medios_pago}.
  *
+ * <h2>Por qué la V44 quitó {@code ventas.medio_id} sin rellenar {@code pagos_venta}</h2>
+ *
+ * El medio de pago va en cada pago, no en la venta (cobro mixto). La V44 elimina la columna sin
+ * convertir su valor en un pago: hasta esta entrega la caja no existía, nada escribía en {@code ventas}
+ * y ninguna base de producción tiene ventas reales; las pocas filas de demostración o de pruebas no
+ * tienen cobros que reconstruir. Si algún día hubiera ventas con medio, habría que migrarlas a mano
+ * antes de aplicar la V44.
+ *
  * Toda sentencia lleva {@code empresa_id} (ADR-0011). Las escrituras de las líneas y los pagos van
  * por lotes ({@code batchUpdate}, como la importación de listas), de modo que las consultas de una
  * venta no dependen de cuántas líneas ni cuántos pagos tenga. Ninguna sentencia lleva datos
@@ -63,7 +71,7 @@ public class RepositorioVentas {
                 .optional();
     }
 
-    public record ProductoBloqueado(Integer id, String nombre, int existencia, BigDecimal costo, boolean activo) {}
+    public record ProductoBloqueado(Integer id, String nombre, int existencia, BigDecimal costo) {}
 
     /**
      * Los productos de la venta, por {@code producto_id} ascendente y con las filas bloqueadas
@@ -75,7 +83,7 @@ public class RepositorioVentas {
      */
     public List<ProductoBloqueado> bloquearProductos(Integer empresaId, Collection<Integer> ids) {
         return jdbc.sql("""
-                        SELECT producto_id AS id, nombre, existencia, costo, activo
+                        SELECT producto_id AS id, nombre, existencia, costo
                           FROM productos FORCE INDEX (PRIMARY)
                          WHERE producto_id IN (:ids) AND empresa_id = :empresa
                          ORDER BY producto_id

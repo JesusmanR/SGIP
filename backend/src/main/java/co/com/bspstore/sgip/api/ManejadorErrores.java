@@ -99,6 +99,9 @@ public class ManejadorErrores {
     private static final int MYSQL_FILA_REFERENCIADA = 1451;
     private static final int MYSQL_COLUMNA_NULA = 1048;
     private static final int MYSQL_DATO_DEMASIADO_LARGO = 1406;
+    private static final int MYSQL_CHECK_VIOLADO = 3819;
+    private static final java.util.regex.Pattern CHECK_VIOLADO =
+            java.util.regex.Pattern.compile("Check constraint '([^']+)'");
 
     @ExceptionHandler(CredencialesInvalidasException.class)
     public ProblemDetail credencialesInvalidas(CredencialesInvalidasException e) {
@@ -366,9 +369,31 @@ public class ManejadorErrores {
         return p;
     }
 
-    /** Firma vacía de la ronda 1. */
+    /**
+     * Una restricción CHECK de la base violada (MySQL 3819). Spring no la traduce a una excepción de
+     * integridad: llega como {@code UncategorizedSQLException}. Es una validación que faltó en la
+     * solicitud, como un 1048 o un 1406: 400 con un texto fijo, sin el nombre de la restricción ni el
+     * valor, y un aviso en el registro con solo el nombre de la restricción. Cualquier otra excepción
+     * SQL sin categoría sigue siendo un 500 genérico.
+     */
+    @ExceptionHandler(org.springframework.jdbc.UncategorizedSQLException.class)
     public ProblemDetail violacionDeReglaDeLaBase(org.springframework.jdbc.UncategorizedSQLException e) {
-        throw new UnsupportedOperationException("pendiente");
+        SQLException sql = e.getSQLException();
+        if (sql != null && sql.getErrorCode() == MYSQL_CHECK_VIOLADO) {
+            var restriccion = CHECK_VIOLADO.matcher(String.valueOf(sql.getMessage()));
+            LOG.warn("Una regla de la base rechazó la operación (código {}, restricción {}): falta una validación.",
+                    MYSQL_CHECK_VIOLADO, restriccion.find() ? restriccion.group(1) : "desconocida");
+            ProblemDetail p = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
+            p.setTitle("Dato no válido");
+            p.setDetail("Uno de los datos no cumple una regla del sistema.");
+            return p;
+        }
+        LOG.error("El motor rechazó la operación por un error SQL sin categoría", e);
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.INTERNAL_SERVER_ERROR);
+        p.setTitle("Error interno");
+        p.setDetail("No se pudo completar la operación. Inténtalo de nuevo; "
+                + "si persiste, avisa al administrador.");
+        return p;
     }
 
     @ExceptionHandler(VentaInvalidaException.class)

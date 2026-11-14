@@ -20,12 +20,13 @@ import java.util.Optional;
  *
  * <h2>La fila de una empresa nace con su primer uso</h2>
  *
- * Se lee primero con {@code FOR UPDATE}; solo si no existe se crea con {@code INSERT IGNORE} y se
- * vuelve a leer con el mismo bloqueo. Leer primero importa: un {@code INSERT IGNORE} sobre una fila
- * que ya existe toma un bloqueo compartido sobre ella, y dos transacciones que lo hagan y después
- * pidan el bloqueo exclusivo se esperan entre sí (un interbloqueo). Así, en régimen normal ese
- * {@code INSERT IGNORE} nunca se ejecuta. Si dos transacciones llegan a la vez a la primera vez, la
- * segunda espera la inserción de la primera, la ignora y toma su bloqueo cuando la primera termina.
+ * Se lee primero con {@code FOR UPDATE}; solo si no existe se crea con
+ * {@code INSERT ... ON DUPLICATE KEY UPDATE siguiente = siguiente} y se vuelve a leer con el mismo
+ * bloqueo. La cláusula no cambia nada: existe para que, si la fila ya está (la creó otra transacción
+ * que llegó antes), el motor pida directamente el bloqueo EXCLUSIVO y espere. Un {@code INSERT IGNORE}
+ * toma en ese caso un bloqueo compartido, y con tres transacciones a la vez las dos que esperan lo
+ * tienen y después piden el exclusivo: un ciclo, y el motor mata a una. En régimen normal (la fila
+ * ya existe) este {@code INSERT} no se ejecuta.
  */
 @Repository
 public class RepositorioConsecutivos {
@@ -47,7 +48,10 @@ public class RepositorioConsecutivos {
         }
         Optional<Long> actual = leerConBloqueo(empresaId, tipo);
         if (actual.isEmpty()) {
-            jdbc.sql("INSERT IGNORE INTO consecutivos (empresa_id, tipo) VALUES (:empresa, :tipo)")
+            jdbc.sql("""
+                            INSERT INTO consecutivos (empresa_id, tipo) VALUES (:empresa, :tipo)
+                            ON DUPLICATE KEY UPDATE siguiente = siguiente
+                            """)
                     .param("empresa", empresaId)
                     .param("tipo", tipo.name())
                     .update();

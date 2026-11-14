@@ -10,6 +10,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.time.Clock;
 import java.util.EnumSet;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -54,8 +55,20 @@ public class ServicioVentas {
             throw new IllegalStateException("Registrar una venta no puede llamarse dentro de una transacción: "
                     + "el PIN se valida en su propia transacción antes de abrir la de la venta.");
         }
-        SolicitudVenta normalizada = NormalizadorDeVenta.normalizar(solicitud, Hoy.de(reloj));
-        Autorizacion autorizada = autorizacion.autorizar(normalizada.autorizacion(), excepcionesNecesarias(normalizada));
+        // La forma primero (la huella la necesita), el reintento después y solo entonces lo que
+        // depende del día, del turno o del PIN: una venta ya registrada cuya respuesta se perdió se
+        // devuelve aunque el turno se haya cerrado, el PIN no venga o la fecha de entrega ya sea de ayer.
+        SolicitudVenta enSuForma = NormalizadorDeVenta.forma(solicitud);
+        Optional<ResultadoDeVenta> yaRegistrada = registrador.siYaExiste(enSuForma);
+        if (yaRegistrada.isPresent()) {
+            return yaRegistrada.get();
+        }
+        SolicitudVenta normalizada = NormalizadorDeVenta.fechas(enSuForma, Hoy.de(reloj));
+        Set<ExcepcionAutorizable> necesarias = excepcionesNecesarias(normalizada);
+        // Sin nada que autorizar no se abre la transacción independiente de la autorización.
+        Autorizacion autorizada = necesarias.isEmpty()
+                ? new Autorizacion(null, necesarias)
+                : autorizacion.autorizar(normalizada.autorizacion(), necesarias);
         try {
             return registrador.registrar(normalizada, autorizada);
         } catch (VentaDuplicadaException e) {
