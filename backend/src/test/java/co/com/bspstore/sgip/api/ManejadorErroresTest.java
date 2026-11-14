@@ -7,6 +7,8 @@ import co.com.bspstore.sgip.logica.NitRepetidoException;
 import co.com.bspstore.sgip.logica.RegistroRepetidoException;
 import co.com.bspstore.sgip.logica.CredencialesInvalidasException;
 import co.com.bspstore.sgip.logica.CuentaBloqueadaException;
+import co.com.bspstore.sgip.logica.DescuentoInvalidoException;
+import co.com.bspstore.sgip.logica.EfectivoRecibidoInvalidoException;
 import co.com.bspstore.sgip.logica.EstadoDeCargaInvalidoException;
 import co.com.bspstore.sgip.logica.ImpuestoNoDisponibleException;
 import co.com.bspstore.sgip.logica.RecursoNoEncontradoException;
@@ -397,5 +399,25 @@ class ManejadorErroresTest {
         assertEquals(422, p.getStatus());
         assertEquals("Impuesto no disponible", p.getTitle());
         assertEquals("El impuesto «X» no existe o no está activo.", p.getDetail());
+    }
+
+    @Test
+    void unDescuentoInvalidoEsUn400ConTextoFijoYSinEco() {
+        ProblemDetail p = manejador.descuentoInvalido(
+                new DescuentoInvalidoException("El descuento no puede ser mayor que el valor descontado."));
+
+        assertEquals(400, p.getStatus());
+        assertEquals("Descuento no válido", p.getTitle());
+        assertEquals("El descuento no puede ser mayor que el valor descontado.", p.getDetail());
+    }
+
+    @Test
+    void unEfectivoRecibidoInvalidoEsUn400ConTextoFijoYSinEco() {
+        ProblemDetail p = manejador.efectivoRecibidoInvalido(
+                new EfectivoRecibidoInvalidoException("El efectivo recibido no cubre el total."));
+
+        assertEquals(400, p.getStatus());
+        assertEquals("Efectivo recibido no válido", p.getTitle());
+        assertEquals("El efectivo recibido no cubre el total.", p.getDetail());
     }
 }

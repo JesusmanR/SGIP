@@ -22,6 +22,8 @@ import co.com.bspstore.sgip.logica.ArchivoInvalidoException;
 import co.com.bspstore.sgip.logica.ClienteNoEditableException;
 import co.com.bspstore.sgip.logica.DatoDeClienteInvalidoException;
 import co.com.bspstore.sgip.logica.DatoDeTurnoInvalidoException;
+import co.com.bspstore.sgip.logica.DescuentoInvalidoException;
+import co.com.bspstore.sgip.logica.EfectivoRecibidoInvalidoException;
 import co.com.bspstore.sgip.logica.SinTurnoAbiertoException;
 import co.com.bspstore.sgip.logica.TurnoYaAbiertoException;
 import co.com.bspstore.sgip.logica.DatosDeDomicilioIncompletosException;
@@ -310,6 +312,15 @@ public class ManejadorErrores {
         p.setTitle("Cliente no editable");
         p.setDetail(e.getMessage());
         return p;
+    }
+
+    // Firmas mínimas para que la prueba compile; el manejo llega en el commit siguiente.
+    public ProblemDetail descuentoInvalido(DescuentoInvalidoException e) {
+        throw new UnsupportedOperationException("pendiente");
+    }
+
+    public ProblemDetail efectivoRecibidoInvalido(EfectivoRecibidoInvalidoException e) {
+        throw new UnsupportedOperationException("pendiente");
     }
 
     @ExceptionHandler(DatoDeTurnoInvalidoException.class)
