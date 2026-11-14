@@ -35,17 +35,38 @@ import java.util.List;
  * cantidad no positiva, precio o tarifa inválidos, tratamiento desconocido) lanza
  * {@link IllegalArgumentException}: son datos que el servicio de ventas debe haber validado o sacado
  * de la base, así que si llegan aquí es un error de programación y no un 400 para el cliente.
+ *
+ * <p>Lo que esta clase NO valida y debe validar la frontera (el DTO y el servicio de ventas):
+ * <ul>
+ *   <li>un tope de cantidad por línea (aquí solo se topa el importe que resulta);
+ *   <li>que el producto exista, sea de la empresa y esté activo, y que el precio, la tarifa y el
+ *       tratamiento salgan de la vista de precios y no del cliente;
+ *   <li>que el precio sea mayor que cero: aquí se acepta 0, pero {@code venta_items} exige
+ *       {@code precio_unitario > 0};
+ *   <li>que no haya productos repetidos: {@code UNIQUE (venta_id, producto_id)}; aquí no se fusionan;
+ *   <li>que el efectivo recibido solo se pida cuando hay pago en efectivo.
+ * </ul>
+ *
+ * <p>Un número que viene de fuera se acota antes de operar con él: como mucho 4 decimales y 12 cifras
+ * enteras. Sin eso, un {@code 1E+99999999} haría trabajar al hilo sin terminar. Ningún importe
+ * calculado puede pasar de lo que cabe en {@code DECIMAL(14,2)}.
  */
 public final class CalculoDeVenta {
 
     private static final int ESCALA = 2;
     private static final int ESCALA_TARIFA = 4;
+    private static final int MAX_ESCALA_ENTRADA = 4;
+    private static final int MAX_CIFRAS_ENTERAS = 12;
     private static final BigDecimal CIEN = BigDecimal.valueOf(100);
+    /** Lo más que cabe en {@code DECIMAL(14,2)}. */
+    private static final BigDecimal MAXIMO_IMPORTE = new BigDecimal("999999999999.99");
 
     private static final String DESCUENTO_SIN_VALOR = "El descuento debe tener un tipo y un valor.";
     private static final String DESCUENTO_NEGATIVO = "El descuento no puede ser negativo.";
     private static final String DESCUENTO_PORCENTAJE = "Un descuento en porcentaje no puede pasar de 100.";
     private static final String DESCUENTO_CON_CENTAVOS = "Un descuento en pesos debe ser un monto entero.";
+    private static final String DESCUENTO_DESMESURADO =
+            "El descuento tiene más cifras de las que se admiten.";
     private static final String DESCUENTO_MAYOR = "El descuento no puede ser mayor que el valor al que se aplica.";
     private static final String EFECTIVO_RECIBIDO =
             "El efectivo recibido debe ser un monto en pesos enteros que cubra el total en efectivo.";
@@ -67,7 +88,7 @@ public final class CalculoDeVenta {
 
         for (LineaPedida p : pedidas) {
             validarLinea(p);
-            BigDecimal subtotal = p.precioUnitario().multiply(BigDecimal.valueOf(p.cantidad()));
+            BigDecimal subtotal = toparImporte(p.precioUnitario().multiply(BigDecimal.valueOf(p.cantidad())));
             BigDecimal propio = importeDelDescuento(p.descuento(), subtotal);
             BigDecimal base = subtotal.subtract(propio);
             subtotales.add(subtotal);
@@ -90,6 +111,7 @@ public final class CalculoDeVenta {
             BigDecimal descuentoDeLinea = propios.get(i).add(repartido.get(i));
             BigDecimal base = subtotales.get(i).subtract(descuentoDeLinea);
             BigDecimal ivaDeLinea = base.multiply(p.tarifaIva()).setScale(0, RoundingMode.HALF_UP);
+            toparImporte(base.add(ivaDeLinea));
             lineas.add(new LineaCalculada(
                     p.productoId(),
                     p.cantidad(),
@@ -105,7 +127,9 @@ public final class CalculoDeVenta {
             descuento = descuento.add(descuentoDeLinea);
             iva = iva.add(ivaDeLinea);
         }
-        BigDecimal total = subtotal.subtract(descuento).add(iva);
+        BigDecimal total = toparImporte(subtotal.subtract(descuento).add(iva));
+        toparImporte(subtotal);
+        toparImporte(iva);
         return new VentaCalculada(List.copyOf(lineas), pesos(subtotal), pesos(descuento), pesos(iva), pesos(total),
                 tieneDescuento);
     }
@@ -116,10 +140,10 @@ public final class CalculoDeVenta {
      * no cubre el total es un 400; el total en efectivo lo calcula el servidor.
      */
     public static BigDecimal cambio(BigDecimal totalEfectivo, BigDecimal recibido) {
-        if (totalEfectivo == null || totalEfectivo.signum() < 0) {
+        if (totalEfectivo == null || !esRazonable(totalEfectivo) || totalEfectivo.signum() < 0) {
             throw new IllegalArgumentException("El total en efectivo debe ser un monto no negativo.");
         }
-        if (recibido == null || tieneCentavos(recibido) || recibido.compareTo(totalEfectivo) < 0) {
+        if (recibido == null || !esRazonable(recibido) || tieneCentavos(recibido) || recibido.compareTo(totalEfectivo) < 0) {
             throw new EfectivoRecibidoInvalidoException(EFECTIVO_RECIBIDO);
         }
         return pesos(recibido.subtract(totalEfectivo));
@@ -133,15 +157,23 @@ public final class CalculoDeVenta {
             throw new IllegalArgumentException("La cantidad debe ser mayor que cero.");
         }
         BigDecimal precio = p.precioUnitario();
-        if (precio == null || precio.signum() < 0 || tieneCentavos(precio)) {
+        if (precio == null || !esRazonable(precio) || precio.signum() < 0 || tieneCentavos(precio)) {
             throw new IllegalArgumentException("El precio debe ser un monto en pesos enteros no negativo.");
         }
         BigDecimal tarifa = p.tarifaIva();
-        if (tarifa == null || tarifa.signum() < 0 || tarifa.compareTo(BigDecimal.ONE) > 0
+        if (tarifa == null || !esRazonable(tarifa) || tarifa.signum() < 0 || tarifa.compareTo(BigDecimal.ONE) > 0
                 || tarifa.stripTrailingZeros().scale() > ESCALA_TARIFA) {
             throw new IllegalArgumentException("La tarifa de IVA debe estar entre 0 y 1, con hasta cuatro decimales.");
         }
         tratamientoGuardado(p);
+        // Sin IVA no hay tarifa: la vista da 0 a EXCLUIDO, EXENTO y NO_GRAVADO, y a la regla vacía
+        // (tratamiento nulo, ADR-0024) le da tarifa 0. Una tarifa mayor que cero aquí es una fila
+        // incoherente. GRAVADO con tarifa 0 sí es válido.
+        String t = p.tratamientoIva();
+        boolean sinIva = t == null || t.equals("EXCLUIDO") || t.equals("EXENTO") || t.equals("NO_GRAVADO");
+        if (sinIva && tarifa.signum() > 0) {
+            throw new IllegalArgumentException("Un tratamiento sin IVA no puede llevar tarifa.");
+        }
     }
 
     /**
@@ -156,6 +188,9 @@ public final class CalculoDeVenta {
             throw new DescuentoInvalidoException(DESCUENTO_SIN_VALOR);
         }
         BigDecimal pedido = descuento.valor();
+        if (!esRazonable(pedido)) {
+            throw new DescuentoInvalidoException(DESCUENTO_DESMESURADO);
+        }
         if (pedido.signum() < 0) {
             throw new DescuentoInvalidoException(DESCUENTO_NEGATIVO);
         }
@@ -231,6 +266,24 @@ public final class CalculoDeVenta {
             case "GRAVADO", "EXCLUIDO", "EXENTO", "NO_GRAVADO" -> tratamiento;
             default -> throw new IllegalArgumentException("Tratamiento de IVA desconocido.");
         };
+    }
+
+    /**
+     * Acota un número de fuera antes de operar con él, solo con {@code scale()} y {@code precision()},
+     * que no calculan nada: a lo sumo cuatro decimales y doce cifras enteras. La escala negativa
+     * ({@code 1E+3}) vale mientras el número siga teniendo pocas cifras. La resta va en {@code long}
+     * porque una escala extrema desbordaría el {@code int}.
+     */
+    private static boolean esRazonable(BigDecimal valor) {
+        return valor.scale() <= MAX_ESCALA_ENTRADA
+                && (long) valor.precision() - valor.scale() <= MAX_CIFRAS_ENTERAS;
+    }
+
+    private static BigDecimal toparImporte(BigDecimal importe) {
+        if (importe.compareTo(MAXIMO_IMPORTE) > 0) {
+            throw new IllegalArgumentException("El importe de la venta es mayor que el que se puede guardar.");
+        }
+        return importe;
     }
 
     private static boolean tieneCentavos(BigDecimal valor) {
