@@ -23,12 +23,14 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
+import java.sql.SQLIntegrityConstraintViolationException;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -38,6 +40,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -790,6 +793,124 @@ class ServicioProductoTest {
 
         assertEquals("7709999999999", guardado.getCodigoBarras());
         verify(productos).existsByEmpresaIdAndCodigoBarrasAndIdNot(3, "7709999999999", 11);
+    }
+
+    // ── El dueño del código de barras está inactivo (M12) ───────────
+    private static final String TEXTO_DEL_INACTIVO =
+            "Ese código de barras ya lo usa un producto inactivo de tu empresa.";
+
+    @Test
+    void codigoRepetidoDeUnInactivoLoDiceAlCrear() {
+        comoEmpresa(3);
+        referenciasPropias();
+        when(productos.existsByEmpresaIdAndCodigoBarras(3, "7701234567890")).thenReturn(true);
+        when(productos.existsByEmpresaIdAndCodigoBarrasAndActivoFalse(3, "7701234567890")).thenReturn(true);
+
+        NombreRepetidoException e = assertThrows(NombreRepetidoException.class,
+                () -> servicio.crear(conBarras("7701234567890")));
+
+        assertEquals(TEXTO_DEL_INACTIVO, e.getMessage());
+        verify(productos, never()).save(any());
+    }
+
+    @Test
+    void codigoRepetidoDeUnInactivoLoDiceAlEditar() {
+        comoEmpresa(3);
+        when(productos.findByEmpresaIdAndId(3, 11)).thenReturn(Optional.of(productoGuardado()));
+        referenciasPropias();
+        when(productos.existsByEmpresaIdAndCodigoBarrasAndIdNot(3, "7709999999999", 11)).thenReturn(true);
+        when(productos.existsByEmpresaIdAndCodigoBarrasAndIdNotAndActivoFalse(3, "7709999999999", 11))
+                .thenReturn(true);
+
+        NombreRepetidoException e = assertThrows(NombreRepetidoException.class,
+                () -> servicio.actualizar(11, edicionConBarras("7709999999999")));
+
+        assertEquals(TEXTO_DEL_INACTIVO, e.getMessage());
+        verify(productos, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void conUnDuenoActivoElMensajeSigueSiendoElDeSiempre() {
+        comoEmpresa(3);
+        referenciasPropias();
+        when(productos.existsByEmpresaIdAndCodigoBarras(3, "7701234567890")).thenReturn(true);
+
+        NombreRepetidoException e = assertThrows(NombreRepetidoException.class,
+                () -> servicio.crear(conBarras("7701234567890")));
+
+        assertEquals("Ya existe un producto con el código de barras 7701234567890.", e.getMessage());
+    }
+
+    // ── Dos altas a la vez con el mismo código de barras (M13) ──────
+    /** Lo que llega del motor al chocar con una clave única: su mensaje termina con el nombre de la clave. */
+    private static DataIntegrityViolationException choqueConLaClave(String clave) {
+        return choqueConElMensaje("Duplicate entry '3-7701234567890' for key '" + clave + "'");
+    }
+
+    private static DataIntegrityViolationException choqueConElMensaje(String mensajeDelMotor) {
+        return new DataIntegrityViolationException("could not execute statement",
+                new SQLIntegrityConstraintViolationException(mensajeDelMotor, "23000", 1062));
+    }
+
+    @Test
+    void elChoqueConLaClaveDelCodigoDeBarrasAlCrearEsUn409SinRepetirLoEnviado() {
+        comoEmpresa(3);
+        referenciasPropias();
+        when(productos.save(any())).thenThrow(choqueConLaClave("productos.uq_productos_barras"));
+
+        NombreRepetidoException e = assertThrows(NombreRepetidoException.class,
+                () -> servicio.crear(conBarras("7701234567890")));
+
+        assertEquals("Ya existe un producto con ese código de barras.", e.getMessage());
+    }
+
+    @Test
+    void elChoqueConLaClaveDelCodigoDeBarrasAlEditarEsUn409() {
+        comoEmpresa(3);
+        when(productos.findByEmpresaIdAndId(3, 11)).thenReturn(Optional.of(productoGuardado()));
+        referenciasPropias();
+        when(productos.saveAndFlush(any())).thenThrow(choqueConLaClave("productos.uq_productos_barras"));
+
+        NombreRepetidoException e = assertThrows(NombreRepetidoException.class,
+                () -> servicio.actualizar(11, edicionConBarras("7709999999999")));
+
+        assertEquals("Ya existe un producto con ese código de barras.", e.getMessage());
+    }
+
+    @Test
+    void elChoqueConOtraClaveNoSeDisfrazaDeCodigoDeBarras() {
+        comoEmpresa(3);
+        referenciasPropias();
+        DataIntegrityViolationException delCodigo = choqueConLaClave("productos.uq_productos_codigo");
+        when(productos.save(any())).thenThrow(delCodigo);
+
+        assertSame(delCodigo, assertThrows(DataIntegrityViolationException.class,
+                () -> servicio.crear(conBarras("7701234567890"))));
+    }
+
+    @Test
+    void unValorQueNombraLaClaveDeBarrasNoConfundeALaTraduccion() {
+        comoEmpresa(3);
+        referenciasPropias();
+        // El mensaje del motor repite el valor, y el valor lo escribe quien da el alta: nombrar
+        // la clave de barras dentro de él no cambia cuál chocó, y es la del final.
+        DataIntegrityViolationException delCodigo = choqueConElMensaje(
+                "Duplicate entry '3-X for key 'productos.uq_productos_barras'' for key 'productos.uq_productos_codigo'");
+        when(productos.save(any())).thenThrow(delCodigo);
+
+        assertSame(delCodigo, assertThrows(DataIntegrityViolationException.class,
+                () -> servicio.crear(conBarras("7701234567890"))));
+    }
+
+    @Test
+    void unaViolacionDeIntegridadSinMensajeDelMotorSeRelanzaTalCual() {
+        comoEmpresa(3);
+        referenciasPropias();
+        DataIntegrityViolationException sinCausa = new DataIntegrityViolationException("sin causa");
+        when(productos.save(any())).thenThrow(sinCausa);
+
+        assertSame(sinCausa, assertThrows(DataIntegrityViolationException.class,
+                () -> servicio.crear(conBarras("7701234567890"))));
     }
 
     // ── El porcentaje y el precio de venta (ADR-0025) ───────────────

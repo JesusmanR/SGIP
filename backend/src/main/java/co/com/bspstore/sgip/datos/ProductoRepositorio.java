@@ -39,6 +39,10 @@ public interface ProductoRepositorio extends JpaRepository<Producto, Integer> {
 
     boolean existsByEmpresaIdAndCodigoBarrasAndIdNot(Integer empresaId, String codigoBarras, Integer id);
 
+    boolean existsByEmpresaIdAndCodigoBarrasAndActivoFalse(Integer empresaId, String codigoBarras);
+
+    boolean existsByEmpresaIdAndCodigoBarrasAndIdNotAndActivoFalse(Integer empresaId, String codigoBarras, Integer id);
+
     /**
      * Para negarse a desactivar una categoria que todavia sostiene
      * productos. Cuenta solo los activos: los ya desactivados no

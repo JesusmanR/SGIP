@@ -156,4 +156,8 @@ public class ConsultaCatalogo {
                 .query(ProductoEnCatalogo.class)
                 .optional();
     }
+
+    public Optional<ProductoEnCatalogo> porCodigo(Integer empresaId, String codigo) {
+        throw new UnsupportedOperationException();
+    }
 }
