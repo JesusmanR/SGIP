@@ -6,14 +6,19 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -492,76 +497,342 @@ class CalculoDeVentaTest {
         assertThrows(IllegalArgumentException.class, () -> CalculoDeVenta.cambio(new BigDecimal("-1"), BigDecimal.TEN));
     }
 
+    // ---- Números que vienen de fuera: nada que cuelgue el hilo (I1) --------------------------------
+
+    private static final Duration PLAZO = Duration.ofSeconds(2);
+    private static final List<String> EXPONENTES_EXTREMOS = List.of("1E+99999999", "1E-99999999");
+
+    @Test
+    void unDescuentoDeExponenteExtremoSeRechazaSinColgarElHilo() {
+        for (String extremo : EXPONENTES_EXTREMOS) {
+            BigDecimal valor = new BigDecimal(extremo);
+            for (TipoDescuento tipo : TipoDescuento.values()) {
+                Descuento d = new Descuento(tipo, valor);
+                assertTimeoutPreemptively(PLAZO, () -> {
+                    assertThrows(DescuentoInvalidoException.class, () -> CalculoDeVenta.calcular(
+                            List.of(linea(1, 1, 10_000, SIN_IVA, "EXCLUIDO", d)), null), "en la línea " + tipo + " " + extremo);
+                    assertThrows(DescuentoInvalidoException.class, () -> CalculoDeVenta.calcular(
+                            List.of(simple(1, 1, 10_000)), d), "en el total " + tipo + " " + extremo);
+                });
+            }
+        }
+    }
+
+    @Test
+    void unEfectivoRecibidoDeExponenteExtremoSeRechazaSinColgarElHilo() {
+        for (String extremo : EXPONENTES_EXTREMOS) {
+            assertTimeoutPreemptively(PLAZO, () -> assertThrows(EfectivoRecibidoInvalidoException.class,
+                    () -> CalculoDeVenta.cambio(new BigDecimal("100"), new BigDecimal(extremo)), extremo));
+        }
+    }
+
+    @Test
+    void unPrecioUnaTarifaOUnTotalEnEfectivoDeExponenteExtremoSeRechazanSinColgarElHilo() {
+        for (String extremo : EXPONENTES_EXTREMOS) {
+            BigDecimal valor = new BigDecimal(extremo);
+            assertTimeoutPreemptively(PLAZO, () -> {
+                assertThrows(IllegalArgumentException.class, () -> CalculoDeVenta.calcular(
+                        List.of(new LineaPedida(1, 1, valor, SIN_IVA, "EXCLUIDO", null)), null), "precio " + extremo);
+                assertThrows(IllegalArgumentException.class, () -> CalculoDeVenta.calcular(
+                        List.of(new LineaPedida(1, 1, BigDecimal.TEN, valor, "GRAVADO", null)), null), "tarifa " + extremo);
+                assertThrows(IllegalArgumentException.class,
+                        () -> CalculoDeVenta.cambio(valor, BigDecimal.TEN), "total en efectivo " + extremo);
+            });
+        }
+    }
+
+    @Test
+    void unNumeroConMasDeDoceCifrasEnterasOCuatroDecimalesSeRechaza() {
+        BigDecimal trece = new BigDecimal("1000000000000");
+        assertThrows(DescuentoInvalidoException.class, () -> CalculoDeVenta.calcular(
+                List.of(simple(1, 1, 10_000)), new Descuento(TipoDescuento.PESOS, trece)));
+        assertThrows(DescuentoInvalidoException.class, () -> CalculoDeVenta.calcular(
+                List.of(simple(1, 1, 10_000)), new Descuento(TipoDescuento.PORCENTAJE, new BigDecimal("10.00001"))));
+        assertThrows(EfectivoRecibidoInvalidoException.class, () -> CalculoDeVenta.cambio(BigDecimal.TEN, trece));
+        assertThrows(IllegalArgumentException.class, () -> CalculoDeVenta.calcular(
+                List.of(new LineaPedida(1, 1, trece, SIN_IVA, "EXCLUIDO", null)), null));
+    }
+
+    @Test
+    void unaEscalaNegativaConValorRazonableSeAcepta() {
+        // 1E+3 es 1 000: la notación científica no hace inválido un monto legítimo.
+        Descuento mil = new Descuento(TipoDescuento.PESOS, new BigDecimal("1E+3"));
+        Descuento cien = new Descuento(TipoDescuento.PORCENTAJE, new BigDecimal("1E+2"));
+
+        igual(1_000, CalculoDeVenta.calcular(List.of(simple(1, 1, 5_000)), mil).descuento(), "1E+3 pesos");
+        igual(5_000, CalculoDeVenta.calcular(List.of(simple(1, 1, 5_000)), cien).descuento(), "1E+2 por ciento");
+        igual(1_000, CalculoDeVenta.cambio(new BigDecimal("9000"), new BigDecimal("1E+4")), "1E+4 recibidos");
+    }
+
+    // ---- Tope de importes (M1) -----------------------------------------------------------------
+
+    @Test
+    void unImporteQueNoCabeEnDecimal14Con2EsInvalido() {
+        BigDecimal alto = new BigDecimal("999999999999");
+
+        assertThrows(IllegalArgumentException.class, () -> CalculoDeVenta.calcular(
+                List.of(new LineaPedida(1, Integer.MAX_VALUE, alto, SIN_IVA, "EXCLUIDO", null)), null));
+        // Cada línea cabe, pero la venta no.
+        assertThrows(IllegalArgumentException.class, () -> CalculoDeVenta.calcular(List.of(
+                new LineaPedida(1, 1, alto, SIN_IVA, "EXCLUIDO", null),
+                new LineaPedida(2, 1, alto, SIN_IVA, "EXCLUIDO", null)), null));
+        // La línea cabe, pero con su IVA el total de la línea no.
+        assertThrows(IllegalArgumentException.class, () -> CalculoDeVenta.calcular(
+                List.of(new LineaPedida(1, 1, alto, IVA_19, "GRAVADO", null)), null));
+    }
+
+    @Test
+    void elMayorImporteQueCabeSeAcepta() {
+        VentaCalculada v = CalculoDeVenta.calcular(
+                List.of(new LineaPedida(1, 1, new BigDecimal("999999999999"), SIN_IVA, "EXCLUIDO", null)), null);
+
+        assertEquals(0, new BigDecimal("999999999999.00").compareTo(v.total()));
+    }
+
+    // ---- Tratamiento sin IVA con tarifa (M2) ---------------------------------------------------
+
+    @Test
+    void unTratamientoSinIvaConTarifaMayorQueCeroEsInvalido() {
+        for (String t : new String[] {"EXENTO", "EXCLUIDO", "NO_GRAVADO", null}) {
+            assertThrows(IllegalArgumentException.class, () -> CalculoDeVenta.calcular(
+                    List.of(linea(1, 1, 1_000, IVA_19, t, null)), null), String.valueOf(t));
+        }
+    }
+
+    @Test
+    void gravadoConTarifaCeroYExcluidoHastaUmbralSiguenSiendoValidos() {
+        CalculoDeVenta.calcular(List.of(linea(1, 1, 1_000, SIN_IVA, "GRAVADO", null)), null);
+        CalculoDeVenta.calcular(List.of(linea(1, 1, 1_000, SIN_IVA, "EXCLUIDO_HASTA_UMBRAL", null)), null);
+        CalculoDeVenta.calcular(List.of(linea(1, 1, 1_000, IVA_19, "EXCLUIDO_HASTA_UMBRAL", null)), null);
+    }
+
+    // ---- Pruebas baratas (M4) ------------------------------------------------------------------
+
+    private static Map<Integer, Long> descuentoPorProducto(List<LineaPedida> lineas, Descuento total) {
+        VentaCalculada v = CalculoDeVenta.calcular(lineas, total);
+        Map<Integer, Long> porProducto = new HashMap<>();
+        for (LineaCalculada l : v.lineas()) {
+            porProducto.put(l.productoId(), l.descuento().longValueExact());
+        }
+        return porProducto;
+    }
+
+    private static void permutaciones(List<LineaPedida> lineas, int desde, List<List<LineaPedida>> salida) {
+        if (desde == lineas.size()) {
+            salida.add(new ArrayList<>(lineas));
+            return;
+        }
+        for (int i = desde; i < lineas.size(); i++) {
+            Collections.swap(lineas, desde, i);
+            permutaciones(lineas, desde + 1, salida);
+            Collections.swap(lineas, desde, i);
+        }
+    }
+
+    @Test
+    void unaPermutacionDeLasLineasDaElMismoRepartoPorProductoId() {
+        // Empates de valor (se resuelven por productoId), valores distintos y el caso en cascada.
+        record Escenario(List<LineaPedida> lineas, long total, Map<Integer, Long> esperado) {}
+        List<Escenario> escenarios = List.of(
+                new Escenario(List.of(simple(1, 1, 100), simple(2, 1, 100), simple(3, 1, 100)), 50,
+                        Map.of(1, 16L, 2, 17L, 3, 17L)),
+                new Escenario(List.of(simple(1, 1, 1_000), simple(2, 1, 1_000), simple(3, 1, 1_000)), 100,
+                        Map.of(1, 34L, 2, 33L, 3, 33L)),
+                new Escenario(List.of(simple(1, 1, 400), simple(2, 1, 450), simple(3, 1, 150)), 1,
+                        Map.of(1, 0L, 2, 1L, 3, 0L)),
+                new Escenario(List.of(simple(1, 1, 1), simple(2, 1, 1), simple(3, 1, 1), simple(4, 1, 1)), 2,
+                        Map.of(1, 0L, 2, 0L, 3, 1L, 4, 1L)));
+        for (Escenario e : escenarios) {
+            List<List<LineaPedida>> todas = new ArrayList<>();
+            permutaciones(new ArrayList<>(e.lineas()), 0, todas);
+            for (List<LineaPedida> permutada : todas) {
+                assertEquals(e.esperado(), descuentoPorProducto(permutada, pesos(e.total())), permutada.toString());
+            }
+        }
+    }
+
+    @Test
+    void conBaseCeroPorElDescuentoTotalElIvaEsCero() {
+        for (Descuento total : List.of(porcentaje("100"), pesos(10_000))) {
+            VentaCalculada v = CalculoDeVenta.calcular(List.of(linea(1, 1, 10_000, IVA_19, "GRAVADO", null)), total);
+
+            igual(0, v.lineas().get(0).base(), "base");
+            igual(0, v.lineas().get(0).iva(), "iva de la línea");
+            igual(0, v.iva(), "iva de la venta");
+            igual(0, v.total(), "total");
+        }
+    }
+
     // ---- Propiedad -----------------------------------------------------------------------------
 
-    /**
-     * Combinaciones generadas con semilla fija. En cada una: lo repartido suma exactamente el
-     * descuento total, ningún descuento de línea es negativo ni pasa de su valor, y la venta
-     * cuadra: {@code total = subtotal − descuento + iva}.
-     */
-    @Test
-    void propiedadDelRepartoYDeLosTotales() {
-        Random azar = new Random(20261109L);
-        BigDecimal[] tarifas = {SIN_IVA, new BigDecimal("0.05"), IVA_19};
+    private static final BigDecimal[] TARIFAS = {SIN_IVA, new BigDecimal("0.05"), IVA_19};
+
+    private record Estadistica(int conResiduo, int enCascada, int totalIgualALaSuma) {}
+
+    private static Descuento porcentajeConDecimales(Random azar) {
+        return new Descuento(TipoDescuento.PORCENTAJE, BigDecimal.valueOf(azar.nextInt(10_001), 2));
+    }
+
+    private static Descuento descuentoPropio(Random azar, long subtotal) {
+        return switch (azar.nextInt(4)) {
+            case 0 -> null;
+            case 1 -> porcentajeConDecimales(azar);
+            case 2 -> porcentaje(String.valueOf(azar.nextInt(101)));
+            default -> pesos(azar.nextLong(subtotal + 1));
+        };
+    }
+
+    private static List<LineaPedida> generarLineas(Random azar, boolean pequenas) {
+        int n = pequenas ? 2 + azar.nextInt(7) : 1 + azar.nextInt(6);
+        List<LineaPedida> lineas = new ArrayList<>();
+        for (int i = 0; i < n; i++) {
+            int cantidad = pequenas ? 1 : 1 + azar.nextInt(5);
+            long precio = pequenas ? azar.nextInt(4) : 1 + azar.nextInt(azar.nextBoolean() ? 100 : 50_000);
+            Descuento propio = pequenas && azar.nextInt(4) > 0 ? null : descuentoPropio(azar, cantidad * precio);
+            lineas.add(linea(azar.nextInt(pequenas ? 6 : 8), cantidad, precio,
+                    TARIFAS[azar.nextInt(TARIFAS.length)], "GRAVADO", propio));
+        }
+        return lineas;
+    }
+
+    /** El descuento total que se pide y los pesos que deben salir (calculados aparte del código). */
+    private record TotalPedido(Descuento descuento, long enPesos) {}
+
+    private static TotalPedido generarTotal(Random azar, long sumaDeBases) {
+        return switch (azar.nextInt(6)) {
+            case 0 -> new TotalPedido(null, 0);
+            case 1 -> {
+                long pesos = azar.nextLong(sumaDeBases + 1);
+                yield new TotalPedido(pesos(pesos), pesos);
+            }
+            case 2 -> new TotalPedido(pesos(sumaDeBases), sumaDeBases);
+            case 3 -> new TotalPedido(porcentaje("100"), sumaDeBases);
+            default -> {
+                Descuento d = porcentajeConDecimales(azar);
+                long pesos = BigDecimal.valueOf(sumaDeBases).multiply(d.valor())
+                        .divide(BigDecimal.valueOf(100), 0, RoundingMode.HALF_UP).longValueExact();
+                yield new TotalPedido(d, pesos);
+            }
+        };
+    }
+
+    private static long parteProporcional(long total, long base, long suma) {
+        if (suma == 0) {
+            return 0;
+        }
+        return BigDecimal.valueOf(total).multiply(BigDecimal.valueOf(base))
+                .divide(BigDecimal.valueOf(suma), 0, RoundingMode.HALF_UP).longValueExact();
+    }
+
+    /** La regla literal del diseño, escrita aparte: el residuo va entero a la línea mayor. */
+    private static long[] repartoLiteral(List<LineaPedida> lineas, List<Long> bases, long total) {
+        long suma = bases.stream().mapToLong(Long::longValue).sum();
+        long[] partes = new long[bases.size()];
+        long repartido = 0;
+        for (int i = 0; i < partes.length; i++) {
+            partes[i] = parteProporcional(total, bases.get(i), suma);
+            repartido += partes[i];
+        }
+        int elegida = 0;
+        for (int i = 1; i < partes.length; i++) {
+            int porValor = Long.compare(bases.get(i), bases.get(elegida));
+            if (porValor > 0 || (porValor == 0 && lineas.get(i).productoId() < lineas.get(elegida).productoId())) {
+                elegida = i;
+            }
+        }
+        partes[elegida] += total - repartido;
+        return partes;
+    }
+
+    private static Estadistica ejercitar(Random azar, int casos, boolean pequenas) {
         int conResiduo = 0;
+        int enCascada = 0;
+        int totalIgualALaSuma = 0;
 
-        for (int caso = 0; caso < 2_000; caso++) {
-            int n = 1 + azar.nextInt(6);
-            List<LineaPedida> lineas = new ArrayList<>();
-            for (int i = 0; i < n; i++) {
-                int cantidad = 1 + azar.nextInt(5);
-                long precio = 1 + azar.nextInt(azar.nextBoolean() ? 100 : 50_000);
-                BigDecimal tarifa = tarifas[azar.nextInt(tarifas.length)];
-                Descuento propio = switch (azar.nextInt(3)) {
-                    case 0 -> null;
-                    case 1 -> porcentaje(String.valueOf(azar.nextInt(101)));
-                    default -> pesos(azar.nextInt((int) Math.min(cantidad * precio, Integer.MAX_VALUE) + 1));
-                };
-                lineas.add(linea(azar.nextInt(8), cantidad, precio, tarifa, "GRAVADO", propio));
-            }
+        for (int caso = 0; caso < casos; caso++) {
+            String donde = " en el caso " + caso + (pequenas ? " (pequeñas)" : "");
+            List<LineaPedida> lineas = generarLineas(azar, pequenas);
+            int n = lineas.size();
             VentaCalculada sinTotal = CalculoDeVenta.calcular(lineas, null);
-            long sumaDeBases = sinTotal.lineas().stream().mapToLong(l -> l.base().longValueExact()).sum();
+            List<Long> bases = sinTotal.lineas().stream().map(l -> l.base().longValueExact()).toList();
+            long sumaDeBases = bases.stream().mapToLong(Long::longValue).sum();
+            TotalPedido pedido = generarTotal(azar, sumaDeBases);
 
-            Descuento total;
-            long esperado;
-            switch (azar.nextInt(3)) {
-                case 0 -> {
-                    total = null;
-                    esperado = 0;
-                }
-                case 1 -> {
-                    int p = azar.nextInt(101);
-                    total = porcentaje(String.valueOf(p));
-                    esperado = BigDecimal.valueOf(sumaDeBases).multiply(BigDecimal.valueOf(p))
-                            .divide(BigDecimal.valueOf(100), 0, RoundingMode.HALF_UP).longValueExact();
-                }
-                default -> {
-                    esperado = sumaDeBases == 0 ? 0 : azar.nextLong(sumaDeBases + 1);
-                    total = pesos(esperado);
-                }
+            VentaCalculada v = CalculoDeVenta.calcular(lineas, pedido.descuento());
+
+            long[] literal = repartoLiteral(lineas, bases, pedido.enPesos());
+            boolean literalValido = true;
+            long redondeado = 0;
+            for (int i = 0; i < n; i++) {
+                literalValido &= literal[i] >= 0 && literal[i] <= bases.get(i);
+                redondeado += parteProporcional(pedido.enPesos(), bases.get(i), sumaDeBases);
             }
-
-            VentaCalculada v = CalculoDeVenta.calcular(lineas, total);
+            if (redondeado != pedido.enPesos()) {
+                conResiduo++;
+            }
+            if (!literalValido) {
+                enCascada++;
+            }
+            if (sumaDeBases > 0 && pedido.enPesos() == sumaDeBases) {
+                totalIgualALaSuma++;
+            }
 
             long repartido = 0;
+            BigDecimal ivaEsperado = BigDecimal.ZERO;
             for (int i = 0; i < n; i++) {
                 LineaCalculada con = v.lineas().get(i);
                 LineaCalculada sin = sinTotal.lineas().get(i);
                 long parte = con.descuento().longValueExact() - sin.descuento().longValueExact();
                 repartido += parte;
-                assertTrue(con.descuento().signum() >= 0, "descuento negativo en el caso " + caso);
-                assertTrue(con.descuento().compareTo(con.subtotal()) <= 0, "descuento mayor que la línea en el caso " + caso);
-                assertTrue(con.base().signum() >= 0, "base negativa en el caso " + caso);
-                assertTrue(parte >= 0 && parte <= sin.base().longValueExact(), "parte fuera de la base en el caso " + caso);
-                assertEquals(0, con.base().add(con.iva()).compareTo(con.total()), "total de línea en el caso " + caso);
+                assertTrue(con.descuento().signum() >= 0, "descuento negativo" + donde);
+                assertTrue(con.descuento().compareTo(con.subtotal()) <= 0, "descuento mayor que la línea" + donde);
+                assertTrue(con.base().signum() >= 0, "base negativa" + donde);
+                assertTrue(parte >= 0 && parte <= sin.base().longValueExact(), "parte fuera de la base" + donde);
+                if (literalValido) {
+                    assertEquals(literal[i], parte, "la parte sigue la regla literal" + donde);
+                }
+                BigDecimal iva = con.base().multiply(lineas.get(i).tarifaIva()).setScale(0, RoundingMode.HALF_UP);
+                assertEquals(0, iva.compareTo(con.iva()), "iva = round(base · tarifa)" + donde);
+                assertEquals(0, con.base().add(con.iva()).compareTo(con.total()), "total de línea" + donde);
+                ivaEsperado = ivaEsperado.add(iva);
             }
-            assertEquals(esperado, repartido, "lo repartido suma el descuento total en el caso " + caso);
+            assertEquals(pedido.enPesos(), repartido, "lo repartido suma el descuento total" + donde);
+            assertEquals(0, ivaEsperado.compareTo(v.iva()), "iva de la venta" + donde);
             assertEquals(0, v.subtotal().subtract(v.descuento()).add(v.iva()).compareTo(v.total()),
-                    "total = subtotal − descuento + iva en el caso " + caso);
-            if (repartido > 0) {
-                conResiduo++;
-            }
+                    "total = subtotal − descuento + iva" + donde);
         }
-        assertTrue(conResiduo > 500, "la propiedad debe ejercitar el reparto: " + conResiduo);
+        return new Estadistica(conResiduo, enCascada, totalIgualALaSuma);
     }
+
+    /**
+     * Combinaciones generadas con semilla fija. En cada una: lo repartido suma exactamente el
+     * descuento total (calculado aparte), ningún descuento de línea es negativo ni pasa de su valor,
+     * el IVA de cada línea es {@code round(base · tarifa)} y la venta cuadra. Cuando la regla
+     * literal del diseño da un reparto válido, el resultado es exactamente ese.
+     */
+    @Test
+    void propiedadDelRepartoYDeLosTotales() {
+        Estadistica e = ejercitar(new Random(20261109L), 2_000, false);
+
+        assertAll(
+                () -> assertTrue(e.conResiduo() >= MIN_RESIDUO_GRANDES, "casos con residuo: " + e),
+                () -> assertTrue(e.totalIgualALaSuma() >= MIN_IGUAL_GRANDES, "casos con total igual a la suma: " + e));
+    }
+
+    /** Bases de 0 a 3 pesos: aquí el residuo es la regla y la cascada aparece a menudo. */
+    @Test
+    void propiedadDelRepartoConBasesPequenasEjercitaLaCascada() {
+        Estadistica e = ejercitar(new Random(20261110L), 20_000, true);
+
+        assertAll(
+                () -> assertTrue(e.conResiduo() >= MIN_RESIDUO_PEQUENAS, "casos con residuo: " + e),
+                () -> assertTrue(e.enCascada() >= MIN_CASCADA, "casos en cascada: " + e),
+                () -> assertTrue(e.totalIgualALaSuma() >= MIN_IGUAL_PEQUENAS, "casos con total igual a la suma: " + e));
+    }
+
+    private static final int MIN_RESIDUO_GRANDES = 150;
+    private static final int MIN_IGUAL_GRANDES = 400;
+    private static final int MIN_RESIDUO_PEQUENAS = 3_000;
+    private static final int MIN_CASCADA = 40;
+    private static final int MIN_IGUAL_PEQUENAS = 5_000;
 }
