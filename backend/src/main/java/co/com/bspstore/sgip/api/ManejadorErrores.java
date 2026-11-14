@@ -366,6 +366,11 @@ public class ManejadorErrores {
         return p;
     }
 
+    /** Firma vacía de la ronda 1. */
+    public ProblemDetail violacionDeReglaDeLaBase(org.springframework.jdbc.UncategorizedSQLException e) {
+        throw new UnsupportedOperationException("pendiente");
+    }
+
     @ExceptionHandler(VentaInvalidaException.class)
     public ProblemDetail ventaInvalida(VentaInvalidaException e) {
         // 400: el cuerpo está bien formado, pero la regla que incumple depende de la base (el

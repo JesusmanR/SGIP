@@ -369,6 +369,34 @@ class VentaConcurrenteConBaseTest {
                 .param("e", caja.empresa.empresaId).query(Long.class).single());
     }
 
+    @Test
+    void tresPrimerasVentasSimultaneasNoSeInterbloqueanAlCrearLaFilaDelConsecutivo() throws Exception {
+        // Con dos transacciones basta un INSERT IGNORE; con tres, las dos que esperan la inserción de la
+        // primera toman un bloqueo compartido sobre su fila y después piden el exclusivo: un ciclo.
+        Integer a = caja.producto("A", 5, "10000");
+        Integer b = caja.producto("B", 5, "10000");
+        Integer c = caja.producto("C", 5, "10000");
+        CyclicBarrier juntas = new CyclicBarrier(3);
+        doAnswer(llamada -> {
+            juntas.await(ESPERA_MAXIMA_EN_SEGUNDOS, TimeUnit.SECONDS);
+            return llamada.callRealMethod();
+        }).when(consecutivos).tomarSiguiente(any(), any());
+
+        List<Future<ResultadoDeVenta>> tres = List.of(
+                comoAdministrador(() -> ventas.procesar(venta(UUID.randomUUID(), a, 1, "10000"))),
+                comoAdministrador(() -> ventas.procesar(venta(UUID.randomUUID(), b, 1, "10000"))),
+                comoAdministrador(() -> ventas.procesar(venta(UUID.randomUUID(), c, 1, "10000"))));
+        List<String> numeros = new ArrayList<>();
+        for (Future<ResultadoDeVenta> f : tres) {
+            numeros.add(resultado(f).venta().consecutivo());
+        }
+        numeros.sort(String::compareTo);
+
+        assertEquals(List.of("V-00000001", "V-00000002", "V-00000003"), numeros, "tres ventas y ningún 409");
+        assertEquals(3, caja.cuantas("ventas"));
+        assertEquals(1, caja.cuantas("consecutivos"));
+    }
+
     /** Dos ventas de dos cajeros que llegan juntas al consecutivo; devuelve sus números, ordenados. */
     private List<String> dosVentasJuntas(Integer a, Integer b) throws Exception {
         CyclicBarrier juntas = new CyclicBarrier(2);

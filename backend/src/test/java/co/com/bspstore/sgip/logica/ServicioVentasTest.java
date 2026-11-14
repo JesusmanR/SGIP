@@ -31,6 +31,7 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -153,22 +154,20 @@ class ServicioVentasTest {
     // ------------------------------------------------------- el camino feliz
 
     @Test
-    void unaVentaSinNadaQueAutorizarLlamaAutorizarConUnConjuntoVacioYEntregaLaSolicitudAlRegistrador() {
-        Autorizacion vacia = new Autorizacion(null, Set.of());
-        when(autorizacion.autorizar(any(), anySet())).thenReturn(vacia);
+    void unaVentaSinNadaQueAutorizarNoLlamaALaAutorizacionYEntregaUnaAutorizacionVacia() {
+        // Evita una transacción independiente (REQUIRES_NEW) vacía por cada venta.
         when(registrador.registrar(any(), any())).thenReturn(new ResultadoDeVenta(REGISTRADA, false));
 
         ResultadoDeVenta r = servicio.procesar(venta(linea(7, 2)));
 
         assertSame(REGISTRADA, r.venta());
         assertFalse(r.yaExistia());
-        assertEquals(NADA, excepcionesPedidas());
-        verify(registrador).registrar(any(), eq(vacia));
+        verifyNoInteractions(autorizacion);
+        verify(registrador).registrar(any(), eq(new Autorizacion(null, NADA)));
     }
 
     @Test
     void registrarDevuelveSoloLaVenta() {
-        when(autorizacion.autorizar(any(), anySet())).thenReturn(new Autorizacion(null, Set.of()));
         when(registrador.registrar(any(), any())).thenReturn(new ResultadoDeVenta(REGISTRADA, true));
 
         assertSame(REGISTRADA, servicio.registrar(venta(linea(7, 2))));
@@ -219,12 +218,11 @@ class ServicioVentasTest {
 
     @Test
     void unMotivoEnBlancoNoCuentaComoCampoDeEncargo() {
-        when(autorizacion.autorizar(any(), anySet())).thenReturn(new Autorizacion(null, Set.of()));
         when(registrador.registrar(any(), any())).thenReturn(new ResultadoDeVenta(REGISTRADA, false));
 
         servicio.procesar(conMotivo(venta(linea(7, 2)), "   "));
 
-        assertEquals(NADA, excepcionesPedidas());
+        verifyNoInteractions(autorizacion);
     }
 
     @Test
@@ -330,7 +328,6 @@ class ServicioVentasTest {
 
     @Test
     void lasLineasRepetidasSumanSusCantidadesYSePasanOrdenadasPorProducto() {
-        when(autorizacion.autorizar(any(), anySet())).thenReturn(new Autorizacion(null, Set.of()));
         when(registrador.registrar(any(), any())).thenReturn(new ResultadoDeVenta(REGISTRADA, false));
 
         servicio.procesar(venta(linea(9, 1), linea(7, 2), linea(7, 3)));
@@ -389,7 +386,30 @@ class ServicioVentasTest {
         var ayer = new LineaSolicitada(7, null, 2, null, HOY.minusDays(1));
 
         assertThrows(VentaInvalidaException.class, () -> servicio.procesar(conMotivo(venta(ayer), "Llega pronto")));
-        sinTocarNada();
+        verify(registrador, never()).registrar(any(), any());
+        verifyNoInteractions(autorizacion);
+    }
+
+    @Test
+    void encargoConFechaImposibleEs400() {
+        // Hoy + 1 año es el tope. LocalDate admite hasta el año 999999999 y la columna DATE hasta el 9999.
+        var imposible = new LineaSolicitada(7, null, 2, null, LocalDate.of(10000, 1, 1));
+        var pasadoElTope = new LineaSolicitada(7, null, 2, null, HOY.plusYears(1).plusDays(1));
+
+        assertThrows(VentaInvalidaException.class, () -> servicio.procesar(conMotivo(venta(imposible), "Llega pronto")));
+        assertThrows(VentaInvalidaException.class, () -> servicio.procesar(conMotivo(venta(pasadoElTope), "Llega pronto")));
+        verify(registrador, never()).registrar(any(), any());
+        verifyNoInteractions(autorizacion);
+    }
+
+    @Test
+    void laEntregaEstimadaDeHoyMasUnAnoEsValida() {
+        when(autorizacion.autorizar(any(), anySet())).thenReturn(new Autorizacion(1, Set.of(ExcepcionAutorizable.ENCARGO)));
+        when(registrador.registrar(any(), any())).thenReturn(new ResultadoDeVenta(REGISTRADA, false));
+
+        servicio.procesar(conMotivo(venta(new LineaSolicitada(7, null, 2, null, HOY.plusYears(1))), "Llega en un año"));
+
+        verify(registrador).registrar(any(), any());
     }
 
     @Test
@@ -487,11 +507,55 @@ class ServicioVentasTest {
         assertNotNull(e.getMessage());
     }
 
-    // ------------------------------------------------------- el reintento
+    // ------------------------------------------------------- el reintento de una venta ya registrada
+
+    @Test
+    void unReintentoSeReconoceAntesDeAutorizarYAntesDeMirarElDia() {
+        // Descuento sin PIN y una fecha de entrega que ya pasó: lo que a una venta nueva le daría 403 y
+        // 400 no impide devolver la que ya se registró y cuya respuesta se perdió.
+        when(registrador.siYaExiste(any())).thenReturn(Optional.of(new ResultadoDeVenta(REGISTRADA, true)));
+        var conDescuentoYFechaVieja = new LineaSolicitada(7, null, 2,
+                new Descuento(TipoDescuento.PESOS, new BigDecimal("500")), HOY.minusDays(1));
+
+        ResultadoDeVenta r = servicio.procesar(conMotivo(venta(conDescuentoYFechaVieja), "Llega pronto"));
+
+        assertTrue(r.yaExistia());
+        assertSame(REGISTRADA, r.venta());
+        verifyNoInteractions(autorizacion);
+        verify(registrador, never()).registrar(any(), any());
+    }
+
+    @Test
+    void elReconocimientoDelReintentoVeLaCargaNormalizada() {
+        when(registrador.siYaExiste(any())).thenReturn(Optional.of(new ResultadoDeVenta(REGISTRADA, true)));
+
+        servicio.procesar(venta(linea(9, 1), linea(7, 2), linea(7, 3)));
+
+        ArgumentCaptor<SolicitudVenta> vista = ArgumentCaptor.forClass(SolicitudVenta.class);
+        verify(registrador).siYaExiste(vista.capture());
+        assertEquals(2, vista.getValue().lineas().size(), "la huella necesita las líneas ya fusionadas");
+        assertEquals(5, vista.getValue().lineas().get(0).cantidad());
+    }
+
+    @Test
+    void laMismaClaveConOtraCargaEs409AntesDeAutorizar() {
+        doThrow(new ClaveDeIdempotenciaEnUsoException()).when(registrador).siYaExiste(any());
+
+        assertThrows(ClaveDeIdempotenciaEnUsoException.class, () -> servicio.procesar(venta(linea(7, 2))));
+
+        verifyNoInteractions(autorizacion);
+        verify(registrador, never()).registrar(any(), any());
+    }
+
+    @Test
+    void laFormaSeValidaAntesDeReconocerUnReintento() {
+        assertThrows(VentaInvalidaException.class, () -> servicio.procesar(venta(linea(7, 0))));
+
+        verifyNoInteractions(autorizacion, registrador);
+    }
 
     @Test
     void siOtraPeticionConLaMismaClaveGanoDevuelveLaVentaQueYaExisteConElRegistradorDeLectura() {
-        when(autorizacion.autorizar(any(), anySet())).thenReturn(new Autorizacion(null, Set.of()));
         when(registrador.registrar(any(), any())).thenThrow(new VentaDuplicadaException(new RuntimeException("duplicado")));
         when(registrador.existente(any())).thenReturn(new ResultadoDeVenta(REGISTRADA, true));
 
@@ -504,7 +568,6 @@ class ServicioVentasTest {
 
     @Test
     void sinNingunaExcepcionLaVentaNuevaNoConsultaLaExistente() {
-        when(autorizacion.autorizar(any(), anySet())).thenReturn(new Autorizacion(null, Set.of()));
         when(registrador.registrar(any(), any())).thenReturn(new ResultadoDeVenta(REGISTRADA, false));
 
         servicio.procesar(venta(linea(7, 2)));

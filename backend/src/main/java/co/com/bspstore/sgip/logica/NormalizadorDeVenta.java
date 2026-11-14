@@ -72,6 +72,16 @@ final class NormalizadorDeVenta {
                 s.autorizacion(), null);
     }
 
+    /** Firma vacía de la ronda 1. */
+    static SolicitudVenta forma(SolicitudVenta s) {
+        throw new UnsupportedOperationException("pendiente");
+    }
+
+    /** Firma vacía de la ronda 1. */
+    static SolicitudVenta fechas(SolicitudVenta s, LocalDate hoy) {
+        throw new UnsupportedOperationException("pendiente");
+    }
+
     // ------------------------------------------------------------ líneas
 
     private static List<LineaSolicitada> fusionar(List<LineaSolicitada> pedidas, LocalDate hoy) {

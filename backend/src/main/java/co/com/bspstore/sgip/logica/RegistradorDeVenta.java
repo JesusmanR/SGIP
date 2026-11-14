@@ -210,6 +210,11 @@ public class RegistradorDeVenta {
                 List.copyOf(calculada.lineas())), false);
     }
 
+    /** Firma vacía de la ronda 1: la implementación llega con el commit del arreglo. */
+    public Optional<ResultadoDeVenta> siYaExiste(SolicitudVenta pedida) {
+        throw new UnsupportedOperationException("pendiente");
+    }
+
     /**
      * La venta que ya existe para esa clave, leída en una transacción nueva. La llama la fachada
      * cuando {@link #registrar} descartó la suya por una venta hermana con la misma clave.

@@ -183,6 +183,48 @@ class ManejadorErroresTest {
         registro.list.forEach(ev -> assertEquals(Level.WARN, ev.getLevel()));
     }
 
+    /**
+     * Spring no traduce el 3819 de MySQL (una restricción CHECK) a una excepción de integridad: llega
+     * como {@code UncategorizedSQLException}. Es una validación que faltó en la solicitud.
+     */
+    private static org.springframework.jdbc.UncategorizedSQLException delCheck(String texto, int codigo) {
+        return new org.springframework.jdbc.UncategorizedSQLException("tarea", "INSERT INTO t ...",
+                new java.sql.SQLException(texto, "HY000", codigo));
+    }
+
+    @Test
+    void unaViolacionDeCheckEsUn400SinExponerLaRestriccionNiElValor() {
+        var e = delCheck("Check constraint 'ck_restriccion_secreta' is violated.", 3819);
+
+        ProblemDetail p = manejador.violacionDeReglaDeLaBase(e);
+
+        assertEquals(400, p.getStatus());
+        assertEquals("Dato no válido", p.getTitle());
+        assertEquals("Uno de los datos no cumple una regla del sistema.", p.getDetail());
+        sinTextoDelMotor(p, "ck_restriccion_secreta", "Check constraint");
+    }
+
+    @Test
+    void unaViolacionDeCheckQuedaComoAvisoConElNombreDeLaRestriccion() {
+        manejador.violacionDeReglaDeLaBase(delCheck("Check constraint 'ck_restriccion_secreta' is violated.", 3819));
+
+        assertEquals(Level.WARN, nivelRegistrado());
+        String mensaje = registro.list.get(0).getFormattedMessage();
+        assertTrue(mensaje.contains("ck_restriccion_secreta"), mensaje);
+        assertTrue(mensaje.contains("falta una validación"), mensaje);
+    }
+
+    @Test
+    void otraExcepcionSqlSinCategoriaSigueSiendoUn500GenericoSinExponerNada() {
+        var e = delCheck("Table 'tabla_secreta.x' doesn't exist", 1146);
+
+        ProblemDetail p = manejador.violacionDeReglaDeLaBase(e);
+
+        assertEquals(500, p.getStatus());
+        sinTextoDelMotor(p, "tabla_secreta");
+        assertEquals(Level.ERROR, nivelRegistrado());
+    }
+
     @Test
     void unCodigoInesperadoSigueSiendoUnError() {
         manejador.integridad(delMotor("Check constraint 'ck_x' is violated.", "HY000", 3819));
