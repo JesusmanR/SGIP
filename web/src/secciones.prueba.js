@@ -7,8 +7,10 @@ import { describe, expect, it } from 'vitest'
 import { puedeVer, secciones, seccionesDe } from './secciones.js'
 
 const ADMIN = ['ADMINISTRADOR']
+const VENDEN = ['ADMINISTRADOR', 'VENDEDOR']
 const TODOS = ['ADMINISTRADOR', 'VENDEDOR', 'CLIENTE']
 const ESPERADO = [
+  ['/caja', 'Caja', VENDEN, 'Operación'],
   ['/panel', 'Panel', ADMIN, 'Operación'],
   ['/catalogo', 'Catálogo', TODOS, 'Operación'],
   ['/importar', 'Importar precios', ADMIN, 'Operación'],
@@ -25,6 +27,14 @@ const ESPERADO = [
 const ROLES = ['ADMINISTRADOR', 'VENDEDOR', 'CLIENTE', 'SUPER_ADMIN']
 
 describe('tabla de secciones', () => {
+  it('cajaSoloParaAdministradorYVendedor: el cliente y el super administrador no la ven', () => {
+    expect(puedeVer('/caja', 'ADMINISTRADOR')).toBe(true)
+    expect(puedeVer('/caja', 'VENDEDOR')).toBe(true)
+    expect(puedeVer('/caja', 'CLIENTE')).toBe(false)
+    expect(puedeVer('/caja', 'SUPER_ADMIN')).toBe(false)
+    expect(secciones[0].ruta).toBe('/caja')
+  })
+
   it('tiene exactamente las filas del encargo', () => {
     expect(secciones.map((s) => [s.ruta, s.etiqueta, s.roles, s.grupo])).toEqual(ESPERADO)
   })
