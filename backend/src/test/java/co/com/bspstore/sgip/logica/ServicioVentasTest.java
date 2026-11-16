@@ -289,12 +289,28 @@ class ServicioVentasTest {
     // ------------------------------------------------------- la forma de la solicitud (400)
 
     @Test
-    void unaLineaConProductoNuevoRespondeQueAunNoEstaDisponibleSinTocarNada() {
-        var nuevo = new LineaSolicitada(null, new ProductoNuevo("Tornillo", new BigDecimal("500"), null), 1, null, null);
+    void unaLineaConProductoNuevoPideAutorizarElProductoNuevoYElEncargoConUnSoloPin() {
+        when(autorizacion.autorizar(any(), anySet())).thenReturn(new Autorizacion(1,
+                Set.of(ExcepcionAutorizable.PRODUCTO_NUEVO, ExcepcionAutorizable.ENCARGO)));
+        when(registrador.registrar(any(), any())).thenReturn(new ResultadoDeVenta(REGISTRADA, false));
+        var nuevo = new LineaSolicitada(null, new ProductoNuevo("Tornillo", new BigDecimal("500"), null), 1, null,
+                HOY.plusDays(5));
 
-        VentaInvalidaException e = assertThrows(VentaInvalidaException.class, () -> servicio.procesar(venta(nuevo)));
+        servicio.procesar(conAutorizacion(conMotivo(venta(nuevo), "Llega el viernes"), new SolicitudAutorizacion(1, "483920")));
 
-        assertEquals("Los productos nuevos aún no están disponibles", e.getMessage());
+        assertEquals(Set.of(ExcepcionAutorizable.PRODUCTO_NUEVO, ExcepcionAutorizable.ENCARGO), excepcionesPedidas());
+        assertNotNull(lasQueRecibeElRegistrador().lineas().get(0).productoNuevo());
+    }
+
+    @Test
+    void unProductoNuevoSinFechaOSinMotivoEs400SinPedirElPinNiTocarNada() {
+        var sinFecha = new LineaSolicitada(null, new ProductoNuevo("Tornillo", new BigDecimal("500"), null), 1, null, null);
+        var conFecha = new LineaSolicitada(null, new ProductoNuevo("Tornillo", new BigDecimal("500"), null), 1, null,
+                HOY.plusDays(5));
+
+        assertThrows(VentaInvalidaException.class, () -> servicio.procesar(conMotivo(venta(sinFecha), "Llega el viernes")));
+        assertThrows(VentaInvalidaException.class, () -> servicio.procesar(venta(conFecha)));
+
         sinTocarNada();
     }
 

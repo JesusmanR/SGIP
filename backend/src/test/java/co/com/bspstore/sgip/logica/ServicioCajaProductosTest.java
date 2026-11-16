@@ -77,7 +77,7 @@ class ServicioCajaProductosTest {
                 new BigDecimal("4046"), "SOBRE_COSTO", "SOBRE_COSTO",
                 0, 0, 0, 0, null, 0,
                 new BigDecimal("24.00"), new BigDecimal("36.00"),
-                null, null, new BigDecimal("24.00"), new BigDecimal("36.00"), 5);
+                null, null, new BigDecimal("24.00"), new BigDecimal("36.00"), 5, true);
     }
 
     // ------------------------------------------------------- el precio y si se puede vender
@@ -157,7 +157,7 @@ class ServicioCajaProductosTest {
                 sinExistencia.tarifaContado(), sinExistencia.totalContado(), sinExistencia.totalCredito(),
                 sinExistencia.baseContado(), sinExistencia.baseCredito(), 0, 0, 0, 0, null, 0,
                 sinExistencia.margenContado(), sinExistencia.margenCredito(), null, null,
-                sinExistencia.porcentajeContado(), sinExistencia.porcentajeCredito(), 5);
+                sinExistencia.porcentajeContado(), sinExistencia.porcentajeCredito(), 5, true);
         when(catalogo.porCodigoBarras(3, "1")).thenReturn(Optional.of(agotado));
 
         ProductoParaCaja p = servicio.porCodigo("1").orElseThrow();

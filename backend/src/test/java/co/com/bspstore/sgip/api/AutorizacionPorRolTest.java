@@ -110,7 +110,7 @@ class AutorizacionPorRolTest {
                 BigDecimal.ZERO, new BigDecimal("3720.00"), new BigDecimal("3875.00"),
                 "SOBRE_COSTO", "SOBRE_PRECIO", 0, 0, 0, 0, null, 0,
                 new BigDecimal("20.00"), new BigDecimal("25.00"), new BigDecimal("3720"), null,
-                null, new BigDecimal("25.00"), 3);
+                null, new BigDecimal("25.00"), 3, true);
     }
 
     /** El 403 de la API: ProblemDetail con texto fijo, no el cuerpo vacío del contenedor. */
@@ -150,7 +150,8 @@ class AutorizacionPorRolTest {
                 .andExpect(jsonPath("$[0].precioFijoCredito").doesNotExist())
                 .andExpect(jsonPath("$[0].porcentajeContado").doesNotExist())
                 .andExpect(jsonPath("$[0].porcentajeCredito").doesNotExist())
-                .andExpect(jsonPath("$[0].version").doesNotExist());
+                .andExpect(jsonPath("$[0].version").doesNotExist())
+                .andExpect(jsonPath("$[0].costoProvisional").doesNotExist());
     }
 
     @ParameterizedTest
@@ -173,7 +174,8 @@ class AutorizacionPorRolTest {
                 .andExpect(jsonPath("$.precioFijoCredito").doesNotExist())
                 .andExpect(jsonPath("$.porcentajeContado").doesNotExist())
                 .andExpect(jsonPath("$.porcentajeCredito").doesNotExist())
-                .andExpect(jsonPath("$.version").doesNotExist());
+                .andExpect(jsonPath("$.version").doesNotExist())
+                .andExpect(jsonPath("$.costoProvisional").doesNotExist());
     }
 
     @ParameterizedTest
@@ -196,7 +198,8 @@ class AutorizacionPorRolTest {
                 .andExpect(jsonPath("$.precioFijoCredito").doesNotExist())
                 .andExpect(jsonPath("$.porcentajeContado").doesNotExist())
                 .andExpect(jsonPath("$.porcentajeCredito").doesNotExist())
-                .andExpect(jsonPath("$.version").doesNotExist());
+                .andExpect(jsonPath("$.version").doesNotExist())
+                .andExpect(jsonPath("$.costoProvisional").doesNotExist());
     }
 
     // ---- lo que se les niega -----------------------------------------

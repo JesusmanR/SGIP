@@ -71,6 +71,14 @@ import java.math.BigDecimal;
  * de la fila del producto por su clave primaria. Un cambio solo de precio no la
  * sube (ADR-0025). Es del administrador: quien vende no edita.
  *
+ * costoProvisional · el costo no es el real: el producto se creó dentro de una
+ * venta (RF-42) con costo 1,00 porque la columna exige un costo mayor que cero.
+ * Se apaga cuando el administrador escribe el costo real, sea editando el
+ * producto o con una lista de precios. No sale de la vista: lo lee
+ * `ConsultaCatalogo` de la fila del producto, como `version`. Es del
+ * administrador, igual que el costo: quien vende no lo recibe, y la caja
+ * tampoco.
+ *
  * Esta es la forma completa, con costo y proveedor, y solo la recibe el
  * administrador. Quien vende recibe {@link ProductoParaVenta}.
  */
@@ -110,5 +118,6 @@ public record ProductoEnCatalogo(
         BigDecimal precioFijoCredito,
         BigDecimal porcentajeContado,
         BigDecimal porcentajeCredito,
-        Integer version
+        Integer version,
+        boolean costoProvisional
 ) implements VistaDeProducto {}

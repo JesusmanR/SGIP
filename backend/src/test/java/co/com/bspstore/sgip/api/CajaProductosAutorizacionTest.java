@@ -95,7 +95,7 @@ class CajaProductosAutorizacionTest {
                 new BigDecimal("3689"), new BigDecimal("4046"), "SOBRE_COSTO", "SOBRE_COSTO",
                 0, 0, 0, 0, null, 0,
                 new BigDecimal("24.00"), new BigDecimal("36.00"),
-                null, null, new BigDecimal("24.00"), new BigDecimal("36.00"), 5);
+                null, null, new BigDecimal("24.00"), new BigDecimal("36.00"), 5, true);
     }
 
     private static MockHttpServletRequestBuilder porCodigo(String codigo) {
