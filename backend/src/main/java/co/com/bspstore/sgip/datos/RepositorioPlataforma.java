@@ -298,6 +298,12 @@ public class RepositorioPlataforma {
                 .update();
     }
 
+    /**
+     * Firma mínima del par rojo/verde de la V45: el cuerpo llega con el verde.
+     */
+    public void sembrarSinProveedorYSinCategoria(Integer empresaId) {
+    }
+
     /** Devuelve las filas afectadas: cero si la empresa no existe. */
     public int cambiarEstado(Integer empresaId, EstadoEmpresa nuevo) {
         return jdbc.sql("UPDATE empresas SET estado = :estado WHERE empresa_id = :empresa")

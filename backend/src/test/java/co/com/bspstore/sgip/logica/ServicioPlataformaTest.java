@@ -198,6 +198,30 @@ class ServicioPlataformaTest {
                 "222222222222", "Bucaramanga");
     }
 
+    /**
+     * El producto que se crea dentro de la venta necesita proveedor y categoría (las dos columnas
+     * son obligatorias): el alta deja «Sin proveedor» y «Sin categoría» para que la venta solo los
+     * busque y no los cree a mitad de una venta (R3 del 2026-11-16).
+     */
+    @Test
+    void elAltaSiembraSinProveedorYSinCategoria() {
+        altaViable(12, 30);
+
+        servicio.darDeAlta(solicitud());
+
+        verify(plataforma).sembrarSinProveedorYSinCategoria(12);
+    }
+
+    @Test
+    void siSinProveedorFallaElAltaSePropagaYNoSeAudita() {
+        altaViable(12, 1);
+        doThrow(new IllegalStateException("siembra rota")).when(plataforma).sembrarSinProveedorYSinCategoria(12);
+
+        assertThrows(IllegalStateException.class, () -> servicio.darDeAlta(solicitud()));
+
+        verify(plataforma, never()).registrar(any(), any(), any(), any(), any(), any(), any(), any());
+    }
+
     @Test
     void elAltaSinCiudadSiembraElConsumidorFinalSinCiudad() {
         altaViable(12, 30);
@@ -242,10 +266,11 @@ class ServicioPlataformaTest {
                 .toList();
         assertEquals(
                 List.of("insertarEmpresa", "insertarSuscripcion", "insertarConfiguracion",
-                        "sembrarMediosDePago", "sembrarConsumidorFinal"),
+                        "sembrarMediosDePago", "sembrarConsumidorFinal", "sembrarSinProveedorYSinCategoria"),
                 escrituras,
                 "el alta solo escribe la empresa, la suscripción, la configuración vacía, "
-                        + "los medios de pago y el consumidor final; ni márgenes ni reglas de IVA");
+                        + "los medios de pago, el consumidor final y el proveedor y la categoría de los "
+                        + "productos nuevos; ni márgenes ni reglas de IVA");
     }
 
     /**
