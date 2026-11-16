@@ -290,6 +290,75 @@ class VentasAutorizacionTest {
         verifyNoInteractions(servicio);
     }
 
+    // ------------------------------------------------------ el domicilio
+
+    private static final String DOMICILIO = """
+            {"direccion":"Calle 1 # 2-3","ciudad":"Cali","telefono":"3001112233","recibe":"Ana","contraEntrega":%s}""";
+
+    private static String conDomicilio(String domicilio, String pagos) {
+        return """
+                {"claveIdempotencia":"%s","clienteId":5,
+                 "lineas":[{"productoId":7,"cantidad":2}],%s
+                 "domicilio":%s}
+                """.formatted(CLAVE, pagos == null ? "" : "\"pagos\":" + pagos + ",", domicilio);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"ADMINISTRADOR", "VENDEDOR"})
+    void unDomicilioContraEntregaSinPagosEsUnaVentaValidaYLlegaAlServicio(String rol) throws Exception {
+        when(servicio.procesar(any())).thenReturn(new ResultadoDeVenta(REGISTRADA, false));
+
+        mvc.perform(registrar(conDomicilio(DOMICILIO.formatted("true"), null)).with(como(rol)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.consecutivo").value("V-00000001"));
+
+        var recibida = forClass(SolicitudVenta.class);
+        verify(servicio).procesar(recibida.capture());
+        assertEquals(true, recibida.getValue().domicilio().contraEntrega());
+        assertEquals("Calle 1 # 2-3", recibida.getValue().domicilio().direccion());
+        assertNull(recibida.getValue().pagos());
+    }
+
+    @Test
+    void sinContraEntregaLosPagosSiguenSiendoObligatoriosAunConDomicilio() throws Exception {
+        for (String pagos : new String[]{null, "[]"}) {
+            mvc.perform(registrar(conDomicilio(DOMICILIO.formatted("false"), pagos)).with(como("VENDEDOR")))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
+        }
+
+        verifyNoInteractions(servicio);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            // un texto más largo que su columna
+            "{\"direccion\":\"%1$s\",\"ciudad\":\"Cali\",\"telefono\":\"3001112233\",\"recibe\":\"Ana\",\"contraEntrega\":false}",
+            "{\"direccion\":\"Calle 1\",\"ciudad\":\"%1$s\",\"telefono\":\"3001112233\",\"recibe\":\"Ana\",\"contraEntrega\":false}",
+            "{\"direccion\":\"Calle 1\",\"ciudad\":\"Cali\",\"telefono\":\"%1$s\",\"recibe\":\"Ana\",\"contraEntrega\":false}",
+            "{\"direccion\":\"Calle 1\",\"ciudad\":\"Cali\",\"telefono\":\"3001112233\",\"recibe\":\"%1$s\",\"contraEntrega\":false}"})
+    void unTextoDelDomicilioMasLargoQueSuColumnaEsUn400(String plantilla) throws Exception {
+        String domicilio = plantilla.formatted("x".repeat(250));
+
+        mvc.perform(registrar(conDomicilio(domicilio, "[{\"medioId\":1,\"monto\":20000}]")).with(como("VENDEDOR")))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(content().string(not(containsString("xxxx"))));
+
+        verifyNoInteractions(servicio);
+    }
+
+    @Test
+    void faltarLosDatosDelDomicilioLlegaAlServicioQueLosDiceYElErrorSeTraduceA400() throws Exception {
+        doThrow(new co.com.bspstore.sgip.logica.DatosDeDomicilioIncompletosException(
+                "Para un domicilio faltan datos del cliente: teléfono.")).when(servicio).procesar(any());
+
+        mvc.perform(registrar(conDomicilio(DOMICILIO.formatted("false"), "[{\"medioId\":1,\"monto\":20000}]"))
+                        .with(como("VENDEDOR")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.title").value("Datos de domicilio incompletos"));
+    }
+
     @Test
     void masDeDoscientasLineasEsUn400() throws Exception {
         StringBuilder lineas = new StringBuilder();

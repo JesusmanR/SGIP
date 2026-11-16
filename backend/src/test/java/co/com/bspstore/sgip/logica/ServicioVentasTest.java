@@ -315,13 +315,24 @@ class ServicioVentasTest {
     }
 
     @Test
-    void unaVentaConDomicilioRespondeQueAunNoEstaDisponibleSinTocarNada() {
-        var conDomicilio = new SolicitudVenta(CLAVE, null, List.of(linea(7, 1)), null, List.of(efectivo("10000")), null, null,
+    void unDomicilioNoPideAutorizacionYLlegaAlRegistradorConSusTextosLimpios() {
+        when(registrador.registrar(any(), any())).thenReturn(new ResultadoDeVenta(REGISTRADA, false));
+        var conDomicilio = new SolicitudVenta(CLAVE, 5, List.of(linea(7, 1)), null, List.of(efectivo("10000")), null, null,
+                new Domicilio(" Calle 1 ", "Cali", "3001112233", " Ana ", false));
+
+        servicio.procesar(conDomicilio);
+
+        verifyNoInteractions(autorizacion);
+        assertEquals(new Domicilio("Calle 1", "Cali", "3001112233", "Ana", false), lasQueRecibeElRegistrador().domicilio());
+    }
+
+    @Test
+    void unDomicilioSinClienteIdentificadoEs400SinPedirElPinNiTocarElRegistrador() {
+        var sinCliente = new SolicitudVenta(CLAVE, null, List.of(linea(7, 1)), null, List.of(efectivo("10000")), null, null,
                 new Domicilio("Calle 1", "Cali", "3001112233", "Ana", false));
 
-        VentaInvalidaException e = assertThrows(VentaInvalidaException.class, () -> servicio.procesar(conDomicilio));
+        assertThrows(DatosDeDomicilioIncompletosException.class, () -> servicio.procesar(sinCliente));
 
-        assertEquals("Los domicilios aún no están disponibles", e.getMessage());
         sinTocarNada();
     }
 
