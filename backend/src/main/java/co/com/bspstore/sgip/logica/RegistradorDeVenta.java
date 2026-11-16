@@ -1,5 +1,7 @@
 package co.com.bspstore.sgip.logica;
 
+import co.com.bspstore.sgip.api.dto.Cliente;
+import co.com.bspstore.sgip.api.dto.Domicilio;
 import co.com.bspstore.sgip.api.dto.LineaSolicitada;
 import co.com.bspstore.sgip.api.dto.MedioDePago;
 import co.com.bspstore.sgip.api.dto.PagoSolicitado;
@@ -132,6 +134,7 @@ public class RegistradorDeVenta {
     static final String SALDO_NO_DISPONIBLE = "El saldo a favor aún no está disponible";
     static final String MEDIO_NO_DISPONIBLE = "El medio de pago no está disponible.";
     static final String PAGOS_NO_SUMAN = "La suma de los pagos debe ser igual al total de la venta.";
+    static final String TOTAL_POR_COBRAR_EN_CERO = "Una venta por cobrar necesita un total mayor que cero.";
     static final String IMPORTE_DESMEDIDO = "El importe de la venta es demasiado grande para guardarse.";
 
     private final ServicioTurnos turnos;
@@ -139,17 +142,19 @@ public class RegistradorDeVenta {
     private final RepositorioConsecutivos consecutivos;
     private final RepositorioInventario inventario;
     private final RepositorioClientes clientes;
+    private final ServicioClientes servicioClientes;
     private final ServicioProductoNuevo productosNuevos;
     private final Clock reloj;
 
     public RegistradorDeVenta(ServicioTurnos turnos, RepositorioVentas ventas, RepositorioConsecutivos consecutivos,
                               RepositorioInventario inventario, RepositorioClientes clientes,
-                              ServicioProductoNuevo productosNuevos, Clock reloj) {
+                              ServicioClientes servicioClientes, ServicioProductoNuevo productosNuevos, Clock reloj) {
         this.turnos = turnos;
         this.ventas = ventas;
         this.consecutivos = consecutivos;
         this.inventario = inventario;
         this.clientes = clientes;
+        this.servicioClientes = servicioClientes;
         this.productosNuevos = productosNuevos;
         this.reloj = reloj;
     }
@@ -187,7 +192,15 @@ public class RegistradorDeVenta {
         }
 
         // 5. El saldo del cliente: el medio SALDO_A_FAVOR se rechaza más abajo (tarea 9).
-        Integer cliente = cliente(empresa, s.clienteId());
+        Cliente cliente = cliente(empresa, s.clienteId());
+        // Un domicilio exige un cliente identificado con sus datos: se mira antes de crear nada.
+        Domicilio domicilio = s.domicilio();
+        boolean contraEntrega = domicilio != null && domicilio.contraEntrega();
+        String ciudadDelDomicilio = null;
+        if (domicilio != null) {
+            servicioClientes.exigirDatosDeDomicilio(cliente);
+            ciudadDelDomicilio = ciudadDelDomicilio(empresa, domicilio);
+        }
 
         // 6. Los productos nuevos: cada línea de producto nuevo se vuelve una línea del producto que
         //    acaba de nacer. Desde aquí la venta se lee de `r`, con todas sus líneas ya resueltas.
@@ -223,8 +236,10 @@ public class RegistradorDeVenta {
         }
         List<NuevaLinea> lineas = lineasAGuardar(calculada, productos, existencias, r);
 
-        // Los pagos, contra los medios de la empresa.
-        PagosValidados pagos = validarPagos(empresa, s.pagos(), calculada.total());
+        // Los pagos, contra los medios de la empresa. El contra entrega no trae ninguno: queda por cobrar.
+        PagosValidados pagos = contraEntrega
+                ? sinPagos(calculada.total())
+                : validarPagos(empresa, s.pagos(), calculada.total());
 
         // 8. El consecutivo (FOR UPDATE), el último bloqueo antes de insertar.
         String consecutivo = "V-%08d".formatted(consecutivos.tomarSiguiente(empresa, TipoConsecutivo.VENTA));
@@ -234,20 +249,26 @@ public class RegistradorDeVenta {
         Integer autorizadaPor = usoAutorizacion ? autorizacion.administradorId() : null;
         Long ventaId;
         try {
-            ventaId = ventas.insertarVenta(new NuevaVenta(empresa, consecutivo, cliente, cajero, ahora, turno,
+            ventaId = ventas.insertarVenta(new NuevaVenta(empresa, consecutivo, cliente.id(), cajero, ahora, turno,
                     calculada.subtotal(), calculada.descuento(), calculada.iva(), hayEncargo, autorizadaPor,
                     hayEncargo ? s.motivoEncargo() : null,
                     autorizadaPor != null && autorizadaPor.equals(cajero), clave, huella,
                     s.descuentoTotal() == null ? null : s.descuentoTotal().tipo(),
-                    s.descuentoTotal() == null ? null : s.descuentoTotal().valor()));
+                    s.descuentoTotal() == null ? null : s.descuentoTotal().valor(), domicilio != null, contraEntrega));
         } catch (DuplicateKeyException e) {
             if (e.getMessage() != null && e.getMessage().contains(RepositorioVentas.CLAVE_UNICA_DE_IDEMPOTENCIA)) {
                 throw new VentaDuplicadaException(e);
             }
             throw e;
         }
+        if (domicilio != null) {
+            ventas.insertarDomicilio(empresa, ventaId, domicilio.direccion(), ciudadDelDomicilio, domicilio.telefono(),
+                    domicilio.recibe());
+        }
         ventas.insertarLineas(empresa, ventaId, lineas);
-        ventas.insertarPagos(empresa, ventaId, turno, cajero, ahora, pagos.pagos());
+        if (!pagos.pagos().isEmpty()) {
+            ventas.insertarPagos(empresa, ventaId, turno, cajero, ahora, pagos.pagos());
+        }
         List<Egreso> egresos = new ArrayList<>(existencias.size());
         for (Existencia e : existencias) {
             egresos.add(new Egreso(e.productoId(), e.cantidad(), e.anterior(), e.posterior(),
@@ -320,13 +341,26 @@ public class RegistradorDeVenta {
 
     // ------------------------------------------------------------ cliente
 
-    private Integer cliente(Integer empresa, Integer pedido) {
+    private Cliente cliente(Integer empresa, Integer pedido) {
         if (pedido == null) {
             return clientes.buscarConsumidorFinal(empresa).orElseThrow(() -> new IllegalStateException(
-                    "La empresa " + empresa + " no tiene su Consumidor final: ni el alta ni la V41 lo sembraron.")).id();
+                    "La empresa " + empresa + " no tiene su Consumidor final: ni el alta ni la V41 lo sembraron."));
         }
         return clientes.buscar(empresa, pedido)
-                .orElseThrow(() -> new RecursoNoEncontradoException("El cliente no existe.")).id();
+                .orElseThrow(() -> new RecursoNoEncontradoException("El cliente no existe."));
+    }
+
+    /**
+     * La ciudad del domicilio: la que se envió o, si vino vacía, la de la empresa («la ciudad cuando no
+     * sea local», diseño §6). Sin ninguna de las dos es un 400, no una venta con la ciudad en blanco.
+     */
+    private String ciudadDelDomicilio(Integer empresa, Domicilio domicilio) {
+        if (domicilio.ciudad() != null) {
+            return domicilio.ciudad();
+        }
+        return clientes.ciudadDeLaEmpresa(empresa).map(String::trim).filter(c -> !c.isEmpty())
+                .orElseThrow(() -> new DatosDeDomicilioIncompletosException(
+                        "La ciudad del domicilio es obligatoria: no se envió y la empresa no tiene una por omisión."));
     }
 
     // ------------------------------------------------------------ precio
@@ -449,6 +483,14 @@ public class RegistradorDeVenta {
     // ------------------------------------------------------------ pagos
 
     private record PagosValidados(List<NuevoPago> pagos, BigDecimal cambio) {}
+
+    /** Lo que se cobra después: sin pagos y sin cambio, y con un total que se pueda cobrar. */
+    private static PagosValidados sinPagos(BigDecimal total) {
+        if (total.signum() <= 0) {
+            throw new VentaInvalidaException(TOTAL_POR_COBRAR_EN_CERO);
+        }
+        return new PagosValidados(List.of(), BigDecimal.ZERO.setScale(2));
+    }
 
     private PagosValidados validarPagos(Integer empresa, List<PagoSolicitado> pedidos, BigDecimal total) {
         Map<Integer, MedioDePago> medios = new HashMap<>();

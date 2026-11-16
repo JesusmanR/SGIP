@@ -134,13 +134,17 @@ public class RepositorioVentas {
                              LocalDateTime fecha, Long cierreId, BigDecimal subtotal, BigDecimal descuento,
                              BigDecimal iva, boolean sinExistencia, Integer autorizadaPor, String motivoSinExistencia,
                              boolean autorizacionAutoconcedida, String claveIdempotencia, String huellaCarga,
-                             TipoDescuento descuentoTipo, BigDecimal descuentoValor) {}
+                             TipoDescuento descuentoTipo, BigDecimal descuentoValor, boolean domicilio,
+                             boolean contraEntrega) {}
 
     /**
      * Inserta la venta y devuelve su identificador. Una venta con clave de idempotencia ya usada
      * lanza {@link DuplicateKeyException}; quien llama distingue ese choque del de otra clave única
      * por el nombre de la restricción ({@link #CLAVE_UNICA_DE_IDEMPOTENCIA}). {@code total} no se
      * escribe: es una columna generada. {@code forma_pago} es siempre CONTADO y el plazo, cero.
+     *
+     * Un domicilio pagado por adelantado nace PAGADA, como el mostrador; el de pago contra entrega nace
+     * PENDIENTE (por cobrar) y con {@code pago_contra_entrega}, y el cobro posterior la pasa a PAGADA.
      */
     public Long insertarVenta(NuevaVenta v) {
         KeyHolder llaves = new GeneratedKeyHolder();
@@ -149,12 +153,13 @@ public class RepositorioVentas {
                                             estado_pago, cierre_id, plazo_dias, subtotal, descuento, iva, envio,
                                             sin_existencia, autorizada_por, motivo_sin_existencia,
                                             autorizacion_autoconcedida, reposicion_pendiente, clave_idempotencia,
-                                            huella_carga, descuento_tipo, descuento_valor, tipo_entrega)
+                                            huella_carga, descuento_tipo, descuento_valor, tipo_entrega,
+                                            pago_contra_entrega)
                         VALUES (:empresa, :consecutivo, :cliente, :usuario, :fecha, 'CONTADO',
-                                'PAGADA', :cierre, 0, :subtotal, :descuento, :iva, 0,
+                                :estadoPago, :cierre, 0, :subtotal, :descuento, :iva, 0,
                                 :sinExistencia, :autorizadaPor, :motivo,
                                 :autoconcedida, :sinExistencia, :clave,
-                                :huella, :descuentoTipo, :descuentoValor, 'MOSTRADOR')
+                                :huella, :descuentoTipo, :descuentoValor, :tipoEntrega, :contraEntrega)
                         """)
                 .param("empresa", v.empresaId())
                 .param("consecutivo", v.consecutivo())
@@ -173,12 +178,35 @@ public class RepositorioVentas {
                 .param("huella", v.huellaCarga())
                 .param("descuentoTipo", v.descuentoTipo() == null ? null : v.descuentoTipo().name())
                 .param("descuentoValor", v.descuentoValor())
+                .param("estadoPago", v.contraEntrega() ? "PENDIENTE" : "PAGADA")
+                .param("tipoEntrega", v.domicilio() ? "DOMICILIO" : "MOSTRADOR")
+                .param("contraEntrega", v.contraEntrega())
                 .update(llaves);
         Number clave = llaves.getKey();
         if (clave == null) {
             throw new IllegalStateException("El motor no devolvió el identificador de la venta recién registrada.");
         }
         return clave.longValue();
+    }
+
+    /**
+     * Los datos de entrega de la venta a domicilio. Nacen sin entregar; la entrega la marca
+     * {@code ServicioDomicilios}. Tiene que llamarse después de {@link #insertarVenta}: la clave
+     * foránea es hacia la venta.
+     */
+    public void insertarDomicilio(Integer empresaId, Long ventaId, String direccion, String ciudad, String telefono,
+                                  String recibe) {
+        jdbc.sql("""
+                        INSERT INTO domicilios_venta (venta_id, empresa_id, direccion, ciudad, telefono, recibe)
+                        VALUES (:venta, :empresa, :direccion, :ciudad, :telefono, :recibe)
+                        """)
+                .param("venta", ventaId)
+                .param("empresa", empresaId)
+                .param("direccion", direccion)
+                .param("ciudad", ciudad)
+                .param("telefono", telefono)
+                .param("recibe", recibe)
+                .update();
     }
 
     public record NuevaLinea(Integer productoId, int cantidad, BigDecimal precioUnitario, BigDecimal costoUnitario,

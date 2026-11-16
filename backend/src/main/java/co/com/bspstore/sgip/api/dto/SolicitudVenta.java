@@ -2,7 +2,9 @@ package co.com.bspstore.sgip.api.dto;
 
 import co.com.bspstore.sgip.logica.venta.Descuento;
 import co.com.bspstore.sgip.logica.venta.LimitesDeVenta;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
@@ -21,7 +23,9 @@ import java.util.UUID;
  *
  * {@code descuentoTotal}, las fechas de entrega de las líneas, {@code motivoEncargo} y el
  * producto nuevo son cosas que un vendedor no hace solo: piden la {@code autorizacion} de un
- * administrador (ADR-0032). {@code domicilio} es nulo en el mostrador.
+ * administrador (ADR-0032). {@code domicilio} es nulo en el mostrador. Un domicilio con
+ * {@code contraEntrega} se cobra al entregarlo: no lleva pagos (mandarlos es un error); toda otra venta
+ * los lleva por el total.
  *
  * Los mensajes de validación son fijos y no repiten lo enviado.
  */
@@ -40,7 +44,6 @@ public record SolicitudVenta(
         @Valid
         Descuento descuentoTotal,
 
-        @NotEmpty(message = "La venta necesita al menos un pago")
         @Size(max = LimitesDeVenta.PAGOS, message = "La venta admite como máximo 10 pagos")
         List<@NotNull(message = "Un pago de la venta está vacío") @Valid PagoSolicitado> pagos,
 
@@ -50,6 +53,19 @@ public record SolicitudVenta(
 
         SolicitudAutorizacion autorizacion,
 
+        @Valid
         Domicilio domicilio
 ) {
+
+    /**
+     * Los pagos son obligatorios salvo en un domicilio contra entrega, que se cobra después. Va aquí y
+     * no como {@code @NotEmpty} en el campo porque depende de otro campo; que un contra entrega no los
+     * traiga lo comprueba {@code NormalizadorDeVenta}, que es quien conoce la regla completa.
+     */
+    @JsonIgnore
+    @AssertTrue(message = "La venta necesita al menos un pago")
+    public boolean isConPagos() {
+        boolean contraEntrega = domicilio != null && domicilio.contraEntrega();
+        return contraEntrega || (pagos != null && !pagos.isEmpty());
+    }
 }

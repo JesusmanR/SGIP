@@ -1,5 +1,6 @@
 package co.com.bspstore.sgip.logica;
 
+import co.com.bspstore.sgip.api.dto.Domicilio;
 import co.com.bspstore.sgip.api.dto.LineaSolicitada;
 import co.com.bspstore.sgip.api.dto.PagoSolicitado;
 import co.com.bspstore.sgip.api.dto.ProductoNuevo;
@@ -35,7 +36,8 @@ import java.util.TreeMap;
  */
 final class NormalizadorDeVenta {
 
-    static final String DOMICILIO_NO_DISPONIBLE = "Los domicilios aún no están disponibles";
+    static final String CLIENTE_PARA_DOMICILIO =
+            "Un domicilio necesita un cliente identificado: el Consumidor final no sirve.";
 
     private static final int MAX_CIFRAS_ENTERAS = 12;
     private static final int MAX_DECIMALES = 2;
@@ -88,9 +90,7 @@ final class NormalizadorDeVenta {
         if (s.clienteId() != null && s.clienteId() <= 0) {
             throw invalida("El cliente no es válido.");
         }
-        if (s.domicilio() != null) {
-            throw invalida(DOMICILIO_NO_DISPONIBLE);
-        }
+        Domicilio domicilio = domicilio(s.domicilio(), s.clienteId());
         String motivo = texto(s.motivoEncargo());
         if (motivo != null && motivo.length() > LimitesDeVenta.MOTIVO_DEL_ENCARGO) {
             throw invalida("El motivo del encargo admite hasta " + LimitesDeVenta.MOTIVO_DEL_ENCARGO + " caracteres.");
@@ -102,9 +102,12 @@ final class NormalizadorDeVenta {
         if (motivo == null && lineas.stream().anyMatch(l -> l.productoNuevo() != null)) {
             throw invalida("Un producto nuevo se vende como encargo y necesita el motivo.");
         }
-        List<PagoSolicitado> pagos = limpiar(s.pagos());
+        // Un domicilio contra entrega se cobra al entregarlo: no lleva pagos. Todo lo demás los lleva.
+        List<PagoSolicitado> pagos = domicilio != null && domicilio.contraEntrega()
+                ? sinPagos(s.pagos())
+                : limpiar(s.pagos());
         return new SolicitudVenta(s.claveIdempotencia(), s.clienteId(), lineas, s.descuentoTotal(), pagos, motivo,
-                s.autorizacion(), null);
+                s.autorizacion(), domicilio);
     }
 
     // ------------------------------------------------------------ líneas
@@ -166,6 +169,59 @@ final class NormalizadorDeVenta {
         List<LineaSolicitada> lineas = new ArrayList<>(porProducto.values());
         lineas.addAll(nuevas);
         return List.copyOf(lineas);
+    }
+
+    // ------------------------------------------------------------ el domicilio
+
+    /**
+     * El domicilio con sus textos limpios: dirección, teléfono y quien recibe obligatorios (400 con el
+     * nombre de lo que falta, sin el valor), ciudad opcional (vacía es nula y la venta toma la de la
+     * empresa) y cada texto del tamaño de su columna. Exige un cliente identificado: sin él la venta
+     * sería al Consumidor final, que no sirve para un domicilio; que el cliente tenga además sus datos
+     * lo comprueba la venta contra la base.
+     */
+    static Domicilio domicilio(Domicilio d, Integer clienteId) {
+        if (d == null) {
+            return null;
+        }
+        if (clienteId == null) {
+            throw new DatosDeDomicilioIncompletosException(CLIENTE_PARA_DOMICILIO);
+        }
+        String direccion = texto(d.direccion());
+        String ciudad = texto(d.ciudad());
+        String telefono = texto(d.telefono());
+        String recibe = texto(d.recibe());
+        List<String> faltan = new ArrayList<>();
+        if (direccion == null) {
+            faltan.add("la dirección");
+        }
+        if (telefono == null) {
+            faltan.add("el teléfono");
+        }
+        if (recibe == null) {
+            faltan.add("quien recibe");
+        }
+        if (!faltan.isEmpty()) {
+            throw new DatosDeDomicilioIncompletosException("Para un domicilio falta " + String.join(", ", faltan) + ".");
+        }
+        acotar(direccion, 200, "La dirección");
+        acotar(ciudad, 80, "La ciudad");
+        acotar(telefono, 20, "El teléfono");
+        acotar(recibe, 120, "El nombre de quien recibe");
+        return new Domicilio(direccion, ciudad, telefono, recibe, d.contraEntrega());
+    }
+
+    private static void acotar(String texto, int maximo, String que) {
+        if (texto != null && texto.length() > maximo) {
+            throw invalida(que + " admite hasta " + maximo + " caracteres.");
+        }
+    }
+
+    private static List<PagoSolicitado> sinPagos(List<PagoSolicitado> pedidos) {
+        if (pedidos != null && !pedidos.isEmpty()) {
+            throw invalida("Un domicilio contra entrega no lleva pagos: el dinero se cobra al entregarlo.");
+        }
+        return List.of();
     }
 
     // ------------------------------------------------------------ el producto nuevo
@@ -329,6 +385,13 @@ final class NormalizadorDeVenta {
             canon.append("P:").append(p.medioId()).append(':').append(plano(p.monto())).append(':')
                     .append(p.recibido() == null ? "-" : plano(p.recibido())).append(':')
                     .append(p.referencia() == null ? "-" : p.referencia()).append('|');
+        }
+        // El domicilio entra con todos sus campos, también la marca de contra entrega, y solo si lo hay.
+        if (n.domicilio() != null) {
+            Domicilio d = n.domicilio();
+            canon.append("DOM:").append(campo(d.direccion())).append(':').append(campo(d.ciudad())).append(':')
+                    .append(campo(d.telefono())).append(':').append(campo(d.recibe())).append(':')
+                    .append(d.contraEntrega()).append('|');
         }
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256").digest(canon.toString().getBytes(StandardCharsets.UTF_8));

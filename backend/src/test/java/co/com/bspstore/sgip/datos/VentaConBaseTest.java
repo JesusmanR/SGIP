@@ -12,6 +12,7 @@ import co.com.bspstore.sgip.logica.ExistenciaInsuficienteException;
 import co.com.bspstore.sgip.logica.RecursoNoEncontradoException;
 import co.com.bspstore.sgip.logica.RegistradorDeVenta;
 import co.com.bspstore.sgip.logica.ResultadoDeVenta;
+import co.com.bspstore.sgip.logica.ServicioClientes;
 import co.com.bspstore.sgip.logica.ServicioInventario;
 import co.com.bspstore.sgip.logica.ServicioProductoNuevo;
 import co.com.bspstore.sgip.logica.ServicioTurnos;
@@ -82,6 +83,7 @@ class VentaConBaseTest {
     @Autowired RepositorioVentas repositorioVentas;
     @Autowired RepositorioConsecutivos consecutivos;
     @Autowired ServicioProductoNuevo productosNuevos;
+    @Autowired ServicioClientes servicioClientes;
     @Autowired PlatformTransactionManager transacciones;
     @Autowired JdbcClient jdbc;
     @Autowired MockMvc mvc;
@@ -894,7 +896,7 @@ class VentaConBaseTest {
         Integer producto = caja.producto("A", 5, "10000");
         Clock utc = Clock.fixed(Instant.parse("2026-11-12T13:30:45.678Z"), ZoneOffset.UTC);
         RegistradorDeVenta conRelojFijo = new RegistradorDeVenta(turnos, repositorioVentas, consecutivos, kardex,
-                clientes, productosNuevos, utc);
+                clientes, servicioClientes, productosNuevos, utc);
         SolicitudVenta solicitud = venta(linea(producto, 1), efectivo("10000"));
 
         ResultadoDeVenta r = new TransactionTemplate(transacciones).execute(estado ->
