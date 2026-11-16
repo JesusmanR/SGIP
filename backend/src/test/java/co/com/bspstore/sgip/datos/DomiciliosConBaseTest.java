@@ -639,7 +639,7 @@ class DomiciliosConBaseTest {
                 List.of(new PagoSolicitado(caja.saldoAFavorId, new BigDecimal("10000"), null, null))), "saldo a favor");
         assertThrows(VentaInvalidaException.class, () -> domicilios.cobrar(venta,
                 List.of(new PagoSolicitado(987654, new BigDecimal("10000"), null, null))), "medio ajeno");
-        assertThrows(VentaInvalidaException.class, () -> domicilios.cobrar(venta,
+        assertThrows(co.com.bspstore.sgip.logica.EfectivoRecibidoInvalidoException.class, () -> domicilios.cobrar(venta,
                 List.of(efectivoRecibiendo("10000", "9000"))), "el efectivo recibido no alcanza");
         assertThrows(VentaInvalidaException.class, () -> domicilios.cobrar(venta,
                 List.of(new PagoSolicitado(caja.efectivoId, new BigDecimal("10000.50"), null, null))), "centavos");

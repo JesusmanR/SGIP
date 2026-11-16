@@ -195,7 +195,8 @@ class EncargosConBaseTest {
             VentaRegistrada ajena = ventas.registrar(new SolicitudVenta(UUID.randomUUID(), null,
                     List.of(new LineaSolicitada(delOtra, null, 1, null, entrega())), null,
                     List.of(new PagoSolicitado(otra.efectivoId, new BigDecimal("10000"), null, null)), MOTIVO, null, null));
-            Long itemAjeno = itemDe(ajena.id());
+            Long itemAjeno = jdbc.sql("SELECT item_id FROM venta_items WHERE venta_id = :v")
+                    .param("v", ajena.id()).query(Long.class).single();
 
             caja.entrarComoAdministrador();
             assertEquals(List.of(itemDe(propia.id())), items(encargos.listar("PENDIENTE")));

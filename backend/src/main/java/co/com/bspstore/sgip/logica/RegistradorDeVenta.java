@@ -3,8 +3,6 @@ package co.com.bspstore.sgip.logica;
 import co.com.bspstore.sgip.api.dto.Cliente;
 import co.com.bspstore.sgip.api.dto.Domicilio;
 import co.com.bspstore.sgip.api.dto.LineaSolicitada;
-import co.com.bspstore.sgip.api.dto.MedioDePago;
-import co.com.bspstore.sgip.api.dto.PagoSolicitado;
 import co.com.bspstore.sgip.api.dto.SolicitudVenta;
 import co.com.bspstore.sgip.api.dto.VentaRegistrada;
 import co.com.bspstore.sgip.config.ContextoEmpresa;
@@ -16,7 +14,6 @@ import co.com.bspstore.sgip.datos.RepositorioInventario.Egreso;
 import co.com.bspstore.sgip.datos.RepositorioVentas;
 import co.com.bspstore.sgip.datos.RepositorioVentas.NuevaLinea;
 import co.com.bspstore.sgip.datos.RepositorioVentas.NuevaVenta;
-import co.com.bspstore.sgip.datos.RepositorioVentas.NuevoPago;
 import co.com.bspstore.sgip.datos.RepositorioVentas.PrecioVigente;
 import co.com.bspstore.sgip.datos.RepositorioVentas.ProductoBloqueado;
 import co.com.bspstore.sgip.datos.RepositorioVentas.VentaPorClave;
@@ -25,9 +22,9 @@ import co.com.bspstore.sgip.logica.venta.Descuento;
 import co.com.bspstore.sgip.logica.venta.LineaCalculada;
 import co.com.bspstore.sgip.logica.venta.LineaPedida;
 import co.com.bspstore.sgip.logica.ServicioProductoNuevo.Creado;
+import co.com.bspstore.sgip.logica.ValidadorDePagos.Validados;
 import co.com.bspstore.sgip.logica.venta.VentaCalculada;
 import co.com.bspstore.sgip.modelo.TipoConsecutivo;
-import co.com.bspstore.sgip.modelo.TipoMedio;
 import co.com.bspstore.sgip.util.Hoy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -131,9 +128,6 @@ public class RegistradorDeVenta {
     private static final BigDecimal IMPORTE_MAXIMO = new BigDecimal("999999999999.99");
 
     static final String NO_VENDIBLE = "Este producto no se puede vender: no tiene un precio de venta válido.";
-    static final String SALDO_NO_DISPONIBLE = "El saldo a favor aún no está disponible";
-    static final String MEDIO_NO_DISPONIBLE = "El medio de pago no está disponible.";
-    static final String PAGOS_NO_SUMAN = "La suma de los pagos debe ser igual al total de la venta.";
     static final String TOTAL_POR_COBRAR_EN_CERO = "Una venta por cobrar necesita un total mayor que cero.";
     static final String IMPORTE_DESMEDIDO = "El importe de la venta es demasiado grande para guardarse.";
 
@@ -144,11 +138,13 @@ public class RegistradorDeVenta {
     private final RepositorioClientes clientes;
     private final ServicioClientes servicioClientes;
     private final ServicioProductoNuevo productosNuevos;
+    private final ValidadorDePagos validador;
     private final Clock reloj;
 
     public RegistradorDeVenta(ServicioTurnos turnos, RepositorioVentas ventas, RepositorioConsecutivos consecutivos,
                               RepositorioInventario inventario, RepositorioClientes clientes,
-                              ServicioClientes servicioClientes, ServicioProductoNuevo productosNuevos, Clock reloj) {
+                              ServicioClientes servicioClientes, ServicioProductoNuevo productosNuevos,
+                              ValidadorDePagos validador, Clock reloj) {
         this.turnos = turnos;
         this.ventas = ventas;
         this.consecutivos = consecutivos;
@@ -156,6 +152,7 @@ public class RegistradorDeVenta {
         this.clientes = clientes;
         this.servicioClientes = servicioClientes;
         this.productosNuevos = productosNuevos;
+        this.validador = validador;
         this.reloj = reloj;
     }
 
@@ -237,9 +234,9 @@ public class RegistradorDeVenta {
         List<NuevaLinea> lineas = lineasAGuardar(calculada, productos, existencias, r);
 
         // Los pagos, contra los medios de la empresa. El contra entrega no trae ninguno: queda por cobrar.
-        PagosValidados pagos = contraEntrega
+        Validados pagos = contraEntrega
                 ? sinPagos(calculada.total())
-                : validarPagos(empresa, s.pagos(), calculada.total());
+                : validador.validar(empresa, s.pagos(), calculada.total(), ValidadorDePagos.NO_SUMAN_EL_TOTAL);
 
         // 8. El consecutivo (FOR UPDATE), el último bloqueo antes de insertar.
         String consecutivo = "V-%08d".formatted(consecutivos.tomarSiguiente(empresa, TipoConsecutivo.VENTA));
@@ -482,55 +479,12 @@ public class RegistradorDeVenta {
 
     // ------------------------------------------------------------ pagos
 
-    private record PagosValidados(List<NuevoPago> pagos, BigDecimal cambio) {}
-
     /** Lo que se cobra después: sin pagos y sin cambio, y con un total que se pueda cobrar. */
-    private static PagosValidados sinPagos(BigDecimal total) {
+    private static Validados sinPagos(BigDecimal total) {
         if (total.signum() <= 0) {
             throw new VentaInvalidaException(TOTAL_POR_COBRAR_EN_CERO);
         }
-        return new PagosValidados(List.of(), BigDecimal.ZERO.setScale(2));
-    }
-
-    private PagosValidados validarPagos(Integer empresa, List<PagoSolicitado> pedidos, BigDecimal total) {
-        Map<Integer, MedioDePago> medios = new HashMap<>();
-        for (MedioDePago m : ventas.mediosPorId(empresa, pedidos.stream().map(PagoSolicitado::medioId).distinct().toList())) {
-            medios.put(m.id(), m);
-        }
-        List<NuevoPago> pagos = new ArrayList<>(pedidos.size());
-        BigDecimal suma = BigDecimal.ZERO;
-        BigDecimal cambio = BigDecimal.ZERO;
-        for (PagoSolicitado p : pedidos) {
-            MedioDePago medio = medios.get(p.medioId());
-            if (medio == null) {
-                throw new VentaInvalidaException(MEDIO_NO_DISPONIBLE);
-            }
-            if (medio.tipo() == TipoMedio.SALDO_A_FAVOR) {
-                throw new VentaInvalidaException(SALDO_NO_DISPONIBLE);
-            }
-            if (!medio.activo()) {
-                throw new VentaInvalidaException(MEDIO_NO_DISPONIBLE);
-            }
-            BigDecimal monto = p.monto().setScale(2, RoundingMode.UNNECESSARY);
-            BigDecimal recibido = null;
-            if (medio.tipo() == TipoMedio.EFECTIVO) {
-                recibido = (p.recibido() == null ? p.monto() : p.recibido()).setScale(2, RoundingMode.UNNECESSARY);
-                cambio = cambio.add(CalculoDeVenta.cambio(monto, recibido));
-            } else {
-                if (p.referencia() == null) {
-                    throw new VentaInvalidaException("El pago con tarjeta o transferencia necesita su referencia.");
-                }
-                if (p.recibido() != null) {
-                    throw new VentaInvalidaException("El efectivo recibido solo se pide en los pagos en efectivo.");
-                }
-            }
-            suma = suma.add(monto);
-            pagos.add(new NuevoPago(p.medioId(), monto, p.referencia(), recibido));
-        }
-        if (suma.compareTo(total) != 0) {
-            throw new VentaInvalidaException(PAGOS_NO_SUMAN);
-        }
-        return new PagosValidados(List.copyOf(pagos), cambio.setScale(2, RoundingMode.UNNECESSARY));
+        return new Validados(List.of(), BigDecimal.ZERO.setScale(2));
     }
 
     private static Integer cajeroEnSesion() {

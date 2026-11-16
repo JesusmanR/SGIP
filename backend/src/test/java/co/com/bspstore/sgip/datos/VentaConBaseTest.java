@@ -84,6 +84,7 @@ class VentaConBaseTest {
     @Autowired RepositorioConsecutivos consecutivos;
     @Autowired ServicioProductoNuevo productosNuevos;
     @Autowired ServicioClientes servicioClientes;
+    @Autowired co.com.bspstore.sgip.logica.ValidadorDePagos validadorDePagos;
     @Autowired PlatformTransactionManager transacciones;
     @Autowired JdbcClient jdbc;
     @Autowired MockMvc mvc;
@@ -896,7 +897,7 @@ class VentaConBaseTest {
         Integer producto = caja.producto("A", 5, "10000");
         Clock utc = Clock.fixed(Instant.parse("2026-11-12T13:30:45.678Z"), ZoneOffset.UTC);
         RegistradorDeVenta conRelojFijo = new RegistradorDeVenta(turnos, repositorioVentas, consecutivos, kardex,
-                clientes, servicioClientes, productosNuevos, utc);
+                clientes, servicioClientes, productosNuevos, validadorDePagos, utc);
         SolicitudVenta solicitud = venta(linea(producto, 1), efectivo("10000"));
 
         ResultadoDeVenta r = new TransactionTemplate(transacciones).execute(estado ->

@@ -26,6 +26,7 @@ import co.com.bspstore.sgip.logica.DescuentoInvalidoException;
 import co.com.bspstore.sgip.logica.EfectivoRecibidoInvalidoException;
 import co.com.bspstore.sgip.logica.SinTurnoAbiertoException;
 import co.com.bspstore.sgip.logica.ClaveDeIdempotenciaEnUsoException;
+import co.com.bspstore.sgip.logica.EstadoNoAdmiteLaOperacionException;
 import co.com.bspstore.sgip.logica.ExistenciaInsuficienteException;
 import co.com.bspstore.sgip.logica.VentaInvalidaException;
 import co.com.bspstore.sgip.logica.TurnoYaAbiertoException;
@@ -420,6 +421,16 @@ public class ManejadorErrores {
         // 409: la clave ya registró otra venta. Texto fijo, sin la clave.
         ProblemDetail p = ProblemDetail.forStatus(HttpStatus.CONFLICT);
         p.setTitle("Clave de idempotencia en uso");
+        p.setDetail(e.getMessage());
+        return p;
+    }
+
+    @ExceptionHandler(EstadoNoAdmiteLaOperacionException.class)
+    public ProblemDetail estadoNoAdmiteLaOperacion(EstadoNoAdmiteLaOperacionException e) {
+        // 409: la petición es válida y es el estado de lo que toca (una venta ya pagada, un domicilio ya
+        // entregado) lo que impide atenderla. Texto fijo, sin repetir lo enviado.
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.CONFLICT);
+        p.setTitle("Estado que no admite la operación");
         p.setDetail(e.getMessage());
         return p;
     }

@@ -105,7 +105,7 @@ final class NormalizadorDeVenta {
         // Un domicilio contra entrega se cobra al entregarlo: no lleva pagos. Todo lo demás los lleva.
         List<PagoSolicitado> pagos = domicilio != null && domicilio.contraEntrega()
                 ? sinPagos(s.pagos())
-                : limpiar(s.pagos());
+                : pagos(s.pagos());
         return new SolicitudVenta(s.claveIdempotencia(), s.clienteId(), lineas, s.descuentoTotal(), pagos, motivo,
                 s.autorizacion(), domicilio);
     }
@@ -293,7 +293,12 @@ final class NormalizadorDeVenta {
 
     // ------------------------------------------------------------ pagos
 
-    private static List<PagoSolicitado> limpiar(List<PagoSolicitado> pedidos) {
+    /**
+     * Los pagos validados en su forma y con sus montos en pesos enteros (400 si faltan, si son más de
+     * los que caben o si alguno no sirve). Lo usan el registro de la venta y el cobro posterior de un
+     * domicilio contra entrega, de modo que la frontera de los pagos es una sola.
+     */
+    static List<PagoSolicitado> pagos(List<PagoSolicitado> pedidos) {
         if (pedidos == null || pedidos.isEmpty()) {
             throw invalida("La venta necesita al menos un pago.");
         }
