@@ -521,6 +521,54 @@ rechaza "un cambio de UVT atribuido a una empresa sigue rechazado" 3819 ck_audit
 rechaza "una activación sin estado anterior sigue rechazada" 3819 ck_auditoria_plataforma_cambio \
   "$(bitacora "$AJENA" EMPRESA_ACTIVACION PAP-D5 NULL)"
 
+# ── El domicilio, el producto nuevo y el encargo entregado (V45) ────────
+# La V45 siembra «Sin proveedor» y «Sin categoría» para las empresas que ya
+# existían (el producto que se crea dentro de la venta los necesita y la
+# venta nunca los crea), y sus restricciones tienen que rechazar de verdad.
+# La empresa de prueba PAP-900-1 se creó después de la V45: no se siembra.
+echo
+echo "── el domicilio, el producto nuevo y el encargo entregado (V45) ──"
+
+igual "toda empresa anterior a la V45 tiene su «Sin proveedor» y su «Sin categoría», una sola vez" "0"   "$(consulta "SELECT COUNT(*) FROM empresas e
+                WHERE e.nit NOT LIKE 'PAP-%'
+                  AND ((SELECT COUNT(*) FROM proveedores p
+                         WHERE p.empresa_id = e.empresa_id AND p.razon_social = 'Sin proveedor') <> 1
+                    OR (SELECT COUNT(*) FROM categorias c
+                         WHERE c.empresa_id = e.empresa_id AND c.nombre = 'Sin categoría') <> 1);")"
+
+VENTA_V45="INSERT INTO ventas (empresa_id, consecutivo, cliente_id, usuario_id, forma_pago, tipo_entrega)
+   SELECT 1, 'PAP-V45', (SELECT cliente_id FROM clientes WHERE empresa_id = 1 LIMIT 1),
+          (SELECT usuario_id FROM usuarios WHERE empresa_id = 1 LIMIT 1), 'CONTADO', 'DOMICILIO';"
+acepta "un domicilio completo y sin entregar se guarda"   "START TRANSACTION;
+   $VENTA_V45
+   INSERT INTO domicilios_venta (venta_id, empresa_id, direccion, ciudad, telefono, recibe)
+   VALUES (LAST_INSERT_ID(), 1, 'Calle 1 # 2-3', 'Cali', '3001112233', 'Ana');
+   ROLLBACK;"
+rechaza "un domicilio con la dirección en blanco" 3819 ck_domicilios_texto   "START TRANSACTION;
+   $VENTA_V45
+   INSERT INTO domicilios_venta (venta_id, empresa_id, direccion, ciudad, telefono, recibe)
+   VALUES (LAST_INSERT_ID(), 1, '  ', 'Cali', '3001112233', 'Ana');
+   ROLLBACK;"
+rechaza "una entrega con el momento y sin quien entregó" 3819 ck_domicilios_entrega   "START TRANSACTION;
+   $VENTA_V45
+   INSERT INTO domicilios_venta (venta_id, empresa_id, direccion, ciudad, telefono, recibe, entregado_en)
+   VALUES (LAST_INSERT_ID(), 1, 'Calle 1 # 2-3', 'Cali', '3001112233', 'Ana', '2026-11-12 10:00:00');
+   ROLLBACK;"
+rechaza "un pago contra entrega en una venta del mostrador" 3819 ck_ventas_contra_entrega   "START TRANSACTION;
+   INSERT INTO ventas (empresa_id, consecutivo, cliente_id, usuario_id, forma_pago, tipo_entrega,
+                       pago_contra_entrega)
+   SELECT 1, 'PAP-V46', (SELECT cliente_id FROM clientes WHERE empresa_id = 1 LIMIT 1),
+          (SELECT usuario_id FROM usuarios WHERE empresa_id = 1 LIMIT 1), 'CONTADO', 'MOSTRADOR', TRUE;
+   ROLLBACK;"
+rechaza "la entrega de un encargo en una línea que no lo es" 3819 ck_venitems_encargo_entregado   "START TRANSACTION;
+   $VENTA_V45
+   INSERT INTO venta_items (venta_id, empresa_id, producto_id, cantidad, precio_unitario, costo_unitario,
+                            tarifa_iva, tratamiento_iva, subtotal, valor_iva, utilidad,
+                            encargo_entregado_en, encargo_entregado_por)
+   VALUES (LAST_INSERT_ID(), 1, $PIDB, 1, 1500, 1000, 0, 'NO_GRAVADO', 1500, 0, 500, '2026-11-12 10:00:00',
+           (SELECT usuario_id FROM usuarios WHERE empresa_id = 1 LIMIT 1));
+   ROLLBACK;"
+
 echo
 if [[ "$fallos" -eq 0 ]]; then
   echo "TODO EN VERDE"

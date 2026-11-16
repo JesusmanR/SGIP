@@ -21,7 +21,7 @@ final class EmpresaDePrueba {
 
     // De las hojas a la raíz: lo de la caja (pagos, líneas, ventas, consecutivos) cuelga de los
     // turnos, los clientes, los medios, los productos y los usuarios, así que va antes que ellos.
-    private static final List<String> TABLAS = List.of("pagos_venta", "venta_items", "ventas",
+    private static final List<String> TABLAS = List.of("pagos_venta", "venta_items", "domicilios_venta", "ventas",
             "consecutivos", "recepciones", "orden_compra_items",
             "ordenes_compra", "historico_costos", "detalle_carga_precios", "cargas_precios",
             "movimientos_inventario", "reglas_iva", "reglas_margen", "productos", "proveedores",

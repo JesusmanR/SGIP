@@ -40,11 +40,14 @@ final class CajaDePrueba {
     final Integer transferenciaId;
     final Integer saldoAFavorId;
     final Integer inactivoId;
+    final Integer sinProveedorId;
+    final Integer sinCategoriaId;
     private final String marca;
 
     private CajaDePrueba(JdbcClient jdbc, EmpresaDePrueba empresa, Integer vendedorId, Integer consumidorFinalId,
                          Integer clienteId, Integer efectivoId, Integer tarjetaId, Integer transferenciaId,
-                         Integer saldoAFavorId, Integer inactivoId) {
+                         Integer saldoAFavorId, Integer inactivoId, Integer sinProveedorId,
+                         Integer sinCategoriaId) {
         this.jdbc = jdbc;
         this.empresa = empresa;
         this.administradorId = empresa.usuarioId;
@@ -56,6 +59,8 @@ final class CajaDePrueba {
         this.transferenciaId = transferenciaId;
         this.saldoAFavorId = saldoAFavorId;
         this.inactivoId = inactivoId;
+        this.sinProveedorId = sinProveedorId;
+        this.sinCategoriaId = sinCategoriaId;
         this.marca = empresa.marca;
     }
 
@@ -91,8 +96,17 @@ final class CajaDePrueba {
         Integer cliente = clientes.insertar(empresa.empresaId,
                 new Cliente(null, "Cliente " + marca, TipoDocumento.CC, "9" + marca, null, "3001112233",
                         "Calle 1", "Cali", false), LocalDateTime.of(2026, 11, 1, 8, 0), "CAJA");
+        // El proveedor y la categoría del producto que se crea dentro de la venta: el alta de
+        // empresa los siembra, y esta empresa no pasa por el alta.
+        KeyHolder sinProveedor = new GeneratedKeyHolder();
+        jdbc.sql("INSERT INTO proveedores (empresa_id, razon_social, nit) VALUES (:e, 'Sin proveedor', 'SIN-PROVEEDOR')")
+                .param("e", empresa.empresaId).update(sinProveedor);
+        KeyHolder sinCategoria = new GeneratedKeyHolder();
+        jdbc.sql("INSERT INTO categorias (empresa_id, nombre) VALUES (:e, 'Sin categoría')")
+                .param("e", empresa.empresaId).update(sinCategoria);
         return new CajaDePrueba(jdbc, empresa, vendedor, consumidor, cliente, efectivo, tarjeta, transferencia,
-                saldo, inactivo);
+                saldo, inactivo, sinProveedor.getKeyAs(Number.class).intValue(),
+                sinCategoria.getKeyAs(Number.class).intValue());
     }
 
     private static Integer medio(JdbcClient jdbc, EmpresaDePrueba empresa, String nombre, String tipo, boolean activo) {
@@ -199,6 +213,14 @@ final class CajaDePrueba {
                     .param("existencia", existencia).update();
         }
         return id;
+    }
+
+    /** La empresa mal sembrada: sin el proveedor ni la categoría del producto nuevo. */
+    void quitarSinProveedorYSinCategoria() {
+        jdbc.sql("DELETE FROM proveedores WHERE empresa_id = :e AND razon_social = 'Sin proveedor'")
+                .param("e", empresa.empresaId).update();
+        jdbc.sql("DELETE FROM categorias WHERE empresa_id = :e AND nombre = 'Sin categoría'")
+                .param("e", empresa.empresaId).update();
     }
 
     void desactivarProducto(Integer id) {

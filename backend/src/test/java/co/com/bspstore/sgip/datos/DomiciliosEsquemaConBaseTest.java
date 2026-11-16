@@ -20,7 +20,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * El esquema del domicilio, del producto nuevo y del encargo entregado (V45) contra la base
@@ -305,44 +304,51 @@ class DomiciliosEsquemaConBaseTest {
 
     // ------------------------------------------------------------ «Sin proveedor» y «Sin categoría»
 
-    private int cuantos(String tabla, String columna, String nombre) {
+    private int cuantos(CajaDePrueba de, String tabla, String columna, String nombre) {
         return jdbc.sql("SELECT COUNT(*) FROM " + tabla + " WHERE empresa_id = :e AND " + columna + " = :n")
-                .param("e", caja.empresa.empresaId).param("n", nombre).query(Integer.class).single();
+                .param("e", de.empresa.empresaId).param("n", nombre).query(Integer.class).single();
     }
 
     @Test
     void sembrarSinProveedorYSinCategoriaLosDejaUnaSolaVezPorEmpresa() {
-        assertEquals(0, cuantos("proveedores", "razon_social", "Sin proveedor"));
-        assertEquals(0, cuantos("categorias", "nombre", "Sin categoría"));
+        caja.quitarSinProveedorYSinCategoria();
+        assertEquals(0, cuantos(caja, "proveedores", "razon_social", "Sin proveedor"));
+        assertEquals(0, cuantos(caja, "categorias", "nombre", "Sin categoría"));
 
         plataforma.sembrarSinProveedorYSinCategoria(caja.empresa.empresaId);
         plataforma.sembrarSinProveedorYSinCategoria(caja.empresa.empresaId);
 
-        assertEquals(1, cuantos("proveedores", "razon_social", "Sin proveedor"));
-        assertEquals(1, cuantos("categorias", "nombre", "Sin categoría"));
+        assertEquals(1, cuantos(caja, "proveedores", "razon_social", "Sin proveedor"));
+        assertEquals(1, cuantos(caja, "categorias", "nombre", "Sin categoría"));
     }
 
     @Test
     void sembrarReutilizaLosQueLaEmpresaYaTeniaConEseNombre() {
-        jdbc.sql("INSERT INTO categorias (empresa_id, nombre) VALUES (:e, 'Sin categoría')")
+        caja.quitarSinProveedorYSinCategoria();
+        jdbc.sql("INSERT INTO categorias (empresa_id, nombre) VALUES (:e, 'SIN CATEGORIA')")
                 .param("e", caja.empresa.empresaId).update();
         jdbc.sql("INSERT INTO proveedores (empresa_id, razon_social, nit) VALUES (:e, 'Sin proveedor', '900123456')")
                 .param("e", caja.empresa.empresaId).update();
 
         plataforma.sembrarSinProveedorYSinCategoria(caja.empresa.empresaId);
 
-        assertEquals(1, cuantos("proveedores", "razon_social", "Sin proveedor"));
-        assertEquals(1, cuantos("categorias", "nombre", "Sin categoría"));
+        assertEquals(1, cuantos(caja, "proveedores", "razon_social", "Sin proveedor"));
+        assertEquals(1, cuantos(caja, "categorias", "nombre", "Sin categoría"), "sin distinguir mayúsculas ni tildes");
     }
 
     @Test
-    void sembrarNoTocaALasOtrasEmpresas() {
+    void sembrarNoDuplicaAlQueYaTieneElNitReservadoYNoTocaALasOtrasEmpresas() {
         CajaDePrueba otra = nuevaCaja();
+        caja.quitarSinProveedorYSinCategoria();
+        jdbc.sql("INSERT INTO proveedores (empresa_id, razon_social, nit) VALUES (:e, 'Otro nombre', 'SIN-PROVEEDOR')")
+                .param("e", caja.empresa.empresaId).update();
 
         plataforma.sembrarSinProveedorYSinCategoria(caja.empresa.empresaId);
 
-        assertEquals(0, jdbc.sql("SELECT COUNT(*) FROM proveedores WHERE empresa_id = :e AND razon_social = 'Sin proveedor'")
-                .param("e", otra.empresa.empresaId).query(Integer.class).single());
-        assertTrue(cuantos("proveedores", "razon_social", "Sin proveedor") == 1);
+        assertEquals(0, cuantos(caja, "proveedores", "razon_social", "Sin proveedor"),
+                "el NIT reservado ya está tomado: no se inserta nada y no se falla");
+        assertEquals(1, cuantos(caja, "categorias", "nombre", "Sin categoría"));
+        assertEquals(1, cuantos(otra, "proveedores", "razon_social", "Sin proveedor"), "la otra empresa conserva el suyo");
+        assertEquals(1, cuantos(otra, "categorias", "nombre", "Sin categoría"));
     }
 }

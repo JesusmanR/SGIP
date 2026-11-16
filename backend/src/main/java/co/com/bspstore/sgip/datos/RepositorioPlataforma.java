@@ -44,6 +44,14 @@ import java.util.Optional;
 public class RepositorioPlataforma {
 
     /**
+     * El proveedor y la categoría de los productos que se crean dentro de la venta (V45). Los
+     * nombres los comparten la siembra de aquí y la búsqueda de {@code ServicioProductoNuevo}.
+     */
+    public static final String NOMBRE_SIN_PROVEEDOR = "Sin proveedor";
+    public static final String NIT_SIN_PROVEEDOR = "SIN-PROVEEDOR";
+    public static final String NOMBRE_SIN_CATEGORIA = "Sin categoría";
+
+    /**
      * El valor por omisión si el parámetro no está cargado.
      *
      * Coincide con el que la V39 inserta. Está duplicado a propósito: sin
@@ -299,9 +307,39 @@ public class RepositorioPlataforma {
     }
 
     /**
-     * Firma mínima del par rojo/verde de la V45: el cuerpo llega con el verde.
+     * Siembra el proveedor «Sin proveedor» y la categoría «Sin categoría» de una empresa.
+     *
+     * Hacen falta porque el producto que se crea dentro de la venta no tiene proveedor ni categoría
+     * y las dos columnas son obligatorias (y la vista de precios hace JOIN interno con ambas). La
+     * venta solo los busca: si faltaran sería una empresa mal sembrada, no un dato del usuario.
+     * Es idempotente y la misma de la V45: si la empresa ya tiene uno con ese nombre, se reutiliza
+     * (la comparación es la de la columna, sin distinguir mayúsculas ni tildes). El NIT del
+     * proveedor es el reservado {@code SIN-PROVEEDOR}; si otro proveedor de la empresa ya lo usa
+     * no se inserta nada en lugar de fallar.
      */
     public void sembrarSinProveedorYSinCategoria(Integer empresaId) {
+        jdbc.sql("""
+                        INSERT INTO proveedores (empresa_id, razon_social, nit)
+                        SELECT :empresa, :nombre, :nit
+                          FROM DUAL
+                         WHERE NOT EXISTS (SELECT 1 FROM proveedores p
+                                            WHERE p.empresa_id = :empresa
+                                              AND (p.razon_social = :nombre OR p.nit = :nit))
+                        """)
+                .param("empresa", empresaId)
+                .param("nombre", NOMBRE_SIN_PROVEEDOR)
+                .param("nit", NIT_SIN_PROVEEDOR)
+                .update();
+        jdbc.sql("""
+                        INSERT INTO categorias (empresa_id, nombre)
+                        SELECT :empresa, :nombre
+                          FROM DUAL
+                         WHERE NOT EXISTS (SELECT 1 FROM categorias c
+                                            WHERE c.empresa_id = :empresa AND c.nombre = :nombre)
+                        """)
+                .param("empresa", empresaId)
+                .param("nombre", NOMBRE_SIN_CATEGORIA)
+                .update();
     }
 
     /** Devuelve las filas afectadas: cero si la empresa no existe. */

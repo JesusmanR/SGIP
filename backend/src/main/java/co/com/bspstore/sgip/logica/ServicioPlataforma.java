@@ -107,8 +107,8 @@ public class ServicioPlataforma {
     /**
      * Da de alta una empresa con su administrador inicial (RF-01).
      *
-     * Las siete escrituras —empresa, suscripción, configuración, medios
-     * de pago, consumidor final, usuario y bitácora— van en una sola transacción, y no es
+     * Las ocho escrituras —empresa, suscripción, configuración, medios
+     * de pago, consumidor final, proveedor y categoría de los productos nuevos, usuario y bitácora— van en una sola transacción, y no es
      * celo: a medias queda una empresa en la que nadie puede entrar, o
      * que no puede cobrar, y nadie de fuera puede crearle el primer
      * usuario, porque crear usuarios es cosa de su propio administrador
@@ -172,6 +172,10 @@ public class ServicioPlataforma {
                 ServicioClientes.TIPO_CONSUMIDOR_FINAL,
                 ServicioClientes.IDENTIFICACION_CONSUMIDOR_FINAL,
                 texto(solicitud.ciudad()));
+
+        // Y el proveedor y la categoría del producto que se crea dentro de la venta: las dos
+        // columnas son obligatorias y la venta solo los busca, nunca los crea a mitad de una venta.
+        plataforma.sembrarSinProveedorYSinCategoria(empresaId);
 
         Rol rolAdministrador = roles.findByNombre(ROL_ADMINISTRADOR)
                 .orElseThrow(() -> new IllegalStateException(
