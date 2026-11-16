@@ -1,20 +1,28 @@
 package co.com.bspstore.sgip.datos;
 
 import co.com.bspstore.sgip.api.dto.Cliente;
+import co.com.bspstore.sgip.api.dto.CobroRegistrado;
 import co.com.bspstore.sgip.api.dto.Domicilio;
+import co.com.bspstore.sgip.api.dto.DomicilioPendiente;
+import co.com.bspstore.sgip.api.dto.EntregaRegistrada;
 import co.com.bspstore.sgip.api.dto.LineaSolicitada;
 import co.com.bspstore.sgip.api.dto.PagoSolicitado;
 import co.com.bspstore.sgip.api.dto.SolicitudVenta;
 import co.com.bspstore.sgip.api.dto.VentaRegistrada;
 import co.com.bspstore.sgip.logica.ClaveDeIdempotenciaEnUsoException;
 import co.com.bspstore.sgip.logica.DatosDeDomicilioIncompletosException;
+import co.com.bspstore.sgip.logica.EstadoNoAdmiteLaOperacionException;
 import co.com.bspstore.sgip.logica.ExistenciaInsuficienteException;
+import co.com.bspstore.sgip.logica.FiltroInvalidoException;
+import co.com.bspstore.sgip.logica.RecursoNoEncontradoException;
 import co.com.bspstore.sgip.logica.ResultadoDeVenta;
+import co.com.bspstore.sgip.logica.ServicioDomicilios;
 import co.com.bspstore.sgip.logica.ServicioInventario;
 import co.com.bspstore.sgip.logica.ServicioVentas;
 import co.com.bspstore.sgip.logica.SinTurnoAbiertoException;
 import co.com.bspstore.sgip.logica.VentaInvalidaException;
 import co.com.bspstore.sgip.modelo.TipoDocumento;
+import co.com.bspstore.sgip.util.Hoy;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
@@ -24,9 +32,11 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -52,6 +62,7 @@ class DomiciliosConBaseTest {
 
     @Autowired ServicioVentas ventas;
     @Autowired ServicioInventario inventario;
+    @Autowired ServicioDomicilios domicilios;
     @Autowired RepositorioPlataforma plataforma;
     @Autowired CategoriaRepositorio categorias;
     @Autowired ProveedorRepositorio proveedores;
@@ -60,12 +71,13 @@ class DomiciliosConBaseTest {
 
     private CajaDePrueba caja;
     private Long turnoDelAdministrador;
+    private Long turnoDelVendedor;
 
     @BeforeEach
     void prepararDatosPropios() {
         caja = CajaDePrueba.crear("Domicilios", jdbc, plataforma, categorias, proveedores, clientes);
         turnoDelAdministrador = caja.abrirTurno(caja.administradorId);
-        caja.abrirTurno(caja.vendedorId);
+        turnoDelVendedor = caja.abrirTurno(caja.vendedorId);
         caja.entrarComoAdministrador();
     }
 
@@ -321,5 +333,330 @@ class DomiciliosConBaseTest {
     private Long ventaIdDe(UUID clave) {
         return jdbc.sql("SELECT venta_id FROM ventas WHERE empresa_id = :e AND clave_idempotencia = :c")
                 .param("e", caja.empresa.empresaId).param("c", clave.toString()).query(Long.class).single();
+    }
+
+    // =================================================================== las listas
+
+    private static List<Long> ids(List<DomicilioPendiente> lista) {
+        return lista.stream().map(DomicilioPendiente::ventaId).toList();
+    }
+
+    private PagoSolicitado efectivoRecibiendo(String monto, String recibido) {
+        return new PagoSolicitado(caja.efectivoId, new BigDecimal(monto), new BigDecimal(recibido), null);
+    }
+
+    private List<Map<String, Object>> pagosGuardados(Long venta) {
+        return jdbc.sql("SELECT * FROM pagos_venta WHERE empresa_id = :e AND venta_id = :v ORDER BY pago_id")
+                .param("e", caja.empresa.empresaId).param("v", venta).query().listOfRows();
+    }
+
+    @Test
+    void domicilioPagadoNoApareceEnPorCobrar() {
+        Integer producto = caja.producto("A", 5, "10000");
+        VentaRegistrada pagado = ventas.registrar(pagado(producto, "10000"));
+        VentaRegistrada pendiente = ventas.registrar(contraEntrega(producto, 1));
+
+        assertEquals(List.of(pendiente.id()), ids(domicilios.listar("POR_COBRAR")));
+        assertEquals(Set.of(pagado.id(), pendiente.id()), Set.copyOf(ids(domicilios.listar("POR_DESPACHAR"))),
+                "los dos faltan por despachar");
+    }
+
+    @Test
+    void porCobrarMuestraValorYAntiguedad() {
+        Integer producto = caja.producto("A", 5, "10000");
+        VentaRegistrada vieja = ventas.registrar(contraEntrega(producto, 2));
+        VentaRegistrada nueva = ventas.registrar(contraEntrega(producto, 1));
+        LocalDateTime haceTresDias = Hoy.ahora(Clock.systemUTC()).minusDays(3);
+        jdbc.sql("UPDATE ventas SET fecha = :f WHERE empresa_id = :e AND venta_id = :v")
+                .param("f", haceTresDias).param("e", caja.empresa.empresaId).param("v", vieja.id()).update();
+
+        List<DomicilioPendiente> lista = domicilios.listar("POR_COBRAR");
+
+        assertEquals(List.of(vieja.id(), nueva.id()), ids(lista), "primero el más antiguo");
+        DomicilioPendiente v = lista.get(0);
+        assertEquals(3, v.antiguedadDias());
+        igual("20000", v.valorPorCobrar());
+        igual("20000", v.total());
+        assertEquals("PENDIENTE", v.estadoPago());
+        assertTrue(v.contraEntrega());
+        assertEquals(vieja.consecutivo(), v.consecutivo());
+        assertEquals("Cliente " + caja.empresa.marca.toLowerCase(), v.cliente());
+        assertEquals("Calle 1 # 2-3", v.direccion());
+        assertEquals("Cali", v.ciudad());
+        assertEquals("3001112233", v.telefono());
+        assertEquals("Ana Pérez", v.recibe());
+        assertEquals(0, lista.get(1).antiguedadDias());
+        igual("10000", lista.get(1).valorPorCobrar());
+    }
+
+    @Test
+    void unDomicilioPagadoMuestraCeroPorCobrar() {
+        Integer producto = caja.producto("A", 5, "10000");
+        ventas.registrar(pagado(producto, "10000"));
+
+        List<DomicilioPendiente> lista = domicilios.listar("POR_DESPACHAR");
+
+        igual("0", lista.get(0).valorPorCobrar());
+        assertEquals("PAGADA", lista.get(0).estadoPago());
+        assertFalse(lista.get(0).contraEntrega());
+    }
+
+    @Test
+    void elEstadoDeLaListaEsObligatorioYUnoDesconocidoEs400() {
+        assertThrows(FiltroInvalidoException.class, () -> domicilios.listar(null));
+        assertThrows(FiltroInvalidoException.class, () -> domicilios.listar("  "));
+        assertThrows(FiltroInvalidoException.class, () -> domicilios.listar("ENTREGADOS"));
+        assertEquals(List.of(), domicilios.listar(" por_cobrar "), "se acepta sin importar mayúsculas ni espacios");
+    }
+
+    @Test
+    void lasListasNoMezclanEmpresasNiLasOperanPorId() {
+        Integer producto = caja.producto("A", 5, "10000");
+        VentaRegistrada propia = ventas.registrar(contraEntrega(producto, 1));
+        CajaDePrueba otra = CajaDePrueba.crear("Otra empresa", jdbc, plataforma, categorias, proveedores, clientes);
+        try {
+            otra.abrirTurno(otra.administradorId);
+            Integer delOtra = otra.producto("B", 5, "10000");
+            otra.entrarComoAdministrador();
+            VentaRegistrada ajena = ventas.registrar(new SolicitudVenta(UUID.randomUUID(), otra.clienteId,
+                    List.of(new LineaSolicitada(delOtra, null, 1, null, null)), null, List.of(), null, null, CONTRA_ENTREGA));
+
+            caja.entrarComoAdministrador();
+            assertEquals(List.of(propia.id()), ids(domicilios.listar("POR_COBRAR")));
+            assertEquals(List.of(propia.id()), ids(domicilios.listar("POR_DESPACHAR")));
+            assertThrows(RecursoNoEncontradoException.class, () -> domicilios.entregar(ajena.id()));
+            assertThrows(RecursoNoEncontradoException.class,
+                    () -> domicilios.cobrar(ajena.id(), List.of(efectivo("10000"))));
+            otra.entrarComoAdministrador();
+            assertEquals(List.of(ajena.id()), ids(domicilios.listar("POR_COBRAR")), "y la otra solo ve lo suyo");
+        } finally {
+            otra.borrar();
+        }
+    }
+
+    @Test
+    void laListaNoPasaDelTopeYMuestraLosMasAntiguos() {
+        Integer producto = caja.producto("A", 5, "10000");
+        VentaRegistrada vieja = ventas.registrar(contraEntrega(producto, 1));
+        jdbc.sql("UPDATE ventas SET fecha = '2020-01-01 08:00:00' WHERE empresa_id = :e AND venta_id = :v")
+                .param("e", caja.empresa.empresaId).param("v", vieja.id()).update();
+        jdbc.sql("""
+                INSERT INTO ventas (empresa_id, consecutivo, cliente_id, usuario_id, fecha, forma_pago, estado_pago,
+                                    cierre_id, subtotal, descuento, iva, tipo_entrega, pago_contra_entrega)
+                SELECT :e, CONCAT('X-', n.i), :cliente, :usuario, '2026-11-01 08:00:00', 'CONTADO', 'PENDIENTE', :turno,
+                       1000, 0, 0, 'DOMICILIO', TRUE
+                  FROM (WITH RECURSIVE s(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM s WHERE i < 205) SELECT i FROM s) n
+                """).param("e", caja.empresa.empresaId).param("cliente", caja.clienteId)
+                .param("usuario", caja.administradorId).param("turno", turnoDelAdministrador).update();
+        jdbc.sql("""
+                INSERT INTO domicilios_venta (venta_id, empresa_id, direccion, ciudad, telefono, recibe)
+                SELECT venta_id, empresa_id, 'Calle 1', 'Cali', '3001112233', 'Ana'
+                  FROM ventas WHERE empresa_id = :e AND consecutivo LIKE 'X-%'
+                """).param("e", caja.empresa.empresaId).update();
+
+        List<DomicilioPendiente> lista = domicilios.listar("POR_COBRAR");
+
+        assertEquals(200, lista.size());
+        assertEquals(vieja.id(), lista.get(0).ventaId(), "el tope deja fuera a los más nuevos, no a los más antiguos");
+    }
+
+    // =================================================================== marcar la entrega
+
+    @Test
+    void marcarEntregadoRegistraQuienYCuando() {
+        Integer producto = caja.producto("A", 5, "10000");
+        VentaRegistrada r = ventas.registrar(contraEntrega(producto, 1));
+        caja.entrarComoVendedor();
+        LocalDateTime antes = Hoy.ahora(Clock.systemUTC());
+
+        EntregaRegistrada entrega = domicilios.entregar(r.id());
+
+        LocalDateTime despues = Hoy.ahora(Clock.systemUTC());
+        Map<String, Object> d = domicilioGuardado(r.id());
+        assertEquals(caja.vendedorId, d.get("entregado_por"));
+        LocalDateTime cuando = (LocalDateTime) d.get("entregado_en");
+        assertFalse(cuando.isBefore(antes) || cuando.isAfter(despues), "la hora de Bogotá de la aplicación: " + cuando);
+        assertEquals(r.id(), entrega.id());
+        assertEquals(caja.vendedorId, entrega.entregadoPor());
+        assertEquals(cuando, entrega.entregadoEn().toLocalDateTime());
+        assertEquals(List.of(), ids(domicilios.listar("POR_DESPACHAR")), "entregado sale de por despachar");
+        assertEquals(List.of(r.id()), ids(domicilios.listar("POR_COBRAR")), "y sigue por cobrar hasta que llegue el dinero");
+    }
+
+    @Test
+    void entregarDosVecesEs409YNoCambiaQuienNiCuando() {
+        Integer producto = caja.producto("A", 5, "10000");
+        VentaRegistrada r = ventas.registrar(pagado(producto, "10000"));
+        domicilios.entregar(r.id());
+        Map<String, Object> primera = domicilioGuardado(r.id());
+        caja.entrarComoVendedor();
+
+        assertThrows(EstadoNoAdmiteLaOperacionException.class, () -> domicilios.entregar(r.id()));
+
+        assertEquals(primera, domicilioGuardado(r.id()));
+    }
+
+    @Test
+    void entregarUnaVentaSinDomicilioOInexistenteEs404() {
+        Integer producto = caja.producto("A", 5, "10000");
+        VentaRegistrada mostrador = ventas.registrar(domicilio(UUID.randomUUID(), null, producto, 1, null,
+                List.of(efectivo("10000"))));
+
+        assertThrows(RecursoNoEncontradoException.class, () -> domicilios.entregar(mostrador.id()));
+        assertThrows(RecursoNoEncontradoException.class, () -> domicilios.entregar(987654321L));
+    }
+
+    @Test
+    void unaVentaAnuladaNoSeEntregaNiSeCobraNiApareceEnLasListas() {
+        Integer producto = caja.producto("A", 5, "10000");
+        VentaRegistrada r = ventas.registrar(contraEntrega(producto, 1));
+        jdbc.sql("UPDATE ventas SET estado = 'ANULADA', estado_pago = 'ANULADA' WHERE empresa_id = :e AND venta_id = :v")
+                .param("e", caja.empresa.empresaId).param("v", r.id()).update();
+
+        assertEquals(List.of(), domicilios.listar("POR_DESPACHAR"));
+        assertEquals(List.of(), domicilios.listar("POR_COBRAR"));
+        assertThrows(EstadoNoAdmiteLaOperacionException.class, () -> domicilios.entregar(r.id()));
+        assertThrows(EstadoNoAdmiteLaOperacionException.class,
+                () -> domicilios.cobrar(r.id(), List.of(efectivo("10000"))));
+        assertNull(domicilioGuardado(r.id()).get("entregado_en"));
+        assertEquals(0, caja.cuantas("pagos_venta"));
+    }
+
+    // =================================================================== el cobro posterior
+
+    @Test
+    void cobroPosteriorVaAlTurnoDeQuienCobra() {
+        Integer producto = caja.producto("A", 5, "10000");
+        VentaRegistrada r = ventas.registrar(contraEntrega(producto, 1));
+        caja.entrarComoVendedor();
+
+        CobroRegistrado cobro = domicilios.cobrar(r.id(), List.of(efectivoRecibiendo("10000", "20000")));
+
+        List<Map<String, Object>> pagos = pagosGuardados(r.id());
+        assertEquals(1, pagos.size());
+        assertEquals(turnoDelVendedor, pagos.get(0).get("cierre_id"), "el pago lleva el turno de quien cobra, no el de la venta");
+        assertEquals(caja.vendedorId, pagos.get(0).get("registrado_por"));
+        assertEquals(caja.efectivoId, pagos.get(0).get("medio_id"));
+        igual("10000", pagos.get(0).get("monto"));
+        igual("20000", pagos.get(0).get("recibido"));
+        Map<String, Object> v = ventaGuardada(r.id());
+        assertEquals("PAGADA", v.get("estado_pago"));
+        assertEquals(turnoDelAdministrador, v.get("cierre_id"), "la venta sigue siendo del turno en que se hizo");
+        assertEquals(true, v.get("pago_contra_entrega"));
+        assertEquals(r.id(), cobro.ventaId());
+        assertEquals(r.consecutivo(), cobro.consecutivo());
+        igual("10000", cobro.cobrado());
+        igual("10000", cobro.cambio());
+        assertEquals(List.of(), ids(domicilios.listar("POR_COBRAR")), "ya no está por cobrar");
+    }
+
+    @Test
+    void elCobroPuedeSerMixtoYSumaElSaldo() {
+        Integer producto = caja.producto("A", 5, "10000");
+        VentaRegistrada r = ventas.registrar(contraEntrega(producto, 1));
+
+        domicilios.cobrar(r.id(), List.of(efectivo("4000"),
+                new PagoSolicitado(caja.tarjetaId, new BigDecimal("6000"), null, "APROB-123")));
+
+        assertEquals(2, pagosGuardados(r.id()).size());
+        assertEquals("PAGADA", ventaGuardada(r.id()).get("estado_pago"));
+    }
+
+    @Test
+    void cobroParcialOdeMasEs400YLaVentaSigueConElSaldoCompleto() {
+        Integer producto = caja.producto("A", 5, "10000");
+        VentaRegistrada r = ventas.registrar(contraEntrega(producto, 1));
+
+        assertThrows(VentaInvalidaException.class, () -> domicilios.cobrar(r.id(), List.of(efectivo("5000"))));
+        assertThrows(VentaInvalidaException.class, () -> domicilios.cobrar(r.id(), List.of(efectivo("10001"))));
+        assertThrows(VentaInvalidaException.class, () -> domicilios.cobrar(r.id(),
+                List.of(efectivo("5000"), efectivo("5001"))));
+
+        assertEquals(0, caja.cuantas("pagos_venta"));
+        assertEquals("PENDIENTE", ventaGuardada(r.id()).get("estado_pago"));
+        assertEquals(List.of(r.id()), ids(domicilios.listar("POR_COBRAR")));
+    }
+
+    @Test
+    void cobrarDosVecesEs409() {
+        Integer producto = caja.producto("A", 5, "10000");
+        VentaRegistrada r = ventas.registrar(contraEntrega(producto, 1));
+        domicilios.cobrar(r.id(), List.of(efectivo("10000")));
+
+        assertThrows(EstadoNoAdmiteLaOperacionException.class, () -> domicilios.cobrar(r.id(), List.of(efectivo("10000"))));
+
+        assertEquals(1, pagosGuardados(r.id()).size(), "el dinero no se cuenta dos veces");
+    }
+
+    @Test
+    void cobrarUnaVentaQueNoEsContraEntregaEs409() {
+        Integer producto = caja.producto("A", 5, "10000");
+        VentaRegistrada domicilioPagado = ventas.registrar(pagado(producto, "10000"));
+        VentaRegistrada mostrador = ventas.registrar(domicilio(UUID.randomUUID(), null, producto, 1, null,
+                List.of(efectivo("10000"))));
+
+        assertThrows(EstadoNoAdmiteLaOperacionException.class,
+                () -> domicilios.cobrar(domicilioPagado.id(), List.of(efectivo("10000"))));
+        assertThrows(EstadoNoAdmiteLaOperacionException.class,
+                () -> domicilios.cobrar(mostrador.id(), List.of(efectivo("10000"))));
+
+        assertEquals(2, caja.cuantas("pagos_venta"), "solo los de las dos ventas pagadas");
+    }
+
+    @Test
+    void cobrarUnaVentaInexistenteEs404() {
+        assertThrows(RecursoNoEncontradoException.class, () -> domicilios.cobrar(987654321L, List.of(efectivo("10000"))));
+        assertThrows(RecursoNoEncontradoException.class, () -> domicilios.cobrar(0L, List.of(efectivo("10000"))));
+        assertThrows(RecursoNoEncontradoException.class, () -> domicilios.cobrar(-5L, List.of(efectivo("10000"))));
+    }
+
+    @Test
+    void cobrarExigeElTurnoAbiertoDeQuienCobra() {
+        Integer producto = caja.producto("A", 5, "10000");
+        VentaRegistrada r = ventas.registrar(contraEntrega(producto, 1));
+        caja.cerrarTurno(turnoDelVendedor);
+        caja.entrarComoVendedor();
+
+        assertThrows(SinTurnoAbiertoException.class, () -> domicilios.cobrar(r.id(), List.of(efectivo("10000"))));
+
+        assertEquals("PENDIENTE", ventaGuardada(r.id()).get("estado_pago"));
+        assertEquals(0, caja.cuantas("pagos_venta"));
+    }
+
+    @Test
+    void elCobroValidaLosPagosComoLaVenta() {
+        Integer producto = caja.producto("A", 5, "10000");
+        VentaRegistrada r = ventas.registrar(contraEntrega(producto, 1));
+        Long venta = r.id();
+
+        assertThrows(VentaInvalidaException.class, () -> domicilios.cobrar(venta, null), "sin pagos");
+        assertThrows(VentaInvalidaException.class, () -> domicilios.cobrar(venta, List.of()), "sin pagos");
+        assertThrows(VentaInvalidaException.class, () -> domicilios.cobrar(venta,
+                List.of(new PagoSolicitado(caja.tarjetaId, new BigDecimal("10000"), null, null))), "tarjeta sin referencia");
+        assertThrows(VentaInvalidaException.class, () -> domicilios.cobrar(venta,
+                List.of(new PagoSolicitado(caja.inactivoId, new BigDecimal("10000"), null, "REF"))), "medio inactivo");
+        assertThrows(VentaInvalidaException.class, () -> domicilios.cobrar(venta,
+                List.of(new PagoSolicitado(caja.saldoAFavorId, new BigDecimal("10000"), null, null))), "saldo a favor");
+        assertThrows(VentaInvalidaException.class, () -> domicilios.cobrar(venta,
+                List.of(new PagoSolicitado(987654, new BigDecimal("10000"), null, null))), "medio ajeno");
+        assertThrows(VentaInvalidaException.class, () -> domicilios.cobrar(venta,
+                List.of(efectivoRecibiendo("10000", "9000"))), "el efectivo recibido no alcanza");
+        assertThrows(VentaInvalidaException.class, () -> domicilios.cobrar(venta,
+                List.of(new PagoSolicitado(caja.efectivoId, new BigDecimal("10000.50"), null, null))), "centavos");
+
+        assertEquals(0, caja.cuantas("pagos_venta"));
+        assertEquals("PENDIENTE", ventaGuardada(venta).get("estado_pago"));
+    }
+
+    @Test
+    void elCobroNoMueveLaExistenciaNiElKardex() {
+        Integer producto = caja.producto("A", 5, "10000");
+        VentaRegistrada r = ventas.registrar(contraEntrega(producto, 2));
+        int movimientos = caja.cuantas("movimientos_inventario");
+
+        domicilios.cobrar(r.id(), List.of(efectivo("20000")));
+
+        assertEquals(3, caja.existencia(producto));
+        assertEquals(movimientos, caja.cuantas("movimientos_inventario"));
     }
 }
