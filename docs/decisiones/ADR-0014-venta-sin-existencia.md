@@ -103,3 +103,27 @@ anotaba que `v_inventario_valorizado` puede dar negativo para una
 referencia y que estaba bien que lo mostrara. Preverlo fue acertado,
 pero esa columna se lee sumada, y sumada no mostraba un pasivo al lado
 del activo: lo restaba. Ver ADR-0019.
+
+## Nota posterior · el encargo en la caja (2026-11, V44 y V45)
+
+La decisión sigue en pie: la existencia negativa es la deuda de reposición. La caja la usa para el
+**encargo** (RF-42) y el mecanismo cambia en tres cosas, sin tocar el piso de −9999.
+
+**Qué se guarda.** La venta con encargo sigue marcando `ventas.sin_existencia`, `autorizada_por`,
+`motivo_sin_existencia` y `reposicion_pendiente`. Ahora además guarda, por línea, `venta_items.cantidad_encargo`
+(las unidades que no había y se deben) y `entrega_estimada` (la fecha que el cliente aceptó), y en el kárdex
+`movimientos_inventario.autorizado_por` (quién autorizó el egreso que dejó la existencia en negativo). El motivo
+sigue siendo uno por venta.
+
+**`reposicion_pendiente` ya no es el estado vigente.** Es la marca de que la venta tuvo un encargo y se queda
+así para siempre. El estado de cada línea, «pendiente» o «llegó», **se calcula al consultar**: pendiente
+mientras la existencia del producto siga en negativo y llegó desde que es cero o más
+(`GET /api/v1/caja/encargos`). No hay trigger ni se actualiza ninguna marca cuando entra mercancía: el estado
+no se puede desincronizar de la existencia porque no se guarda (RF-69 en esta entrega). La entrega se marca a
+mano por el administrador (`venta_items.encargo_entregado_en` y `encargo_entregado_por`, V45) y no mueve el
+inventario: la existencia ya se descontó al vender.
+
+**El producto nuevo es un encargo.** El producto que se crea dentro de la venta (RF-42) nace con existencia 0,
+así que toda su venta es encargo: pide la autorización de producto nuevo y la de encargo con un solo PIN, la
+fecha de entrega de la línea y el motivo de la venta. Su costo es provisional (1,00) hasta que el administrador
+escriba el real.
