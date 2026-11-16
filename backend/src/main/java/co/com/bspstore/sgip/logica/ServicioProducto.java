@@ -313,7 +313,7 @@ public class ServicioProducto {
      * mandaría a quien corrige a mirar el campo equivocado. Es el mismo criterio de
      * {@code ServicioTurnos.abrir}.
      */
-    private static <T> T traduciendoElChoqueDelCodigoDeBarras(Supplier<T> escritura) {
+    static <T> T traduciendoElChoqueDelCodigoDeBarras(Supplier<T> escritura) {
         try {
             return escritura.get();
         } catch (DataIntegrityViolationException e) {

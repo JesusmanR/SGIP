@@ -43,6 +43,27 @@ public class RepositorioConsecutivos {
      * podrían llevar el mismo número.
      */
     public long tomarSiguiente(Integer empresaId, TipoConsecutivo tipo) {
+        long numero = bloquear(empresaId, tipo);
+        jdbc.sql("""
+                        UPDATE consecutivos SET siguiente = :siguiente
+                         WHERE empresa_id = :empresa AND tipo = :tipo
+                        """)
+                .param("siguiente", numero + 1)
+                .param("empresa", empresaId)
+                .param("tipo", tipo.name())
+                .update();
+        return numero;
+    }
+
+    /**
+     * Toma el bloqueo del consecutivo sin gastar ningún número, y devuelve el que toca. Sirve para
+     * serializar a quienes van a numerar antes de decidir si numeran: la venta con un producto
+     * nuevo lo toma para esperar a su hermana de la misma clave y comprobar, ya con el turno, si
+     * la clave ya registró una venta. Quien después llame a {@link #tomarSiguiente} en la misma
+     * transacción ya lo tiene y no espera. Con las mismas condiciones que
+     * {@link #tomarSiguiente}: dentro de la transacción del documento.
+     */
+    public long bloquear(Integer empresaId, TipoConsecutivo tipo) {
         if (!TransactionSynchronizationManager.isActualTransactionActive()) {
             throw new IllegalStateException("El consecutivo se toma dentro de la transacción del documento.");
         }
@@ -57,17 +78,8 @@ public class RepositorioConsecutivos {
                     .update();
             actual = leerConBloqueo(empresaId, tipo);
         }
-        long numero = actual.orElseThrow(() -> new IllegalStateException(
+        return actual.orElseThrow(() -> new IllegalStateException(
                 "El consecutivo " + tipo + " de la empresa " + empresaId + " no existe después de crearlo."));
-        jdbc.sql("""
-                        UPDATE consecutivos SET siguiente = :siguiente
-                         WHERE empresa_id = :empresa AND tipo = :tipo
-                        """)
-                .param("siguiente", numero + 1)
-                .param("empresa", empresaId)
-                .param("tipo", tipo.name())
-                .update();
-        return numero;
     }
 
     private Optional<Long> leerConBloqueo(Integer empresaId, TipoConsecutivo tipo) {

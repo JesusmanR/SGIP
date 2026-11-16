@@ -407,6 +407,9 @@ public class RepositorioImportacion {
      * quedarse a medias: así el motor aplica todo o nada dentro de la
      * transacción.
      *
+     * Apaga {@code costo_provisional}: el costo de una lista de precios es el real, y el producto
+     * que nació dentro de una venta con costo 1,00 deja de estar marcado (RF-42).
+     *
      * Suma uno a {@code version} porque esta sentencia cambia el costo por
      * fuera de JPA. Es lo que permite que una edición abierta antes de aplicar la
      * carga se rechace: el formulario devuelve la versión que traía al abrirse
@@ -425,6 +428,7 @@ public class RepositorioImportacion {
                             ON d.empresa_id = p.empresa_id
                            AND d.producto_id = p.producto_id
                            SET p.costo = d.costo,
+                               p.costo_provisional = FALSE,
                                p.version = p.version + 1
                          WHERE d.empresa_id = :empresa AND d.carga_id = :carga
                            AND d.aceptado = TRUE

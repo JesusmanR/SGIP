@@ -87,6 +87,15 @@ public class Producto {
     @Column(name = "existencia", nullable = false, updatable = false)
     private int existencia;
 
+    /**
+     * El producto que nació dentro de una venta (RF-42) tiene costo 1,00 porque la columna exige un
+     * costo mayor que cero. La marca dura hasta que alguien escribe el costo real: editar el producto
+     * con otro costo ({@link #reemplazarDatos}) o aplicar una lista de precios. El alta de catálogo
+     * nunca la enciende.
+     */
+    @Column(name = "costo_provisional", nullable = false)
+    private boolean costoProvisional;
+
     @Column(name = "existencia_minima", nullable = false)
     private int existenciaMinima = 5;
 
@@ -150,6 +159,9 @@ public class Producto {
      * lo guarda: lo calcula la vista con la regla de margen vigente.
      */
     public void cambiarCosto(BigDecimal nuevo) {
+        if (this.costo.compareTo(nuevo) != 0) {
+            this.costoProvisional = false;
+        }
         this.costo = nuevo;
     }
 
@@ -176,6 +188,11 @@ public class Producto {
         this.presentacion = presentacion;
         this.descripcion = descripcion;
         this.codigoBarras = codigoBarras;
+        // Escribir otro costo es confirmarlo; volver a mandar el mismo (el formulario siempre lo manda)
+        // no dice que sea el real.
+        if (this.costo == null || this.costo.compareTo(costo) != 0) {
+            this.costoProvisional = false;
+        }
         this.costo = costo;
         this.existenciaMinima = existenciaMinima;
     }
@@ -195,6 +212,7 @@ public class Producto {
     public String getPresentacion() { return presentacion; }
     public String getDescripcion() { return descripcion; }
     public BigDecimal getCosto() { return costo; }
+    public boolean isCostoProvisional() { return costoProvisional; }
     public int getExistencia() { return existencia; }
     public int getExistenciaMinima() { return existenciaMinima; }
     public boolean isActivo() { return activo; }

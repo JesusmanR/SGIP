@@ -1,5 +1,6 @@
 package co.com.bspstore.sgip.datos;
 
+import co.com.bspstore.sgip.api.dto.FilaDeCarga;
 import co.com.bspstore.sgip.api.dto.LineaSolicitada;
 import co.com.bspstore.sgip.api.dto.PagoSolicitado;
 import co.com.bspstore.sgip.api.dto.ProductoEnCatalogo;
@@ -72,6 +73,7 @@ class ProductoNuevoConBaseTest {
     @Autowired CategoriaRepositorio categorias;
     @Autowired ProveedorRepositorio proveedores;
     @Autowired RepositorioClientes clientes;
+    @Autowired RepositorioImportacion importacion;
     @Autowired JdbcClient jdbc;
     @Autowired MockMvc mvc;
     @MockitoSpyBean RepositorioInventario kardex;
@@ -233,7 +235,7 @@ class ProductoNuevoConBaseTest {
         igual("1.00", linea.get("costo_unitario"));
         igual("7500", linea.get("precio_unitario"));
         igual("22500", linea.get("subtotal"));
-        igual("21000", linea.get("utilidad"));
+        igual("22497", linea.get("utilidad"));
     }
 
     @Test
@@ -482,6 +484,25 @@ class ProductoNuevoConBaseTest {
         Map<String, Object> p = producto(caja, "RAP-1");
         igual("3200.00", p.get("costo"));
         assertEquals(false, p.get("costo_provisional"), "el administrador escribió el costo real");
+    }
+
+    @Test
+    void aplicarUnaListaDePreciosApagaElCostoProvisional() {
+        ventas.registrar(venta(UUID.randomUUID(), "7500", null, lineaNueva(nuevo("Tornillo", "7500", null), 1)));
+        Integer id = idDe(caja, "RAP-1");
+        Integer otro = caja.producto("A", 5, "10000");
+
+        Long carga = importacion.insertarCarga(caja.empresa.empresaId, caja.empresa.proveedorId, caja.administradorId,
+                "lista.csv", 1, 1, 0);
+        importacion.insertarDetalles(caja.empresa.empresaId, carga, List.of(
+                new FilaDeCarga(2, id, "RAP-1", null, new BigDecimal("3200.00"), new BigDecimal("1.00"), true, null, null)));
+        importacion.aplicarCostos(caja.empresa.empresaId, carga);
+
+        Map<String, Object> p = producto(caja, "RAP-1");
+        igual("3200.00", p.get("costo"));
+        assertEquals(false, p.get("costo_provisional"), "el costo de la lista es el real");
+        assertEquals(false, jdbc.sql("SELECT costo_provisional FROM productos WHERE empresa_id = :e AND producto_id = :p")
+                .param("e", caja.empresa.empresaId).param("p", otro).query().singleRow().get("costo_provisional"));
     }
 
     private void editar(Integer id, String nombre, String costo) {

@@ -25,5 +25,18 @@ public final class LimitesDeVenta {
     /** {@code ventas.motivo_sin_existencia}. */
     public static final int MOTIVO_DEL_ENCARGO = 200;
 
+    /**
+     * Productos nuevos que caben en una venta. Cada uno cuesta unas consultas propias (su código,
+     * su fila y su precio) y el resto de la venta no, así que el tope acota las consultas de una
+     * sola petición. Una venta real trae uno, rara vez dos.
+     */
+    public static final int PRODUCTOS_NUEVOS = 10;
+
+    /** {@code productos.nombre}. */
+    public static final int NOMBRE_DEL_PRODUCTO = 160;
+
+    /** {@code productos.codigo_barras}. */
+    public static final int CODIGO_DE_BARRAS = 60;
+
     private LimitesDeVenta() {}
 }

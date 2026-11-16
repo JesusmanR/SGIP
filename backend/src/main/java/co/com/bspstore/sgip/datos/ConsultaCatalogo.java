@@ -61,6 +61,18 @@ public class ConsultaCatalogo {
                 AND p.producto_id = v.producto_id)
             """;
 
+    /**
+     * Si el costo del producto es el provisional con que nació dentro de una venta (RF-42). Está en
+     * `productos` y no en la vista, por la misma razón que la versión: rehacer `v_precios_producto`
+     * tocaría un plan que `EscalaDeReglasPropiasTest` vigila. Subconsulta por clave primaria, con el
+     * filtro de empresa repetido. La caja y quien vende no lo reciben: solo el administrador.
+     */
+    private static final String COSTO_PROVISIONAL = """
+            (SELECT p.costo_provisional FROM productos p
+              WHERE p.empresa_id = v.empresa_id
+                AND p.producto_id = v.producto_id)
+            """;
+
     private static final String COLUMNAS = """
             producto_id, codigo, sku, nombre, presentacion,
             descripcion, codigo_barras,
@@ -75,8 +87,9 @@ public class ConsultaCatalogo {
             margen_contado, margen_credito,
             precio_fijo_contado, precio_fijo_credito,
             porcentaje_contado, porcentaje_credito,
-            %2$s AS version
-            """.formatted(IMAGEN_PRINCIPAL, VERSION);
+            %2$s AS version,
+            %3$s AS costo_provisional
+            """.formatted(IMAGEN_PRINCIPAL, VERSION, COSTO_PROVISIONAL);
 
     private final JdbcClient jdbc;
 
