@@ -4,9 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { hoyISO, sumarDias } from '../../servicios/fechas.js'
 import {
-  abrirTurno, registrarVenta, saldoDeCliente, turnoActual,
+  abrirTurno, CLAVE_EN_USO, registrarVenta, saldoDeCliente, turnoActual,
 } from '../../servicios/api/caja.js'
-import { ANA, PINTURA, TORNILLO, entrar, errorApi, pesos, prepararApi } from './ayuda.js'
+import { ANA, LLAVE_A, LLAVE_B, PINTURA, TORNILLO, entrar, errorApi, pesos, prepararApi } from './ayuda.js'
 import Caja from './Caja.jsx'
 
 vi.mock('../../servicios/api/caja.js')
@@ -257,6 +257,14 @@ describe('caja: cobro', () => {
     expect(cobrar()).toBeDisabled()
   })
 
+  it('un descuento con más de 2 decimales se dice y no se cobra', async () => {
+    await abrir()
+    await agregar()
+    await userEvent.type(screen.getByLabelText('Descuento de Tornillo M6'), '7,555')
+    expect(screen.getByText(/hasta 2 decimales/i)).toBeInTheDocument()
+    expect(cobrar()).toBeDisabled()
+  })
+
   it('al registrar muestra el recibo con el importe del servidor, Imprimir y Descargar PDF', async () => {
     window.print = vi.fn()
     await abrir()
@@ -368,18 +376,19 @@ describe('caja: autorización con PIN', () => {
 })
 
 describe('caja: reintentos y conexión', () => {
-  it('reintentoUsaLaMismaClave: tras un fallo de red el reintento repite la clave, y la venta siguiente usa otra', async () => {
+  it('reintentoUsaLaMismaClave: tras un fallo de red el reintento manda el mismo cuerpo con la misma clave, y la venta siguiente usa otra', async () => {
     registrarVenta.mockRejectedValueOnce(new TypeError('Failed to fetch'))
     await abrir()
     await agregar()
     await pagarTodo()
     await userEvent.click(cobrar())
-    expect(await screen.findByText(/sin conexión con el servidor/i)).toBeInTheDocument()
+    expect(await screen.findByText(/no sabemos si se registró\. reintenta: no se cobrará dos veces/i)).toBeInTheDocument()
+    expect(document.body).not.toHaveTextContent(/no se cobró nada/i)
     expect(cobrar()).toBeDisabled()
     await userEvent.click(screen.getByRole('button', { name: /reintentar el cobro/i }))
     await waitFor(() => expect(registrarVenta).toHaveBeenCalledTimes(2))
-    const [primera, segunda] = registrarVenta.mock.calls.map((c) => c[0].claveIdempotencia)
-    expect(segunda).toBe(primera)
+    expect(registrarVenta.mock.calls[1][0]).toEqual(registrarVenta.mock.calls[0][0])
+    expect(registrarVenta.mock.calls[1][0].pagos).toHaveLength(1)
     expect(await screen.findByText(/venta registrada/i)).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: /nueva venta/i }))
@@ -387,38 +396,191 @@ describe('caja: reintentos y conexión', () => {
     await pagarTodo()
     await userEvent.click(cobrar())
     await waitFor(() => expect(registrarVenta).toHaveBeenCalledTimes(3))
-    expect(registrarVenta.mock.calls[2][0].claveIdempotencia).not.toBe(primera)
+    expect(registrarVenta.mock.calls[2][0].claveIdempotencia).not.toBe(registrarVenta.mock.calls[0][0].claveIdempotencia)
   })
 
-  it('si la carga cambia tras un fallo de red la clave se mantiene y un 409 se explica sin cobrar otra vez', async () => {
-    registrarVenta.mockRejectedValueOnce(new TypeError('Failed to fetch'))
-    registrarVenta.mockRejectedValueOnce(errorApi(409, 'Esta venta ya se registró con otra carga.'))
+  it.each([502, 504, 500])('un %i también deja la venta en estado ambiguo', async (estado) => {
+    registrarVenta.mockRejectedValueOnce(errorApi(estado, 'Falló'))
     await abrir()
     await agregar()
     await pagarTodo()
     await userEvent.click(cobrar())
-    await screen.findByText(/sin conexión con el servidor/i)
-    await userEvent.type(screen.getByLabelText('Cantidad de Tornillo M6'), '2')
-    await userEvent.click(screen.getByRole('button', { name: /reintentar el cobro/i }))
-    const alerta = await screen.findByRole('alert')
-    expect(alerta).toHaveTextContent('Esta venta ya se registró con otra carga.')
-    expect(alerta).toHaveTextContent(/no se cobró otra vez/i)
-    expect(registrarVenta.mock.calls[1][0].claveIdempotencia).toBe(registrarVenta.mock.calls[0][0].claveIdempotencia)
+    expect(await screen.findByText(/no sabemos si se registró/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /reintentar el cobro/i })).toBeEnabled()
   })
 
-  it('vaciar el carrito renueva la clave', async () => {
+  it('con la venta ambigua el carrito, el cliente y los pagos quedan congelados', async () => {
     registrarVenta.mockRejectedValueOnce(new TypeError('Failed to fetch'))
     await abrir()
     await agregar()
     await pagarTodo()
     await userEvent.click(cobrar())
-    await screen.findByText(/sin conexión con el servidor/i)
-    await userEvent.click(screen.getByRole('button', { name: 'Quitar Tornillo M6' }))
+    await screen.findByText(/no sabemos si se registró/i)
+    expect(screen.getByLabelText('Cantidad de Tornillo M6')).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Quitar Tornillo M6' })).toBeDisabled()
+    expect(buscador()).toBeDisabled()
+    expect(screen.getByRole('button', { name: /identificar cliente/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /quitar pago de efectivo/i })).toBeDisabled()
+  })
+
+  it('abandonar una venta ambigua pide confirmar el riesgo, y solo entonces empieza otra con clave nueva', async () => {
+    registrarVenta.mockRejectedValueOnce(new TypeError('Failed to fetch'))
+    await abrir()
+    await agregar()
+    await pagarTodo()
+    await userEvent.click(cobrar())
+    await screen.findByText(/no sabemos si se registró/i)
+    await userEvent.click(screen.getByRole('button', { name: /abandonar esta venta/i }))
+    expect(screen.getByText(/podría quedar cobrado/i)).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: /seguir reintentando/i }))
+    expect(screen.getByLabelText('Cantidad de Tornillo M6')).toBeDisabled()
+    await userEvent.click(screen.getByRole('button', { name: /abandonar esta venta/i }))
+    await userEvent.click(screen.getByRole('button', { name: /sí, abandonar/i }))
+    expect(screen.queryByLabelText('Cantidad de Tornillo M6')).not.toBeInTheDocument()
     await agregar()
     await pagarTodo()
     await userEvent.click(cobrar())
     await waitFor(() => expect(registrarVenta).toHaveBeenCalledTimes(2))
     expect(registrarVenta.mock.calls[1][0].claveIdempotencia).not.toBe(registrarVenta.mock.calls[0][0].claveIdempotencia)
+  })
+
+  it('reintentar respeta la conexión: sin red no se puede', async () => {
+    registrarVenta.mockRejectedValueOnce(new TypeError('Failed to fetch'))
+    const enLinea = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(true)
+    await abrir()
+    await agregar()
+    await pagarTodo()
+    await userEvent.click(cobrar())
+    await screen.findByText(/no sabemos si se registró/i)
+    enLinea.mockReturnValue(false)
+    window.dispatchEvent(new Event('offline'))
+    await waitFor(() => expect(screen.getByRole('button', { name: /reintentar el cobro/i })).toBeDisabled())
+  })
+
+  it('un vendedor que reintenta una venta con descuento vuelve a escribir el PIN, con el mismo cuerpo y la misma clave', async () => {
+    entrar('VENDEDOR')
+    registrarVenta.mockRejectedValueOnce(new TypeError('Failed to fetch'))
+    await abrir()
+    await agregar()
+    await userEvent.type(screen.getByLabelText('Descuento de Tornillo M6'), '10')
+    await pagarTodo()
+    await userEvent.click(cobrar())
+    let dialogo = await screen.findByRole('dialog', { name: /autorización del administrador/i })
+    await screen.findByRole('option', { name: 'Laura Pérez' })
+    await userEvent.selectOptions(within(dialogo).getByLabelText(/^administrador$/i), 'Laura Pérez')
+    await userEvent.type(within(dialogo).getByLabelText(/^pin$/i), '1234')
+    await userEvent.click(within(dialogo).getByRole('button', { name: /autorizar y cobrar/i }))
+    expect(await within(dialogo).findByText(/no sabemos si se registró/i)).toBeInTheDocument()
+    expect(within(dialogo).getByLabelText(/^pin$/i)).toHaveValue('')
+    await userEvent.click(within(dialogo).getByRole('button', { name: /cancelar/i }))
+    await userEvent.click(screen.getByRole('button', { name: /reintentar el cobro/i }))
+    dialogo = await screen.findByRole('dialog', { name: /autorización del administrador/i })
+    await screen.findByRole('option', { name: 'Laura Pérez' })
+    await userEvent.selectOptions(within(dialogo).getByLabelText(/^administrador$/i), 'Laura Pérez')
+    await userEvent.type(within(dialogo).getByLabelText(/^pin$/i), '4321')
+    await userEvent.click(within(dialogo).getByRole('button', { name: /autorizar y cobrar/i }))
+    await waitFor(() => expect(registrarVenta).toHaveBeenCalledTimes(2))
+    const [primera, segunda] = registrarVenta.mock.calls.map((c) => c[0])
+    expect(segunda.autorizacion).toEqual({ administradorId: 3, pin: '4321' })
+    expect({ ...segunda, autorizacion: undefined }).toEqual({ ...primera, autorizacion: undefined })
+  })
+
+  it('el 409 de clave en uso se explica sin hablar de claves y ofrece empezar otra venta', async () => {
+    registrarVenta.mockRejectedValueOnce(errorApi(409, 'La clave ya se usó con otra carga.', CLAVE_EN_USO))
+    await abrir()
+    await agregar()
+    await pagarTodo()
+    await userEvent.click(cobrar())
+    const alerta = await screen.findByRole('alert')
+    expect(alerta).toHaveTextContent('Esta venta ya se registró con otros datos. Revisa las ventas del turno.')
+    expect(document.body).not.toHaveTextContent(/clave|idempotencia/i)
+    expect(screen.queryByRole('button', { name: /reintentar el cobro/i })).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: /empezar otra venta/i }))
+    expect(screen.queryByLabelText('Cantidad de Tornillo M6')).not.toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('el contraejemplo de la revisión: dos llaves con distinto IVA y 1 peso de descuento se cobran sin un peso de diferencia', async () => {
+    await abrir()
+    await agregar(LLAVE_A)
+    await agregar(LLAVE_B)
+    await userEvent.type(screen.getByLabelText('Descuento de toda la compra'), '1')
+    await userEvent.selectOptions(screen.getByLabelText('Tipo de descuento de toda la compra'), 'PESOS')
+    expect(total()).toHaveTextContent(pesos(2195))
+    await pagarTodo()
+    await userEvent.click(cobrar())
+    // El servidor simulado rechaza (400) si los pagos no suman exactamente su total.
+    expect(await screen.findByText(/venta registrada/i)).toBeInTheDocument()
+  })
+
+  it('el recibo empareja cada nombre con sus importes aunque el servidor devuelva las líneas ordenadas por producto', async () => {
+    await abrir()
+    await agregar(PINTURA)
+    await agregar(TORNILLO)
+    await pagarTodo()
+    await userEvent.click(cobrar())
+    await screen.findByText(/venta registrada/i)
+    const recibo = screen.getByRole('article', { name: /recibo de venta/i })
+    const filaPintura = within(recibo).getByText('Pintura blanca').closest('li')
+    const filaTornillo = within(recibo).getByText('Tornillo M6').closest('li')
+    expect(filaPintura).toHaveTextContent(pesos(23800))
+    expect(filaTornillo).toHaveTextContent(pesos(11900))
+  })
+
+  it('tras registrar, el foco va al encabezado del recibo, que se anuncia', async () => {
+    await abrir()
+    await agregar()
+    await pagarTodo()
+    await userEvent.click(cobrar())
+    const titulo = await screen.findByRole('heading', { name: /venta registrada/i })
+    await waitFor(() => expect(titulo).toHaveFocus())
+  })
+
+  it('vaciar el carrito tras una venta confirmada renueva la clave', async () => {
+    await abrir()
+    await agregar()
+    await pagarTodo()
+    await userEvent.click(cobrar())
+    await screen.findByText(/venta registrada/i)
+    await userEvent.click(screen.getByRole('button', { name: /nueva venta/i }))
+    await agregar()
+    await pagarTodo()
+    await userEvent.click(cobrar())
+    await waitFor(() => expect(registrarVenta).toHaveBeenCalledTimes(2))
+    expect(registrarVenta.mock.calls[1][0].claveIdempotencia).not.toBe(registrarVenta.mock.calls[0][0].claveIdempotencia)
+  })
+
+  it('al empezar otra venta no queda ningún dato del cliente anterior', async () => {
+    await abrir()
+    await agregar()
+    await userEvent.click(screen.getByRole('button', { name: /identificar cliente/i }))
+    await userEvent.type(screen.getByLabelText(/^identificación/i), ANA.identificacion)
+    await userEvent.click(screen.getByRole('button', { name: /buscar cliente/i }))
+    await screen.findByText('Ana Pérez')
+    await userEvent.click(screen.getByRole('button', { name: /usar este cliente/i }))
+    await pagarTodo()
+    await userEvent.click(cobrar())
+    await screen.findByText(/venta registrada/i)
+    await userEvent.click(screen.getByRole('button', { name: /nueva venta/i }))
+    expect(screen.queryByText('Ana Pérez')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/^identificación/i)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Consumidor final' })).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('al cambiar de cliente se quitan los pagos con saldo a favor', async () => {
+    saldoDeCliente.mockResolvedValue({ saldo: 20000 })
+    await abrir()
+    await agregar()
+    await userEvent.click(screen.getByRole('button', { name: /identificar cliente/i }))
+    await userEvent.type(screen.getByLabelText(/^identificación/i), ANA.identificacion)
+    await userEvent.click(screen.getByRole('button', { name: /buscar cliente/i }))
+    await userEvent.click(await screen.findByRole('button', { name: /usar este cliente/i }))
+    await waitFor(() => within(screen.getByLabelText(/medio de pago/i)).getByRole('option', { name: /saldo a favor/i }))
+    await userEvent.selectOptions(screen.getByLabelText(/medio de pago/i), 'Saldo a favor')
+    await userEvent.click(screen.getByRole('button', { name: /agregar pago/i }))
+    expect(screen.getByRole('button', { name: /quitar pago de saldo a favor/i })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Consumidor final' }))
+    await waitFor(() => expect(screen.queryByRole('button', { name: /quitar pago de saldo a favor/i })).not.toBeInTheDocument())
   })
 
   it('sinConexionNoCobra: con el navegador sin red avisa y no deja cobrar', async () => {
@@ -437,7 +599,9 @@ describe('caja: reintentos y conexión', () => {
     await agregar()
     await pagarTodo()
     await userEvent.click(cobrar())
-    expect(await screen.findByRole('alert')).toHaveTextContent('No hay existencia suficiente de Tornillo M6.')
+    const alerta = await screen.findByRole('alert')
+    expect(alerta).toHaveTextContent('No hay existencia suficiente de Tornillo M6.')
+    expect(alerta).not.toHaveTextContent(/otra vez/i)
     expect(cobrar()).toBeEnabled()
   })
 })

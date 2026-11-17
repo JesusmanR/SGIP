@@ -4,7 +4,7 @@ import { ErrorApi, pedir } from '../api.js'
 import {
   abrirTurno, actualizarCliente, administradores, clientePorIdentificacion, crearCliente,
   datosDeLaEmpresa, mediosDePago, productoPorCodigo, productosPorTexto, registrarVenta,
-  saldoDeCliente, turnoActual,
+  saldoDeCliente, turnoActual, CLAVE_EN_USO,
 } from './caja.js'
 
 vi.mock('../api.js', async (original) => ({ ...(await original()), pedir: vi.fn(async () => ({ ok: true })) }))
@@ -60,6 +60,10 @@ describe('servicio de la caja', () => {
     expect(pedir).toHaveBeenCalledWith('/caja/administradores')
     await datosDeLaEmpresa()
     expect(pedir).toHaveBeenCalledWith('/empresa')
+  })
+
+  it('el tipo del 409 de clave en uso es una constante (supuesto: el backend la añadirá al integrar)', () => {
+    expect(CLAVE_EN_USO).toBe('urn:sgip:caja:clave-en-uso')
   })
 
   it('registra la venta con POST y el cuerpo tal cual', async () => {

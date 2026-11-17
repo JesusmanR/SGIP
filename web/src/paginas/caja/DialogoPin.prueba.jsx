@@ -103,6 +103,13 @@ describe('diálogo del PIN', () => {
     }
   })
 
+  it('con un solo administrador ya elegido, el foco va al campo del PIN', async () => {
+    administradores.mockResolvedValue([ADMINS[0]])
+    montar()
+    await waitFor(() => expect(pin()).toHaveFocus())
+    expect(screen.getByLabelText(/^administrador$/i)).toHaveValue(String(ADMINS[0].id))
+  })
+
   it('si no se pudo traer la lista de administradores lo dice', async () => {
     administradores.mockRejectedValue(new Error('Se cayó'))
     montar()

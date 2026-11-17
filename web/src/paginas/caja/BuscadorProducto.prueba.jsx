@@ -33,6 +33,21 @@ describe('buscador de producto', () => {
     expect(campo()).toHaveFocus()
   })
 
+  it('dos Enter seguidos con una respuesta lenta no pierden ningún código: se vacía el campo al instante y se procesan en orden', async () => {
+    let soltarPrimero
+    productoPorCodigo.mockImplementationOnce(() => new Promise((resolver) => { soltarPrimero = () => resolver(TORNILLO) }))
+    productoPorCodigo.mockImplementationOnce(async () => PINTURA)
+    montar()
+    await userEvent.type(campo(), '7701234567890{Enter}7709990001112{Enter}')
+    // El segundo código ya se leyó entero y el campo quedó vacío, aunque el primero siga buscándose.
+    expect(campo()).toHaveValue('')
+    expect(productoPorCodigo).toHaveBeenCalledTimes(1)
+    soltarPrimero()
+    await waitFor(() => expect(alAgregar).toHaveBeenCalledTimes(2))
+    expect(productoPorCodigo.mock.calls.map((c) => c[0])).toEqual(['7701234567890', '7709990001112'])
+    expect(alAgregar.mock.calls.map((c) => c[0])).toEqual([TORNILLO, PINTURA])
+  })
+
   it('un código que no existe dice «No encontramos ese código» y ofrece buscar por nombre o crear', async () => {
     montar()
     await userEvent.type(campo(), '000{Enter}')

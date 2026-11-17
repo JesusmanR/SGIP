@@ -1,0 +1,101 @@
+import { act, renderHook } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+import { ErrorApi } from '../../servicios/api.js'
+import { CLAVE_EN_USO, registrarVenta } from '../../servicios/api/caja.js'
+import useVentaEnCurso from './useVentaEnCurso.js'
+
+vi.mock('../../servicios/api/caja.js', async (original) => ({ ...(await original()), registrarVenta: vi.fn() }))
+
+const construir = (clave) => ({ claveIdempotencia: clave, lineas: [{ productoId: 1, cantidad: 1 }], pagos: [] })
+const VENTA = { id: 1, consecutivo: 'V-1', total: 10, cambio: 0, lineas: [] }
+
+beforeEach(() => vi.resetAllMocks())
+
+async function enviar(hook, autorizacion) {
+  let resultado
+  await act(async () => { resultado = await hook.result.current.enviar(construir, autorizacion) })
+  return resultado
+}
+
+describe('la venta en curso', () => {
+  it('arranca libre, con una clave', () => {
+    const { result } = renderHook(() => useVentaEnCurso())
+    expect(result.current.estado).toBe('libre')
+    expect(result.current.clave).toMatch(/^[0-9a-f-]{36}$/)
+  })
+
+  it('al confirmarse devuelve la venta y renueva la clave', async () => {
+    registrarVenta.mockResolvedValue(VENTA)
+    const hook = renderHook(() => useVentaEnCurso())
+    const antes = hook.result.current.clave
+    const r = await enviar(hook)
+    expect(r.venta).toBe(VENTA)
+    expect(registrarVenta.mock.calls[0][0].claveIdempotencia).toBe(antes)
+    expect(hook.result.current.clave).not.toBe(antes)
+    expect(hook.result.current.estado).toBe('libre')
+  })
+
+  it.each([
+    ['un error de red', () => new TypeError('Failed to fetch')],
+    ['un 500', () => new ErrorApi(500, 'Falló')],
+    ['un 502', () => new ErrorApi(502, 'Puerta de enlace')],
+    ['un 504', () => new ErrorApi(504, 'Tiempo agotado')],
+  ])('%s deja la venta ambigua y el reintento manda el cuerpo exacto con la misma clave', async (_n, error) => {
+    registrarVenta.mockRejectedValueOnce(error()).mockResolvedValueOnce(VENTA)
+    const hook = renderHook(() => useVentaEnCurso())
+    const clave = hook.result.current.clave
+    const r = await enviar(hook)
+    expect(r.error).toMatch(/no sabemos si se registró/i)
+    expect(hook.result.current.estado).toBe('ambiguo')
+    expect(hook.result.current.clave).toBe(clave)
+
+    // Aunque la pantalla armara otro cuerpo, se reenvía el primero.
+    let segundo
+    await act(async () => { segundo = await hook.result.current.enviar(() => ({ otro: true })) })
+    expect(registrarVenta.mock.calls[1][0]).toEqual(registrarVenta.mock.calls[0][0])
+    expect(segundo.venta).toBe(VENTA)
+    expect(hook.result.current.estado).toBe('libre')
+    expect(hook.result.current.clave).not.toBe(clave)
+  })
+
+  it('la autorización viaja en el envío pero no se guarda en el cuerpo que se reenvía', async () => {
+    registrarVenta.mockRejectedValueOnce(new TypeError('x')).mockResolvedValueOnce(VENTA)
+    const hook = renderHook(() => useVentaEnCurso())
+    await enviar(hook, { administradorId: 3, pin: '1234' })
+    expect(registrarVenta.mock.calls[0][0].autorizacion).toEqual({ administradorId: 3, pin: '1234' })
+    await enviar(hook)
+    expect(registrarVenta.mock.calls[1][0].autorizacion).toBeUndefined()
+    expect(JSON.stringify(hook.result.current)).not.toContain('1234')
+  })
+
+  it('un error definitivo (400, 403, 409 de existencia) deja libre la venta y conserva la clave', async () => {
+    registrarVenta.mockRejectedValueOnce(new ErrorApi(409, 'No hay existencia suficiente de Tornillo M6.', 'urn:otro'))
+    const hook = renderHook(() => useVentaEnCurso())
+    const clave = hook.result.current.clave
+    const r = await enviar(hook)
+    expect(r.error).toBe('No hay existencia suficiente de Tornillo M6.')
+    expect(r.error).not.toMatch(/otra vez/i)
+    expect(hook.result.current.estado).toBe('libre')
+    expect(hook.result.current.clave).toBe(clave)
+  })
+
+  it('el 409 de clave en uso se distingue por su tipo y no deja reintentar', async () => {
+    registrarVenta.mockRejectedValueOnce(new ErrorApi(409, 'x', CLAVE_EN_USO))
+    const hook = renderHook(() => useVentaEnCurso())
+    const r = await enviar(hook)
+    expect(r.error).toBe('Esta venta ya se registró con otros datos. Revisa las ventas del turno.')
+    expect(hook.result.current.estado).toBe('claveEnUso')
+    expect(r.error).not.toMatch(/clave|idempotencia/i)
+  })
+
+  it('abandonar renueva la clave y deja libre', async () => {
+    registrarVenta.mockRejectedValueOnce(new TypeError('x'))
+    const hook = renderHook(() => useVentaEnCurso())
+    const clave = hook.result.current.clave
+    await enviar(hook)
+    act(() => hook.result.current.abandonar())
+    expect(hook.result.current.estado).toBe('libre')
+    expect(hook.result.current.clave).not.toBe(clave)
+  })
+})

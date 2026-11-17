@@ -97,6 +97,13 @@ describe('cliente del API', () => {
     expect(e.tipo).toBe('urn:sgip:producto-cambio')
   })
 
+  it('el error lleva también el título del problema', async () => {
+    responder(409, { type: 'urn:sgip:caja:clave-en-uso', title: 'Clave en uso', detail: 'x' })
+    const e = await api.editarProducto(1, {}).catch((x) => x)
+    expect(e.titulo).toBe('Clave en uso')
+    expect(e.tipo).toBe('urn:sgip:caja:clave-en-uso')
+  })
+
   it('usa el detalle del ProblemDetail como mensaje', async () => {
     responder(409, { detail: 'Ya existe una categoría llamada «Bebidas».' })
     await expect(api.categorias()).rejects.toThrow('Ya existe una categoría llamada «Bebidas».')

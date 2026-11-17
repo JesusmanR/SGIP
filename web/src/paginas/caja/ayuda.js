@@ -25,7 +25,16 @@ export const SIN_PRECIO = {
   existencia: 9, precio: null, tarifaIva: 0, tratamientoIva: 'GRAVADO', vendible: false,
   motivoNoVendible: 'Este producto no tiene precio de venta.',
 }
-export const PRODUCTOS = [TORNILLO, PINTURA, SIN_PRECIO]
+// Dos productos con el mismo precio y distinto IVA, con el id al revés del orden en que se escanean.
+export const LLAVE_A = {
+  id: 20, codigo: 'LLA-A', nombre: 'Llave A', presentacion: 'Unidad', codigoBarras: '7700000000020',
+  existencia: 9, precio: 1003, tarifaIva: 0.19, tratamientoIva: 'GRAVADO', vendible: true, motivoNoVendible: null,
+}
+export const LLAVE_B = {
+  id: 10, codigo: 'LLA-B', nombre: 'Llave B', presentacion: 'Unidad', codigoBarras: '7700000000010',
+  existencia: 9, precio: 1003, tarifaIva: 0, tratamientoIva: 'EXENTO', vendible: true, motivoNoVendible: null,
+}
+export const PRODUCTOS = [TORNILLO, PINTURA, SIN_PRECIO, LLAVE_A, LLAVE_B]
 
 export const MEDIOS = [
   { id: 1, nombre: 'Efectivo', tipo: 'EFECTIVO', activo: true, deSistema: false },
@@ -42,21 +51,64 @@ export const ANA = {
   telefono: '3001112233', direccion: 'Calle 1 # 2-3', ciudad: 'Cali', consumidorFinal: false,
 }
 
-/** Lo que el servidor devolvería: total y cambio de los pagos enviados, y una línea por línea pedida. */
+// ── El servidor simulado ─────────────────────────────────────────────
+// Repite, escrito aparte y sin usar el código del front, lo que hacen NormalizadorDeVenta y
+// CalculoDeVenta: las líneas de catálogo se ordenan por productoId y los productos nuevos van
+// después, en el orden de la solicitud (nacen con ids mayores); el residuo del reparto del
+// descuento total va a la línea de mayor base y, a igual base, a la de menor productoId; y los
+// pagos tienen que sumar exactamente el total (si no, 400). Así una diferencia de un peso entre
+// la vista previa y el servidor se ve en las pruebas.
+const mitad = (a, b) => Math.floor((2 * a + b) / (2 * b))
+
+function descontado(descuento, valor) {
+  if (!descuento) return 0
+  if (descuento.tipo === 'PESOS') return descuento.valor
+  return mitad(valor * Math.round(descuento.valor * 100), 10000)
+}
+
 export function ventaDelServidor(solicitud) {
-  const total = solicitud.pagos.reduce((a, p) => a + p.monto, 0)
-  const cambio = solicitud.pagos.reduce((a, p) => a + ((p.recibido ?? p.monto) - p.monto), 0)
-  return {
-    id: 100,
-    consecutivo: 'V-0001',
-    total,
-    cambio,
-    lineas: solicitud.lineas.map((l, i) => ({
-      productoId: l.productoId ?? 900 + i, cantidad: l.cantidad, precioUnitario: 10000,
-      subtotal: 10000 * l.cantidad, descuento: 0, base: 10000 * l.cantidad, tarifaIva: 0.19,
-      tratamientoIva: 'GRAVADO', iva: 0, total: 10000 * l.cantidad,
-    })),
+  let siguienteId = 900
+  const delCatalogo = solicitud.lineas.filter((l) => l.productoId != null).sort((a, b) => a.productoId - b.productoId)
+  const nuevas = solicitud.lineas.filter((l) => l.productoNuevo).map((l) => ({ ...l, productoId: siguienteId++ }))
+  const lineas = [...delCatalogo, ...nuevas].map((l) => {
+    const producto = PRODUCTOS.find((p) => p.id === l.productoId)
+    const precio = producto ? producto.precio : l.productoNuevo.precioVenta
+    const tarifa = producto ? producto.tarifaIva : 0
+    const subtotal = precio * l.cantidad
+    const propio = descontado(l.descuento, subtotal)
+    return { productoId: l.productoId, cantidad: l.cantidad, precio, tarifa, subtotal, propio, base: subtotal - propio }
+  })
+  const suma = lineas.reduce((a, l) => a + l.base, 0)
+  const aDescontar = descontado(solicitud.descuentoTotal, suma)
+  const partes = lineas.map((l) => (suma === 0 ? 0 : mitad(aDescontar * l.base, suma)))
+  let residuo = aDescontar - partes.reduce((a, p) => a + p, 0)
+  const orden = lineas.map((_, i) => i)
+    .sort((i, j) => (lineas[j].base - lineas[i].base) || (lineas[i].productoId - lineas[j].productoId))
+  for (const i of orden) {
+    if (residuo === 0) break
+    const cabe = residuo > 0 ? Math.min(lineas[i].base - partes[i], residuo) : Math.max(-partes[i], residuo)
+    partes[i] += cabe
+    residuo -= cabe
   }
+  const calculadas = lineas.map((l, i) => {
+    const descuento = l.propio + partes[i]
+    const base = l.subtotal - descuento
+    const iva = mitad(base * Math.round(l.tarifa * 10000), 10000)
+    return {
+      productoId: l.productoId, cantidad: l.cantidad, precioUnitario: l.precio, subtotal: l.subtotal,
+      descuento, base, tarifaIva: l.tarifa, tratamientoIva: 'GRAVADO', iva, total: base + iva,
+    }
+  })
+  const total = calculadas.reduce((a, l) => a + l.total, 0)
+  const contraEntrega = Boolean(solicitud.domicilio?.contraEntrega)
+  const pagado = solicitud.pagos.reduce((a, p) => a + p.monto, 0)
+  if (contraEntrega ? solicitud.pagos.length > 0 : pagado !== total) {
+    throw new ErrorApi(400, contraEntrega
+      ? 'Un domicilio contra entrega no lleva pagos.'
+      : 'Los pagos no suman el total de la venta.')
+  }
+  const cambio = solicitud.pagos.reduce((a, p) => a + ((p.recibido ?? p.monto) - p.monto), 0)
+  return { id: 100, consecutivo: 'V-0001', total, cambio, lineas: calculadas }
 }
 
 /** Deja la API simulada con respuestas razonables; cada prueba cambia lo que le interesa. */
