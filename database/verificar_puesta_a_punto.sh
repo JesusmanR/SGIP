@@ -525,16 +525,16 @@ rechaza "una activación sin estado anterior sigue rechazada" 3819 ck_auditoria_
 # La V45 siembra «Sin proveedor» y «Sin categoría» para las empresas que ya
 # existían (el producto que se crea dentro de la venta los necesita y la
 # venta nunca los crea), y sus restricciones tienen que rechazar de verdad.
-# La empresa de prueba PAP-900-1 se creó después de la V45: no se siembra.
+# Solo se mira la empresa 1, la de los datos de demostración, que existía antes de la V45: las
+# empresas que otros guiones de esta cadena crean después (aislamiento, importación, panel y la PAP-900-1
+# de este) no pasan por la V45 ni por el alta, y no llevan siembra.
 echo
 echo "── el domicilio, el producto nuevo y el encargo entregado (V45) ──"
 
-igual "toda empresa anterior a la V45 tiene su «Sin proveedor» y su «Sin categoría», una sola vez" "0"   "$(consulta "SELECT COUNT(*) FROM empresas e
-                WHERE e.nit NOT LIKE 'PAP-%'
-                  AND ((SELECT COUNT(*) FROM proveedores p
-                         WHERE p.empresa_id = e.empresa_id AND p.razon_social = 'Sin proveedor') <> 1
-                    OR (SELECT COUNT(*) FROM categorias c
-                         WHERE c.empresa_id = e.empresa_id AND c.nombre = 'Sin categoría') <> 1);")"
+igual "la empresa 1, anterior a la V45, tiene su «Sin proveedor» y su «Sin categoría», una sola vez" "1|1"   "$(consulta "SELECT CONCAT((SELECT COUNT(*) FROM proveedores p
+                               WHERE p.empresa_id = 1 AND p.razon_social = 'Sin proveedor'), '|',
+                              (SELECT COUNT(*) FROM categorias c
+                               WHERE c.empresa_id = 1 AND c.nombre = 'Sin categoría'));")"
 
 VENTA_V45="INSERT INTO ventas (empresa_id, consecutivo, cliente_id, usuario_id, forma_pago, tipo_entrega)
    SELECT 1, 'PAP-V45', (SELECT cliente_id FROM clientes WHERE empresa_id = 1 LIMIT 1),
