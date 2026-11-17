@@ -377,4 +377,43 @@ class ServicioComprasTest {
         verify(compras).insertarRecepcion(eq(EMPRESA), eq(ORDEN), eq(USUARIO), isNull());
         verify(inventario).ingresarPorRecepcion(eq(PC), eq(10), isNull(), eq(RECEPCION));
     }
+
+    /**
+     * Los productos de la entrega se bloquean juntos antes de escribir nada: el orden
+     * ascendente lo fija el repositorio, y esto asegura que el servicio los pide todos de
+     * una vez (el interbloqueo real lo reproduce RecepcionesConcurrentesConBaseTest).
+     */
+    @Test
+    void recibirBloqueaLosProductosDeLaEntregaAntesDeEscribirLaRecepcion() {
+        when(compras.bloquearOrden(EMPRESA, ORDEN)).thenReturn(Optional.of("ABIERTA"));
+        when(compras.bloquearLineas(EMPRESA, ORDEN)).thenReturn(List.of(
+                new LineaBloqueada(1L, PC, 10, 0),
+                new LineaBloqueada(2L, MON, 10, 0)));
+
+        // Llegan en orden descendente: el repositorio es quien los ordena al bloquear.
+        servicio.recibir(ORDEN, new SolicitudRecepcion(List.of(
+                new SolicitudRecepcion.LineaRecepcion(MON, 3),
+                new SolicitudRecepcion.LineaRecepcion(PC, 4)), null, null));
+
+        var orden = org.mockito.Mockito.inOrder(compras, inventario);
+        orden.verify(compras).bloquearProductos(EMPRESA, List.of(MON, PC));
+        orden.verify(compras).insertarRecepcion(eq(EMPRESA), eq(ORDEN), eq(USUARIO), isNull());
+        orden.verify(inventario).ingresarPorRecepcion(eq(MON), eq(3), isNull(), eq(RECEPCION));
+        orden.verify(inventario).ingresarPorRecepcion(eq(PC), eq(4), isNull(), eq(RECEPCION));
+    }
+
+    @Test
+    void unaEntregaRechazadaNoBloqueaNingunProducto() {
+        when(compras.bloquearOrden(EMPRESA, ORDEN)).thenReturn(Optional.of("ABIERTA"));
+        when(compras.bloquearLineas(EMPRESA, ORDEN))
+                .thenReturn(List.of(new LineaBloqueada(1L, PC, 10, 0)));
+
+        // El mismo producto en dos líneas: se rechaza como hasta ahora, antes de bloquear.
+        var repetido = new SolicitudRecepcion(List.of(
+                new SolicitudRecepcion.LineaRecepcion(PC, 1),
+                new SolicitudRecepcion.LineaRecepcion(PC, 1)), null, null);
+        assertThrows(RecepcionInvalidaException.class, () -> servicio.recibir(ORDEN, repetido));
+
+        verify(compras, never()).bloquearProductos(anyInt(), any());
+    }
 }

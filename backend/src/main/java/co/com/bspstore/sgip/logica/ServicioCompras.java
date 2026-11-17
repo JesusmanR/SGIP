@@ -157,6 +157,8 @@ public class ServicioCompras {
      *       entrega registrada si la transacción no cubriera todo, y
      *       cubriéndolo todo —que lo hace— deja al usuario un error
      *       sobre una línea cuando el problema era otra.</li>
+     *   <li>Bloquear los productos de la entrega, todos juntos y en orden
+     *       ascendente de identificador.</li>
      *   <li>Escribir la recepción, sumar lo recibido en cada línea y
      *       pedir el INGRESO al servicio de inventario.</li>
      *   <li>Recalcular el estado de la orden con lo que queda
@@ -202,6 +204,13 @@ public class ServicioCompras {
                                 + linea.pendiente() + ".");
             }
         }
+
+        // Los saldos de todos los productos de la entrega, juntos y en orden ascendente de
+        // identificador, antes de escribir: bloquearlos uno a uno en el orden de las líneas
+        // interbloquea a dos entregas que traen los mismos productos en orden inverso, y a
+        // una entrega con una venta (que también bloquea en orden ascendente).
+        compras.bloquearProductos(empresa, solicitud.items().stream()
+                .map(SolicitudRecepcion.LineaRecepcion::productoId).toList());
 
         Long recepcionId = compras.insertarRecepcion(empresa, ordenId, responsable(),
                 texto(solicitud.observacion()));

@@ -516,12 +516,17 @@ public class RepositorioImportacion {
      * `fecha_aplicacion` se queda nula, que es coherente con
      * `ck_cargas_aplicacion`: esa restricción solo exige la fecha cuando
      * el estado es APLICADA.
+     *
+     * Solo cambia una carga validada, y devuelve cuántas filas cambió: una carga que ya
+     * se aplicó no puede pasar a rechazada ni aunque quien llame no haya comprobado el
+     * estado con la cabecera bloqueada.
      */
-    public void marcarRechazada(Integer empresaId, Long cargaId) {
-        jdbc.sql("""
+    public int marcarRechazada(Integer empresaId, Long cargaId) {
+        return jdbc.sql("""
                  UPDATE cargas_precios
                     SET estado = 'RECHAZADA'
                   WHERE empresa_id = :empresa AND carga_id = :carga
+                    AND estado = 'VALIDADA'
                  """)
                 .param("empresa", empresaId)
                 .param("carga", cargaId)

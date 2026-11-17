@@ -129,6 +129,18 @@ propias del producto.
   lista corta el optimizador elige a veces otro índice y ordena después; con ella el plan es
   siempre un rango por `PRIMARY` sin ordenar, que comprueba un `EXPLAIN` en
   `BloqueoDeProductosDeCargaConBaseTest`.
+- `ServicioImportacion.rechazar` toma el mismo bloqueo de la cabecera de la carga que
+  `aplicar` (`FOR UPDATE OF c`) y comprueba el estado ya con ella bloqueada, y su
+  `UPDATE` solo cambia una carga VALIDADA: una carga aplicada no puede pasar a rechazada,
+  ni al revés. Quien llega segundo recibe el 409 de estado.
+- `ServicioCompras.recibir` bloquea la orden, sus líneas y después los productos de la
+  entrega, todos juntos y en orden ascendente de `producto_id` (la misma sentencia con
+  `FORCE INDEX (PRIMARY)`), antes de escribir. Antes los saldos se bloqueaban uno a uno en
+  el orden de las líneas y dos entregas con los mismos productos en orden inverso se
+  interbloqueaban (lo reproduce `RecepcionesConcurrentesConBaseTest`). Los demás caminos
+  (ajuste, ingreso manual, edición de un producto) bloquean un solo producto, así que no
+  forman ciclo entre sí; todo camino nuevo que bloquee varios productos debe hacerlo en
+  orden ascendente de `producto_id`.
 - Como red de seguridad, `ManejadorErrores` traduce un interbloqueo (1213) o una espera
   agotada (1205) a 409 con un texto fijo, sin eco de datos.
 
