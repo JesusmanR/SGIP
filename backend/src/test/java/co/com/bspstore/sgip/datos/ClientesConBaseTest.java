@@ -118,7 +118,7 @@ class ClientesConBaseTest {
                 .param("nit", nit()).param("otro", nit() + "-B").query(Integer.class).list();
         // De las hojas a la raíz: lo sembrado cuelga de la empresa.
         for (Integer empresa : empresas) {
-            for (String tabla : List.of("auditoria_plataforma", "clientes", "medios_pago", "empresa_config",
+            for (String tabla : List.of("auditoria_plataforma", "clientes", "medios_pago", "proveedores", "categorias", "empresa_config",
                     "suscripciones", "usuarios", "empresas")) {
                 jdbc.sql("DELETE FROM " + tabla + " WHERE empresa_id = :empresa")
                         .param("empresa", empresa).update();
