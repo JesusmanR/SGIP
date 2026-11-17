@@ -186,7 +186,10 @@ public class ServicioImportacion {
     @Transactional
     public Optional<ResumenCarga> rechazar(Long cargaId) {
         Integer empresa = ContextoEmpresa.empresaActual();
-        Optional<CabeceraCarga> cabecera = importacion.buscarCarga(empresa, cargaId);
+        // El mismo bloqueo de la cabecera que toma aplicar, y el estado se comprueba ya con
+        // ella bloqueada: sin eso, un rechazo que lee «validada» mientras otro aplica
+        // esperaría a que confirme y escribiría «rechazada» sobre una carga ya aplicada.
+        Optional<CabeceraCarga> cabecera = importacion.bloquearCarga(empresa, cargaId);
         if (cabecera.isEmpty()) {
             return Optional.empty();
         }
@@ -197,7 +200,15 @@ public class ServicioImportacion {
                             + "catálogo. Rechazarla ahora no los devolvería: para eso "
                             + "hay que cargar la lista anterior.");
         }
-        importacion.marcarRechazada(empresa, cargaId);
+        if ("RECHAZADA".equals(estado)) {
+            // Ya estaba descartada: rechazar otra vez no cambia nada.
+            return buscar(cargaId);
+        }
+        if (importacion.marcarRechazada(empresa, cargaId) == 0) {
+            // Red de seguridad: con la cabecera bloqueada no debería ocurrir.
+            throw new EstadoDeCargaInvalidoException(
+                    "La carga ya no está validada y no se pudo rechazar.");
+        }
         return buscar(cargaId);
     }
 
