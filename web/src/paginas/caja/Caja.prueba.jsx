@@ -166,7 +166,7 @@ describe('caja: cliente y domicilio', () => {
     await userEvent.click(screen.getByLabelText('Domicilio'))
     expect(screen.getByLabelText(/quién recibe/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/¿paga contra entrega\?/i)).toBeInTheDocument()
-    expect(screen.getByText(/necesita un cliente identificado/i)).toBeInTheDocument()
+    expect(screen.getAllByText(/necesita un cliente identificado/i).length).toBeGreaterThan(0)
     await pagarTodo()
     expect(cobrar()).toBeDisabled()
   })

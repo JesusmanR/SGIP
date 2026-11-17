@@ -8,13 +8,16 @@
  *   empresa de la sesión, y SUPER_ADMIN no pertenece a ninguna; por eso
  *   solo los ven los roles de empresa.
  * - /plataforma/* es de SUPER_ADMIN.
+ * - /caja la usan quienes venden: administrador y vendedor, nunca CLIENTE.
  * - Todo lo demás es de ADMINISTRADOR.
  */
 const ADMIN = ['ADMINISTRADOR']
+const VENDEN = ['ADMINISTRADOR', 'VENDEDOR']
 const DE_EMPRESA = ['ADMINISTRADOR', 'VENDEDOR', 'CLIENTE']
 const PLATAFORMA = ['SUPER_ADMIN']
 
 export const secciones = [
+  { ruta: '/caja', etiqueta: 'Caja', roles: VENDEN, grupo: 'Operación' },
   { ruta: '/panel', etiqueta: 'Panel', roles: ADMIN, grupo: 'Operación' },
   { ruta: '/catalogo', etiqueta: 'Catálogo', roles: DE_EMPRESA, grupo: 'Operación' },
   { ruta: '/importar', etiqueta: 'Importar precios', roles: ADMIN, grupo: 'Operación' },

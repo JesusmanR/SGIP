@@ -9,7 +9,8 @@ import {
 import { PESOS } from '../../servicios/formato.js'
 import { guardarSesion } from '../../servicios/sesion.js'
 
-export const pesos = (n) => PESOS.format(n)
+// Lo que el navegador escribe con espacio duro, las pruebas lo comparan con espacio normal.
+export const pesos = (n) => PESOS.format(n).replaceAll(String.fromCharCode(160), ' ')
 
 export const TORNILLO = {
   id: 30, codigo: 'TOR-6', nombre: 'Tornillo M6', presentacion: 'Caja x100', codigoBarras: '7701234567890',

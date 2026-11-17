@@ -1,0 +1,225 @@
+import { useEffect, useRef, useState } from 'react'
+import Aviso from '../../componentes/comun/Aviso.jsx'
+import { productoPorCodigo, productosPorTexto } from '../../servicios/api/caja.js'
+import '../../estilos/caja.css'
+import Dialogo from './Dialogo.jsx'
+
+const FORMATOS = ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39']
+const CADA_CUANTO_MIRA = 400
+
+/** La cámara se ofrece solo si el navegador sabe leer códigos de barras. */
+function haySoporteDeCamara() {
+  return typeof window !== 'undefined' && 'BarcodeDetector' in window
+    && Boolean(navigator.mediaDevices?.getUserMedia)
+}
+
+/**
+ * La cámara en un diálogo: lee el primer código que vea con el `BarcodeDetector`
+ * del navegador (sin librerías) y lo entrega. Al cerrarse apaga la cámara.
+ */
+function DialogoCamara({ alLeer, alCerrar }) {
+  const video = useRef(null)
+  const [fallo, setFallo] = useState(null)
+  // La lectura vive en un ref: si cambiara con cada pintado, la cámara se reiniciaría.
+  const leer = useRef(alLeer)
+  leer.current = alLeer
+
+  useEffect(() => {
+    let cerrado = false
+    let flujo = null
+    let temporizador = null
+    let mirando = false
+
+    async function arrancar() {
+      try {
+        const detector = new window.BarcodeDetector({ formats: FORMATOS })
+        flujo = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+        if (cerrado) {
+          flujo.getTracks().forEach((t) => t.stop())
+          return
+        }
+        if (video.current) video.current.srcObject = flujo
+        temporizador = setInterval(async () => {
+          if (mirando || cerrado) return
+          mirando = true
+          try {
+            const codigos = await detector.detect(video.current)
+            const leido = codigos?.[0]?.rawValue
+            if (leido && !cerrado) {
+              cerrado = true
+              clearInterval(temporizador)
+              leer.current(leido)
+            }
+          } catch {
+            // Un cuadro que no se pudo leer no es un fallo: se mira el siguiente.
+          } finally {
+            mirando = false
+          }
+        }, CADA_CUANTO_MIRA)
+      } catch {
+        if (!cerrado) setFallo('No pudimos abrir la cámara. Revisa el permiso del navegador o escribe el código.')
+      }
+    }
+    arrancar()
+    return () => {
+      cerrado = true
+      clearInterval(temporizador)
+      flujo?.getTracks().forEach((t) => t.stop())
+    }
+  }, [])
+
+  return (
+    <Dialogo titulo="Escanear con la cámara" alCerrar={alCerrar}>
+      {fallo
+        ? <p role="alert" className="caja-error-texto">{fallo}</p>
+        : <p className="nota">Apunta al código de barras. Se lee solo.</p>}
+      <video ref={video} className="caja-video" autoPlay playsInline muted aria-hidden="true" />
+      <div className="caja-acciones">
+        <button type="button" className="boton secundario" onClick={alCerrar}>Cerrar</button>
+      </div>
+    </Dialogo>
+  )
+}
+
+/**
+ * El campo de la caja: un lector de código de barras es un teclado que escribe
+ * el código y pulsa Enter, así que Enter busca por código. Si no existe, se
+ * ofrece buscar por nombre o, con un administrador, crear el producto.
+ */
+export default function BuscadorProducto({ alAgregar, alCrearProducto, entradaRef }) {
+  const propia = useRef(null)
+  const campo = entradaRef ?? propia
+  const [texto, setTexto] = useState('')
+  const [buscando, setBuscando] = useState(false)
+  const [noEncontrado, setNoEncontrado] = useState(null)
+  const [resultados, setResultados] = useState(null)
+  const [aviso, setAviso] = useState(null)
+  const [fallo, setFallo] = useState(null)
+  const [camara, setCamara] = useState(false)
+  const camaraUsada = useRef(false)
+
+  // Al cerrar la cámara el foco vuelve al buscador, como con cualquier diálogo.
+  useEffect(() => {
+    if (camara) camaraUsada.current = true
+    else if (camaraUsada.current) campo.current?.focus()
+  }, [camara, campo])
+
+  function limpiar() {
+    setTexto('')
+    setNoEncontrado(null)
+    setResultados(null)
+    campo.current?.focus()
+  }
+
+  function agregar(producto) {
+    alAgregar(producto)
+    limpiar()
+  }
+
+  async function buscarCodigo(codigo) {
+    const limpio = codigo.trim()
+    if (!limpio || buscando) return
+    setBuscando(true)
+    setAviso(null)
+    setFallo(null)
+    setResultados(null)
+    setNoEncontrado(null)
+    try {
+      const producto = await productoPorCodigo(limpio)
+      if (!producto) {
+        setTexto(limpio)
+        setNoEncontrado(limpio)
+      } else if (!producto.vendible) {
+        setAviso(producto.motivoNoVendible || 'Este producto no se puede vender.')
+        setTexto('')
+        campo.current?.focus()
+      } else {
+        agregar(producto)
+      }
+    } catch (error) {
+      setFallo(error.message || 'No se pudo buscar. Inténtalo otra vez.')
+    } finally {
+      setBuscando(false)
+    }
+  }
+
+  async function buscarPorNombre() {
+    setFallo(null)
+    try {
+      setResultados(await productosPorTexto(noEncontrado))
+    } catch (error) {
+      setFallo(error.message || 'No se pudo buscar. Inténtalo otra vez.')
+    }
+  }
+
+  function enviar(evento) {
+    evento.preventDefault()
+    buscarCodigo(texto)
+  }
+
+  return (
+    <section className="caja-buscador" aria-label="Búsqueda de productos">
+      <form onSubmit={enviar} className="caja-buscador-fila">
+        <div className="campo">
+          <label htmlFor="caja-buscar"><span>Buscar producto o escanear código</span></label>
+          <input
+            id="caja-buscar" ref={campo} type="text" inputMode="search" autoComplete="off"
+            enterKeyHint="search" value={texto} onChange={(e) => setTexto(e.target.value)}
+          />
+        </div>
+        <button type="submit" className="boton" disabled={buscando}>Buscar</button>
+        {haySoporteDeCamara() && (
+          <button type="button" className="boton secundario" onClick={() => setCamara(true)}>
+            Escanear con la cámara
+          </button>
+        )}
+      </form>
+
+      {aviso && <Aviso tipo="aviso">{aviso}</Aviso>}
+      {fallo && <Aviso tipo="peligro">{fallo}</Aviso>}
+
+      {noEncontrado && (
+        <div className="caja-no-encontrado">
+          <Aviso tipo="aviso">No encontramos ese código.</Aviso>
+          <div className="caja-acciones">
+            <button type="button" className="boton secundario" onClick={buscarPorNombre}>Buscar por nombre</button>
+            <button type="button" className="boton secundario" onClick={() => alCrearProducto(noEncontrado)}>
+              Crear producto (requiere administrador)
+            </button>
+          </div>
+        </div>
+      )}
+
+      {resultados && (
+        resultados.length === 0
+          ? <p className="nota">No hay productos con ese nombre.</p>
+          : (
+            <ul className="caja-resultados" aria-label="Resultados de la búsqueda">
+              {resultados.map((p) => (
+                <li key={p.id}>
+                  <span>
+                    <strong>{p.nombre}</strong>
+                    <span className="sub-linea">{p.codigo}{p.presentacion ? ` · ${p.presentacion}` : ''} · {p.existencia} en existencia</span>
+                    {!p.vendible && <span className="sub-linea">{p.motivoNoVendible}</span>}
+                  </span>
+                  <button
+                    type="button" className="boton secundario" disabled={!p.vendible}
+                    aria-label={`Agregar ${p.nombre}`} onClick={() => agregar(p)}
+                  >
+                    Agregar
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )
+      )}
+
+      {camara && (
+        <DialogoCamara
+          alCerrar={() => setCamara(false)}
+          alLeer={(codigo) => { setCamara(false); buscarCodigo(codigo) }}
+        />
+      )}
+    </section>
+  )
+}

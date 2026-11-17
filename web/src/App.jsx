@@ -13,6 +13,7 @@ import { borrarSesion, debeCambiarClave, haySesion, inicioSegunRol, leerSesion }
 
 // Las secciones de la etapa 1 se cargan bajo demanda. Cada una es dueña de
 // su carpeta y de sus subrutas: aquí solo se registra una vez.
+const Caja = lazy(() => import('./paginas/caja/Caja.jsx'))
 const Usuarios = lazy(() => import('./paginas/usuarios/index.jsx'))
 const Proveedores = lazy(() => import('./paginas/proveedores/index.jsx'))
 const Compras = lazy(() => import('./paginas/compras/index.jsx'))
@@ -24,6 +25,7 @@ const PlataformaTributario = lazy(() => import('./paginas/plataforma-tributario/
 
 /** Qué página atiende cada ruta de la tabla de secciones. */
 const paginas = {
+  '/caja': Caja,
   '/panel': Panel,
   '/catalogo': Catalogo,
   '/importar': Importacion,
