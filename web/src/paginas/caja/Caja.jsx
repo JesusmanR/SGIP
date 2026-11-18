@@ -2,14 +2,14 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import Aviso from '../../componentes/comun/Aviso.jsx'
 import AvisoConexion from '../../componentes/comun/AvisoConexion.jsx'
 import Campo from '../../componentes/comun/Campo.jsx'
+import Confirmacion from '../../componentes/comun/Confirmacion.jsx'
 import EncabezadoPagina from '../../componentes/comun/EncabezadoPagina.jsx'
 import EstadoCarga from '../../componentes/comun/EstadoCarga.jsx'
 import EstadoError from '../../componentes/comun/EstadoError.jsx'
 import EstadoSinPermiso from '../../componentes/comun/EstadoSinPermiso.jsx'
 import { useDatos } from '../../hooks/useDatos.js'
-import { ErrorApi } from '../../servicios/api.js'
 import {
-  abrirTurno, datosDeLaEmpresa, mediosDePago, registrarVenta, saldoDeCliente, turnoActual,
+  abrirTurno, datosDeLaEmpresa, mediosDePago, saldoDeCliente, turnoActual,
 } from '../../servicios/api/caja.js'
 import { PESOS } from '../../servicios/formato.js'
 import { esAdministrador, leerSesion } from '../../servicios/sesion.js'
@@ -22,14 +22,14 @@ import DatosCliente from './DatosCliente.jsx'
 import DialogoPin from './DialogoPin.jsx'
 import ProductoNuevo from './ProductoNuevo.jsx'
 import ReciboImprimible from './ReciboImprimible.jsx'
+import useVentaEnCurso, { MENSAJE_AMBIGUO } from './useVentaEnCurso.js'
 import {
   agregarProducto, armarRecibo, armarSolicitud, bloqueoDeVenta, descuentoDe, lineaDeProductoNuevo,
-  lineasParaVista, motivosDeAutorizacion, nuevaClaveDeVenta,
+  lineasParaVista, motivosDeAutorizacion, puedeCobrar,
 } from './venta.js'
 
 const SIN_DESCUENTO = { tipo: 'PORCENTAJE', valor: '' }
 const BASE = /^\d{1,12}$/
-const MENSAJE_SIN_RED = 'Sin conexión con el servidor. No se cobró nada; puedes reintentar el cobro.'
 
 /** Sin turno abierto no se vende: el cajero cuenta lo que hay en el cajón y lo abre. */
 function AbrirTurno({ alAbrir }) {
@@ -91,6 +91,8 @@ function Venta({ turno }) {
   const enLinea = useEnLinea()
   const empresa = useDatos(() => datosDeLaEmpresa())
   const medios = useDatos(() => mediosDePago())
+  // La clave de idempotencia, el cuerpo enviado y el resultado ambiguo viven en el hook.
+  const envio = useVentaEnCurso()
 
   const [lineas, setLineas] = useState([])
   const [cliente, setCliente] = useState(null)
@@ -99,24 +101,26 @@ function Venta({ turno }) {
   const [motivoEncargo, setMotivoEncargo] = useState('')
   const [pagos, setPagos] = useState([])
   const [saldo, setSaldo] = useState(0)
-  // Una clave por venta en curso: se repite en cada reintento y solo cambia cuando el
-  // servidor confirma la venta o el cajero vacía el carrito.
-  const [clave, setClave] = useState(nuevaClaveDeVenta)
   const [dialogo, setDialogo] = useState(null) // 'producto' | 'pin' | null
   const [codigoNuevo, setCodigoNuevo] = useState('')
-  const [enviando, setEnviando] = useState(false)
-  const [sinRed, setSinRed] = useState(false)
-  const [error, setError] = useState(null)
+  const [mensaje, setMensaje] = useState(null)
+  const [abandonando, setAbandonando] = useState(false)
   const [recibo, setRecibo] = useState(null)
   const [impreso, setImpreso] = useState(false)
+  // Cada venta nueva estrena el formulario del cliente: no queda nada del anterior.
+  const [epoca, setEpoca] = useState(0)
   const buscador = useRef(null)
+  const tituloRecibo = useRef(null)
 
   // El foco vuelve al buscador al cargar, al cerrar un diálogo y al empezar otra venta.
   useEffect(() => {
     if (!dialogo && !recibo) buscador.current?.focus()
   }, [dialogo, recibo])
 
-  useEffect(() => { if (enLinea) setSinRed(false) }, [enLinea])
+  // Tras registrar, el foco va al encabezado del recibo: así se anuncia «Venta registrada».
+  useEffect(() => {
+    if (recibo) tituloRecibo.current?.focus()
+  }, [recibo])
 
   useEffect(() => {
     if (!cliente) {
@@ -137,6 +141,10 @@ function Venta({ turno }) {
   const bloqueo = bloqueoDeVenta({ lineas, vista, cliente, domicilio, motivoEncargo })
   const motivos = motivosDeAutorizacion(lineas, descuentoTotal)
   const necesitaPin = motivos.length > 0 && !esAdministrador(sesion)
+  const contraEntrega = Boolean(domicilio?.contraEntrega)
+  // Con un resultado ambiguo o una clave en uso no se edita nada: solo se reintenta o se abandona.
+  const congelado = envio.estado !== 'libre'
+  const sinConexion = !enLinea
 
   function cambiarLinea(claveLinea, cambios) {
     setLineas((actuales) => actuales.map((l) => (l.clave === claveLinea ? { ...l, ...cambios } : l)))
@@ -158,9 +166,17 @@ function Venta({ turno }) {
     setDescuentoTotal(SIN_DESCUENTO)
     setMotivoEncargo('')
     setPagos([])
-    setError(null)
-    setSinRed(false)
-    setClave(nuevaClaveDeVenta())
+    setMensaje(null)
+    setAbandonando(false)
+    setDialogo(null)
+    setEpoca((n) => n + 1)
+    envio.abandonar()
+  }
+
+  function cambiarCliente(nuevo) {
+    setCliente(nuevo)
+    // El saldo a favor es de un cliente: con otro, esos pagos ya no valen.
+    setPagos((actuales) => actuales.filter((p) => p.tipo !== 'SALDO_A_FAVOR'))
   }
 
   function agregarDelCatalogo(producto) {
@@ -177,47 +193,43 @@ function Venta({ turno }) {
 
   /** Envía la venta. Devuelve el texto del error, o null si quedó registrada. */
   async function enviar(autorizacion) {
-    setEnviando(true)
-    setError(null)
-    setSinRed(false)
-    try {
-      const venta = await registrarVenta(armarSolicitud({
-        claveIdempotencia: clave, cliente, lineas, descuentoTotal, pagos, motivoEncargo, autorizacion, domicilio,
-      }))
+    setMensaje(null)
+    const resultado = await envio.enviar((clave) => armarSolicitud({
+      claveIdempotencia: clave, cliente, lineas, descuentoTotal, pagos, motivoEncargo, domicilio,
+    }), autorizacion)
+    if (resultado.venta) {
       setRecibo(armarRecibo({
-        empresa: empresa.datos ?? { razonSocial: '' }, venta, lineas, pagos, cliente,
+        empresa: empresa.datos ?? { razonSocial: '' }, venta: resultado.venta, lineas, pagos, cliente,
         cajero: sesion?.nombre ?? turno.cajero, domicilio,
       }))
       setDialogo(null)
-      vaciar()
+      setLineas([])
+      setCliente(null)
+      setDomicilio(null)
+      setDescuentoTotal(SIN_DESCUENTO)
+      setMotivoEncargo('')
+      setPagos([])
+      setAbandonando(false)
+      setEpoca((n) => n + 1)
       return null
-    } catch (fallo) {
-      if (fallo instanceof ErrorApi) {
-        const mensaje = fallo.estado === 409
-          ? `${fallo.message} Si esta venta ya se había registrado, no se cobró otra vez.`
-          : fallo.message
-        setError(mensaje)
-        return mensaje
-      }
-      setSinRed(true)
-      return MENSAJE_SIN_RED
-    } finally {
-      setEnviando(false)
     }
+    if (resultado.error) setMensaje(resultado.error)
+    return resultado.error ?? null
   }
 
   function iniciarCobro() {
     if (necesitaPin) setDialogo('pin')
-    else enviar(null)
+    else enviar(undefined)
   }
 
-  const sinConexion = !enLinea || sinRed
+  // «Reintentar» respeta lo mismo que «Cobrar»: bloqueos, pagos que cuadran y conexión.
+  const puedeReintentar = puedeCobrar({ bloqueo, vista, pagos, contraEntrega, sinConexion, enviando: envio.enviando })
 
   if (recibo) {
     return (
       <div className="caja-recibo-pantalla">
         <div className="caja-recibo-acciones">
-          <h2>Venta registrada</h2>
+          <h2 ref={tituloRecibo} tabIndex={-1}>Venta registrada</h2>
           <div className="caja-acciones">
             <button type="button" className="boton" onClick={() => window.print()}>Imprimir</button>
             <button type="button" className="boton secundario" onClick={() => { setImpreso(true); window.print() }}>
@@ -238,38 +250,62 @@ function Venta({ turno }) {
     <>
       <div className="caja-rejilla">
         <div className="caja-area-buscador">
-          <BuscadorProducto
-            entradaRef={buscador} alAgregar={agregarDelCatalogo}
-            alCrearProducto={(codigo) => { setCodigoNuevo(codigo); setDialogo('producto') }}
-          />
+          <fieldset className="caja-congelable" disabled={congelado}>
+            <BuscadorProducto
+              entradaRef={buscador} alAgregar={agregarDelCatalogo}
+              alCrearProducto={(codigo) => { setCodigoNuevo(codigo); setDialogo('producto') }}
+            />
+          </fieldset>
         </div>
 
         <div className="caja-area-carrito">
-          <Carrito
-            lineas={lineas} vista={vista} alCambiar={cambiarLinea} alQuitar={quitarLinea}
-            descuentoTotal={descuentoTotal}
-            alCambiarDescuentoTotal={(d) => { setDescuentoTotal(d); setPagos([]) }}
-            motivoEncargo={motivoEncargo} alCambiarMotivo={setMotivoEncargo}
-          />
-          <DatosCliente
-            cliente={cliente} alCambiarCliente={setCliente} domicilio={domicilio} alCambiarDomicilio={setDomicilio}
-          />
+          <fieldset className="caja-congelable" disabled={congelado}>
+            <Carrito
+              lineas={lineas} vista={vista} alCambiar={cambiarLinea} alQuitar={quitarLinea}
+              descuentoTotal={descuentoTotal}
+              alCambiarDescuentoTotal={(d) => { setDescuentoTotal(d); setPagos([]) }}
+              motivoEncargo={motivoEncargo} alCambiarMotivo={setMotivoEncargo}
+            />
+            <DatosCliente
+              key={epoca} cliente={cliente} alCambiarCliente={cambiarCliente}
+              domicilio={domicilio} alCambiarDomicilio={setDomicilio}
+            />
+          </fieldset>
         </div>
 
         <div className="caja-area-cobro">
-          {sinRed && (
+          {envio.estado === 'ambiguo' && (
             <Aviso tipo="aviso">
-              Sin conexión con el servidor. No se cobró nada.{' '}
-              <button type="button" className="enlace" disabled={enviando} onClick={iniciarCobro}>
-                Reintentar el cobro
-              </button>
+              {MENSAJE_AMBIGUO}
+              <span className="caja-acciones">
+                <button type="button" className="boton" disabled={!puedeReintentar} onClick={iniciarCobro}>
+                  Reintentar el cobro
+                </button>
+                <button type="button" className="boton secundario" disabled={envio.enviando} onClick={() => setAbandonando(true)}>
+                  Abandonar esta venta
+                </button>
+              </span>
             </Aviso>
           )}
-          {error && !dialogo && <Aviso tipo="peligro">{error}</Aviso>}
+          {envio.estado === 'ambiguo' && abandonando && (
+            <Confirmacion
+              pregunta="¿Abandonar esta venta sin saber si se registró?"
+              detalle="Si el cobro sí se registró, el cliente podría quedar cobrado y la venta tendría que revisarse en las ventas del turno. Si no estás segura, reintenta."
+              textoConfirmar="Sí, abandonar" textoCancelar="Seguir reintentando"
+              alConfirmar={vaciar} alCancelar={() => setAbandonando(false)}
+            />
+          )}
+          {envio.estado === 'claveEnUso' && (
+            <>
+              <Aviso tipo="peligro">{mensaje}</Aviso>
+              <button type="button" className="boton" onClick={vaciar}>Empezar otra venta</button>
+            </>
+          )}
+          {envio.estado === 'libre' && mensaje && !dialogo && <Aviso tipo="peligro">{mensaje}</Aviso>}
           <Cobro
             vista={vista} medios={medios.datos ?? []} saldo={saldo} pagos={pagos} alCambiarPagos={setPagos}
-            bloqueo={bloqueo} contraEntrega={Boolean(domicilio?.contraEntrega)} sinConexion={sinConexion}
-            enviando={enviando} alCobrar={iniciarCobro}
+            bloqueo={bloqueo} contraEntrega={contraEntrega} sinConexion={sinConexion}
+            enviando={envio.enviando} congelado={congelado} alCobrar={iniciarCobro}
           />
         </div>
       </div>

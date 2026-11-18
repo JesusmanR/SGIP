@@ -131,4 +131,4 @@ export function entrar(rol) {
   guardarSesion({ token: 't', nombre: 'Marta Ruiz', rol })
 }
 
-export const errorApi = (estado, detalle) => new ErrorApi(estado, detalle)
+export const errorApi = (estado, detalle, tipo) => new ErrorApi(estado, detalle, tipo)

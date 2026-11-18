@@ -51,6 +51,7 @@ export function descuentoDe(descuento) {
 export function lineasParaVista(lineas) {
   return lineas.map((l) => ({
     clave: l.clave,
+    productoId: l.producto?.id ?? null,
     precio: precioDe(l),
     tarifaIva: tarifaDe(l),
     cantidad: Number.isNaN(cantidadDe(l)) ? 0 : cantidadDe(l),
@@ -133,6 +134,16 @@ export function bloqueoDeVenta({ lineas, vista, cliente, domicilio, motivoEncarg
   return null
 }
 
+/**
+ * Si «Cobrar» (o «Reintentar») puede enviarse: nada lo bloquea, hay conexión, no se está enviando y
+ * lo pagado es igual al total (en contra entrega no hay pagos). Una sola regla para los dos botones.
+ */
+export function puedeCobrar({ bloqueo, vista, pagos, contraEntrega, sinConexion, enviando }) {
+  if (sinConexion || enviando || bloqueo) return false
+  if (contraEntrega) return vista.total > 0
+  return vista.total > 0 && pagos.reduce((a, p) => a + p.monto, 0) === vista.total
+}
+
 /** Un pago como lo espera el servidor: solo los datos que su medio usa. */
 function pagoParaApi(p) {
   const pago = { medioId: p.medioId, monto: p.monto }
@@ -184,6 +195,11 @@ const dos = (n) => String(n).padStart(2, '0')
 /** El recibo con los importes que devolvió el servidor; de la pantalla solo salen los nombres. */
 export function armarRecibo({ empresa, venta, lineas, pagos, cliente, cajero, domicilio, ahora = new Date() }) {
   const delServidor = venta.lineas ?? []
+  // El servidor devuelve las líneas ordenadas por producto, no como se escanearon: cada una de
+  // catálogo se busca por su productoId, y los productos nuevos toman las que quedan, en orden.
+  const porId = new Map(delServidor.map((s) => [s.productoId, s]))
+  const deProductosNuevos = delServidor.filter((s) => !lineas.some((l) => l.producto?.id === s.productoId))
+  let siguienteNuevo = 0
   const suma = (campo) => delServidor.reduce((a, l) => a + Number(l[campo]), 0)
   return {
     empresa,
@@ -191,8 +207,8 @@ export function armarRecibo({ empresa, venta, lineas, pagos, cliente, cajero, do
     fecha: `${hoyISO(ahora)}T${dos(ahora.getHours())}:${dos(ahora.getMinutes())}`,
     cajero,
     cliente: cliente ? { nombre: cliente.nombre, identificacion: cliente.identificacion } : null,
-    lineas: lineas.map((l, i) => {
-      const s = delServidor[i] ?? {}
+    lineas: lineas.map((l) => {
+      const s = (l.producto ? porId.get(l.producto.id) : deProductosNuevos[siguienteNuevo++]) ?? {}
       return {
         nombre: nombreDe(l),
         cantidad: s.cantidad ?? cantidadDe(l),

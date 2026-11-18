@@ -9,7 +9,10 @@
  * - un porcentaje se redondea a pesos con HALF_UP;
  * - el descuento de toda la compra se reparte por la base de cada línea y el
  *   residuo va a la de mayor base (a igual base, la primera);
- * - el IVA de cada línea es base × tarifa, a pesos con HALF_UP.
+ * - el IVA de cada línea es base × tarifa, a pesos con HALF_UP;
+ * - el servidor fusiona y ordena las líneas por productoId, y los productos nuevos (que nacen al
+ *   cobrar, con ids mayores) van después en el orden en que se agregaron. El reparto del residuo
+ *   desempata por menor productoId, así que aquí se ordena igual: el orden de escaneo no cuenta.
  *
  * Todo se hace con enteros (BigInt) para que 1 005 × 10 % no dependa del
  * punto flotante. Las tarifas y los porcentajes se llevan a 4 decimales.
@@ -30,12 +33,14 @@ const MOTIVOS = {
   mayor: 'El descuento no puede ser mayor que el valor al que se aplica.',
   porcentaje: 'Un descuento en porcentaje no puede pasar de 100.',
   centavos: 'Un descuento en pesos debe ser un monto entero.',
+  decimales: 'El descuento admite hasta 2 decimales.',
 }
 
 /** Cuántos pesos descuenta `descuento` de `valor`; o `{ motivo }` si no vale. */
 function importeDelDescuento(descuento, valor) {
   if (!descuento || !(Number(descuento.valor) > 0)) return { importe: 0n }
   const pedido = escalado(descuento.valor)
+  if (pedido % 100n !== 0n) return { motivo: MOTIVOS.decimales }
   let importe
   if (descuento.tipo === 'PORCENTAJE') {
     if (pedido > 100n * ESCALA) return { motivo: MOTIVOS.porcentaje }
@@ -76,8 +81,17 @@ const CERO = {
  * `tipo` `PORCENTAJE` o `PESOS`. Devuelve los importes en pesos (números enteros) y `motivo`, que
  * es null salvo que un descuento no valga: entonces los importes no se deben mostrar.
  */
-export function calcularVistaPrevia(lineas, descuentoTotal = null) {
-  if (lineas.length === 0) return { ...CERO }
+/** Catálogo por productoId ascendente y, después, los productos nuevos (sin id) en su orden; estable. */
+function comoLasOrdenaElServidor(lineas) {
+  return [...lineas].sort((a, b) => {
+    if (a.productoId == null || b.productoId == null) return (a.productoId == null) - (b.productoId == null)
+    return a.productoId - b.productoId
+  })
+}
+
+export function calcularVistaPrevia(lineasEscaneadas, descuentoTotal = null) {
+  if (lineasEscaneadas.length === 0) return { ...CERO }
+  const lineas = comoLasOrdenaElServidor(lineasEscaneadas)
   let motivo = null
   const subtotales = []
   const propios = []

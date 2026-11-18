@@ -46,3 +46,9 @@ export const administradores = () => pedir('/caja/administradores')
 export const datosDeLaEmpresa = () => pedir('/empresa')
 
 export const registrarVenta = (solicitud) => pedir('/caja/ventas', { method: 'POST', body: solicitud })
+
+/**
+ * El `type` del ProblemDetail del 409 que responde el servidor cuando la clave de idempotencia
+ * ya se usó con otra carga. Supuesto de contrato: hoy no existe; el backend lo añadirá al integrar.
+ */
+export const CLAVE_EN_USO = 'urn:sgip:caja:clave-en-uso'

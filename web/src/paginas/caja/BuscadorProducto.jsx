@@ -90,13 +90,16 @@ export default function BuscadorProducto({ alAgregar, alCrearProducto, entradaRe
   const propia = useRef(null)
   const campo = entradaRef ?? propia
   const [texto, setTexto] = useState('')
-  const [buscando, setBuscando] = useState(false)
+  const [pendientes, setPendientes] = useState(0)
   const [noEncontrado, setNoEncontrado] = useState(null)
   const [resultados, setResultados] = useState(null)
   const [aviso, setAviso] = useState(null)
   const [fallo, setFallo] = useState(null)
   const [camara, setCamara] = useState(false)
   const camaraUsada = useRef(false)
+  // Los códigos se procesan de uno en uno y en el orden en que se leyeron: un lector puede
+  // mandar el segundo antes de que el servidor responda el primero, y ninguno se pierde.
+  const cola = useRef(Promise.resolve())
 
   // Al cerrar la cámara el foco vuelve al buscador, como con cualquier diálogo.
   useEffect(() => {
@@ -104,43 +107,41 @@ export default function BuscadorProducto({ alAgregar, alCrearProducto, entradaRe
     else if (camaraUsada.current) campo.current?.focus()
   }, [camara, campo])
 
-  function limpiar() {
-    setTexto('')
+  function agregar(producto) {
+    alAgregar(producto)
     setNoEncontrado(null)
     setResultados(null)
     campo.current?.focus()
   }
 
-  function agregar(producto) {
-    alAgregar(producto)
-    limpiar()
-  }
-
-  async function buscarCodigo(codigo) {
-    const limpio = codigo.trim()
-    if (!limpio || buscando) return
-    setBuscando(true)
+  async function procesar(codigo) {
     setAviso(null)
     setFallo(null)
     setResultados(null)
     setNoEncontrado(null)
     try {
-      const producto = await productoPorCodigo(limpio)
+      const producto = await productoPorCodigo(codigo)
       if (!producto) {
-        setTexto(limpio)
-        setNoEncontrado(limpio)
+        setNoEncontrado(codigo)
       } else if (!producto.vendible) {
         setAviso(producto.motivoNoVendible || 'Este producto no se puede vender.')
-        setTexto('')
         campo.current?.focus()
       } else {
         agregar(producto)
       }
     } catch (error) {
       setFallo(error.message || 'No se pudo buscar. Inténtalo otra vez.')
-    } finally {
-      setBuscando(false)
     }
+  }
+
+  /** Lee el código y deja el campo vacío al instante; la búsqueda se hace en la cola. */
+  function encolar(codigo) {
+    const limpio = codigo.trim()
+    if (!limpio) return
+    setPendientes((n) => n + 1)
+    cola.current = cola.current
+      .then(() => procesar(limpio))
+      .finally(() => setPendientes((n) => n - 1))
   }
 
   async function buscarPorNombre() {
@@ -154,11 +155,13 @@ export default function BuscadorProducto({ alAgregar, alCrearProducto, entradaRe
 
   function enviar(evento) {
     evento.preventDefault()
-    buscarCodigo(texto)
+    const codigo = texto
+    setTexto('')
+    encolar(codigo)
   }
 
   return (
-    <section className="caja-buscador" aria-label="Búsqueda de productos">
+    <section className="caja-buscador" aria-label="Búsqueda de productos" aria-busy={pendientes > 0}>
       <form onSubmit={enviar} className="caja-buscador-fila">
         <div className="campo">
           <label htmlFor="caja-buscar"><span>Buscar producto o escanear código</span></label>
@@ -167,7 +170,7 @@ export default function BuscadorProducto({ alAgregar, alCrearProducto, entradaRe
             enterKeyHint="search" value={texto} onChange={(e) => setTexto(e.target.value)}
           />
         </div>
-        <button type="submit" className="boton" disabled={buscando}>Buscar</button>
+        <button type="submit" className="boton">Buscar</button>
         {haySoporteDeCamara() && (
           <button type="button" className="boton secundario" onClick={() => setCamara(true)}>
             Escanear con la cámara
@@ -217,7 +220,7 @@ export default function BuscadorProducto({ alAgregar, alCrearProducto, entradaRe
       {camara && (
         <DialogoCamara
           alCerrar={() => setCamara(false)}
-          alLeer={(codigo) => { setCamara(false); buscarCodigo(codigo) }}
+          alLeer={(codigo) => { setCamara(false); encolar(codigo) }}
         />
       )}
     </section>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Aviso from '../../componentes/comun/Aviso.jsx'
 import Campo from '../../componentes/comun/Campo.jsx'
 import { administradores } from '../../servicios/api/caja.js'
@@ -20,6 +20,7 @@ export default function DialogoPin({ motivos, alConfirmar, alCerrar }) {
   const [pin, setPin] = useState('')
   const [error, setError] = useState(null)
   const [enviando, setEnviando] = useState(false)
+  const campoPin = useRef(null)
 
   useEffect(() => {
     let vigente = true
@@ -32,6 +33,11 @@ export default function DialogoPin({ motivos, alConfirmar, alCerrar }) {
       .catch((e) => { if (vigente) setFallo(e.message || 'No se pudo traer la lista de administradores.') })
     return () => { vigente = false }
   }, [])
+
+  // Con un solo administrador ya elegido, lo que falta es el PIN: el foco va ahí.
+  useEffect(() => {
+    if (lista?.length === 1) campoPin.current?.focus()
+  }, [lista])
 
   const puede = administradorId !== '' && pin.length >= 4 && !enviando
 
@@ -65,7 +71,7 @@ export default function DialogoPin({ motivos, alConfirmar, alCerrar }) {
         </Campo>
         <Campo etiqueta="PIN" ayuda="De 4 a 6 números.">
           <input
-            type="password" inputMode="numeric" autoComplete="off" maxLength={6} value={pin}
+            type="password" inputMode="numeric" autoComplete="off" maxLength={6} value={pin} ref={campoPin}
             onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
           />
         </Campo>

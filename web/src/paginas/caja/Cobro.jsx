@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import Campo from '../../componentes/comun/Campo.jsx'
 import { PESOS } from '../../servicios/formato.js'
 import '../../estilos/caja.css'
+import { puedeCobrar } from './venta.js'
 
 const ENTERO = /^\d{1,12}$/
 let consecutivo = 0
@@ -16,7 +17,7 @@ const sumar = (pagos, filtro = () => true) => pagos.filter(filtro).reduce((a, p)
  * hay pagos: se registra para cobrar al entregar). Sin conexión no se cobra nada.
  */
 export default function Cobro({
-  vista, medios, saldo, pagos, alCambiarPagos, bloqueo, contraEntrega, sinConexion, enviando, alCobrar,
+  vista, medios, saldo, pagos, alCambiarPagos, bloqueo, contraEntrega, sinConexion, enviando, congelado = false, alCobrar,
 }) {
   const saldoUsado = sumar(pagos, (p) => p.tipo === 'SALDO_A_FAVOR')
   const saldoDisponible = Math.max(0, saldo - saldoUsado)
@@ -66,8 +67,9 @@ export default function Cobro({
     setReferencia('')
   }
 
-  const cuadra = pagado === total && total > 0
-  const puedeCobrar = !sinConexion && !enviando && !bloqueo && (contraEntrega ? total > 0 : cuadra)
+  // Con la venta congelada (resultado ambiguo) solo se reintenta: «Cobrar» queda quieto.
+  const habilitado = puedeCobrar({ bloqueo, vista, pagos, contraEntrega, sinConexion, enviando: enviando || congelado })
+  const mensaje = bloqueo ?? (sinConexion ? 'Sin conexión: no se puede cobrar.' : '')
   const textoBoton = contraEntrega ? 'Registrar para cobrar en la entrega' : enviando ? 'Cobrando…' : 'Cobrar'
 
   return (
@@ -77,9 +79,9 @@ export default function Cobro({
           <p className="caja-total-rotulo">Total a cobrar</p>
           <p className="caja-total-valor cifra" data-testid="total-a-cobrar">{PESOS.format(total)}</p>
         </div>
-        <button type="button" className="boton caja-cobrar" disabled={!puedeCobrar} onClick={alCobrar}>{textoBoton}</button>
-        {bloqueo && <p className="caja-total-mensaje" role="status">{bloqueo}</p>}
-        {sinConexion && !bloqueo && <p className="caja-total-mensaje" role="status">Sin conexión: no se puede cobrar.</p>}
+        <button type="button" className="boton caja-cobrar" disabled={!habilitado} onClick={alCobrar}>{textoBoton}</button>
+        {/* La región existe siempre, vacía si no hay nada que decir: así el lector anuncia el cambio. */}
+        <p className="caja-total-mensaje" role="status">{mensaje}</p>
       </div>
 
       <dl className="caja-desglose">
@@ -91,7 +93,7 @@ export default function Cobro({
       {contraEntrega ? (
         <p className="nota">El cliente pagará al recibir el pedido. La mercancía sale de la tienda al registrarlo.</p>
       ) : (
-        <>
+        <fieldset className="caja-congelable" disabled={congelado}>
           <form
             className="caja-pago" aria-label="Agregar pago" noValidate
             onSubmit={(e) => { e.preventDefault(); agregar() }}
@@ -144,16 +146,18 @@ export default function Cobro({
           )}
 
           {total > 0 && (
-            <p className="caja-falta-pagar" role="status">
+            <p className="caja-falta-pagar">
               Falta por pagar<strong className="cifra">{PESOS.format(pendiente)}</strong>
             </p>
           )}
-          {cambio > 0 && (
-            <p className="caja-cambio" role="status">
-              Cambio<strong className="cifra">{PESOS.format(cambio)}</strong>
-            </p>
-          )}
-        </>
+          <div role="status">
+            {cambio > 0 && (
+              <p className="caja-cambio">
+                Cambio<strong className="cifra">{PESOS.format(cambio)}</strong>
+              </p>
+            )}
+          </div>
+        </fieldset>
       )}
     </section>
   )

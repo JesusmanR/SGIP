@@ -193,3 +193,8 @@
     border: 0; border-radius: 0; padding: 0;
   }
 }
+
+/* ── Venta congelada (resultado ambiguo): un fieldset deshabilitado apaga todo lo de dentro ── */
+.caja-congelable { border: 0; margin: 0; padding: 0; min-width: 0; }
+.caja-congelable:disabled { opacity: .7; }
+.caja-area-cobro .aviso-estado .caja-acciones { display: flex; }

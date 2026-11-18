@@ -13,10 +13,11 @@ export class ErrorApi extends Error {
    * (un 409 puede ser un código repetido o un producto que cambió), y el estado
    * solo no dice cuál: quien necesite distinguirlas mira el tipo.
    */
-  constructor(estado, detalle, tipo) {
+  constructor(estado, detalle, tipo, titulo) {
     super(detalle)
     this.estado = estado
     this.tipo = tipo
+    this.titulo = titulo
   }
 }
 
@@ -110,14 +111,16 @@ export async function pedir(ruta, opciones = {}) {
     // El backend responde con ProblemDetail, que trae «detail».
     let detalle = 'No se pudo completar la operación.'
     let tipo
+    let titulo
     try {
       const cuerpo = await respuesta.json()
       if (cuerpo?.detail) detalle = cuerpo.detail
       tipo = cuerpo?.type
+      titulo = cuerpo?.title
     } catch {
       // Una respuesta sin cuerpo JSON deja el mensaje genérico.
     }
-    throw new ErrorApi(respuesta.status, detalle, tipo)
+    throw new ErrorApi(respuesta.status, detalle, tipo, titulo)
   }
 
   if (respuesta.status === 204) return null
