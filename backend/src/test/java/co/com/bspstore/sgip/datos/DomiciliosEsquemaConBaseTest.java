@@ -294,12 +294,13 @@ class DomiciliosEsquemaConBaseTest {
 
     @Test
     void laListaDeEncargosTieneSuIndice() {
-        long indices = jdbc.sql("""
-                SELECT COUNT(*) FROM information_schema.statistics
-                 WHERE table_schema = DATABASE() AND table_name = 'venta_items'
-                   AND index_name = 'ix_venitems_encargos' AND seq_in_index = 2 AND column_name = 'cantidad_encargo'
-                """).query(Long.class).single();
-        assertEquals(1, indices);
+        // empresa, entrega (nula mientras está pendiente) y cantidad de encargo, en ese orden.
+        List<String> columnas = jdbc.sql("""
+                SELECT column_name FROM information_schema.statistics
+                 WHERE table_schema = DATABASE() AND table_name = 'venta_items' AND index_name = 'ix_venitems_encargos'
+                 ORDER BY seq_in_index
+                """).query(String.class).list();
+        assertEquals(List.of("empresa_id", "encargo_entregado_en", "cantidad_encargo"), columnas);
     }
 
     // ------------------------------------------------------------ «Sin proveedor» y «Sin categoría»
@@ -309,46 +310,83 @@ class DomiciliosEsquemaConBaseTest {
                 .param("e", de.empresa.empresaId).param("n", nombre).query(Integer.class).single();
     }
 
+    private int categoriasGenericas(CajaDePrueba de) {
+        return jdbc.sql("SELECT COUNT(*) FROM categorias WHERE empresa_id = :e AND generica = TRUE")
+                .param("e", de.empresa.empresaId).query(Integer.class).single();
+    }
+
+    @Test
+    void laCategoriaTieneLaMarcaGenericaYNaceSinEla() {
+        assertEquals("NO", columna("categorias", "generica", "is_nullable"));
+        assertEquals("0", columna("categorias", "generica", "column_default"));
+        jdbc.sql("INSERT INTO categorias (empresa_id, nombre) VALUES (:e, 'Una cualquiera')")
+                .param("e", caja.empresa.empresaId).update();
+
+        assertEquals(1, cuantos(caja, "categorias", "nombre", "Una cualquiera"));
+        assertEquals(0, jdbc.sql("SELECT generica FROM categorias WHERE empresa_id = :e AND nombre = 'Una cualquiera'")
+                .param("e", caja.empresa.empresaId).query(Integer.class).single());
+    }
+
     @Test
     void sembrarSinProveedorYSinCategoriaLosDejaUnaSolaVezPorEmpresa() {
         caja.quitarSinProveedorYSinCategoria();
-        assertEquals(0, cuantos(caja, "proveedores", "razon_social", "Sin proveedor"));
-        assertEquals(0, cuantos(caja, "categorias", "nombre", "Sin categoría"));
+        assertEquals(0, cuantos(caja, "proveedores", "nit", "SIN-PROVEEDOR"));
+        assertEquals(0, categoriasGenericas(caja));
 
         plataforma.sembrarSinProveedorYSinCategoria(caja.empresa.empresaId);
         plataforma.sembrarSinProveedorYSinCategoria(caja.empresa.empresaId);
 
-        assertEquals(1, cuantos(caja, "proveedores", "razon_social", "Sin proveedor"));
+        assertEquals(1, cuantos(caja, "proveedores", "nit", "SIN-PROVEEDOR"));
+        assertEquals(1, categoriasGenericas(caja), "la categoría sembrada lleva la marca genérica");
         assertEquals(1, cuantos(caja, "categorias", "nombre", "Sin categoría"));
     }
 
     @Test
-    void sembrarReutilizaLosQueLaEmpresaYaTeniaConEseNombre() {
+    void sembrarReutilizaLaCategoriaQueYaTeniaEseNombreYLaMarca() {
         caja.quitarSinProveedorYSinCategoria();
         jdbc.sql("INSERT INTO categorias (empresa_id, nombre) VALUES (:e, 'SIN CATEGORIA')")
-                .param("e", caja.empresa.empresaId).update();
-        jdbc.sql("INSERT INTO proveedores (empresa_id, razon_social, nit) VALUES (:e, 'Sin proveedor', '900123456')")
                 .param("e", caja.empresa.empresaId).update();
 
         plataforma.sembrarSinProveedorYSinCategoria(caja.empresa.empresaId);
 
-        assertEquals(1, cuantos(caja, "proveedores", "razon_social", "Sin proveedor"));
         assertEquals(1, cuantos(caja, "categorias", "nombre", "Sin categoría"), "sin distinguir mayúsculas ni tildes");
+        assertEquals(1, categoriasGenericas(caja), "la que ya existía queda marcada");
     }
 
     @Test
-    void sembrarNoDuplicaAlQueYaTieneElNitReservadoYNoTocaALasOtrasEmpresas() {
-        CajaDePrueba otra = nuevaCaja();
+    void sembrarSeGuiaPorElNitDelProveedorYNoPorSuNombre() {
         caja.quitarSinProveedorYSinCategoria();
+        // Con el NIT reservado y otro nombre: es el genérico (se pudo renombrar), no se siembra otro.
         jdbc.sql("INSERT INTO proveedores (empresa_id, razon_social, nit) VALUES (:e, 'Otro nombre', 'SIN-PROVEEDOR')")
                 .param("e", caja.empresa.empresaId).update();
 
         plataforma.sembrarSinProveedorYSinCategoria(caja.empresa.empresaId);
 
-        assertEquals(0, cuantos(caja, "proveedores", "razon_social", "Sin proveedor"),
-                "el NIT reservado ya está tomado: no se inserta nada y no se falla");
-        assertEquals(1, cuantos(caja, "categorias", "nombre", "Sin categoría"));
-        assertEquals(1, cuantos(otra, "proveedores", "razon_social", "Sin proveedor"), "la otra empresa conserva el suyo");
-        assertEquals(1, cuantos(otra, "categorias", "nombre", "Sin categoría"));
+        assertEquals(1, cuantos(caja, "proveedores", "nit", "SIN-PROVEEDOR"));
+        assertEquals(0, cuantos(caja, "proveedores", "razon_social", "Sin proveedor"));
+    }
+
+    @Test
+    void unProveedorConElNombreGenericoPeroOtroNitNoEsElGenerico() {
+        caja.quitarSinProveedorYSinCategoria();
+        jdbc.sql("INSERT INTO proveedores (empresa_id, razon_social, nit) VALUES (:e, 'Sin proveedor', '900123456')")
+                .param("e", caja.empresa.empresaId).update();
+
+        plataforma.sembrarSinProveedorYSinCategoria(caja.empresa.empresaId);
+
+        assertEquals(1, cuantos(caja, "proveedores", "nit", "SIN-PROVEEDOR"), "se siembra el suyo, con su NIT");
+        assertEquals(2, cuantos(caja, "proveedores", "razon_social", "Sin proveedor"));
+    }
+
+    @Test
+    void sembrarNoTocaALasOtrasEmpresas() {
+        CajaDePrueba otra = nuevaCaja();
+        caja.quitarSinProveedorYSinCategoria();
+
+        plataforma.sembrarSinProveedorYSinCategoria(caja.empresa.empresaId);
+
+        assertEquals(1, cuantos(caja, "proveedores", "nit", "SIN-PROVEEDOR"));
+        assertEquals(1, cuantos(otra, "proveedores", "nit", "SIN-PROVEEDOR"), "la otra empresa conserva el suyo");
+        assertEquals(1, categoriasGenericas(otra));
     }
 }

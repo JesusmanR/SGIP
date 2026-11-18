@@ -120,8 +120,9 @@ class ProductoNuevoConsultasConBaseTest {
         long conUno = sentenciasDeUnaVenta(0, 1);
         long conDiez = sentenciasDeUnaVenta(0, 10);
 
+        // El proveedor y la categoría genéricos se buscan una vez por venta, no una por producto nuevo.
         long porProducto = (conDiez - conUno) / 9;
-        assertTrue(porProducto <= 14, "un producto nuevo costó " + porProducto + " consultas");
-        assertTrue(conDiez <= 12 + 10 * 14, "una venta con diez productos nuevos costó " + conDiez + " consultas");
+        assertTrue(porProducto <= 13, "un producto nuevo costó " + porProducto + " consultas");
+        assertTrue(conDiez <= 145, "una venta con diez productos nuevos costó " + conDiez + " consultas");
     }
 }

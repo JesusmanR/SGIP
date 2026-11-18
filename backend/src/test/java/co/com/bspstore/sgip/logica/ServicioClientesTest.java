@@ -309,6 +309,32 @@ class ServicioClientesTest {
     }
 
     @Test
+    void domicilioExigeTambienElCorreoDelCliente() {
+        for (String correo : new String[]{null, "", "   "}) {
+            Cliente sinCorreo = new Cliente(7, "María", TipoDocumento.CC, "1", correo, "3001234567", "Calle 5",
+                    "Girón", false);
+
+            DatosDeDomicilioIncompletosException e = assertThrows(DatosDeDomicilioIncompletosException.class,
+                    () -> servicio.exigirDatosDeDomicilio(sinCorreo));
+
+            assertTrue(e.getMessage().contains("correo"), e.getMessage());
+            assertFalse(e.getMessage().contains("teléfono"), "solo nombra lo que falta: " + e.getMessage());
+        }
+    }
+
+    @Test
+    void domicilioExigeTambienElNombreYLaIdentificacion() {
+        Cliente anonimo = new Cliente(7, " ", TipoDocumento.CC, "", "m@c.co", "3001234567", "Calle 5", "Girón", false);
+
+        DatosDeDomicilioIncompletosException e = assertThrows(DatosDeDomicilioIncompletosException.class,
+                () -> servicio.exigirDatosDeDomicilio(anonimo));
+
+        assertTrue(e.getMessage().contains("nombre"), e.getMessage());
+        assertTrue(e.getMessage().contains("identificación"), e.getMessage());
+        assertFalse(e.getMessage().contains("correo"), e.getMessage());
+    }
+
+    @Test
     void elConsumidorFinalNuncaSirveParaDomicilio() {
         // Aunque tuviera todos los datos: el genérico no identifica a nadie a quien entregar.
         Cliente conTodo = new Cliente(1, "Consumidor final", TipoDocumento.CC, "222222222222", "c@c.co",

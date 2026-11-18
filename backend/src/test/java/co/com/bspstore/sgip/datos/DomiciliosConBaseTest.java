@@ -196,6 +196,26 @@ class DomiciliosConBaseTest {
     }
 
     @Test
+    void unClienteSembradoSinCorreoNoSirveParaUnDomicilio() {
+        // RF-66: los datos mínimos son nombre, identificación y correo; para un domicilio, además
+        // teléfono, dirección y ciudad. Un cliente anterior a la regla (sin correo) no sirve.
+        Integer producto = caja.producto("A", 5, "10000");
+        jdbc.sql("""
+                INSERT INTO clientes (empresa_id, razon_social, tipo_documento, nit, telefono, direccion, ciudad,
+                                      activo, consumidor_final)
+                VALUES (:e, 'Cliente viejo', 'CC', :nit, '3001112233', 'Calle 1', 'Cali', TRUE, FALSE)
+                """).param("e", caja.empresa.empresaId).param("nit", "7" + caja.empresa.marca).update();
+        Integer sinCorreo = jdbc.sql("SELECT cliente_id FROM clientes WHERE empresa_id = :e AND razon_social = 'Cliente viejo'")
+                .param("e", caja.empresa.empresaId).query(Integer.class).single();
+
+        DatosDeDomicilioIncompletosException e = assertThrows(DatosDeDomicilioIncompletosException.class, () -> ventas.procesar(
+                domicilio(UUID.randomUUID(), sinCorreo, producto, 1, ENTREGA, List.of(efectivo("10000")))));
+
+        assertTrue(e.getMessage().contains("correo"), e.getMessage());
+        nadaGuardado(producto, 5);
+    }
+
+    @Test
     void unClienteDeOtraEmpresaNoSirveParaUnDomicilio() {
         Integer producto = caja.producto("A", 5, "10000");
         CajaDePrueba otra = CajaDePrueba.crear("Otra empresa", jdbc, plataforma, categorias, proveedores, clientes);
@@ -306,6 +326,22 @@ class DomiciliosConBaseTest {
         assertEquals(1, caja.cuantas("ventas"));
         assertEquals(1, caja.cuantas("domicilios_venta"));
         assertEquals(4, caja.existencia(producto), "el descuento se hizo una sola vez");
+    }
+
+    @Test
+    void elReintentoDeUnaContraEntregaYaCobradaDevuelveLaMismaRespuestaDelPrincipio() {
+        Integer producto = caja.producto("A", 5, "10000");
+        SolicitudVenta solicitud = contraEntrega(producto, 1);
+        ResultadoDeVenta primera = ventas.procesar(solicitud);
+        igual("0", primera.venta().cambio());
+        // Se cobra con cambio: el efectivo recibido es mayor que el monto.
+        domicilios.cobrar(primera.venta().id(), List.of(efectivoRecibiendo("10000", "50000")));
+
+        ResultadoDeVenta segunda = ventas.procesar(solicitud);
+
+        assertTrue(segunda.yaExistia());
+        assertEquals(primera.venta(), segunda.venta(), "la respuesta no depende de lo que se cobró después");
+        igual("0", segunda.venta().cambio());
     }
 
     @Test
@@ -567,7 +603,11 @@ class DomiciliosConBaseTest {
         Integer producto = caja.producto("A", 5, "10000");
         VentaRegistrada r = ventas.registrar(contraEntrega(producto, 1));
 
-        assertThrows(VentaInvalidaException.class, () -> domicilios.cobrar(r.id(), List.of(efectivo("5000"))));
+        VentaInvalidaException parcial = assertThrows(VentaInvalidaException.class,
+                () -> domicilios.cobrar(r.id(), List.of(efectivo("5000"))));
+        assertTrue(parcial.getMessage().contains("saldo por cobrar"), parcial.getMessage());
+        assertTrue(parcial.getMessage().contains("parciales"), "dice que no hay cobros parciales: " + parcial.getMessage());
+        assertFalse(parcial.getMessage().contains("5000"), "no repite lo enviado");
         assertThrows(VentaInvalidaException.class, () -> domicilios.cobrar(r.id(), List.of(efectivo("10001"))));
         assertThrows(VentaInvalidaException.class, () -> domicilios.cobrar(r.id(),
                 List.of(efectivo("5000"), efectivo("5001"))));
@@ -629,7 +669,9 @@ class DomiciliosConBaseTest {
         VentaRegistrada r = ventas.registrar(contraEntrega(producto, 1));
         Long venta = r.id();
 
-        assertThrows(VentaInvalidaException.class, () -> domicilios.cobrar(venta, null), "sin pagos");
+        VentaInvalidaException sinPagos = assertThrows(VentaInvalidaException.class,
+                () -> domicilios.cobrar(venta, null), "sin pagos");
+        assertTrue(sinPagos.getMessage().contains("cobro"), "habla del cobro y no de la venta: " + sinPagos.getMessage());
         assertThrows(VentaInvalidaException.class, () -> domicilios.cobrar(venta, List.of()), "sin pagos");
         assertThrows(VentaInvalidaException.class, () -> domicilios.cobrar(venta,
                 List.of(new PagoSolicitado(caja.tarjetaId, new BigDecimal("10000"), null, null))), "tarjeta sin referencia");

@@ -94,7 +94,7 @@ final class CajaDePrueba {
                 SELECT cliente_id FROM clientes WHERE empresa_id = :e AND consumidor_final = 1
                 """).param("e", empresa.empresaId).query(Integer.class).single();
         Integer cliente = clientes.insertar(empresa.empresaId,
-                new Cliente(null, "Cliente " + marca, TipoDocumento.CC, "9" + marca, null, "3001112233",
+                new Cliente(null, "Cliente " + marca, TipoDocumento.CC, "9" + marca, "cliente-" + marca + "@ejemplo.co", "3001112233",
                         "Calle 1", "Cali", false), LocalDateTime.of(2026, 11, 1, 8, 0), "CAJA");
         // El proveedor y la categoría del producto que se crea dentro de la venta: el alta de
         // empresa los siembra, y esta empresa no pasa por el alta.

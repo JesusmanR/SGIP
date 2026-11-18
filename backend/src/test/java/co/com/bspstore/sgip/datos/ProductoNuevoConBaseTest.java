@@ -13,6 +13,7 @@ import co.com.bspstore.sgip.api.dto.VentaRegistrada;
 import co.com.bspstore.sgip.config.UsuarioAutenticado;
 import co.com.bspstore.sgip.logica.AutorizacionRequeridaException;
 import co.com.bspstore.sgip.logica.ClaveDeIdempotenciaEnUsoException;
+import co.com.bspstore.sgip.logica.EstadoNoAdmiteLaOperacionException;
 import co.com.bspstore.sgip.logica.NombreRepetidoException;
 import co.com.bspstore.sgip.logica.ResultadoDeVenta;
 import co.com.bspstore.sgip.logica.ServicioCajaProductos;
@@ -41,6 +42,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -304,16 +306,62 @@ class ProductoNuevoConBaseTest {
     }
 
     @Test
-    void siFaltanSinProveedorOSinCategoriaEsUnErrorDeDatosYLaVentaNoLosCrea() {
+    void siFaltanSinProveedorOSinCategoriaEsUn409ConTextoFijoYLaVentaNoLosCrea() {
         caja.quitarSinProveedorYSinCategoria();
 
-        IllegalStateException e = assertThrows(IllegalStateException.class, () -> ventas.procesar(
+        EstadoNoAdmiteLaOperacionException e = assertThrows(EstadoNoAdmiteLaOperacionException.class, () -> ventas.procesar(
                 venta(UUID.randomUUID(), "7500", null, lineaNueva(nuevo("Tornillo", "7500", null), 1))));
 
-        assertTrue(e.getMessage().contains(String.valueOf(caja.empresa.empresaId)), "dice qué empresa está mal sembrada");
+        assertTrue(e.getMessage().contains("proveedor"), e.getMessage());
+        assertFalse(e.getMessage().contains(String.valueOf(caja.empresa.empresaId)), "texto fijo, sin datos de la empresa");
         nadaCreado();
         assertEquals(0, cuantos("SELECT COUNT(*) FROM proveedores WHERE empresa_id = :e AND razon_social = 'Sin proveedor'"));
         assertEquals(0, cuantos("SELECT COUNT(*) FROM categorias WHERE empresa_id = :e AND nombre = 'Sin categoría'"));
+    }
+
+    @Test
+    void renombrarSinCategoriaOSinProveedorNoImpideVenderUnProductoNuevo() throws Exception {
+        caja.conPruebaVigente();
+        // La categoría se renombra por la API (PUT /categorias/{id}); el proveedor, que se busca por su NIT
+        // reservado, también puede cambiar de nombre.
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .put("/api/v1/categorias/" + caja.sinCategoriaId)
+                        .contentType("application/json").content("{\"nombre\":\"Varios\"}")
+                        .with(como(caja.administradorId, "ADMINISTRADOR")))
+                .andExpect(status().isOk());
+        caja.entrarComoAdministrador();
+        jdbc.sql("UPDATE proveedores SET razon_social = 'Proveedores varios' WHERE empresa_id = :e AND proveedor_id = :p")
+                .param("e", caja.empresa.empresaId).param("p", caja.sinProveedorId).update();
+
+        VentaRegistrada r = ventas.registrar(venta(UUID.randomUUID(), "7500", null,
+                lineaNueva(nuevo("Tornillo", "7500", null), 1)));
+
+        assertNotNull(r);
+        assertEquals(caja.sinCategoriaId, producto(caja, "RAP-1").get("categoria_id"));
+        assertEquals(caja.sinProveedorId, producto(caja, "RAP-1").get("proveedor_id"));
+    }
+
+    private void ocuparElCodigoRapido(int n) {
+        caja.producto("X" + n, 5, "1000");
+        jdbc.sql("UPDATE productos SET codigo = :c, sku = :c WHERE empresa_id = :e AND nombre = :n")
+                .param("c", "RAP-" + n).param("e", caja.empresa.empresaId).param("n", "Producto X" + n).update();
+    }
+
+    @Test
+    void conCuatroCodigosRapidosOcupadosSeSaltanYConCincoEs400() {
+        for (int i = 1; i <= 4; i++) {
+            ocuparElCodigoRapido(i);
+        }
+        vender(caja, "Tornillo", "1000", 1);
+        assertEquals("Tornillo", producto(caja, "RAP-5").get("nombre"), "con cuatro ocupados se salta a RAP-5");
+        for (int i = 6; i <= 10; i++) {
+            ocuparElCodigoRapido(i);
+        }
+        int productos = caja.cuantas("productos");
+
+        assertThrows(VentaInvalidaException.class, () -> vender(caja, "Tuerca", "500", 1));
+
+        assertEquals(productos, caja.cuantas("productos"), "no queda ningún producto de la venta fallida");
     }
 
     @Test

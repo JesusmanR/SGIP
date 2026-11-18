@@ -15,6 +15,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -35,6 +36,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 
 /**
  * El producto nuevo contra dos hilos. Cada prueba fuerza el cruce: sostiene desde la prueba el
@@ -57,6 +60,7 @@ class ProductoNuevoConcurrenteConBaseTest {
     @Autowired RepositorioClientes clientes;
     @Autowired PlatformTransactionManager transacciones;
     @Autowired JdbcClient jdbc;
+    @MockitoSpyBean RepositorioVentas repositorioVentas;
 
     private CajaDePrueba caja;
     private ExecutorService hilos;
@@ -276,5 +280,52 @@ class ProductoNuevoConcurrenteConBaseTest {
         assertEquals(3, caja.cuantas("productos"));
         assertEquals(3, caja.existencia(compartido), "las dos descontaron una unidad");
         assertEquals(2, caja.cuantas("ventas"));
+    }
+
+    // ------------------------------------------------------- la fila de la empresa (las claves foráneas)
+
+    @Test
+    void quienTomaLaFilaDeLaEmpresaYLuegoEscribeUnaReglaDelProductoNoSeInterbloqueaConUnaVentaConProductoNuevo() throws Exception {
+        // ServicioPrecios.crear/actualizar/reemplazar toman la fila de la empresa antes que nada y después
+        // escriben reglas. La venta no la toma a propósito, pero sus INSERT comprueban claves foráneas hacia
+        // `empresas` y toman un bloqueo compartido sobre ella. Aquí el titular toma la empresa (FOR UPDATE),
+        // la venta, que ya tiene el producto P, llega a pedirla, y el titular escribe una regla de IVA de P.
+        Integer p = caja.producto("A", 5, "10000");
+        CountDownLatch productoBloqueado = new CountDownLatch(1);
+        CountDownLatch tomada = new CountDownLatch(1);
+        CountDownLatch seguir = new CountDownLatch(1);
+        // La venta se detiene justo después de bloquear P, hasta que el titular tenga la empresa: así el cruce
+        // es siempre el mismo (la venta con P y pidiendo la empresa; el titular con la empresa y pidiendo P).
+        doAnswer(llamada -> {
+            Object bloqueados = llamada.callRealMethod();
+            productoBloqueado.countDown();
+            esperar(tomada);
+            return bloqueados;
+        }).when(repositorioVentas).bloquearProductos(any(), any());
+        Future<?> titular = hilos.submit(() -> new TransactionTemplate(transacciones).execute(estado -> {
+            esperar(productoBloqueado);
+            jdbc.sql("SELECT empresa_id FROM empresas WHERE empresa_id = :e FOR UPDATE")
+                    .param("e", caja.empresa.empresaId).query(Integer.class).single();
+            tomada.countDown();
+            esperar(seguir);
+            jdbc.sql("""
+                    INSERT INTO reglas_iva (empresa_id, producto_id, tipo_impuesto_id, vigente_desde)
+                    SELECT :e, :p, tipo_impuesto_id, '2026-01-01' FROM tipos_impuesto WHERE codigo = 'IVA_19'
+                    """).param("e", caja.empresa.empresaId).param("p", p).update();
+            return null;
+        }));
+        Future<ResultadoDeVenta> venta = comoAdministrador(() -> ventas.procesar(
+                venta(UUID.randomUUID(), "Tornillo", "7500", null, p)));
+        assertTrue(tomada.await(ESPERA_MAXIMA_EN_SEGUNDOS, TimeUnit.SECONDS), "el titular no tomó la empresa");
+        esperarAQueEsperen("empresas", 1, venta);
+
+        seguir.countDown();
+
+        // Ninguno de los dos recibe un 1213 (el motor mata a uno cuando se esperan en círculo).
+        titular.get(ESPERA_MAXIMA_EN_SEGUNDOS, TimeUnit.SECONDS);
+        resultado(venta);
+        assertEquals(1, caja.cuantas("ventas"));
+        assertEquals(1, jdbc.sql("SELECT COUNT(*) FROM reglas_iva WHERE empresa_id = :e AND producto_id = :p")
+                .param("e", caja.empresa.empresaId).param("p", p).query(Integer.class).single());
     }
 }
