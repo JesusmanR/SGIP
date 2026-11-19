@@ -26,6 +26,12 @@ async function olvidandoElNoEncontrado(promesa) {
 export const turnoActual = () => pedir('/caja/turnos/actual')
 export const abrirTurno = (baseEfectivo) =>
   pedir('/caja/turnos', { method: 'POST', body: { baseEfectivo } })
+export const resumenDelTurno = () => pedir('/caja/turnos/actual/resumen')
+export const cerrarTurno = (solicitud) =>
+  pedir('/caja/turnos/actual/cierre', { method: 'POST', body: solicitud })
+/** El administrador recibe todos los turnos de la empresa; el vendedor, solo los suyos (lo decide el servidor). */
+export const listarTurnos = ({ desde, hasta }) =>
+  pedir(`/caja/turnos?desde=${encodeURIComponent(desde)}&hasta=${encodeURIComponent(hasta)}`)
 
 /** La consulta por código no respondió a tiempo: no se sabe si el producto existe. */
 export class BusquedaAgotada extends Error {

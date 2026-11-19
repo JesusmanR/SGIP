@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import Aviso from '../../componentes/comun/Aviso.jsx'
 import AvisoConexion from '../../componentes/comun/AvisoConexion.jsx'
 import Campo from '../../componentes/comun/Campo.jsx'
@@ -370,12 +371,20 @@ export default function Caja() {
 
   return (
     <div className="contenido seccion-caja">
-      <header className="caja-cabecera">
-        <p className="caja-eyebrow">Ventas</p>
-        <h1>Caja</h1>
-        <p className="caja-subtitulo">
-          {actual?.cajero ? `Turno de ${actual.cajero} · base ${PESOS.format(actual.baseEfectivo)}` : 'Vender y cobrar en el mostrador.'}
-        </p>
+      <header className="caja-cabecera caja-cabecera-fila">
+        <div>
+          <p className="caja-eyebrow">Ventas</p>
+          <h1>Caja</h1>
+          <p className="caja-subtitulo">
+            {actual?.cajero ? `Turno de ${actual.cajero} · base ${PESOS.format(actual.baseEfectivo)}` : 'Vender y cobrar en el mostrador.'}
+          </p>
+        </div>
+        {actual && (
+          <div className="caja-cabecera-acciones">
+            <Link to="/caja/mis-cierres" className="boton secundario enlace-boton">Mis cierres</Link>
+            <Link to="/caja/cierre" className="boton secundario enlace-boton">Cerrar turno</Link>
+          </div>
+        )}
       </header>
       <AvisoConexion />
       {cuerpo}

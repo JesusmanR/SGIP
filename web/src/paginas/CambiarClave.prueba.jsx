@@ -27,7 +27,7 @@ vi.mock('../servicios/api.js', async (original) => {
   return { api: { cambiarClave: vi.fn(), salir: vi.fn() }, ErrorApi: real.ErrorApi }
 })
 
-const PENDIENTE = { token: 'abc', nombre: 'Ana', rol: 'VENDEDOR', debeCambiarClave: true }
+const PENDIENTE = { token: 'abc', nombre: 'Ana', rol: 'CLIENTE', debeCambiarClave: true }
 
 // El 400 de clave actual incorrecta se reconoce por el type del problema, no por el texto.
 const TIPO_ACTUAL_INCORRECTA = 'urn:sgip:clave-actual-incorrecta'
