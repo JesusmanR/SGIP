@@ -35,7 +35,8 @@ public class ValidadorDePagos {
     static final String SALDO_NO_DISPONIBLE = "El saldo a favor aún no está disponible";
     static final String MEDIO_NO_DISPONIBLE = "El medio de pago no está disponible.";
     static final String NO_SUMAN_EL_TOTAL = "La suma de los pagos debe ser igual al total de la venta.";
-    static final String NO_SUMAN_EL_SALDO = "La suma de los pagos debe ser igual al saldo por cobrar.";
+    static final String NO_SUMAN_EL_SALDO = "Los pagos deben sumar exactamente el saldo por cobrar del domicilio: "
+            + "no se admiten cobros parciales ni de más.";
 
     /** Los pagos listos para guardar y el cambio que se devuelve (cero si no hubo efectivo). */
     public record Validados(List<NuevoPago> pagos, BigDecimal cambio) {}

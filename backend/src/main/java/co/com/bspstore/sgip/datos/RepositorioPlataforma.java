@@ -311,11 +311,12 @@ public class RepositorioPlataforma {
      *
      * Hacen falta porque el producto que se crea dentro de la venta no tiene proveedor ni categoría
      * y las dos columnas son obligatorias (y la vista de precios hace JOIN interno con ambas). La
-     * venta solo los busca: si faltaran sería una empresa mal sembrada, no un dato del usuario.
-     * Es idempotente y la misma de la V45: si la empresa ya tiene uno con ese nombre, se reutiliza
-     * (la comparación es la de la columna, sin distinguir mayúsculas ni tildes). El NIT del
-     * proveedor es el reservado {@code SIN-PROVEEDOR}; si otro proveedor de la empresa ya lo usa
-     * no se inserta nada en lugar de fallar.
+     * venta solo los busca, y no por su nombre, que el administrador puede cambiar: el proveedor, por
+     * su NIT reservado {@code SIN-PROVEEDOR}, y la categoría, por su marca {@code generica}. Es
+     * idempotente y la misma de la V45: la empresa que ya tiene un proveedor con ese NIT conserva el
+     * suyo, la que ya tenía una categoría con ese nombre (la comparación es la de la columna, sin
+     * distinguir mayúsculas ni tildes) la ve marcada, y solo la que no tiene ninguna categoría genérica
+     * recibe una nueva.
      */
     public void sembrarSinProveedorYSinCategoria(Integer empresaId) {
         jdbc.sql("""
@@ -323,19 +324,25 @@ public class RepositorioPlataforma {
                         SELECT :empresa, :nombre, :nit
                           FROM DUAL
                          WHERE NOT EXISTS (SELECT 1 FROM proveedores p
-                                            WHERE p.empresa_id = :empresa
-                                              AND (p.razon_social = :nombre OR p.nit = :nit))
+                                            WHERE p.empresa_id = :empresa AND p.nit = :nit)
                         """)
                 .param("empresa", empresaId)
                 .param("nombre", NOMBRE_SIN_PROVEEDOR)
                 .param("nit", NIT_SIN_PROVEEDOR)
                 .update();
         jdbc.sql("""
-                        INSERT INTO categorias (empresa_id, nombre)
-                        SELECT :empresa, :nombre
+                        UPDATE categorias SET generica = TRUE
+                         WHERE empresa_id = :empresa AND nombre = :nombre
+                        """)
+                .param("empresa", empresaId)
+                .param("nombre", NOMBRE_SIN_CATEGORIA)
+                .update();
+        jdbc.sql("""
+                        INSERT INTO categorias (empresa_id, nombre, generica)
+                        SELECT :empresa, :nombre, TRUE
                           FROM DUAL
                          WHERE NOT EXISTS (SELECT 1 FROM categorias c
-                                            WHERE c.empresa_id = :empresa AND c.nombre = :nombre)
+                                            WHERE c.empresa_id = :empresa AND c.generica = TRUE)
                         """)
                 .param("empresa", empresaId)
                 .param("nombre", NOMBRE_SIN_CATEGORIA)

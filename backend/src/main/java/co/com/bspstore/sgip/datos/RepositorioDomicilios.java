@@ -48,7 +48,8 @@ public class RepositorioDomicilios {
     /** Los domicilios que todavía no se entregaron, de una venta que sigue vigente. */
     public List<FilaDeDomicilio> listarPorDespachar(Integer empresaId, int tope) {
         return jdbc.sql(COLUMNAS + """
-                         WHERE d.empresa_id = :empresa AND d.entregado_en IS NULL AND v.estado = 'REGISTRADA'
+                         WHERE d.empresa_id = :empresa AND v.empresa_id = :empresa AND d.entregado_en IS NULL
+                           AND v.estado = 'REGISTRADA'
                          ORDER BY v.fecha, v.venta_id
                          LIMIT :tope
                         """)
@@ -61,7 +62,7 @@ public class RepositorioDomicilios {
     /** Las ventas a domicilio de pago contra entrega que todavía no se cobraron, entregadas o no. */
     public List<FilaDeDomicilio> listarPorCobrar(Integer empresaId, int tope) {
         return jdbc.sql(COLUMNAS + """
-                         WHERE d.empresa_id = :empresa AND v.pago_contra_entrega = TRUE
+                         WHERE d.empresa_id = :empresa AND v.empresa_id = :empresa AND v.pago_contra_entrega = TRUE
                            AND v.estado_pago = 'PENDIENTE' AND v.estado = 'REGISTRADA'
                          ORDER BY v.fecha, v.venta_id
                          LIMIT :tope

@@ -531,10 +531,11 @@ rechaza "una activación sin estado anterior sigue rechazada" 3819 ck_auditoria_
 echo
 echo "── el domicilio, el producto nuevo y el encargo entregado (V45) ──"
 
-igual "la empresa 1, anterior a la V45, tiene su «Sin proveedor» y su «Sin categoría», una sola vez" "1|1"   "$(consulta "SELECT CONCAT((SELECT COUNT(*) FROM proveedores p
-                               WHERE p.empresa_id = 1 AND p.razon_social = 'Sin proveedor'), '|',
+igual "la empresa 1, anterior a la V45, tiene su proveedor (por su NIT) y su categoría (por su marca) genéricos, una vez" "1|1" \
+  "$(consulta "SELECT CONCAT((SELECT COUNT(*) FROM proveedores p
+                               WHERE p.empresa_id = 1 AND p.nit = 'SIN-PROVEEDOR'), '|',
                               (SELECT COUNT(*) FROM categorias c
-                               WHERE c.empresa_id = 1 AND c.nombre = 'Sin categoría'));")"
+                               WHERE c.empresa_id = 1 AND c.generica = TRUE));")"
 
 VENTA_V45="INSERT INTO ventas (empresa_id, consecutivo, cliente_id, usuario_id, forma_pago, tipo_entrega)
    SELECT 1, 'PAP-V45', (SELECT cliente_id FROM clientes WHERE empresa_id = 1 LIMIT 1),

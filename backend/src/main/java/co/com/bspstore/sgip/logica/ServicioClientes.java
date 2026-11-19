@@ -94,9 +94,10 @@ public class ServicioClientes {
     }
 
     /**
-     * Un domicilio se entrega a alguien: pide teléfono, dirección y ciudad, y nunca
-     * sirve el consumidor final, que no identifica a nadie. El mensaje nombra lo que
-     * falta y no el valor de nada.
+     * Un domicilio se entrega a alguien: pide los datos mínimos del cliente (nombre, identificación y
+     * correo) y, además, teléfono, dirección y ciudad (RF-66), y nunca sirve el consumidor final, que
+     * no identifica a nadie. El correo ya lo exige el alta de todo cliente que se guarda, pero un
+     * cliente anterior a esa regla puede no tenerlo. El mensaje nombra lo que falta y no el valor de nada.
      */
     public void exigirDatosDeDomicilio(Cliente cliente) {
         if (cliente.consumidorFinal()) {
@@ -104,6 +105,15 @@ public class ServicioClientes {
                     "El Consumidor final no sirve para un domicilio: hace falta un cliente con sus datos.");
         }
         List<String> faltan = new ArrayList<>();
+        if (texto(cliente.nombre()) == null) {
+            faltan.add("nombre");
+        }
+        if (texto(cliente.identificacion()) == null) {
+            faltan.add("identificación");
+        }
+        if (texto(cliente.correo()) == null) {
+            faltan.add("correo");
+        }
         if (texto(cliente.telefono()) == null) {
             faltan.add("teléfono");
         }

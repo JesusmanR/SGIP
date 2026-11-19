@@ -29,23 +29,23 @@ public class RepositorioProductoNuevo {
     public record SinProveedorYSinCategoria(Integer proveedorId, Integer categoriaId) {}
 
     /**
-     * Los identificadores de «Sin proveedor» y «Sin categoría» de la empresa, en una sola consulta.
-     * Los siembran la V45 y el alta de la empresa; esta consulta solo los busca. Si hubiera dos con
-     * el mismo nombre (no puede: la clave única de las categorías lo impide y el proveedor lleva un
-     * NIT reservado) se toma el más antiguo.
+     * Los identificadores del proveedor y de la categoría genéricos de la empresa, en una sola consulta.
+     * Los siembran la V45 y el alta de la empresa; esta consulta solo los busca, y <b>no por su
+     * nombre</b>, que el administrador puede cambiar (renombrar «Sin categoría» no puede romper la
+     * venta): el proveedor, por su NIT reservado, y la categoría, por su marca {@code generica}. Si
+     * hubiera más de una se toma la más antigua.
      */
     public SinProveedorYSinCategoria buscarSinProveedorYSinCategoria(Integer empresaId) {
         return jdbc.sql("""
                         SELECT (SELECT p.proveedor_id FROM proveedores p
-                                 WHERE p.empresa_id = :empresa AND p.razon_social = :proveedor
+                                 WHERE p.empresa_id = :empresa AND p.nit = :nit
                                  ORDER BY p.proveedor_id LIMIT 1) AS proveedor_id,
                                (SELECT c.categoria_id FROM categorias c
-                                 WHERE c.empresa_id = :empresa AND c.nombre = :categoria
+                                 WHERE c.empresa_id = :empresa AND c.generica = TRUE
                                  ORDER BY c.categoria_id LIMIT 1) AS categoria_id
                         """)
                 .param("empresa", empresaId)
-                .param("proveedor", RepositorioPlataforma.NOMBRE_SIN_PROVEEDOR)
-                .param("categoria", RepositorioPlataforma.NOMBRE_SIN_CATEGORIA)
+                .param("nit", RepositorioPlataforma.NIT_SIN_PROVEEDOR)
                 .query(SinProveedorYSinCategoria.class)
                 .single();
     }

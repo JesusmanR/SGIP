@@ -53,7 +53,7 @@ import java.util.Optional;
  *   <li>el <b>consecutivo</b>;</li>
  *   <li>el <b>kárdex</b>.</li>
  * </ol>
- * Quien toma uno de la lista no toma después uno anterior. La caja no toma la fila de la
+ * Quien toma uno de la lista no toma después uno anterior. La caja no pide la fila de la
  * empresa.
  *
  * El turno se bloquea siempre <b>por su clave primaria</b> ({@code cierre_id}), en las dos

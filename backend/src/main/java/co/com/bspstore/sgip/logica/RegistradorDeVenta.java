@@ -11,6 +11,7 @@ import co.com.bspstore.sgip.datos.RepositorioClientes;
 import co.com.bspstore.sgip.datos.RepositorioConsecutivos;
 import co.com.bspstore.sgip.datos.RepositorioInventario;
 import co.com.bspstore.sgip.datos.RepositorioInventario.Egreso;
+import co.com.bspstore.sgip.datos.RepositorioProductoNuevo.SinProveedorYSinCategoria;
 import co.com.bspstore.sgip.datos.RepositorioVentas;
 import co.com.bspstore.sgip.datos.RepositorioVentas.NuevaLinea;
 import co.com.bspstore.sgip.datos.RepositorioVentas.NuevaVenta;
@@ -322,12 +323,14 @@ public class RegistradorDeVenta {
      */
     private SolicitudVenta conProductosNuevos(Integer empresa, SolicitudVenta s, Map<Integer, ProductoBloqueado> productos) {
         List<LineaSolicitada> resueltas = new ArrayList<>(s.lineas().size());
+        // El proveedor y la categoría genéricos se buscan una vez por venta, no una por producto nuevo.
+        SinProveedorYSinCategoria genericos = productosNuevos.genericos(empresa);
         for (LineaSolicitada l : s.lineas()) {
             if (l.productoNuevo() == null) {
                 resueltas.add(l);
                 continue;
             }
-            Creado creado = productosNuevos.crear(empresa, l.productoNuevo());
+            Creado creado = productosNuevos.crear(empresa, l.productoNuevo(), genericos);
             productos.put(creado.id(), new ProductoBloqueado(creado.id(), creado.nombre(), 0, creado.costo()));
             resueltas.add(new LineaSolicitada(creado.id(), null, l.cantidad(), l.descuento(), l.entregaEstimada()));
         }

@@ -256,16 +256,20 @@ public class RepositorioVentas {
      * La venta tal como se le respondió al mostrador cuando se registró: el cambio sale de lo
      * recibido en efectivo menos lo cobrado en efectivo, y las líneas, de lo guardado. Nunca lee
      * el costo ni la utilidad.
+     *
+     * Una venta de pago contra entrega se registró sin pagos y su respuesta fue con cambio cero: los
+     * pagos que tenga son del cobro posterior (con su propio efectivo y su propio cambio), no de la
+     * venta, así que el reintento devuelve lo mismo que la primera respuesta aunque ya se haya cobrado.
      */
     public Optional<VentaRegistrada> leer(Integer empresaId, Long ventaId) {
         Optional<Object[]> cabecera = jdbc.sql("""
-                        SELECT venta_id, consecutivo, total FROM ventas
+                        SELECT venta_id, consecutivo, total, pago_contra_entrega FROM ventas
                          WHERE empresa_id = :empresa AND venta_id = :venta
                         """)
                 .param("empresa", empresaId)
                 .param("venta", ventaId)
                 .query((fila, n) -> new Object[]{fila.getLong("venta_id"), fila.getString("consecutivo"),
-                        fila.getBigDecimal("total")})
+                        fila.getBigDecimal("total"), fila.getBoolean("pago_contra_entrega")})
                 .optional();
         if (cabecera.isEmpty()) {
             return Optional.empty();
@@ -290,7 +294,8 @@ public class RepositorioVentas {
                             fila.getString("tratamiento_iva"), iva, base.add(iva));
                 })
                 .list();
-        BigDecimal cambio = jdbc.sql("""
+        boolean contraEntrega = (Boolean) cabecera.get()[3];
+        BigDecimal cambio = contraEntrega ? BigDecimal.ZERO : jdbc.sql("""
                         SELECT COALESCE(SUM(p.recibido - p.monto), 0)
                           FROM pagos_venta p
                           JOIN medios_pago m ON m.empresa_id = p.empresa_id AND m.medio_id = p.medio_id

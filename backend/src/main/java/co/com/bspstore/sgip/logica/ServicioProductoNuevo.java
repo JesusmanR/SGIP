@@ -33,9 +33,12 @@ import java.time.Clock;
  *       un costo mayor que cero y el administrador lo corrige cuando lo sepa; editar el costo o
  *       aplicar una lista de precios apaga la marca.</li>
  *   <li>Existencia cero: su venta es un encargo.</li>
- *   <li>«Sin proveedor» y «Sin categoría» de la empresa. <b>No se crean aquí</b>: los siembran la V45 y
- *       el alta de la empresa. Si faltan, la empresa está mal sembrada y es un error de datos (500 con
- *       un registro que dice qué empresa), no algo que la venta repare a mitad de camino.</li>
+ *   <li>El proveedor y la categoría genéricos de la empresa («Sin proveedor» y «Sin categoría»).
+ *       <b>No se crean aquí</b>: los siembran la V45 y el alta de la empresa, y <b>no se buscan por su
+ *       nombre</b>, que el administrador puede cambiar: el proveedor, por su NIT reservado, y la
+ *       categoría, por su marca {@code generica}. Si faltan, la venta responde 409 con un texto fijo y
+ *       un registro del servidor que dice qué empresa; la venta no los repara a mitad de camino. Se
+ *       buscan una vez por venta, no una por producto nuevo.</li>
  *   <li>Su precio, con una regla de precio fijo propia (ADR-0025) escrita por
  *       {@link ServicioPrecios#escribirPrecios}: la misma ruta del catálogo, para contado y crédito. El
  *       precio es SIN IVA, igual que el de la vista.</li>
@@ -51,13 +54,24 @@ import java.time.Clock;
  * nadie más puede haber bloqueado: el producto, su bloqueo de fila en {@code escribirPrecios} y sus
  * reglas. Las claves foráneas hacia «Sin proveedor» y «Sin categoría» toman un bloqueo compartido de
  * esas dos filas, que solo estorba a quien las edite, y esa edición no espera nada que esta venta
- * tenga, de modo que no hay ciclo. {@code escribirPrecios} no toma el bloqueo de la fila de empresa
- * (lo toman {@code crear}, {@code actualizar} y {@code reemplazar} de las reglas de ámbito, que esta
- * venta no usa).
+ * tenga, de modo que no hay ciclo. Ni esta clase ni {@code escribirPrecios} piden la fila de empresa
+ * ({@code FOR UPDATE}); la piden {@code crear}, {@code actualizar} y {@code reemplazar} de las reglas
+ * de ámbito, que esta venta no usa. Pero sus {@code INSERT} comprueban claves foráneas hacia
+ * {@code empresas} y toman sobre esa fila un bloqueo compartido, de modo que esperan a quien tenga la
+ * empresa bloqueada (ADR-0030). Es el mismo trato de toda venta, y no produce ciclo: quien tiene la
+ * empresa y después escribe una regla de un producto que la venta ya bloqueó no la espera (la clave
+ * foránea toma un bloqueo compartido sobre la entrada de {@code uq_productos_empresa}, no sobre la fila
+ * que la venta tiene), lo que comprueba {@code ProductoNuevoConcurrenteConBaseTest}.
+ *
+ * <h2>Consultas</h2>
  *
  * Cada producto nuevo cuesta un número fijo de consultas (su código, sus comprobaciones, su fila y su
- * precio) y el resto de la venta no cambia con él; por eso una venta admite a lo sumo
- * {@link co.com.bspstore.sgip.logica.venta.LimitesDeVenta#PRODUCTOS_NUEVOS}.
+ * precio) y el resto de la venta no cambia con él. Es una desviación consciente del RNF-03 (el conteo
+ * constante por línea): crear un producto es escribir, y las escrituras de varios productos no se
+ * pueden agrupar sin renunciar al consecutivo de cada código ni a la regla de precio por la ruta del
+ * catálogo. Por eso una venta admite a lo sumo
+ * {@link co.com.bspstore.sgip.logica.venta.LimitesDeVenta#PRODUCTOS_NUEVOS} y el conteo de
+ * {@code ProductoNuevoConsultasConBaseTest} fija lo que cuesta cada uno.
  */
 @Service
 public class ServicioProductoNuevo {
@@ -67,8 +81,17 @@ public class ServicioProductoNuevo {
     static final String COSTO_PROVISIONAL_TEXTO = "1,00";
     public static final BigDecimal COSTO_PROVISIONAL = new BigDecimal("1.00");
 
-    /** Cuántos códigos ocupados a mano se saltan antes de rendirse. */
-    private static final int INTENTOS_DE_CODIGO = 50;
+    /**
+     * Cuántos códigos {@code RAP-n} ocupados a mano se saltan antes de rendirse. Cada código saltado
+     * cuesta consultas (tomar el número, gastarlo y comprobar si está libre) y rompe el conteo fijo por
+     * producto nuevo (RNF-03): chocar exige que alguien haya escrito «RAP-n» a mano en el catálogo, y
+     * hacerlo cinco veces seguidas no es un caso real. Pasado el tope, la venta responde 400 y el
+     * administrador cambia esos códigos; no hay un bucle que crezca con lo que alguien dejó ocupado.
+     */
+    private static final int INTENTOS_DE_CODIGO = 5;
+
+    static final String SIN_GENERICOS = "Esta empresa no tiene el proveedor y la categoría de los productos nuevos: "
+            + "avisa al administrador.";
 
     static final String CODIGO_DE_BARRAS_REPETIDO = "Ya existe un producto con ese código de barras.";
 
@@ -89,21 +112,37 @@ public class ServicioProductoNuevo {
     }
 
     /**
-     * Crea el producto de la empresa y devuelve sus datos. Tiene que llamarse dentro de la transacción
-     * de la venta ({@link Propagation#MANDATORY}). La autorización la exige quien llama, antes de
-     * llamar: sin ella no se debe crear nada.
+     * El proveedor y la categoría genéricos de la empresa, buscados una vez por venta. 409 con un texto
+     * fijo si falta alguno (la empresa quedó mal sembrada o se borró): no es un dato del usuario ni algo
+     * que la venta pueda reparar.
      */
     @Transactional(propagation = Propagation.MANDATORY)
-    public Creado crear(Integer empresaId, ProductoNuevo pedido) {
-        ProductoNuevo p = NormalizadorDeVenta.productoNuevo(pedido);
+    public SinProveedorYSinCategoria genericos(Integer empresaId) {
         SinProveedorYSinCategoria genericos = productos.buscarSinProveedorYSinCategoria(empresaId);
         if (genericos.proveedorId() == null || genericos.categoriaId() == null) {
-            LOG.error("La empresa {} no tiene su «Sin proveedor» o su «Sin categoría» (proveedor: {}, categoría: {}): "
-                    + "ni la V45 ni el alta los sembraron.", empresaId, genericos.proveedorId() != null,
+            LOG.error("La empresa {} no tiene su proveedor o su categoría genéricos (proveedor: {}, categoría: {}): "
+                    + "ni la V45 ni el alta los sembraron, o se borraron.", empresaId, genericos.proveedorId() != null,
                     genericos.categoriaId() != null);
-            throw new IllegalStateException("La empresa " + empresaId
-                    + " no tiene su «Sin proveedor» o su «Sin categoría»: ni el alta ni la V45 los sembraron.");
+            throw new EstadoNoAdmiteLaOperacionException(SIN_GENERICOS);
         }
+        return genericos;
+    }
+
+    /** Crea el producto buscando lo genérico de la empresa: para quien crea uno solo. */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public Creado crear(Integer empresaId, ProductoNuevo pedido) {
+        return crear(empresaId, pedido, genericos(empresaId));
+    }
+
+    /**
+     * Crea el producto de la empresa con el proveedor y la categoría ya buscados ({@link #genericos}) y
+     * devuelve sus datos. Tiene que llamarse dentro de la transacción de la venta
+     * ({@link Propagation#MANDATORY}). La autorización la exige quien llama, antes de llamar: sin ella no
+     * se debe crear nada.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public Creado crear(Integer empresaId, ProductoNuevo pedido, SinProveedorYSinCategoria genericos) {
+        ProductoNuevo p = NormalizadorDeVenta.productoNuevo(pedido);
         if (p.codigoBarras() != null && productos.existeCodigoDeBarras(empresaId, p.codigoBarras())) {
             throw new NombreRepetidoException(CODIGO_DE_BARRAS_REPETIDO);
         }

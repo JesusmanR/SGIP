@@ -31,13 +31,17 @@
 -- y `categoria_id` son obligatorios y `v_precios_producto` hace JOIN interno
 -- con ambas tablas. El alta de empresa los siembra para las nuevas
 -- (`ServicioPlataforma.darDeAlta`); la venta solo los busca y nunca los crea.
--- La siembra es idempotente: si la empresa ya tiene uno con ese nombre se
--- reutiliza (la comparación es la de la columna: sin distinguir mayúsculas
--- ni tildes, la misma de las claves únicas). El proveedor lleva el NIT
--- reservado «SIN-PROVEEDOR» (`uq_proveedores_nit` es por empresa); si algún
--- proveedor de la empresa ya usa ese NIT con otro nombre no se inserta nada
--- en lugar de fallar la migración, y el producto nuevo de esa empresa
--- responde con un error de datos claro hasta que se corrija a mano.
+-- Ninguno de los dos se busca por su nombre, que el administrador puede
+-- cambiar (renombrar «Sin categoría» no puede romper la venta): el proveedor
+-- se reconoce por su NIT reservado «SIN-PROVEEDOR» (`uq_proveedores_nit` es
+-- por empresa) y la categoría por su marca `categorias.generica`, que esta
+-- migración añade. La siembra es idempotente: la empresa que ya tiene un
+-- proveedor con ese NIT conserva el suyo, sea cual sea su nombre; la que ya
+-- tenía una categoría llamada «Sin categoría» (la comparación es la de la
+-- columna: sin distinguir mayúsculas ni tildes) la ve marcada, y solo la que
+-- no tiene ninguna categoría genérica recibe una nueva. Si una empresa
+-- perdiera alguno de los dos, la venta con un producto nuevo responde 409
+-- con un texto fijo en lugar de un error del servidor.
 --
 -- Decisiones del esquema:
 --
@@ -54,8 +58,9 @@
 --     longitudes de las columnas homónimas de `clientes` (V4), salvo
 --     `recibe`, que es un nombre.
 --   * Tres índices para las listas: lo que falta por despachar, lo que
---     falta por cobrar y los encargos pendientes. Ninguna lista recorre el
---     historial entero de una empresa.
+--     falta por cobrar y los encargos pendientes (empresa, entrega que es
+--     nula mientras está pendiente, y cantidad de encargo). Ninguna lista
+--     recorre el historial entero de una empresa.
 --
 -- Requiere: V4, V10, V11, V31 y V44.
 -- ---------------------------------------------------------------------
@@ -97,6 +102,11 @@ ALTER TABLE ventas
 ALTER TABLE productos
   ADD COLUMN costo_provisional BOOL NOT NULL DEFAULT FALSE;
 
+-- La categoría de los productos que se crean dentro de la venta. Se reconoce por esta
+-- marca y no por su nombre, que se puede cambiar.
+ALTER TABLE categorias
+  ADD COLUMN generica BOOL NOT NULL DEFAULT FALSE;
+
 -- 4. venta_items: la entrega a mano de un encargo, y su lista de pendientes
 ALTER TABLE venta_items
   ADD COLUMN encargo_entregado_en  DATETIME NULL,
@@ -108,29 +118,32 @@ ALTER TABLE venta_items
     ((encargo_entregado_en IS NULL AND encargo_entregado_por IS NULL)
      OR (encargo_entregado_en IS NOT NULL AND encargo_entregado_por IS NOT NULL))
     AND (encargo_entregado_en IS NULL OR cantidad_encargo > 0)),
-  ADD INDEX ix_venitems_encargos (empresa_id, cantidad_encargo, encargo_entregado_en);
+  ADD INDEX ix_venitems_encargos (empresa_id, encargo_entregado_en, cantidad_encargo);
 
 -- 5. «Sin proveedor» y «Sin categoría» para las empresas que ya existen
 INSERT INTO proveedores (empresa_id, razon_social, nit)
 SELECT e.empresa_id, 'Sin proveedor', 'SIN-PROVEEDOR'
   FROM empresas e
  WHERE NOT EXISTS (SELECT 1 FROM proveedores p
-                    WHERE p.empresa_id = e.empresa_id
-                      AND (p.razon_social = 'Sin proveedor' OR p.nit = 'SIN-PROVEEDOR'));
+                    WHERE p.empresa_id = e.empresa_id AND p.nit = 'SIN-PROVEEDOR');
 
-INSERT INTO categorias (empresa_id, nombre)
-SELECT e.empresa_id, 'Sin categoría'
+-- La que ya se llamaba así queda marcada...
+UPDATE categorias SET generica = TRUE WHERE nombre = 'Sin categoría';
+
+-- ...y la empresa que no tiene ninguna categoría genérica recibe la suya.
+INSERT INTO categorias (empresa_id, nombre, generica)
+SELECT e.empresa_id, 'Sin categoría', TRUE
   FROM empresas e
  WHERE NOT EXISTS (SELECT 1 FROM categorias c
-                    WHERE c.empresa_id = e.empresa_id AND c.nombre = 'Sin categoría');
+                    WHERE c.empresa_id = e.empresa_id AND c.generica = TRUE);
 
 -- =====================================================================
 -- Comprobación
 -- =====================================================================
 --   SELECT e.empresa_id FROM empresas e
 --    WHERE (SELECT COUNT(*) FROM proveedores p
---            WHERE p.empresa_id = e.empresa_id AND p.razon_social = 'Sin proveedor') <> 1
+--            WHERE p.empresa_id = e.empresa_id AND p.nit = 'SIN-PROVEEDOR') <> 1
 --       OR (SELECT COUNT(*) FROM categorias c
---            WHERE c.empresa_id = e.empresa_id AND c.nombre = 'Sin categoría') <> 1;
+--            WHERE c.empresa_id = e.empresa_id AND c.generica = TRUE) <> 1;
 --   → ninguna empresa sin su proveedor y su categoría para productos nuevos, ni con dos
 -- =====================================================================

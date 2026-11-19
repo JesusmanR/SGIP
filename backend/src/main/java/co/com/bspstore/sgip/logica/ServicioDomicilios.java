@@ -180,6 +180,9 @@ public class ServicioDomicilios {
             throw new RecursoNoEncontradoException(VENTA_NO_EXISTE);
         }
         Integer empresa = ContextoEmpresa.empresaActual();
+        if (pedidos == null || pedidos.isEmpty()) {
+            throw new VentaInvalidaException("El cobro necesita al menos un pago.");
+        }
         List<PagoSolicitado> pagos = NormalizadorDeVenta.pagos(pedidos);
         LocalDateTime ahora = Hoy.ahora(reloj);
 

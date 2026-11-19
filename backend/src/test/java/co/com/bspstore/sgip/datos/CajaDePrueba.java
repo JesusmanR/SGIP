@@ -102,7 +102,7 @@ final class CajaDePrueba {
         jdbc.sql("INSERT INTO proveedores (empresa_id, razon_social, nit) VALUES (:e, 'Sin proveedor', 'SIN-PROVEEDOR')")
                 .param("e", empresa.empresaId).update(sinProveedor);
         KeyHolder sinCategoria = new GeneratedKeyHolder();
-        jdbc.sql("INSERT INTO categorias (empresa_id, nombre) VALUES (:e, 'Sin categoría')")
+        jdbc.sql("INSERT INTO categorias (empresa_id, nombre, generica) VALUES (:e, 'Sin categoría', TRUE)")
                 .param("e", empresa.empresaId).update(sinCategoria);
         return new CajaDePrueba(jdbc, empresa, vendedor, consumidor, cliente, efectivo, tarjeta, transferencia,
                 saldo, inactivo, sinProveedor.getKeyAs(Number.class).intValue(),
@@ -217,9 +217,9 @@ final class CajaDePrueba {
 
     /** La empresa mal sembrada: sin el proveedor ni la categoría del producto nuevo. */
     void quitarSinProveedorYSinCategoria() {
-        jdbc.sql("DELETE FROM proveedores WHERE empresa_id = :e AND razon_social = 'Sin proveedor'")
+        jdbc.sql("DELETE FROM proveedores WHERE empresa_id = :e AND nit = 'SIN-PROVEEDOR'")
                 .param("e", empresa.empresaId).update();
-        jdbc.sql("DELETE FROM categorias WHERE empresa_id = :e AND nombre = 'Sin categoría'")
+        jdbc.sql("DELETE FROM categorias WHERE empresa_id = :e AND generica = TRUE")
                 .param("e", empresa.empresaId).update();
     }
 
