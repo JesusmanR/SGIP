@@ -13,6 +13,7 @@ function EtiquetaDeGrupo() {
  * y acciones opcionales. Sin `etiqueta`, usa el grupo de la sección (si hay
  * ruta). `descripcion` es el nombre anterior de `subtitulo`.
  */
+// `descripcion` es el alias antiguo de `subtitulo`; se conserva para no tocar las pantallas.
 export default function EncabezadoPagina({ etiqueta, titulo, subtitulo, descripcion, acciones }) {
   const enRuta = useInRouterContext()
   const texto = subtitulo ?? descripcion
