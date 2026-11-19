@@ -5,9 +5,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { hoyISO, sumarDias } from '../../servicios/fechas.js'
 import {
-  abrirTurno, CLAVE_EN_USO, productoPorCodigo, registrarVenta, saldoDeCliente, turnoActual,
+  abrirTurno, CLAVE_EN_USO, mediosDePago, productoPorCodigo, registrarVenta, saldoDeCliente, turnoActual,
 } from '../../servicios/api/caja.js'
-import { ANA, LLAVE_A, LLAVE_B, PINTURA, TORNILLO, entrar, errorApi, pesos, prepararApi, ventaDelServidor } from './ayuda.js'
+import { CLAVE_VENTA_PENDIENTE } from '../../servicios/ventaPendiente.js'
+import { ANA, LLAVE_A, LLAVE_B, MEDIOS, PINTURA, TORNILLO, entrar, errorApi, pesos, prepararApi, ventaDelServidor } from './ayuda.js'
 import Caja from './Caja.jsx'
 
 vi.mock('../../servicios/api/caja.js')
@@ -782,6 +783,30 @@ describe('caja: estructura de la pantalla', () => {
 })
 
 
+describe('caja: el medio del saldo a favor sale del saldo del cliente', () => {
+  it('el medio de saldo a favor usa el medioId que responde el saldo, aunque la lista de medios no lo traiga', async () => {
+    vi.mocked(mediosDePago).mockResolvedValue(MEDIOS.filter((m) => m.tipo !== 'SALDO_A_FAVOR'))
+    saldoDeCliente.mockResolvedValue({ saldo: 5000, medioId: 41 })
+    await abrir()
+    await agregar()
+    await userEvent.click(screen.getByRole('button', { name: /identificar cliente/i }))
+    await userEvent.type(screen.getByLabelText(/^identificación/i), ANA.identificacion)
+    await userEvent.click(screen.getByRole('button', { name: /buscar cliente/i }))
+    await userEvent.click(await screen.findByRole('button', { name: /usar este cliente/i }))
+    const opcion = await within(screen.getByLabelText(/medio de pago/i)).findByRole('option', { name: /saldo a favor/i })
+    expect(opcion).toHaveValue('41')
+    await userEvent.selectOptions(screen.getByLabelText(/medio de pago/i), '41')
+    await userEvent.clear(screen.getByLabelText(/^monto$/i))
+    await userEvent.type(screen.getByLabelText(/^monto$/i), '5000')
+    await userEvent.click(screen.getByRole('button', { name: /agregar pago/i }))
+    await userEvent.selectOptions(screen.getByLabelText(/medio de pago/i), '1')
+    await userEvent.click(screen.getByRole('button', { name: /agregar pago/i }))
+    await userEvent.click(cobrar())
+    await waitFor(() => expect(registrarVenta).toHaveBeenCalled())
+    expect(registrarVenta.mock.calls[0][0].pagos[0]).toEqual({ medioId: 41, monto: 5000 })
+  })
+})
+
 describe('caja: enlaces al cierre y a los cierres propios', () => {
   it('con un turno abierto ofrece cerrar el turno y ver mis cierres', async () => {
     await abrir()
@@ -794,5 +819,67 @@ describe('caja: enlaces al cierre y a los cierres propios', () => {
     render(<MemoryRouter><Caja /></MemoryRouter>)
     await screen.findByRole('heading', { name: /abrir turno/i })
     expect(screen.queryByRole('link', { name: /cerrar turno/i })).not.toBeInTheDocument()
+  })
+})
+
+describe('caja: una venta ambigua sobrevive a recargar la pestaña (M12-R1)', () => {
+  async function dejarAmbigua() {
+    registrarVenta.mockRejectedValueOnce(new TypeError('Failed to fetch'))
+    const vista = render(<MemoryRouter><Caja /></MemoryRouter>)
+    await screen.findByLabelText(/buscar producto/i)
+    await agregar()
+    await pagarTodo()
+    await userEvent.click(cobrar())
+    await screen.findByText(/no sabemos si se registró/i)
+    vista.unmount()
+  }
+
+  it('al recargar sigue la venta sin confirmar, y reintentar manda el mismo cuerpo y la misma clave', async () => {
+    await dejarAmbigua()
+    const primero = registrarVenta.mock.calls[0][0]
+    expect(sessionStorage.getItem(CLAVE_VENTA_PENDIENTE)).not.toBeNull()
+
+    render(<MemoryRouter><Caja /></MemoryRouter>)
+    expect(await screen.findByText(/no sabemos si se registró/i)).toBeInTheDocument()
+    expect(screen.queryByLabelText('Cantidad de Tornillo M6')).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: /reintentar el cobro/i }))
+    expect(await screen.findByRole('heading', { name: /venta registrada/i })).toBeInTheDocument()
+    expect(registrarVenta.mock.calls[1][0]).toEqual(primero)
+    expect(screen.getByText(/V-0001/)).toBeInTheDocument()
+    expect(sessionStorage.getItem(CLAVE_VENTA_PENDIENTE)).toBeNull()
+    await userEvent.click(screen.getByRole('button', { name: /nueva venta/i }))
+    expect(await screen.findByLabelText(/buscar producto/i)).toBeInTheDocument()
+  })
+
+  it('abandonarla, con confirmación, borra lo guardado y deja vender', async () => {
+    await dejarAmbigua()
+    render(<MemoryRouter><Caja /></MemoryRouter>)
+    await screen.findByText(/no sabemos si se registró/i)
+    await userEvent.click(screen.getByRole('button', { name: /abandonar esta venta/i }))
+    await userEvent.click(screen.getByRole('button', { name: /sí, abandonar/i }))
+    expect(sessionStorage.getItem(CLAVE_VENTA_PENDIENTE)).toBeNull()
+    expect(screen.queryByText(/no sabemos si se registró/i)).not.toBeInTheDocument()
+    await agregar()
+  })
+
+  it('un vendedor con una venta restaurada que lleva descuento debe pedir el PIN otra vez', async () => {
+    entrar('VENDEDOR')
+    sessionStorage.setItem(CLAVE_VENTA_PENDIENTE, JSON.stringify({
+      clave: 'k-1',
+      cuerpo: { claveIdempotencia: 'k-1', lineas: [{ cantidad: 1, productoId: 30, descuento: { tipo: 'PORCENTAJE', valor: 10 } }], pagos: [] },
+      motivos: ['Descuento en la venta'],
+    }))
+    render(<MemoryRouter><Caja /></MemoryRouter>)
+    await screen.findByText(/no sabemos si se registró/i)
+    await userEvent.click(screen.getByRole('button', { name: /reintentar el cobro/i }))
+    const dialogo = await screen.findByRole('dialog', { name: /autorización del administrador/i })
+    expect(within(dialogo).getByText('Descuento en la venta')).toBeInTheDocument()
+    expect(registrarVenta).not.toHaveBeenCalled()
+    await userEvent.selectOptions(within(dialogo).getByLabelText(/administrador/i), '3')
+    await userEvent.type(within(dialogo).getByLabelText(/^pin$/i), '4821')
+    await userEvent.click(within(dialogo).getByRole('button', { name: /autorizar y cobrar/i }))
+    await waitFor(() => expect(registrarVenta).toHaveBeenCalled())
+    expect(registrarVenta.mock.calls[0][0].autorizacion).toEqual({ administradorId: 3, pin: '4821' })
+    expect(registrarVenta.mock.calls[0][0].claveIdempotencia).toBe('k-1')
   })
 })

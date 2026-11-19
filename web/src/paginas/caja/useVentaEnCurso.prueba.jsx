@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ErrorApi } from '../../servicios/api.js'
 import { CLAVE_EN_USO, registrarVenta } from '../../servicios/api/caja.js'
+import { CLAVE_VENTA_PENDIENTE } from '../../servicios/ventaPendiente.js'
 import useVentaEnCurso from './useVentaEnCurso.js'
 
 vi.mock('../../servicios/api/caja.js', async (original) => ({ ...(await original()), registrarVenta: vi.fn() }))
@@ -10,7 +11,10 @@ vi.mock('../../servicios/api/caja.js', async (original) => ({ ...(await original
 const construir = (clave) => ({ claveIdempotencia: clave, lineas: [{ productoId: 1, cantidad: 1 }], pagos: [] })
 const VENTA = { id: 1, consecutivo: 'V-1', total: 10, cambio: 0, lineas: [] }
 
-beforeEach(() => vi.resetAllMocks())
+beforeEach(() => {
+  vi.resetAllMocks()
+  sessionStorage.clear()
+})
 
 async function enviar(hook, autorizacion) {
   let resultado
@@ -124,5 +128,114 @@ describe('la venta en curso', () => {
     act(() => hook.result.current.abandonar())
     expect(hook.result.current.estado).toBe('libre')
     expect(hook.result.current.clave).not.toBe(clave)
+  })
+})
+
+describe('una venta ambigua sobrevive a recargar la pestaña (M12-R1)', () => {
+  const guardado = () => JSON.parse(sessionStorage.getItem(CLAVE_VENTA_PENDIENTE))
+
+  async function dejarAmbigua(autorizacion, motivos = []) {
+    registrarVenta.mockRejectedValueOnce(new TypeError('Failed to fetch'))
+    const hook = renderHook(() => useVentaEnCurso())
+    await act(async () => { await hook.result.current.enviar(construir, autorizacion, motivos) })
+    return hook
+  }
+
+  it('guarda la clave y el cuerpo exacto al quedar ambigua, y nunca el PIN', async () => {
+    const hook = await dejarAmbigua({ administradorId: 3, pin: '4821' }, ['Descuento en la venta'])
+    const guardada = guardado()
+    expect(guardada.clave).toBe(hook.result.current.clave)
+    expect(guardada.cuerpo).toEqual(construir(hook.result.current.clave))
+    expect(guardada.motivos).toEqual(['Descuento en la venta'])
+    expect(sessionStorage.getItem(CLAVE_VENTA_PENDIENTE)).not.toContain('4821')
+    expect(Object.keys(sessionStorage).filter((k) => sessionStorage.getItem(k).includes('4821'))).toEqual([])
+  })
+
+  it('al cargar de nuevo arranca ambigua, con la misma clave, y reenvía el cuerpo guardado sin armar otro', async () => {
+    const primero = await dejarAmbigua(undefined, ['Venta como encargo (sin existencia)'])
+    const clave = primero.result.current.clave
+    primero.unmount()
+
+    registrarVenta.mockResolvedValueOnce(VENTA)
+    const recargada = renderHook(() => useVentaEnCurso())
+    expect(recargada.result.current.estado).toBe('ambiguo')
+    expect(recargada.result.current.clave).toBe(clave)
+    expect(recargada.result.current.restaurada).toBe(true)
+    expect(recargada.result.current.motivos).toEqual(['Venta como encargo (sin existencia)'])
+
+    let r
+    await act(async () => { r = await recargada.result.current.enviar(() => { throw new Error('no se arma de nuevo') }) })
+    expect(r.venta).toBe(VENTA)
+    expect(registrarVenta.mock.calls[1][0]).toEqual(construir(clave))
+    expect(recargada.result.current.estado).toBe('libre')
+    expect(recargada.result.current.restaurada).toBe(false)
+    expect(sessionStorage.getItem(CLAVE_VENTA_PENDIENTE)).toBeNull()
+  })
+
+  it('una venta normal, sin ambigüedad, no deja nada guardado', async () => {
+    registrarVenta.mockResolvedValue(VENTA)
+    const hook = renderHook(() => useVentaEnCurso())
+    await enviar(hook)
+    expect(sessionStorage.getItem(CLAVE_VENTA_PENDIENTE)).toBeNull()
+  })
+
+  it.each([
+    ['un error definitivo', () => new ErrorApi(400, 'Datos inválidos')],
+    ['una clave en uso', () => new ErrorApi(409, 'x', CLAVE_EN_USO)],
+  ])('%s borra lo guardado', async (_n, error) => {
+    const hook = await dejarAmbigua()
+    expect(guardado()).not.toBeNull()
+    registrarVenta.mockRejectedValueOnce(error())
+    await enviar(hook)
+    expect(sessionStorage.getItem(CLAVE_VENTA_PENDIENTE)).toBeNull()
+  })
+
+  it('abandonar borra lo guardado', async () => {
+    const hook = await dejarAmbigua()
+    act(() => hook.result.current.abandonar())
+    expect(sessionStorage.getItem(CLAVE_VENTA_PENDIENTE)).toBeNull()
+  })
+
+  it('el PIN rechazado de una venta restaurada no pierde el cuerpo: se puede volver a intentar', async () => {
+    const primero = await dejarAmbigua(undefined, ['Descuento en la venta'])
+    primero.unmount()
+    const recargada = renderHook(() => useVentaEnCurso())
+    registrarVenta.mockRejectedValueOnce(new ErrorApi(403, 'El PIN no es correcto.'))
+    let r
+    await act(async () => { r = await recargada.result.current.enviar(construir, { administradorId: 3, pin: '0000' }) })
+    expect(r.error).toBe('El PIN no es correcto.')
+    expect(recargada.result.current.estado).toBe('ambiguo')
+    expect(guardado()).not.toBeNull()
+    registrarVenta.mockResolvedValueOnce(VENTA)
+    await act(async () => { r = await recargada.result.current.enviar(construir, { administradorId: 3, pin: '1111' }) })
+    expect(r.venta).toBe(VENTA)
+  })
+
+  it.each([
+    ['basura', 'no es json'],
+    ['sin cuerpo', JSON.stringify({ clave: 'a' })],
+    ['una clave que no es la del cuerpo', JSON.stringify({ clave: 'a', cuerpo: { claveIdempotencia: 'b' }, motivos: [] })],
+  ])('un valor guardado que no vale (%s) se ignora y arranca libre', (_n, valor) => {
+    sessionStorage.setItem(CLAVE_VENTA_PENDIENTE, valor)
+    const { result } = renderHook(() => useVentaEnCurso())
+    expect(result.current.estado).toBe('libre')
+    expect(result.current.restaurada).toBe(false)
+  })
+
+  it('si el almacenamiento no se puede usar, todo sigue funcionando en memoria', async () => {
+    const guardar = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('lleno') })
+    const leer = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('bloqueado') })
+    try {
+      registrarVenta.mockRejectedValueOnce(new TypeError('x')).mockResolvedValueOnce(VENTA)
+      const hook = renderHook(() => useVentaEnCurso())
+      expect(hook.result.current.estado).toBe('libre')
+      await enviar(hook)
+      expect(hook.result.current.estado).toBe('ambiguo')
+      const r = await enviar(hook)
+      expect(r.venta).toBe(VENTA)
+    } finally {
+      guardar.mockRestore()
+      leer.mockRestore()
+    }
   })
 })

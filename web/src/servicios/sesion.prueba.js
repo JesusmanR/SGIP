@@ -24,6 +24,13 @@ describe('sesión del navegador', () => {
     expect(sessionStorage.getItem('sgip.sesion')).toBeNull()
   })
 
+  it('borrar también suelta la venta ambigua guardada: no pasa a quien entre después en la misma pestaña', () => {
+    sessionStorage.setItem('sgip.venta-pendiente', '{}')
+    guardarSesion({ token: 'abc' })
+    borrarSesion()
+    expect(sessionStorage.getItem('sgip.venta-pendiente')).toBeNull()
+  })
+
   it('borrar deja la sesión vacía', () => {
     guardarSesion({ token: 'abc' })
     borrarSesion()

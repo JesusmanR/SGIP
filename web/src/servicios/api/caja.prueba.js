@@ -5,7 +5,8 @@ import {
   abrirTurno, actualizarCliente, administradores, clientePorIdentificacion, crearCliente,
   datosDeLaEmpresa, mediosDePago, productoPorCodigo, productosPorTexto, registrarVenta,
   saldoDeCliente, turnoActual, CLAVE_EN_USO, BusquedaAgotada,
-  cerrarTurno, listarTurnos, resumenDelTurno,
+  cambiarActivoMedio, cerrarTurno, cobrarDomicilio, entregarDomicilio, entregarEncargo, listarDomicilios,
+  listarEncargos, listarMedios, listarTurnos, registrarDevolucion, resumenDelTurno, ventaPorConsecutivo,
 } from './caja.js'
 
 vi.mock('../api.js', async (original) => ({ ...(await original()), pedir: vi.fn(async () => ({ ok: true })) }))
@@ -95,7 +96,7 @@ describe('servicio de la caja', () => {
 })
 
 
-describe('servicio de la caja: cierre y listado de turnos', () => {
+describe('servicio de la caja: turnos, domicilios, encargos, devoluciones y medios', () => {
   it('el resumen, el cierre y el listado del turno', async () => {
     await resumenDelTurno()
     expect(pedir).toHaveBeenLastCalledWith('/caja/turnos/actual/resumen')
@@ -103,5 +104,39 @@ describe('servicio de la caja: cierre y listado de turnos', () => {
     expect(pedir).toHaveBeenLastCalledWith('/caja/turnos/actual/cierre', { method: 'POST', body: { efectivoContado: 150000, observacion: null } })
     await listarTurnos({ desde: '2026-11-01', hasta: '2026-11-30' })
     expect(pedir).toHaveBeenLastCalledWith('/caja/turnos?desde=2026-11-01&hasta=2026-11-30')
+  })
+
+  it('los domicilios: lista por estado, entrega y cobro con la lista de pagos como cuerpo', async () => {
+    await listarDomicilios('POR_COBRAR')
+    expect(pedir).toHaveBeenLastCalledWith('/caja/domicilios?estado=POR_COBRAR')
+    await entregarDomicilio(101)
+    expect(pedir).toHaveBeenLastCalledWith('/caja/domicilios/101/entrega', { method: 'POST' })
+    const pagos = [{ medioId: 1, monto: 85000, recibido: 85000 }]
+    await cobrarDomicilio(101, pagos)
+    expect(pedir).toHaveBeenLastCalledWith('/caja/domicilios/101/cobro', { method: 'POST', body: pagos })
+  })
+
+  it('los encargos: lista por estado y entrega de una línea', async () => {
+    await listarEncargos('LLEGO')
+    expect(pedir).toHaveBeenLastCalledWith('/caja/encargos?estado=LLEGO')
+    await entregarEncargo(72)
+    expect(pedir).toHaveBeenLastCalledWith('/caja/encargos/72/entrega', { method: 'POST' })
+  })
+
+  it('la venta se busca por consecutivo codificado, un 404 es «no hay», y la devolución se envía tal cual', async () => {
+    await ventaPorConsecutivo('V-0042')
+    expect(pedir).toHaveBeenLastCalledWith('/caja/ventas?consecutivo=V-0042')
+    pedir.mockRejectedValueOnce(new ErrorApi(404, 'No existe.'))
+    expect(await ventaPorConsecutivo('V-1')).toBeNull()
+    const solicitud = { ventaId: 100, unidades: [], motivo: 'x', reembolsos: [] }
+    await registrarDevolucion(solicitud)
+    expect(pedir).toHaveBeenLastCalledWith('/caja/devoluciones', { method: 'POST', body: solicitud })
+  })
+
+  it('los medios de pago del administrador: lista y cambio de activo', async () => {
+    await listarMedios()
+    expect(pedir).toHaveBeenLastCalledWith('/medios-pago')
+    await cambiarActivoMedio(2, false)
+    expect(pedir).toHaveBeenLastCalledWith('/medios-pago/2', { method: 'PATCH', body: { activo: false } })
   })
 })

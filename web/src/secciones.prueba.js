@@ -11,6 +11,9 @@ const VENDEN = ['ADMINISTRADOR', 'VENDEDOR']
 const TODOS = ['ADMINISTRADOR', 'VENDEDOR', 'CLIENTE']
 const ESPERADO = [
   ['/caja', 'Caja', VENDEN, 'Operación'],
+  ['/caja/domicilios', 'Domicilios', VENDEN, 'Operación'],
+  ['/caja/devoluciones', 'Devoluciones', VENDEN, 'Operación'],
+  ['/caja/encargos', 'Encargos', ADMIN, 'Operación'],
   ['/caja/turnos', 'Turnos de caja', ADMIN, 'Operación'],
   ['/panel', 'Panel', ADMIN, 'Operación'],
   ['/catalogo', 'Catálogo', TODOS, 'Operación'],
@@ -20,6 +23,7 @@ const ESPERADO = [
   ['/inventario', 'Inventario', ADMIN, 'Inventario'],
   ['/precios', 'Reglas de ganancia', ADMIN, 'Configuración'],
   ['/impuestos', 'Impuestos', ADMIN, 'Configuración'],
+  ['/caja/medios-pago', 'Medios de pago', ADMIN, 'Configuración'],
   ['/usuarios', 'Usuarios', ADMIN, 'Configuración'],
   ['/empresa', 'Mi empresa', TODOS, 'Configuración'],
   ['/plataforma/empresas', 'Empresas', ['SUPER_ADMIN'], 'Plataforma'],
@@ -36,10 +40,15 @@ describe('tabla de secciones', () => {
     expect(secciones[0].ruta).toBe('/caja')
   })
 
-  it('rutasDeLaCajaPorRol: turnos solo del administrador; el cierre y los cierres propios cuelgan de /caja', () => {
-    for (const ruta of ['/caja/turnos']) {
+  it('rutasDeLaCajaPorRol: turnos, encargos y medios de pago solo del administrador; domicilios y devoluciones de quien vende', () => {
+    for (const ruta of ['/caja/turnos', '/caja/encargos', '/caja/medios-pago']) {
       expect(puedeVer(ruta, 'ADMINISTRADOR'), ruta).toBe(true)
       for (const rol of ['VENDEDOR', 'CLIENTE', 'SUPER_ADMIN']) expect(puedeVer(ruta, rol), `${ruta} ${rol}`).toBe(false)
+    }
+    for (const ruta of ['/caja/domicilios', '/caja/devoluciones']) {
+      expect(puedeVer(ruta, 'ADMINISTRADOR'), ruta).toBe(true)
+      expect(puedeVer(ruta, 'VENDEDOR'), ruta).toBe(true)
+      for (const rol of ['CLIENTE', 'SUPER_ADMIN']) expect(puedeVer(ruta, rol), `${ruta} ${rol}`).toBe(false)
     }
     // El cierre y los cierres propios cuelgan de /caja: no tienen entrada de menú propia.
     expect(puedeVer('/caja/cierre', 'VENDEDOR')).toBe(true)

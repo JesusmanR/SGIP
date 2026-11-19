@@ -257,6 +257,25 @@ describe('imágenes protegidas', () => {
   })
 })
 
+describe('PIN de autorización', () => {
+  it('lee si ya está configurado y lo fija con el actual solo cuando lo hay', async () => {
+    guardarSesion({ token: 'abc', nombre: 'Ana' })
+    global.fetch.mockResolvedValue({ ok: true, status: 200, json: async () => ({ configurado: true }) })
+    await expect(api.estadoPin()).resolves.toEqual({ configurado: true })
+    expect(global.fetch.mock.calls[0][0]).toBe('/api/v1/perfil/pin')
+
+    global.fetch.mockResolvedValue({ ok: true, status: 204, json: async () => { throw new Error('sin cuerpo') } })
+    await api.fijarPin('1111', '4821')
+    const [ruta, opciones] = global.fetch.mock.calls[1]
+    expect(ruta).toBe('/api/v1/perfil/pin')
+    expect(opciones.method).toBe('PUT')
+    expect(JSON.parse(opciones.body)).toEqual({ pinActual: '1111', pinNuevo: '4821' })
+
+    await api.fijarPin(null, '4821')
+    expect(JSON.parse(global.fetch.mock.calls[2][1].body)).toEqual({ pinActual: null, pinNuevo: '4821' })
+  })
+})
+
 describe('pedir exportado', () => {
   it('se exporta para que cada sección arme su módulo sin tocar api.js', async () => {
     const { pedir } = await import('./api.js')
