@@ -3,6 +3,7 @@ package co.com.bspstore.sgip.api;
 import co.com.bspstore.sgip.api.dto.DevolucionRegistrada;
 import co.com.bspstore.sgip.api.dto.SaldoDeCliente;
 import co.com.bspstore.sgip.api.dto.SolicitudDevolucion;
+import co.com.bspstore.sgip.logica.ResultadoDeDevolucion;
 import co.com.bspstore.sgip.logica.ServicioDevoluciones;
 import co.com.bspstore.sgip.logica.ServicioSaldoAFavor;
 import jakarta.validation.Valid;
@@ -46,7 +47,9 @@ public class DevolucionesControlador {
 
     @PostMapping("/devoluciones")
     public ResponseEntity<DevolucionRegistrada> devolver(@Valid @RequestBody SolicitudDevolucion solicitud) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(devoluciones.registrar(solicitud));
+        ResultadoDeDevolucion resultado = devoluciones.procesar(solicitud);
+        return ResponseEntity.status(resultado.yaExistia() ? HttpStatus.OK : HttpStatus.CREATED)
+                .body(resultado.devolucion());
     }
 
     @GetMapping("/clientes/{id}/saldo")

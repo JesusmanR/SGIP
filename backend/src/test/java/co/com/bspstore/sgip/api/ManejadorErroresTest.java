@@ -1,6 +1,9 @@
 package co.com.bspstore.sgip.api;
 
+import co.com.bspstore.sgip.logica.AutorizacionRequeridaException;
 import co.com.bspstore.sgip.logica.ClaveActualIncorrectaException;
+import co.com.bspstore.sgip.logica.PinBloqueadoException;
+import co.com.bspstore.sgip.logica.PinInvalidoException;
 import co.com.bspstore.sgip.logica.ClaveNuevaInvalidaException;
 import co.com.bspstore.sgip.logica.CorreoRepetidoException;
 import co.com.bspstore.sgip.logica.NitRepetidoException;
@@ -461,5 +464,52 @@ class ManejadorErroresTest {
         assertEquals(400, p.getStatus());
         assertEquals("Efectivo recibido no válido", p.getTitle());
         assertEquals("El efectivo recibido no cubre el total.", p.getDetail());
+    }
+
+    // ------------------------------------------------------- los 403 del PIN llevan su propio tipo
+
+    /**
+     * Un 403 por el PIN y un 403 por una empresa sin escritura se parecen en el estado; el cliente los
+     * distingue por el tipo (contiene «pin» o «autorizacion»), no por el texto.
+     */
+    @Test
+    void elPinIncorrectoLlevaSuPropioTipoYConservaEstadoYTexto() {
+        ProblemDetail p = manejador.pinInvalido(new PinInvalidoException(15));
+
+        assertEquals(403, p.getStatus());
+        assertEquals("PIN incorrecto", p.getTitle());
+        assertEquals("urn:sgip:caja:pin-invalido", p.getType().toString());
+        assertEquals("El administrador o el PIN no son correctos. Si te equivocas varias veces, "
+                + "la autorización se bloquea durante 15 minutos.", p.getDetail());
+    }
+
+    @Test
+    void laAutorizacionBloqueadaLlevaSuPropioTipoYConservaEstadoYTexto() {
+        ProblemDetail p = manejador.pinBloqueado(new PinBloqueadoException(15));
+
+        assertEquals(403, p.getStatus());
+        assertEquals("Autorización bloqueada", p.getTitle());
+        assertEquals("urn:sgip:caja:pin-bloqueado", p.getType().toString());
+        assertEquals("Se superó el número de intentos con el PIN. Espera 15 minutos desde el bloqueo e inténtalo de nuevo.",
+                p.getDetail());
+    }
+
+    @Test
+    void laAutorizacionRequeridaLlevaSuPropioTipoYConservaEstadoYTexto() {
+        ProblemDetail p = manejador.autorizacionRequerida(new AutorizacionRequeridaException());
+
+        assertEquals(403, p.getStatus());
+        assertEquals("Autorización requerida", p.getTitle());
+        assertEquals("urn:sgip:caja:autorizacion-requerida", p.getType().toString());
+        assertEquals("Esta operación necesita la autorización de un administrador.", p.getDetail());
+    }
+
+    @Test
+    void elPermisoDeRolNoLlevaUnTipoDePin() {
+        ProblemDetail p = manejador.accesoDenegado(new org.springframework.security.access.AccessDeniedException("x"));
+
+        assertEquals(403, p.getStatus());
+        assertEquals(false, String.valueOf(p.getType()).contains("pin")
+                || String.valueOf(p.getType()).contains("autorizacion"));
     }
 }

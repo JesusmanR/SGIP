@@ -113,8 +113,14 @@ public class RegistradorDeDevolucion {
         this.reloj = reloj;
     }
 
+    /** Firma mínima: la clave de idempotencia todavía no se mira. */
+    @Transactional(readOnly = true, isolation = Isolation.READ_COMMITTED)
+    public Optional<ResultadoDeDevolucion> siYaExiste(SolicitudDevolucion solicitud) {
+        return Optional.empty();
+    }
+
     @Transactional(isolation = Isolation.READ_COMMITTED)
-    public DevolucionRegistrada registrar(SolicitudDevolucion s, Autorizacion autorizacion) {
+    public ResultadoDeDevolucion registrar(SolicitudDevolucion s, Autorizacion autorizacion) {
         autorizacion.exigir(ExcepcionAutorizable.DEVOLUCION);
         Integer empresa = ContextoEmpresa.empresaActual();
         Integer cajero = cajeroEnSesion();
@@ -209,9 +215,10 @@ public class RegistradorDeDevolucion {
         String estado = anulada ? "ANULADA" : "DEVUELTA_PARCIAL";
         devoluciones.actualizarVenta(empresa, venta.ventaId(), estado, estadoPago);
 
-        return new DevolucionRegistrada(devolucionId, consecutivo, calculo.valor(), reembolsado.setScale(2),
+        return new ResultadoDeDevolucion(new DevolucionRegistrada(devolucionId, consecutivo, calculo.valor(),
+                reembolsado.setScale(2),
                 anulada ? BigDecimal.ZERO.setScale(2) : porCobrarAhora.setScale(2, RoundingMode.UNNECESSARY), estado,
-                List.copyOf(reembolsos));
+                List.copyOf(reembolsos)), false);
     }
 
     // ------------------------------------------------------------ reembolsos

@@ -44,8 +44,13 @@ final class NormalizadorDeDevolucion {
         if (motivo.length() > LimitesDeVenta.MOTIVO_DE_LA_DEVOLUCION) {
             throw invalida("El motivo admite hasta " + LimitesDeVenta.MOTIVO_DE_LA_DEVOLUCION + " caracteres.");
         }
-        return new SolicitudDevolucion(s.ventaId(), unidades(s.unidades()), motivo, reembolsos(s.reembolsos()),
+        return new SolicitudDevolucion(s.clave(), s.ventaId(), unidades(s.unidades()), motivo, reembolsos(s.reembolsos()),
                 s.autorizacion());
+    }
+
+    /** Firma mínima. */
+    static String huella(SolicitudDevolucion n) {
+        return "";
     }
 
     private static List<UnidadDevuelta> unidades(List<UnidadDevuelta> pedidas) {

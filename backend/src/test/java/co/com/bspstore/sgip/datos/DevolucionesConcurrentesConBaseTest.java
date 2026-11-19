@@ -12,6 +12,7 @@ import co.com.bspstore.sgip.api.dto.SolicitudVenta;
 import co.com.bspstore.sgip.api.dto.UnidadDevuelta;
 import co.com.bspstore.sgip.api.dto.VentaRegistrada;
 import co.com.bspstore.sgip.logica.EstadoNoAdmiteLaOperacionException;
+import co.com.bspstore.sgip.logica.ResultadoDeDevolucion;
 import co.com.bspstore.sgip.logica.ServicioDevoluciones;
 import co.com.bspstore.sgip.logica.ServicioDomicilios;
 import co.com.bspstore.sgip.logica.ServicioVentas;
@@ -117,12 +118,12 @@ class DevolucionesConcurrentesConBaseTest {
     }
 
     private SolicitudDevolucion delAdministrador(Long venta, List<UnidadDevuelta> unidades, Reembolso... reembolsos) {
-        return new SolicitudDevolucion(venta, unidades, "Motivo", List.of(reembolsos), null);
+        return new SolicitudDevolucion(UUID.randomUUID(), venta, unidades, "Motivo", List.of(reembolsos), null);
     }
 
     /** Del vendedor: necesita el PIN del administrador. */
     private SolicitudDevolucion delVendedor(Long venta, List<UnidadDevuelta> unidades, Reembolso... reembolsos) {
-        return new SolicitudDevolucion(venta, unidades, "Motivo", List.of(reembolsos),
+        return new SolicitudDevolucion(UUID.randomUUID(), venta, unidades, "Motivo", List.of(reembolsos),
                 new SolicitudAutorizacion(caja.administradorId, CajaDePrueba.PIN));
     }
 
@@ -400,5 +401,135 @@ class DevolucionesConcurrentesConBaseTest {
                 SELECT saldo FROM saldos_cliente WHERE empresa_id = :e AND cliente_id = :c
                 """).param("e", caja.empresa.empresaId).param("c", caja.clienteId).query(BigDecimal.class).single()));
         assertEquals(3, caja.movimientosDeSaldo("ABONO"));
+    }
+
+    // ------------------------------------------------------- el reintento a la vez que el original
+
+    @Test
+    void dosEnviosSimultaneosDeLaMismaDevolucionRegistranUnaSolaYElOtroRecibeLaMisma() throws Exception {
+        Integer producto = caja.producto("A", 10, "10000");
+        VentaRegistrada v = vender(producto, 3, "30000");
+        SolicitudDevolucion s = new SolicitudDevolucion(UUID.randomUUID(), v.id(),
+                List.of(new UnidadDevuelta(producto, 2)), "Motivo", List.of(enEfectivo("20000")), null);
+        Future<ResultadoDeDevolucion> uno;
+        Future<ResultadoDeDevolucion> otro;
+        // Los dos pasan la lectura previa (la devolución todavía no existe) y esperan la fila de la venta; el
+        // segundo, ya con el bloqueo, encuentra la clave de la primera y la devuelve.
+        try (Bloqueo bloqueo = bloqueoDeLaVenta(v.id())) {
+            uno = comoAdministrador(() -> devoluciones.procesar(s));
+            otro = comoAdministrador(() -> devoluciones.procesar(s));
+            esperarAQueEsperen("ventas", 2, uno, otro);
+        }
+
+        ResultadoDeDevolucion a = resultado(uno);
+        ResultadoDeDevolucion b = resultado(otro);
+
+        assertEquals(1, (a.yaExistia() ? 1 : 0) + (b.yaExistia() ? 1 : 0), "una es nueva y la otra, el reintento");
+        assertEquals(a.devolucion().id(), b.devolucion().id());
+        assertEquals(a.devolucion().consecutivo(), b.devolucion().consecutivo());
+        assertEquals(1, caja.cuantas("devoluciones"));
+        assertEquals(2, unidadesDevueltas(), "se devolvieron 2 una sola vez");
+        assertEquals(9, caja.existencia(producto), "10 - 3 + 2");
+    }
+
+    // ------------------------------------------------------- el cobro contra lo devuelto a la vez
+
+    @Test
+    void elCobroQueEsperaLaDevolucionVeLoQueEstaDevolvioYSuPagoCompletoEs400() throws Exception {
+        Integer producto = caja.producto("A", 10, "3000");
+        VentaRegistrada v = contraEntrega(producto, 3);
+        Future<ResultadoDeDevolucion> devolucion;
+        Future<CobroRegistrado> cobro;
+        // El producto tomado desde fuera: la devolución toma la venta y espera ahí. El cobro llega después y
+        // espera la venta. Cuando se suelta todo, el cobro lee con la devolución ya confirmada: debe 6 000, y su
+        // pago de 9 000 no cuadra.
+        try (Bloqueo bloqueo = new Bloqueo(() -> jdbc.sql("""
+                SELECT producto_id FROM productos FORCE INDEX (PRIMARY)
+                 WHERE producto_id = :p AND empresa_id = :e FOR UPDATE
+                """).param("p", producto).param("e", caja.empresa.empresaId).query(Integer.class).single())) {
+            devolucion = comoAdministrador(() -> devoluciones.procesar(new SolicitudDevolucion(UUID.randomUUID(), v.id(),
+                    List.of(new UnidadDevuelta(producto, 1)), "Motivo", List.of(), null)));
+            esperarAQueEsperen("productos", 1, devolucion);
+            cobro = comoVendedor(() -> domicilios.cobrar(v.id(), List.of(efectivo("9000"))));
+            esperarAQueEsperen("ventas", 1, cobro);
+        }
+
+        resultado(devolucion);
+        Throwable fallo = laQueFallo(cobro, cobro, 0);
+
+        assertInstanceOf(VentaInvalidaException.class, fallo, String.valueOf(fallo));
+        assertEquals(0, caja.cuantas("pagos_venta"), "no entró ningún pago");
+        assertEquals("PENDIENTE", jdbc.sql("SELECT estado_pago FROM ventas WHERE venta_id = :v")
+                .param("v", v.id()).query(String.class).single());
+    }
+
+    // ------------------------------------------------------- el saldo del cliente a la vez
+
+    private void darSaldoAlCliente(Integer producto) {
+        VentaRegistrada semilla = vender(producto, 1, "10000");
+        devoluciones.registrar(delAdministrador(semilla.id(), List.of(), enSaldo("10000")));
+    }
+
+    private VentaRegistrada ventaPagadaConSaldo(Integer producto) {
+        return ventas.registrar(new SolicitudVenta(UUID.randomUUID(), caja.clienteId,
+                List.of(new LineaSolicitada(producto, null, 1, null, null)), null,
+                List.of(new PagoSolicitado(caja.saldoAFavorId, new BigDecimal("10000"), null, null)), null, null, null));
+    }
+
+    private Bloqueo bloqueoDelSaldo() {
+        return new Bloqueo(() -> jdbc.sql("""
+                SELECT saldo FROM saldos_cliente WHERE empresa_id = :e AND cliente_id = :c FOR UPDATE
+                """).param("e", caja.empresa.empresaId).param("c", caja.clienteId).query(BigDecimal.class).single());
+    }
+
+    private BigDecimal saldoDelCliente() {
+        return jdbc.sql("SELECT saldo FROM saldos_cliente WHERE empresa_id = :e AND cliente_id = :c")
+                .param("e", caja.empresa.empresaId).param("c", caja.clienteId).query(BigDecimal.class).single();
+    }
+
+    @Test
+    void dosVentasQueGastanElMismoSaldoUnaPasaYLaOtraRecibe400SinSaldoNegativo() throws Exception {
+        Integer semilla = caja.producto("S", 5, "10000");
+        Integer uno = caja.producto("A", 5, "10000");
+        Integer otro = caja.producto("B", 5, "10000");
+        darSaldoAlCliente(semilla);
+        Future<VentaRegistrada> delAdmin;
+        Future<VentaRegistrada> delVend;
+        try (Bloqueo bloqueo = bloqueoDelSaldo()) {
+            delAdmin = comoAdministrador(() -> ventaPagadaConSaldo(uno));
+            delVend = comoVendedor(() -> ventaPagadaConSaldo(otro));
+            esperarAQueEsperen("saldos_cliente", 2, delAdmin, delVend);
+        }
+
+        Throwable perdedora = laQueFallo(delAdmin, delVend, 1);
+
+        assertInstanceOf(VentaInvalidaException.class, perdedora, String.valueOf(perdedora));
+        assertEquals(0, new BigDecimal("0").compareTo(saldoDelCliente()), "el saldo quedó en cero y no pasó a negativo");
+        assertEquals(1, caja.movimientosDeSaldo("USO"), "el saldo se gastó una sola vez");
+        assertEquals(9, caja.existencia(uno) + caja.existencia(otro), "una venta salió y la otra no");
+    }
+
+    @Test
+    void unUsoYUnAbonoDelMismoSaldoSeSumanSeaCualSeaElOrden() throws Exception {
+        Integer semilla = caja.producto("S", 5, "10000");
+        Integer paraDevolver = caja.producto("D", 5, "10000");
+        Integer paraGastar = caja.producto("G", 5, "10000");
+        darSaldoAlCliente(semilla);
+        VentaRegistrada aDevolver = vender(paraDevolver, 1, "10000");
+        Future<VentaRegistrada> uso;
+        Future<DevolucionRegistrada> abono;
+        try (Bloqueo bloqueo = bloqueoDelSaldo()) {
+            uso = comoAdministrador(() -> ventaPagadaConSaldo(paraGastar));
+            abono = comoVendedor(() -> devoluciones.registrar(
+                    delVendedor(aDevolver.id(), List.of(), enSaldo("10000"))));
+            esperarAQueEsperen("saldos_cliente", 2, uso, abono);
+        }
+
+        resultado(uso);
+        resultado(abono);
+
+        assertEquals(0, new BigDecimal("10000").compareTo(saldoDelCliente()), "10 000 + 10 000 - 10 000");
+        assertEquals(2, caja.movimientosDeSaldo("ABONO"));
+        assertEquals(1, caja.movimientosDeSaldo("USO"));
     }
 }

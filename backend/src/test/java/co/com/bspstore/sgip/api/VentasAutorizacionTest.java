@@ -1,6 +1,7 @@
 package co.com.bspstore.sgip.api;
 
 import co.com.bspstore.sgip.api.dto.SolicitudVenta;
+import co.com.bspstore.sgip.api.dto.VentaConsultada;
 import co.com.bspstore.sgip.api.dto.VentaRegistrada;
 import co.com.bspstore.sgip.config.ConfiguracionSeguridad;
 import co.com.bspstore.sgip.config.FiltroCambioClave;
@@ -11,13 +12,16 @@ import co.com.bspstore.sgip.datos.RepositorioPlataforma;
 import co.com.bspstore.sgip.logica.AutorizacionRequeridaException;
 import co.com.bspstore.sgip.logica.ClaveDeIdempotenciaEnUsoException;
 import co.com.bspstore.sgip.logica.ExistenciaInsuficienteException;
+import co.com.bspstore.sgip.logica.RecursoNoEncontradoException;
 import co.com.bspstore.sgip.logica.ResultadoDeVenta;
 import co.com.bspstore.sgip.logica.ServicioSesion;
+import co.com.bspstore.sgip.logica.ServicioConsultaDeVentas;
 import co.com.bspstore.sgip.logica.ServicioVentas;
 import co.com.bspstore.sgip.logica.SinTurnoAbiertoException;
 import co.com.bspstore.sgip.logica.VentaInvalidaException;
 import co.com.bspstore.sgip.logica.venta.LineaCalculada;
 import co.com.bspstore.sgip.modelo.EstadoEmpresa;
+import co.com.bspstore.sgip.modelo.TipoMedio;
 import co.com.bspstore.sgip.logica.DescuentoInvalidoException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -90,6 +94,7 @@ class VentasAutorizacionTest {
     @Autowired MockMvc mvc;
 
     @MockitoBean ServicioVentas servicio;
+    @MockitoBean ServicioConsultaDeVentas consulta;
     @MockitoBean ServicioSesion sesiones;
     @MockitoBean RepositorioPlataforma plataforma;
 
@@ -445,6 +450,7 @@ class VentasAutorizacionTest {
         mvc.perform(registrar(CUERPO).with(como("VENDEDOR")))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.title").value("Clave de idempotencia en uso"))
+                .andExpect(jsonPath("$.type").value("urn:sgip:caja:clave-en-uso"))
                 .andExpect(jsonPath("$.detail").value(
                         "Esa clave de idempotencia ya registró otra venta. Genera una clave nueva para una venta distinta."));
     }
@@ -465,5 +471,97 @@ class VentasAutorizacionTest {
         mvc.perform(registrar(CUERPO).with(como("VENDEDOR")))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.title").value("Autorización requerida"));
+    }
+
+    // ------------------------------------------------------- consultar una venta por su consecutivo
+
+    private static final VentaConsultada CONSULTADA = new VentaConsultada(9L, "V-00000001", "DEVUELTA_PARCIAL", "PAGADA",
+            new BigDecimal("30000.00"), new VentaConsultada.Cliente(8, "Ana Pérez", false),
+            List.of(new VentaConsultada.Linea(7, "Pastillas de freno", 3, 2, new BigDecimal("30000.00"),
+                    new BigDecimal("20000.00"))),
+            List.of(new VentaConsultada.Pago(1, "Efectivo", TipoMedio.EFECTIVO, new BigDecimal("20000.00")),
+                    new VentaConsultada.Pago(13, "Saldo a favor", TipoMedio.SALDO_A_FAVOR, new BigDecimal("10000.00"))),
+            new BigDecimal("15000.00"));
+
+    @ParameterizedTest
+    @ValueSource(strings = {"ADMINISTRADOR", "VENDEDOR"})
+    void elAdministradorYElVendedorConsultanUnaVentaPorSuConsecutivo(String rol) throws Exception {
+        when(consulta.porConsecutivo("V-00000001")).thenReturn(CONSULTADA);
+
+        mvc.perform(get(RUTA).param("consecutivo", "V-00000001").with(como(rol)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(9))
+                .andExpect(jsonPath("$.consecutivo").value("V-00000001"))
+                .andExpect(jsonPath("$.estado").value("DEVUELTA_PARCIAL"))
+                .andExpect(jsonPath("$.estadoPago").value("PAGADA"))
+                .andExpect(jsonPath("$.total").value(30000))
+                .andExpect(jsonPath("$.cliente.id").value(8))
+                .andExpect(jsonPath("$.cliente.nombre").value("Ana Pérez"))
+                .andExpect(jsonPath("$.cliente.consumidorFinal").value(false))
+                .andExpect(jsonPath("$.lineas[0].productoId").value(7))
+                .andExpect(jsonPath("$.lineas[0].nombre").value("Pastillas de freno"))
+                .andExpect(jsonPath("$.lineas[0].cantidad").value(3))
+                .andExpect(jsonPath("$.lineas[0].cantidadDevuelta").value(2))
+                .andExpect(jsonPath("$.lineas[0].total").value(30000))
+                .andExpect(jsonPath("$.lineas[0].valorDevuelto").value(20000))
+                .andExpect(jsonPath("$.pagos[0].medioId").value(1))
+                .andExpect(jsonPath("$.pagos[0].medio").value("Efectivo"))
+                .andExpect(jsonPath("$.pagos[0].tipo").value("EFECTIVO"))
+                .andExpect(jsonPath("$.pagos[0].monto").value(20000))
+                .andExpect(jsonPath("$.pagos[1].tipo").value("SALDO_A_FAVOR"))
+                .andExpect(jsonPath("$.pagos[1].monto").value(10000))
+                .andExpect(jsonPath("$.reembolsadoSinSaldo").value(15000));
+    }
+
+    @Test
+    void laVentaConsultadaNuncaTraeCostoNiUtilidad() throws Exception {
+        when(consulta.porConsecutivo("V-00000001")).thenReturn(CONSULTADA);
+
+        String json = mvc.perform(get(RUTA).param("consecutivo", "V-00000001").with(como("ADMINISTRADOR")))
+                .andReturn().getResponse().getContentAsString().toLowerCase();
+
+        for (String prohibida : List.of("costo", "utilidad", "margen")) {
+            assertEquals(false, json.contains(prohibida), prohibida + " en " + json);
+        }
+    }
+
+    @Test
+    void unaVentaQueNoExisteEs404() throws Exception {
+        doThrow(new RecursoNoEncontradoException("La venta no existe.")).when(consulta).porConsecutivo("V-99999999");
+
+        mvc.perform(get(RUTA).param("consecutivo", "V-99999999").with(como("VENDEDOR")))
+                .andExpect(status().isNotFound())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
+    }
+
+    @Test
+    void sinElConsecutivoEs400() throws Exception {
+        mvc.perform(get(RUTA).with(como("VENDEDOR"))).andExpect(status().isBadRequest());
+
+        verifyNoInteractions(consulta);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"CLIENTE", "SUPER_ADMIN"})
+    @NullSource
+    void elClienteYElSuperAdministradorNoConsultanVentas(String rol) throws Exception {
+        mvc.perform(get(RUTA).param("consecutivo", "V-00000001").with(como(rol)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.title").value("Sin permiso para esta operación"));
+
+        verifyNoInteractions(consulta);
+    }
+
+    @Test
+    void consultarSinAutenticarEsUn401() throws Exception {
+        mvc.perform(get(RUTA).param("consecutivo", "V-00000001")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void unaEmpresaEnConsultaTambienPuedeConsultarUnaVenta() throws Exception {
+        when(plataforma.estadoDe(4)).thenReturn(Optional.of(EstadoEmpresa.DESACTIVADA));
+        when(consulta.porConsecutivo("V-00000001")).thenReturn(CONSULTADA);
+
+        mvc.perform(get(RUTA).param("consecutivo", "V-00000001").with(como("VENDEDOR"))).andExpect(status().isOk());
     }
 }

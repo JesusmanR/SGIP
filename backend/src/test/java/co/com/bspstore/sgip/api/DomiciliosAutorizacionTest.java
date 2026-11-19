@@ -76,7 +76,7 @@ class DomiciliosAutorizacionTest {
 
     private static final DomicilioPendiente PENDIENTE = new DomicilioPendiente(9L, "V-00000001",
             OffsetDateTime.parse("2026-11-09T09:00:00-05:00"), "Ana Pérez", "Calle 1 # 2-3", "Cali", "3001112233",
-            "Luis", true, "PENDIENTE", new BigDecimal("23800.00"), new BigDecimal("23800.00"), 3);
+            "Luis", true, "PENDIENTE", new BigDecimal("23800.00"), new BigDecimal("23800.00"), 3, 8L, false);
 
     @Autowired MockMvc mvc;
 
@@ -119,7 +119,9 @@ class DomiciliosAutorizacionTest {
                 .andExpect(jsonPath("$[0].recibe").value("Luis"))
                 .andExpect(jsonPath("$[0].contraEntrega").value(true))
                 .andExpect(jsonPath("$[0].valorPorCobrar").value(23800))
-                .andExpect(jsonPath("$[0].antiguedadDias").value(3));
+                .andExpect(jsonPath("$[0].antiguedadDias").value(3))
+                .andExpect(jsonPath("$[0].clienteId").value(8))
+                .andExpect(jsonPath("$[0].entregado").value(false));
         verify(servicio).listar("POR_COBRAR");
     }
 

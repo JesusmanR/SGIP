@@ -12,11 +12,16 @@ import co.com.bspstore.sgip.api.dto.SolicitudAutorizacion;
 import co.com.bspstore.sgip.api.dto.SolicitudDevolucion;
 import co.com.bspstore.sgip.api.dto.SolicitudVenta;
 import co.com.bspstore.sgip.api.dto.UnidadDevuelta;
+import co.com.bspstore.sgip.api.dto.VentaConsultada;
 import co.com.bspstore.sgip.api.dto.VentaRegistrada;
 import co.com.bspstore.sgip.logica.AutorizacionRequeridaException;
 import co.com.bspstore.sgip.logica.EstadoNoAdmiteLaOperacionException;
 import co.com.bspstore.sgip.logica.RecursoNoEncontradoException;
+import co.com.bspstore.sgip.logica.ClaveDeIdempotenciaEnUsoException;
+import co.com.bspstore.sgip.logica.ResultadoDeDevolucion;
+import co.com.bspstore.sgip.logica.ServicioConsultaDeVentas;
 import co.com.bspstore.sgip.logica.ServicioDevoluciones;
+import co.com.bspstore.sgip.logica.ServicioEncargos;
 import co.com.bspstore.sgip.logica.ServicioDomicilios;
 import co.com.bspstore.sgip.logica.ServicioSaldoAFavor;
 import co.com.bspstore.sgip.logica.ServicioVentas;
@@ -34,12 +39,14 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -61,6 +68,8 @@ class DevolucionesConBaseTest {
     @Autowired ServicioDevoluciones devoluciones;
     @Autowired ServicioDomicilios domicilios;
     @Autowired ServicioSaldoAFavor saldos;
+    @Autowired ServicioEncargos encargos;
+    @Autowired ServicioConsultaDeVentas consulta;
     @Autowired RepositorioPlataforma plataforma;
     @Autowired CategoriaRepositorio categorias;
     @Autowired ProveedorRepositorio proveedores;
@@ -129,7 +138,7 @@ class DevolucionesConBaseTest {
 
     /** Lo que envía el administrador: sin PIN. */
     private static SolicitudDevolucion devolucion(Long venta, List<UnidadDevuelta> unidades, List<Reembolso> reembolsos) {
-        return new SolicitudDevolucion(venta, unidades, "El cliente se arrepintió", reembolsos, null);
+        return new SolicitudDevolucion(UUID.randomUUID(), venta, unidades, "El cliente se arrepintió", reembolsos, null);
     }
 
     private DevolucionRegistrada devolver(Long venta, List<UnidadDevuelta> unidades, Reembolso... reembolsos) {
@@ -202,7 +211,7 @@ class DevolucionesConBaseTest {
         VentaRegistrada v = vender(producto, 1, "10000");
         caja.entrarComoVendedor();
 
-        DevolucionRegistrada r = devoluciones.registrar(new SolicitudDevolucion(v.id(), List.of(), "Falló",
+        DevolucionRegistrada r = devoluciones.registrar(new SolicitudDevolucion(UUID.randomUUID(), v.id(), List.of(), "Falló",
                 List.of(enEfectivo("10000")), conPinDelAdministrador()));
 
         Map<String, Object> d = devolucionGuardada(r.id());
@@ -231,7 +240,7 @@ class DevolucionesConBaseTest {
 
         for (String motivo : new String[]{null, "", "   "}) {
             assertThrows(VentaInvalidaException.class, () -> devoluciones.registrar(
-                    new SolicitudDevolucion(v.id(), List.of(), motivo, List.of(enEfectivo("10000")), null)));
+                    new SolicitudDevolucion(UUID.randomUUID(), v.id(), List.of(), motivo, List.of(enEfectivo("10000")), null)));
         }
 
         nadaDevuelto(producto, 4);
@@ -492,7 +501,7 @@ class DevolucionesConBaseTest {
         assertEquals(turnoDelAdministrador, ventaGuardada(v.id()).get("cierre_id"));
         caja.entrarComoVendedor();
 
-        DevolucionRegistrada r = devoluciones.registrar(new SolicitudDevolucion(v.id(), List.of(), "Falló",
+        DevolucionRegistrada r = devoluciones.registrar(new SolicitudDevolucion(UUID.randomUUID(), v.id(), List.of(), "Falló",
                 List.of(enEfectivo("10000")), conPinDelAdministrador()));
 
         assertEquals(turnoDelVendedor, devolucionGuardada(r.id()).get("cierre_id"));
@@ -775,5 +784,428 @@ class DevolucionesConBaseTest {
 
         igual("3000", saldoGuardado(caja.clienteId));
         assertEquals("PENDIENTE", ventaGuardada(v.id()).get("estado_pago"));
+    }
+
+    // ------------------------------------------------------- la clave de idempotencia
+
+    private SolicitudDevolucion conClave(UUID clave, Long venta, List<UnidadDevuelta> unidades, Reembolso... reembolsos) {
+        return new SolicitudDevolucion(clave, venta, unidades, "El cliente se arrepintió", List.of(reembolsos), null);
+    }
+
+    private static void mismaRespuesta(DevolucionRegistrada esperada, DevolucionRegistrada obtenida) {
+        assertEquals(esperada.id(), obtenida.id());
+        assertEquals(esperada.consecutivo(), obtenida.consecutivo());
+        igual(esperada.valorDevuelto().toPlainString(), obtenida.valorDevuelto());
+        igual(esperada.reembolsado().toPlainString(), obtenida.reembolsado());
+        igual(esperada.saldoPorCobrar().toPlainString(), obtenida.saldoPorCobrar());
+        assertEquals(esperada.estadoVenta(), obtenida.estadoVenta());
+        assertEquals(esperada.reembolsos().size(), obtenida.reembolsos().size());
+        for (int i = 0; i < esperada.reembolsos().size(); i++) {
+            assertEquals(esperada.reembolsos().get(i).medioId(), obtenida.reembolsos().get(i).medioId());
+            igual(esperada.reembolsos().get(i).monto().toPlainString(), obtenida.reembolsos().get(i).monto());
+            assertEquals(esperada.reembolsos().get(i).referencia(), obtenida.reembolsos().get(i).referencia());
+        }
+    }
+
+    @Test
+    void elReintentoConLaMismaClaveDevuelveLaPrimeraRespuestaYNoRegistraOtra() {
+        Integer producto = caja.producto("A", 10, "10000");
+        VentaRegistrada v = vender(producto, 3, "30000");
+        SolicitudDevolucion s = conClave(UUID.randomUUID(), v.id(), List.of(new UnidadDevuelta(producto, 1)),
+                enEfectivo("6000"), reembolso(caja.tarjetaId, "4000", "DATAFONO-1"));
+
+        ResultadoDeDevolucion primera = devoluciones.procesar(s);
+        ResultadoDeDevolucion repetida = devoluciones.procesar(s);
+
+        assertFalse(primera.yaExistia());
+        assertTrue(repetida.yaExistia());
+        mismaRespuesta(primera.devolucion(), repetida.devolucion());
+        assertEquals(1, caja.cuantas("devoluciones"));
+        assertEquals(2, caja.cuantas("reembolsos"));
+        assertEquals(8, caja.existencia(producto), "10 - 3 + 1, una sola vez");
+        assertEquals(1, caja.movimientosDe(producto, "DEVOLUCION"));
+        assertEquals("D-00000001", repetida.devolucion().consecutivo());
+    }
+
+    @Test
+    void elReintentoDevuelveLoQueSeRespondioEntoncesAunqueLaVentaHayaCambiado() {
+        Integer producto = caja.producto("A", 10, "10000");
+        VentaRegistrada v = vender(producto, 3, "30000");
+        SolicitudDevolucion primera = conClave(UUID.randomUUID(), v.id(), List.of(new UnidadDevuelta(producto, 1)),
+                enEfectivo("10000"));
+        DevolucionRegistrada original = devoluciones.procesar(primera).devolucion();
+        anular(v.id(), enEfectivo("20000"));
+        assertEquals("ANULADA", ventaGuardada(v.id()).get("estado"));
+
+        ResultadoDeDevolucion repetida = devoluciones.procesar(primera);
+
+        assertTrue(repetida.yaExistia());
+        mismaRespuesta(original, repetida.devolucion());
+        assertEquals("DEVUELTA_PARCIAL", repetida.devolucion().estadoVenta(), "el estado de entonces, no el de ahora");
+        assertEquals(2, caja.cuantas("devoluciones"));
+    }
+
+    @Test
+    void unaAnulacionReintentadaDevuelveLaMismaRespuestaEnVezDelConflicto() {
+        Integer producto = caja.producto("A", 5, "10000");
+        VentaRegistrada v = vender(producto, 1, "10000");
+        SolicitudDevolucion s = conClave(UUID.randomUUID(), v.id(), List.of(), enEfectivo("10000"));
+        DevolucionRegistrada original = devoluciones.procesar(s).devolucion();
+
+        ResultadoDeDevolucion repetida = devoluciones.procesar(s);
+
+        assertTrue(repetida.yaExistia());
+        mismaRespuesta(original, repetida.devolucion());
+        assertEquals(1, caja.cuantas("devoluciones"));
+    }
+
+    @Test
+    void elReintentoNoPideNiElPinNiUnTurnoAbierto() {
+        Integer producto = caja.producto("A", 5, "10000");
+        VentaRegistrada v = vender(producto, 1, "10000");
+        SolicitudDevolucion s = conClave(UUID.randomUUID(), v.id(), List.of(), enEfectivo("10000"));
+        DevolucionRegistrada original = devoluciones.procesar(s).devolucion();
+        caja.cerrarTurno(turnoDelAdministrador);
+        caja.entrarComoVendedor();
+
+        ResultadoDeDevolucion repetida = devoluciones.procesar(s);
+
+        assertTrue(repetida.yaExistia(), "una devolución confirmada se devuelve pase lo que pase después");
+        mismaRespuesta(original, repetida.devolucion());
+    }
+
+    @Test
+    void laMismaClaveConOtraCargaEs409YNoRegistraNada() {
+        Integer producto = caja.producto("A", 10, "10000");
+        VentaRegistrada v = vender(producto, 3, "30000");
+        UUID clave = UUID.randomUUID();
+        devoluciones.procesar(conClave(clave, v.id(), List.of(new UnidadDevuelta(producto, 1)), enEfectivo("10000")));
+
+        assertThrows(ClaveDeIdempotenciaEnUsoException.class, () -> devoluciones.procesar(
+                conClave(clave, v.id(), List.of(new UnidadDevuelta(producto, 2)), enEfectivo("20000"))));
+
+        assertEquals(1, caja.cuantas("devoluciones"));
+        assertEquals(8, caja.existencia(producto));
+    }
+
+    @Test
+    void laMismaClaveEnOtraVentaEs409() {
+        Integer producto = caja.producto("A", 10, "10000");
+        VentaRegistrada una = vender(producto, 1, "10000");
+        VentaRegistrada otra = vender(producto, 1, "10000");
+        UUID clave = UUID.randomUUID();
+        devoluciones.procesar(conClave(clave, una.id(), List.of(), enEfectivo("10000")));
+
+        assertThrows(ClaveDeIdempotenciaEnUsoException.class,
+                () -> devoluciones.procesar(conClave(clave, otra.id(), List.of(), enEfectivo("10000"))));
+
+        assertEquals(1, caja.cuantas("devoluciones"));
+        assertEquals("REGISTRADA", ventaGuardada(otra.id()).get("estado"));
+    }
+
+    // ------------------------------------------------------- lo pagado con saldo vuelve como saldo
+
+    /** Una venta de dos unidades de 10 000: 10 000 con saldo a favor y 10 000 en efectivo. */
+    private VentaRegistrada ventaPagadaMitadConSaldo(Integer producto) {
+        darSaldo(caja.clienteId, producto, "10000", "10000");
+        return vender(caja.clienteId, producto, 2, saldo("10000"), efectivo("10000"));
+    }
+
+    @Test
+    void loPagadoConSaldoNoSePuedeReembolsarEnEfectivo() {
+        Integer producto = caja.producto("A", 10, "10000");
+        VentaRegistrada v = ventaPagadaMitadConSaldo(producto);
+        int devolucionesAntes = caja.cuantas("devoluciones");
+
+        VentaInvalidaException e = assertThrows(VentaInvalidaException.class, () -> anular(v.id(), enEfectivo("20000")));
+        assertThrows(VentaInvalidaException.class, () -> anular(v.id(), enEfectivo("15000"), enSaldo("5000")));
+        assertThrows(VentaInvalidaException.class, () -> anular(v.id(), reembolso(caja.tarjetaId, "20000", "REF")),
+                "tampoco por tarjeta o transferencia: no es saldo");
+
+        assertTrue(e.getMessage().contains("saldo a favor"), e.getMessage());
+        assertEquals(devolucionesAntes, caja.cuantas("devoluciones"));
+        igual("0", saldoGuardado(caja.clienteId));
+    }
+
+    @Test
+    void loPagadoConSaldoSeReembolsaComoSaldoYLoPagadoEnEfectivoVuelveComoSeQuiera() {
+        Integer producto = caja.producto("A", 10, "10000");
+        VentaRegistrada v = ventaPagadaMitadConSaldo(producto);
+
+        DevolucionRegistrada r = anular(v.id(), enEfectivo("10000"), enSaldo("10000"));
+
+        igual("20000", r.reembolsado());
+        igual("10000", saldoGuardado(caja.clienteId));
+    }
+
+    @Test
+    void todoSePuedeReembolsarComoSaldoAunqueSeHayaPagadoEnEfectivo() {
+        Integer producto = caja.producto("A", 10, "10000");
+        VentaRegistrada v = vender(producto, 2, "20000");
+
+        anular(v.id(), enSaldo("20000"));
+
+        igual("20000", saldoGuardado(caja.clienteId));
+    }
+
+    @Test
+    void loQueSePagoConSaldoSeCuentaAcumuladoEntreDevolucionesParciales() {
+        Integer producto = caja.producto("A", 10, "10000");
+        VentaRegistrada v = ventaPagadaMitadConSaldo(producto);
+        List<UnidadDevuelta> una = List.of(new UnidadDevuelta(producto, 1));
+
+        devolver(v.id(), una, enEfectivo("10000"));
+        assertThrows(VentaInvalidaException.class, () -> devolver(v.id(), una, enEfectivo("10000")),
+                "ya se reembolsaron en efectivo los 10 000 que se pagaron en efectivo");
+        DevolucionRegistrada segunda = devolver(v.id(), una, enSaldo("10000"));
+
+        assertEquals("ANULADA", segunda.estadoVenta());
+        igual("10000", saldoGuardado(caja.clienteId));
+        assertEquals(2, caja.cuantas("devoluciones") - 1, "las dos de esta venta y la que dio el saldo");
+    }
+
+    @Test
+    void loPagadoTodoConSaldoSoloVuelveComoSaldo() {
+        Integer producto = caja.producto("A", 10, "10000");
+        darSaldo(caja.clienteId, producto, "10000", "10000");
+        VentaRegistrada v = vender(caja.clienteId, producto, 1, saldo("10000"));
+
+        assertThrows(VentaInvalidaException.class, () -> anular(v.id(), enEfectivo("10000")));
+        anular(v.id(), enSaldo("10000"));
+
+        igual("10000", saldoGuardado(caja.clienteId));
+    }
+
+    // ------------------------------------------------------- lo que DEVUELTA_PARCIAL sigue siendo
+
+    private static final Domicilio ENTREGA = new Domicilio("Calle 1 # 2-3", "Cali", "3001112233", "Ana Pérez", false);
+
+    private VentaRegistrada domicilioPagado(Integer producto, int cantidad, String monto) {
+        return ventas.registrar(new SolicitudVenta(UUID.randomUUID(), caja.clienteId,
+                List.of(new LineaSolicitada(producto, null, cantidad, null, null)), null, List.of(efectivo(monto)), null,
+                null, ENTREGA));
+    }
+
+    @Test
+    void unDomicilioDevueltoEnParteSigueEnLaListaPorDespacharYSePuedeEntregar() {
+        Integer producto = caja.producto("A", 10, "10000");
+        VentaRegistrada v = domicilioPagado(producto, 2, "20000");
+        devolver(v.id(), List.of(new UnidadDevuelta(producto, 1)), enEfectivo("10000"));
+        assertEquals("DEVUELTA_PARCIAL", ventaGuardada(v.id()).get("estado"));
+
+        DomicilioPendiente fila = domicilios.listar("POR_DESPACHAR").stream()
+                .filter(d -> d.ventaId().equals(v.id())).findFirst().orElseThrow();
+        assertEquals(caja.clienteId.longValue(), fila.clienteId());
+        assertFalse(fila.entregado());
+        domicilios.entregar(v.id());
+
+        assertEquals(1, jdbc.sql("SELECT COUNT(*) FROM domicilios_venta WHERE venta_id = :v AND entregado_en IS NOT NULL")
+                .param("v", v.id()).query(Integer.class).single(), "quedó marcado como entregado");
+    }
+
+    @Test
+    void unDomicilioAnuladoSaleDeLaListaPorDespacharYNoSeEntrega() {
+        Integer producto = caja.producto("A", 10, "10000");
+        VentaRegistrada v = domicilioPagado(producto, 1, "10000");
+        anular(v.id(), enEfectivo("10000"));
+
+        assertTrue(domicilios.listar("POR_DESPACHAR").stream().noneMatch(d -> d.ventaId().equals(v.id())));
+        assertThrows(EstadoNoAdmiteLaOperacionException.class, () -> domicilios.entregar(v.id()));
+    }
+
+    @Test
+    void laListaPorCobrarDiceSiYaSeEntregoYDeQuienEs() {
+        Integer producto = caja.producto("A", 10, "3000");
+        VentaRegistrada sinEntregar = contraEntrega(producto, 1);
+        VentaRegistrada entregada = contraEntrega(producto, 1);
+        domicilios.entregar(entregada.id());
+
+        List<DomicilioPendiente> porCobrar = domicilios.listar("POR_COBRAR");
+
+        DomicilioPendiente a = porCobrar.stream().filter(d -> d.ventaId().equals(sinEntregar.id())).findFirst().orElseThrow();
+        DomicilioPendiente b = porCobrar.stream().filter(d -> d.ventaId().equals(entregada.id())).findFirst().orElseThrow();
+        assertFalse(a.entregado());
+        assertTrue(b.entregado(), "la que ya se entregó sigue por cobrar y lo dice");
+        assertEquals(caja.clienteId.longValue(), a.clienteId());
+        assertEquals(caja.clienteId.longValue(), b.clienteId());
+    }
+
+    // ------------------------------------------------------- los encargos de una venta devuelta
+
+    /** Dos líneas: A con existencia y B como encargo (existencia cero). Devuelve la venta y el ítem de B. */
+    private Long[] ventaConUnEncargo(Integer enExistencia, Integer encargo) {
+        VentaRegistrada v = ventas.registrar(new SolicitudVenta(UUID.randomUUID(), caja.clienteId,
+                List.of(new LineaSolicitada(enExistencia, null, 1, null, null),
+                        new LineaSolicitada(encargo, null, 1, null, LocalDate.now().plusDays(7))), null,
+                List.of(efectivo("20000")), "No había existencia", null, null));
+        Long item = jdbc.sql("SELECT item_id FROM venta_items WHERE venta_id = :v AND producto_id = :p")
+                .param("v", v.id()).param("p", encargo).query(Long.class).single();
+        return new Long[]{v.id(), item};
+    }
+
+    private boolean estaEnLasListasDeEncargos(Long item) {
+        return java.util.stream.Stream.of("PENDIENTE", "LLEGO").flatMap(e -> encargos.listar(e).stream())
+                .anyMatch(e -> e.itemId().equals(item));
+    }
+
+    @Test
+    void elEncargoDeUnaVentaDevueltaEnParteSigueEnLaListaYSePuedeEntregar() {
+        Integer a = caja.producto("A", 5, "10000");
+        Integer b = caja.producto("B", 0, "10000");
+        Long[] venta = ventaConUnEncargo(a, b);
+        devolver(venta[0], List.of(new UnidadDevuelta(a, 1)), enEfectivo("10000"));
+        assertEquals("DEVUELTA_PARCIAL", ventaGuardada(venta[0]).get("estado"));
+
+        assertTrue(estaEnLasListasDeEncargos(venta[1]), "el encargo no se devolvió y sigue pendiente");
+        encargos.entregar(venta[1]);
+
+        assertEquals(1, jdbc.sql("SELECT COUNT(*) FROM venta_items WHERE item_id = :i AND encargo_entregado_en IS NOT NULL")
+                .param("i", venta[1]).query(Integer.class).single());
+    }
+
+    @Test
+    void elEncargoDevueltoPorCompletoSaleDeLaListaYNoSeEntrega() {
+        Integer a = caja.producto("A", 5, "10000");
+        Integer b = caja.producto("B", 0, "10000");
+        Long[] venta = ventaConUnEncargo(a, b);
+        assertTrue(estaEnLasListasDeEncargos(venta[1]));
+
+        devolver(venta[0], List.of(new UnidadDevuelta(b, 1)), enEfectivo("10000"));
+
+        assertEquals("DEVUELTA_PARCIAL", ventaGuardada(venta[0]).get("estado"), "A sigue vendida");
+        assertFalse(estaEnLasListasDeEncargos(venta[1]), "la línea del encargo se devolvió entera");
+        assertThrows(EstadoNoAdmiteLaOperacionException.class, () -> encargos.entregar(venta[1]));
+        assertEquals(0, jdbc.sql("SELECT COUNT(*) FROM venta_items WHERE item_id = :i AND encargo_entregado_en IS NOT NULL")
+                .param("i", venta[1]).query(Integer.class).single(), "no quedó marcada");
+    }
+
+    @Test
+    void elEncargoDeUnaVentaAnuladaSaleDeLaLista() {
+        Integer a = caja.producto("A", 5, "10000");
+        Integer b = caja.producto("B", 0, "10000");
+        Long[] venta = ventaConUnEncargo(a, b);
+
+        anular(venta[0], enEfectivo("20000"));
+
+        assertFalse(estaEnLasListasDeEncargos(venta[1]));
+        assertThrows(EstadoNoAdmiteLaOperacionException.class, () -> encargos.entregar(venta[1]));
+    }
+
+    // ------------------------------------------------------- consultar una venta por su consecutivo
+
+    @Test
+    void unaVentaSeConsultaPorSuConsecutivoConSusLineasYSusPagos() {
+        Integer a = caja.producto("A", 10, "10000");
+        Integer b = caja.producto("B", 10, "5000");
+        VentaRegistrada v = ventas.registrar(new SolicitudVenta(UUID.randomUUID(), caja.clienteId,
+                List.of(new LineaSolicitada(a, null, 2, null, null), new LineaSolicitada(b, null, 1, null, null)), null,
+                List.of(efectivo("15000"), new PagoSolicitado(caja.tarjetaId, new BigDecimal("10000"), null, "REF-1")),
+                null, null, null));
+        caja.entrarComoVendedor();
+
+        VentaConsultada c = consulta.porConsecutivo(v.consecutivo());
+
+        assertEquals(v.id(), c.id());
+        assertEquals(v.consecutivo(), c.consecutivo());
+        assertEquals("REGISTRADA", c.estado());
+        assertEquals("PAGADA", c.estadoPago());
+        igual("25000", c.total());
+        assertEquals(caja.clienteId, c.cliente().id());
+        assertEquals("cliente " + caja.empresa.marca.toLowerCase(), c.cliente().nombre().toLowerCase());
+        assertFalse(c.cliente().consumidorFinal());
+        assertEquals(2, c.lineas().size());
+        VentaConsultada.Linea la = c.lineas().get(0).productoId().equals(a) ? c.lineas().get(0) : c.lineas().get(1);
+        assertEquals("Producto A", la.nombre());
+        assertEquals(2, la.cantidad());
+        assertEquals(0, la.cantidadDevuelta());
+        igual("20000", la.total());
+        igual("0", la.valorDevuelto());
+        igual("0", c.reembolsadoSinSaldo());
+        assertEquals(2, c.pagos().size());
+        VentaConsultada.Pago tarjeta = c.pagos().stream().filter(p -> p.medioId().equals(caja.tarjetaId)).findFirst().orElseThrow();
+        assertEquals("Tarjeta", tarjeta.medio());
+        assertEquals(co.com.bspstore.sgip.modelo.TipoMedio.TARJETA, tarjeta.tipo());
+        igual("10000", tarjeta.monto());
+    }
+
+    @Test
+    void laVentaDelConsumidorFinalSeConsultaConSuMarca() {
+        Integer a = caja.producto("A", 10, "10000");
+        VentaRegistrada v = vender(null, a, 1, efectivo("10000"));
+
+        VentaConsultada c = consulta.porConsecutivo(v.consecutivo());
+
+        assertTrue(c.cliente().consumidorFinal());
+        assertEquals(caja.consumidorFinalId, c.cliente().id());
+    }
+
+    @Test
+    void unaVentaConDevolucionPreviaDiceCuantoSeDevolvioDeCadaLinea() {
+        Integer a = caja.producto("A", 10, "10000");
+        VentaRegistrada v = vender(a, 3, "30000");
+        devolver(v.id(), List.of(new UnidadDevuelta(a, 2)), enEfectivo("20000"));
+
+        VentaConsultada c = consulta.porConsecutivo(v.consecutivo());
+
+        assertEquals("DEVUELTA_PARCIAL", c.estado());
+        assertEquals(1, c.lineas().size());
+        assertEquals(3, c.lineas().get(0).cantidad());
+        assertEquals(2, c.lineas().get(0).cantidadDevuelta());
+        igual("30000", c.lineas().get(0).total());
+        igual("20000", c.lineas().get(0).valorDevuelto());
+        igual("20000", c.reembolsadoSinSaldo());
+    }
+
+    @Test
+    void reembolsadoSinSaldoSumaLoReembolsadoPorMediosQueNoSonElSaldoAcumulado() {
+        Integer a = caja.producto("A", 10, "10000");
+        VentaRegistrada v = vender(a, 3, "30000");
+        devolver(v.id(), List.of(new UnidadDevuelta(a, 1)), enEfectivo("4000"), enSaldo("6000"));
+        devolver(v.id(), List.of(new UnidadDevuelta(a, 1)), reembolso(caja.tarjetaId, "5000", "REF"), enSaldo("5000"));
+
+        VentaConsultada c = consulta.porConsecutivo(v.consecutivo());
+
+        igual("9000", c.reembolsadoSinSaldo());
+    }
+
+    @Test
+    void reembolsadoSinSaldoNoCuentaLoReembolsadoDeOtrasVentas() {
+        Integer a = caja.producto("A", 10, "10000");
+        VentaRegistrada una = vender(a, 1, "10000");
+        VentaRegistrada otra = vender(a, 1, "10000");
+        anular(una.id(), enEfectivo("10000"));
+
+        igual("0", consulta.porConsecutivo(otra.consecutivo()).reembolsadoSinSaldo());
+        igual("10000", consulta.porConsecutivo(una.consecutivo()).reembolsadoSinSaldo());
+    }
+
+    @Test
+    void unConsecutivoQueNoExisteEs404() {
+        assertThrows(RecursoNoEncontradoException.class, () -> consulta.porConsecutivo("V-99999999"));
+        assertThrows(RecursoNoEncontradoException.class, () -> consulta.porConsecutivo("   "));
+    }
+
+    @Test
+    void laVentaDeOtraEmpresaConElMismoConsecutivoNoSeVe() {
+        CajaDePrueba ajena = CajaDePrueba.crear("Ajena", jdbc, plataforma, categorias, proveedores, clientes);
+        try {
+            Integer productoAjeno = ajena.producto("A", 5, "10000");
+            ajena.abrirTurno(ajena.administradorId);
+            ajena.entrarComoAdministrador();
+            VentaRegistrada deLaAjena = ventas.registrar(new SolicitudVenta(UUID.randomUUID(), null,
+                    List.of(new LineaSolicitada(productoAjeno, null, 1, null, null)), null,
+                    List.of(new PagoSolicitado(ajena.efectivoId, new BigDecimal("10000"), null, null)), null, null, null));
+            assertEquals("V-00000001", deLaAjena.consecutivo());
+            caja.entrarComoAdministrador();
+
+            assertThrows(RecursoNoEncontradoException.class, () -> consulta.porConsecutivo("V-00000001"),
+                    "la empresa de la sesión no tiene ninguna venta: la V-00000001 es de la otra");
+            Integer propio = caja.producto("A", 5, "10000");
+            VentaRegistrada mia = vender(propio, 1, "10000");
+            assertEquals("V-00000001", mia.consecutivo());
+            assertEquals(mia.id(), consulta.porConsecutivo("V-00000001").id(), "cada empresa ve la suya");
+        } finally {
+            ajena.borrar();
+        }
     }
 }

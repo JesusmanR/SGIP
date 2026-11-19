@@ -11,9 +11,11 @@ import co.com.bspstore.sgip.config.FiltroSesion;
 import co.com.bspstore.sgip.config.UsuarioAutenticado;
 import co.com.bspstore.sgip.datos.RepositorioPlataforma;
 import co.com.bspstore.sgip.logica.AutorizacionRequeridaException;
+import co.com.bspstore.sgip.logica.ClaveDeIdempotenciaEnUsoException;
 import co.com.bspstore.sgip.logica.EstadoNoAdmiteLaOperacionException;
 import co.com.bspstore.sgip.logica.PinInvalidoException;
 import co.com.bspstore.sgip.logica.RecursoNoEncontradoException;
+import co.com.bspstore.sgip.logica.ResultadoDeDevolucion;
 import co.com.bspstore.sgip.logica.ServicioDevoluciones;
 import co.com.bspstore.sgip.logica.ServicioSaldoAFavor;
 import co.com.bspstore.sgip.logica.ServicioSesion;
@@ -74,12 +76,12 @@ class DevolucionesAutorizacionTest {
     private static final String DEVOLUCIONES = "/api/v1/caja/devoluciones";
     private static final String SALDO = "/api/v1/caja/clientes/8/saldo";
     private static final String CUERPO = """
-            {"ventaId":9,"unidades":[{"productoId":3,"cantidad":2}],"motivo":"El cliente se arrepintió",
+            {"clave":"11111111-2222-3333-4444-555555555555","ventaId":9,"unidades":[{"productoId":3,"cantidad":2}],"motivo":"El cliente se arrepintió",
              "reembolsos":[{"medioId":5,"monto":10000},{"medioId":6,"monto":2000,"referencia":"TX-1"}],
              "autorizacion":{"administradorId":2,"pin":"483920"}}
             """;
     private static final String ANULACION = """
-            {"ventaId":9,"unidades":[],"motivo":"Error de digitación","reembolsos":[]}
+            {"clave":"11111111-2222-3333-4444-555555555555","ventaId":9,"unidades":[],"motivo":"Error de digitación","reembolsos":[]}
             """;
 
     private static final DevolucionRegistrada REGISTRADA = new DevolucionRegistrada(4L, "D-00000001",
@@ -117,7 +119,7 @@ class DevolucionesAutorizacionTest {
     @ParameterizedTest
     @ValueSource(strings = {"ADMINISTRADOR", "VENDEDOR"})
     void devolverRecibeLaSolicitudYResponde201ConLaDevolucion(String rol) throws Exception {
-        when(devoluciones.registrar(any())).thenReturn(REGISTRADA);
+        when(devoluciones.procesar(any())).thenReturn(new ResultadoDeDevolucion(REGISTRADA, false));
 
         devolver(rol, CUERPO)
                 .andExpect(status().isCreated())
@@ -130,7 +132,7 @@ class DevolucionesAutorizacionTest {
                 .andExpect(jsonPath("$.reembolsos[1].referencia").value("TX-1"));
 
         var captor = forClass(SolicitudDevolucion.class);
-        verify(devoluciones).registrar(captor.capture());
+        verify(devoluciones).procesar(captor.capture());
         SolicitudDevolucion s = captor.getValue();
         assertEquals(9L, s.ventaId());
         assertEquals(1, s.unidades().size());
@@ -145,18 +147,18 @@ class DevolucionesAutorizacionTest {
 
     @Test
     void unaAnulacionLlevaLaListaDeUnidadesVacia() throws Exception {
-        when(devoluciones.registrar(any())).thenReturn(REGISTRADA);
+        when(devoluciones.procesar(any())).thenReturn(new ResultadoDeDevolucion(REGISTRADA, false));
 
         devolver("ADMINISTRADOR", ANULACION).andExpect(status().isCreated());
 
         var captor = forClass(SolicitudDevolucion.class);
-        verify(devoluciones).registrar(captor.capture());
+        verify(devoluciones).procesar(captor.capture());
         assertEquals(List.of(), captor.getValue().unidades());
     }
 
     @Test
     void laRespuestaNuncaTraeCostoNiUtilidad() throws Exception {
-        when(devoluciones.registrar(any())).thenReturn(REGISTRADA);
+        when(devoluciones.procesar(any())).thenReturn(new ResultadoDeDevolucion(REGISTRADA, false));
 
         String json = devolver("ADMINISTRADOR", CUERPO).andReturn().getResponse().getContentAsString().toLowerCase();
 
@@ -217,9 +219,11 @@ class DevolucionesAutorizacionTest {
     void unCuerpoMalFormadoOUnIdentificadorQueNoEsUnNumeroEsUn400() throws Exception {
         for (String cuerpo : new String[]{"", "hola", "[]",
                 "{\"unidades\":[],\"motivo\":\"x\"}",
-                "{\"ventaId\":9,\"motivo\":\"x\"}",
-                "{\"ventaId\":9,\"unidades\":[{\"productoId\":3,\"cantidad\":0}],\"motivo\":\"x\"}",
-                "{\"ventaId\":9,\"unidades\":[],\"motivo\":\"x\",\"reembolsos\":[{\"medioId\":5,\"monto\":0}]}"}) {
+                "{\"ventaId\":9,\"unidades\":[],\"motivo\":\"x\"}",
+                "{\"clave\":\"no-es-un-uuid\",\"ventaId\":9,\"unidades\":[],\"motivo\":\"x\"}",
+                "{\"clave\":\"11111111-2222-3333-4444-555555555555\",\"ventaId\":9,\"motivo\":\"x\"}",
+                "{\"clave\":\"11111111-2222-3333-4444-555555555555\",\"ventaId\":9,\"unidades\":[{\"productoId\":3,\"cantidad\":0}],\"motivo\":\"x\"}",
+                "{\"clave\":\"11111111-2222-3333-4444-555555555555\",\"ventaId\":9,\"unidades\":[],\"motivo\":\"x\",\"reembolsos\":[{\"medioId\":5,\"monto\":0}]}"}) {
             devolver("VENDEDOR", cuerpo).andExpect(status().isBadRequest());
         }
         mvc.perform(get("/api/v1/caja/clientes/abc/saldo").with(como("VENDEDOR"))).andExpect(status().isBadRequest());
@@ -259,6 +263,39 @@ class DevolucionesAutorizacionTest {
         mvc.perform(get(SALDO).with(como("VENDEDOR"))).andExpect(status().isOk());
         devolver("VENDEDOR", CUERPO).andExpect(status().isForbidden());
 
-        verify(devoluciones, never()).registrar(any());
+        verify(devoluciones, never()).procesar(any());
+    }
+
+    // ------------------------------------------------------- la clave de idempotencia
+
+    @Test
+    void unReintentoConLaMismaClaveRecibeUn200ConLaMismaDevolucion() throws Exception {
+        when(devoluciones.procesar(any())).thenReturn(new ResultadoDeDevolucion(REGISTRADA, true));
+
+        devolver("VENDEDOR", CUERPO)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(4))
+                .andExpect(jsonPath("$.consecutivo").value("D-00000001"));
+    }
+
+    @Test
+    void laClaveReutilizadaParaOtraDevolucionEs409ConElTipoDeLaClaveEnUso() throws Exception {
+        doThrow(new ClaveDeIdempotenciaEnUsoException()).when(devoluciones).procesar(any());
+
+        devolver("VENDEDOR", CUERPO)
+                .andExpect(status().isConflict())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.type").value("urn:sgip:caja:clave-en-uso"));
+    }
+
+    @Test
+    void laSolicitudLlevaLaClaveQueEnvioElMostrador() throws Exception {
+        when(devoluciones.procesar(any())).thenReturn(new ResultadoDeDevolucion(REGISTRADA, false));
+
+        devolver("ADMINISTRADOR", CUERPO).andExpect(status().isCreated());
+
+        var captor = forClass(SolicitudDevolucion.class);
+        verify(devoluciones).procesar(captor.capture());
+        assertEquals("11111111-2222-3333-4444-555555555555", captor.getValue().clave().toString());
     }
 }

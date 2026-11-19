@@ -26,5 +26,7 @@ public record DomicilioPendiente(
         String estadoPago,
         BigDecimal total,
         BigDecimal valorPorCobrar,
-        long antiguedadDias
+        long antiguedadDias,
+        Long clienteId,
+        boolean entregado
 ) {}

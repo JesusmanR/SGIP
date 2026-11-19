@@ -20,16 +20,20 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anySet;
 import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -74,7 +78,7 @@ class ServicioDevolucionesTest {
 
     private static SolicitudDevolucion devolucion(String motivo, List<UnidadDevuelta> unidades,
                                                   List<Reembolso> reembolsos) {
-        return new SolicitudDevolucion(9L, unidades, motivo, reembolsos, PIN);
+        return new SolicitudDevolucion(UUID.randomUUID(), 9L, unidades, motivo, reembolsos, PIN);
     }
 
     private static SolicitudDevolucion buena() {
@@ -103,8 +107,8 @@ class ServicioDevolucionesTest {
 
     @Test
     void sinVentaOSinListaDeUnidadesEs400() {
-        esUn400(new SolicitudDevolucion(null, List.of(), "Motivo", List.of(), PIN));
-        esUn400(new SolicitudDevolucion(0L, List.of(), "Motivo", List.of(), PIN));
+        esUn400(new SolicitudDevolucion(UUID.randomUUID(), null, List.of(), "Motivo", List.of(), PIN));
+        esUn400(new SolicitudDevolucion(UUID.randomUUID(), 0L, List.of(), "Motivo", List.of(), PIN));
         esUn400(devolucion("Motivo", null, List.of()));
         esUn400(null);
     }
@@ -154,7 +158,7 @@ class ServicioDevolucionesTest {
         when(autorizacion.autorizar(PIN, DEVOLUCION)).thenReturn(autorizada);
         DevolucionRegistrada respuesta = new DevolucionRegistrada(1L, "D-00000001", new BigDecimal("10000"),
                 new BigDecimal("10000"), BigDecimal.ZERO, "DEVUELTA_PARCIAL", List.of());
-        when(registrador.registrar(any(), any())).thenReturn(respuesta);
+        when(registrador.registrar(any(), any())).thenReturn(new ResultadoDeDevolucion(respuesta, false));
         SolicitudDevolucion pedida = devolucion("  El cliente se arrepintió  ",
                 List.of(new UnidadDevuelta(3, 1), new UnidadDevuelta(1, 2), new UnidadDevuelta(3, 2)),
                 List.of(new Reembolso(5, new BigDecimal("10000.00"), "  ")));
@@ -190,7 +194,7 @@ class ServicioDevolucionesTest {
         entrar("ADMINISTRADOR");
         when(autorizacion.autorizar(any(), anySet())).thenReturn(new Autorizacion(7, DEVOLUCION));
 
-        servicio.registrar(new SolicitudDevolucion(9L, List.of(), "Motivo", List.of(), null));
+        servicio.registrar(new SolicitudDevolucion(UUID.randomUUID(), 9L, List.of(), "Motivo", List.of(), null));
 
         verify(autorizacion).autorizar(null, DEVOLUCION);
         verify(registrador).registrar(any(), any());
@@ -203,5 +207,68 @@ class ServicioDevolucionesTest {
         assertThrows(IllegalStateException.class, () -> servicio.registrar(buena()));
 
         verifyNoInteractions(autorizacion, registrador);
+    }
+
+    // ------------------------------------------------------- la clave de idempotencia
+
+    @Test
+    void unReintentoDeUnaDevolucionYaRegistradaSeDevuelveSinPedirPinNiAbrirOtraTransaccion() {
+        DevolucionRegistrada primera = new DevolucionRegistrada(1L, "D-00000001", new BigDecimal("10000"),
+                new BigDecimal("10000"), BigDecimal.ZERO, "ANULADA", List.of());
+        when(registrador.siYaExiste(any())).thenReturn(Optional.of(new ResultadoDeDevolucion(primera, true)));
+
+        ResultadoDeDevolucion r = servicio.procesar(buena());
+
+        assertTrue(r.yaExistia());
+        assertSame(primera, r.devolucion());
+        verify(registrador, never()).registrar(any(), any());
+        verifyNoInteractions(autorizacion);
+    }
+
+    @Test
+    void laClaveEnUsoConOtraCargaPasaTalCual() {
+        when(registrador.siYaExiste(any())).thenThrow(new ClaveDeIdempotenciaEnUsoException());
+
+        assertThrows(ClaveDeIdempotenciaEnUsoException.class, () -> servicio.procesar(buena()));
+
+        verifyNoInteractions(autorizacion);
+    }
+
+    @Test
+    void sinClaveEs400() {
+        esUn400(new SolicitudDevolucion(null, 9L, List.of(), "Motivo", List.of(), PIN));
+    }
+
+    @Test
+    void laHuellaNoDependeDelPinNiDelOrdenDeLasUnidadesPeroSiDeLoDemas() {
+        SolicitudDevolucion base = SolicitudDevolucion_(List.of(new UnidadDevuelta(1, 1), new UnidadDevuelta(2, 3)));
+        String huella = NormalizadorDeDevolucion.huella(NormalizadorDeDevolucion.forma(base));
+
+        assertEquals(huella, NormalizadorDeDevolucion.huella(NormalizadorDeDevolucion.forma(
+                SolicitudDevolucion_(List.of(new UnidadDevuelta(2, 3), new UnidadDevuelta(1, 1))))),
+                "el orden de las unidades no cambia la carga");
+        assertEquals(huella, NormalizadorDeDevolucion.huella(NormalizadorDeDevolucion.forma(
+                new SolicitudDevolucion(base.clave(), 9L, base.unidades(), base.motivo(), base.reembolsos(), null))),
+                "quién autoriza no es parte de la carga");
+        for (SolicitudDevolucion otra : List.of(
+                new SolicitudDevolucion(base.clave(), 10L, base.unidades(), base.motivo(), base.reembolsos(), PIN),
+                new SolicitudDevolucion(base.clave(), 9L, List.of(), base.motivo(), base.reembolsos(), PIN),
+                new SolicitudDevolucion(base.clave(), 9L, base.unidades(), "Otro motivo", base.reembolsos(), PIN),
+                new SolicitudDevolucion(base.clave(), 9L, base.unidades(), base.motivo(),
+                        List.of(new Reembolso(5, new BigDecimal("10001"), null)), PIN),
+                new SolicitudDevolucion(base.clave(), 9L, base.unidades(), base.motivo(),
+                        List.of(new Reembolso(5, new BigDecimal("10000"), "REF")), PIN),
+                new SolicitudDevolucion(base.clave(), 9L, base.unidades(), base.motivo(),
+                        List.of(new Reembolso(6, new BigDecimal("10000"), null)), PIN),
+                new SolicitudDevolucion(base.clave(), 9L, List.of(new UnidadDevuelta(1, 2), new UnidadDevuelta(2, 3)),
+                        base.motivo(), base.reembolsos(), PIN))) {
+            assertTrue(!huella.equals(NormalizadorDeDevolucion.huella(NormalizadorDeDevolucion.forma(otra))),
+                    "una variante tiene que cambiar la huella: " + otra);
+        }
+    }
+
+    private static SolicitudDevolucion SolicitudDevolucion_(List<UnidadDevuelta> unidades) {
+        return new SolicitudDevolucion(UUID.fromString("11111111-2222-3333-4444-555555555555"), 9L, unidades,
+                "El cliente se arrepintió", List.of(new Reembolso(5, new BigDecimal("10000"), null)), PIN);
     }
 }

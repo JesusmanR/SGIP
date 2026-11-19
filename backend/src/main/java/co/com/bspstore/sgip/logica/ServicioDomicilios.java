@@ -107,7 +107,7 @@ public class ServicioDomicilios {
         BigDecimal porCobrar = "PENDIENTE".equals(f.estadoPago()) ? saldoPorCobrar(f.total(), f.devuelto()) : BigDecimal.ZERO;
         return new DomicilioPendiente(f.ventaId(), f.consecutivo(), f.fecha().atZone(Hoy.ZONA).toOffsetDateTime(),
                 f.cliente(), f.direccion(), f.ciudad(), f.telefono(), f.recibe(), f.contraEntrega(), f.estadoPago(),
-                f.total(), porCobrar, antiguedadEnDias(f.fecha(), reloj));
+                f.total(), porCobrar, antiguedadEnDias(f.fecha(), reloj), null, false);
     }
 
     private static Estado interpretar(String texto) {

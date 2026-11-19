@@ -42,6 +42,10 @@ public class ServicioDevoluciones {
     }
 
     public DevolucionRegistrada registrar(SolicitudDevolucion solicitud) {
+        return procesar(solicitud).devolucion();
+    }
+
+    public ResultadoDeDevolucion procesar(SolicitudDevolucion solicitud) {
         if (TransactionSynchronizationManager.isActualTransactionActive()) {
             throw new IllegalStateException("Registrar una devolución no puede llamarse dentro de una transacción: "
                     + "el PIN se valida en su propia transacción antes de abrir la de la devolución.");

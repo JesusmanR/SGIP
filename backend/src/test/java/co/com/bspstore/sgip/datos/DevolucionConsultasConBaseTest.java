@@ -41,11 +41,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @SpringBootTest
 class DevolucionConsultasConBaseTest {
 
-    /** Una devolución del administrador cuesta 10 sentencias (medido: el turno, la venta, las líneas con lo ya devuelto, los medios, los productos, el consecutivo con su actualización, la devolución y la venta); el tope deja un margen corto. */
-    private static final int TOPE_DE_SENTENCIAS = 11;
+    /** Una devolución del administrador cuesta 12 sentencias (medido: la lectura previa de la clave, el turno, la venta, la clave dentro de la transacción, las líneas con lo ya devuelto, los medios, los productos, el consecutivo con su actualización, la devolución y la venta); el tope deja un margen corto. */
+    private static final int TOPE_DE_SENTENCIAS = 13;
 
     @Autowired ServicioVentas ventas;
     @Autowired ServicioDevoluciones devoluciones;
+    @Autowired co.com.bspstore.sgip.logica.ServicioConsultaDeVentas consulta;
     @Autowired RepositorioPlataforma plataforma;
     @Autowired CategoriaRepositorio categorias;
     @Autowired ProveedorRepositorio proveedores;
@@ -101,7 +102,7 @@ class DevolucionConsultasConBaseTest {
             long monto = i == reembolsos - 1 ? total - (total / reembolsos) * (reembolsos - 1) : total / reembolsos;
             repartidos.add(new Reembolso(caja.efectivoId, BigDecimal.valueOf(monto), null));
         }
-        SolicitudDevolucion solicitud = new SolicitudDevolucion(v.id(), unidades, "Motivo", repartidos, null);
+        SolicitudDevolucion solicitud = new SolicitudDevolucion(UUID.randomUUID(), v.id(), unidades, "Motivo", repartidos, null);
         Mockito.clearInvocations(jdbc);
         devoluciones.registrar(solicitud);
         return sentencias();
@@ -133,12 +134,46 @@ class DevolucionConsultasConBaseTest {
     void unaAnulacionTotalCuestaLoMismoQueUnaDevolucionDeTodasLasLineas() {
         sentenciasDeDevolver(1, 1);
         VentaRegistrada v = vender(10);
-        SolicitudDevolucion anulacion = new SolicitudDevolucion(v.id(), List.of(), "Motivo",
+        SolicitudDevolucion anulacion = new SolicitudDevolucion(UUID.randomUUID(), v.id(), List.of(), "Motivo",
                 List.of(new Reembolso(caja.efectivoId, new BigDecimal("200000"), null)), null);
         Mockito.clearInvocations(jdbc);
 
         devoluciones.registrar(anulacion);
 
         assertTrue(sentencias() <= TOPE_DE_SENTENCIAS, "una anulación de diez líneas costó " + sentencias() + " consultas");
+    }
+
+    private long sentenciasDeConsultar(int lineas) {
+        VentaRegistrada v = vender(lineas);
+        Mockito.clearInvocations(jdbc);
+        consulta.porConsecutivo(v.consecutivo());
+        return sentencias();
+    }
+
+    @Test
+    void consultarUnaVentaHaceLasMismasConsultasConUnaLineaQueConDiez() {
+        sentenciasDeConsultar(1);
+
+        long conUna = sentenciasDeConsultar(1);
+        long conDiez = sentenciasDeConsultar(10);
+
+        assertEquals(conUna, conDiez, "con una línea fueron " + conUna + " consultas y con diez, " + conDiez);
+        assertTrue(conDiez <= 3, "consultar una venta costó " + conDiez + " consultas: la venta, sus líneas y sus pagos");
+    }
+
+    @Test
+    void consultarUnaVentaConDevolucionesHaceLasMismasConsultas() {
+        VentaRegistrada v = vender(10);
+        List<UnidadDevuelta> unidades = new ArrayList<>();
+        for (int i = 0; i < 10; i++) {
+            unidades.add(new UnidadDevuelta(productos.get(i), 1));
+        }
+        devoluciones.registrar(new SolicitudDevolucion(UUID.randomUUID(), v.id(), unidades, "Motivo",
+                List.of(new Reembolso(caja.efectivoId, new BigDecimal("100000"), null)), null));
+        Mockito.clearInvocations(jdbc);
+
+        consulta.porConsecutivo(v.consecutivo());
+
+        assertTrue(sentencias() <= 3, "consultar una venta devuelta costó " + sentencias() + " consultas");
     }
 }
