@@ -328,13 +328,13 @@ describe('armazón', () => {
         expect(screen.getByRole('button', { name: /^menú$/i })).toHaveAttribute('aria-expanded', 'false')
       })
 
-      it('si el foco estaba dentro del cajón, pasa al botón del menú', async () => {
+      it('si el foco estaba dentro del cajón, pasa al título de la página (el botón del menú ya no se ve)', async () => {
         const teclado = userEvent.setup()
         montar()
-        const boton = screen.getByRole('button', { name: /^menú$/i })
-        await teclado.click(boton)
+        await teclado.click(screen.getByRole('button', { name: /^menú$/i }))
         agrandar()
-        expect(boton).toHaveFocus()
+        expect(screen.getByRole('heading', { level: 1 })).toHaveFocus()
+        expect(screen.getByRole('button', { name: /^menú$/i })).not.toHaveFocus()
       })
 
       it('si el foco estaba fuera del cajón, lo deja donde está', async () => {
@@ -359,7 +359,7 @@ describe('armazón', () => {
       })
       afterEach(() => {
         delete globalThis.ResizeObserver
-        document.documentElement.style.removeProperty('--alto-barra')
+        document.documentElement.style.removeProperty('--alto-barra-real')
       })
 
       it('escribe la altura medida de la barra en --alto-barra y se desconecta al salir', () => {
@@ -369,7 +369,9 @@ describe('armazón', () => {
         expect(observadores[0].el).toBe(barra)
         Object.defineProperty(barra, 'offsetHeight', { configurable: true, value: 92 })
         act(() => observadores[0].f([]))
-        expect(document.documentElement.style.getPropertyValue('--alto-barra')).toBe('92px')
+        const raiz = document.documentElement.style
+        expect(raiz.getPropertyValue('--alto-barra-real')).toBe('92px')
+        expect(raiz.getPropertyValue('--alto-barra')).toBe('')
         unmount()
         expect(observadores[0].desconectado).toBe(true)
       })

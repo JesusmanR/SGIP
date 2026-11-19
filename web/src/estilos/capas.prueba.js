@@ -60,6 +60,12 @@ describe('menú móvil', () => {
     expect(movil).toMatch(/--alto-barra:\s*var\(--alto-barra-movil\)/)
   })
 
+  it('la altura medida solo mueve el margen de desplazamiento, nunca la altura mínima de la barra', () => {
+    expect(armazon).toMatch(/scroll-padding-top:\s*var\(--alto-barra-real,\s*var\(--alto-barra\)\)/)
+    expect(regla(armazon, '.armazon-barra')).not.toMatch(/--alto-barra-real/)
+    expect(regla(armazon, '.armazon-barra')).toMatch(/min-height:\s*var\(--alto-barra\)/)
+  })
+
   it('el cajón del celular usa la altura dinámica, con 100vh de reserva', () => {
     const movil = armazon.slice(armazon.indexOf('@media (max-width'))
     expect(movil).toMatch(/height:\s*100vh;\s*height:\s*100dvh/)
