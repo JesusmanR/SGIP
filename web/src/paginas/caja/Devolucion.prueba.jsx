@@ -23,6 +23,14 @@ const VENTA = {
 }
 const CONSUMIDOR_FINAL = { ...VENTA, cliente: { id: 1, nombre: 'Consumidor final', consumidorFinal: true } }
 const PENDIENTE = { ...VENTA, estadoPago: 'PENDIENTE', pagos: [] }
+// Pagada en parte con tarjeta (40.000) y en parte con saldo a favor (19.500).
+const CON_SALDO = {
+  ...VENTA,
+  pagos: [
+    { medioId: 2, medio: 'Tarjeta', tipo: 'TARJETA', monto: 40000 },
+    { medioId: 9, medio: 'Saldo a favor', tipo: 'SALDO_A_FAVOR', monto: 19500 },
+  ],
+}
 
 function montar() {
   return render(<MemoryRouter><Devolucion /></MemoryRouter>)
@@ -262,5 +270,88 @@ describe('devolución', () => {
     await confirmar()
     await userEvent.click(await screen.findByRole('button', { name: /otra devolución/i }))
     expect(screen.getByLabelText(/consecutivo de la venta/i)).toHaveValue('')
+  })
+
+  it('el motivo admite hasta 200 caracteres, el límite del servidor', async () => {
+    montar()
+    await buscar()
+    expect(screen.getByLabelText(/motivo de la devolución/i)).toHaveAttribute('maxlength', '200')
+  })
+
+  it('el mensaje de un 400 del servidor se muestra tal cual', async () => {
+    entrar('ADMINISTRADOR')
+    registrarDevolucion.mockRejectedValueOnce(errorApi(400, 'El reembolso no cuadra con lo pagado.'))
+    montar()
+    await buscar()
+    await cantidad('Tornillo M6', 1)
+    await dinero(/^efectivo$/i, 11900)
+    await motivo()
+    await confirmar()
+    expect(await screen.findByRole('alert')).toHaveTextContent('El reembolso no cuadra con lo pagado.')
+  })
+
+  describe('lo pagado con saldo a favor vuelve solo como saldo a favor', () => {
+    beforeEach(() => entrar('ADMINISTRADOR'))
+
+    it('al devolver todo deja el saldo preseleccionado por lo que se pagó con saldo y lo explica en una línea', async () => {
+      montar()
+      await buscar(CON_SALDO)
+      await userEvent.click(screen.getByRole('button', { name: /anular toda la venta/i }))
+      expect(screen.getByLabelText(/^saldo a favor/i)).toHaveValue('19500')
+      expect(screen.getByText(/se pagaron \$\s19\.500 con saldo a favor/i)).toBeInTheDocument()
+      await dinero(/^por tarjeta/i, 40000)
+      await userEvent.type(screen.getByLabelText(/n\.º de aprobación/i), 'D-1')
+      expect(screen.getByRole('button', { name: /confirmar devolución/i })).toBeEnabled()
+      await motivo('Venta equivocada')
+      await confirmar()
+      await waitFor(() => expect(registrarDevolucion).toHaveBeenCalled())
+      expect(registrarDevolucion.mock.calls[0][0].reembolsos).toEqual([
+        { medioId: 2, monto: 40000, referencia: 'D-1' },
+        { medioId: 9, monto: 19500 },
+      ])
+    })
+
+    it('no deja devolver en efectivo ni por tarjeta más de lo que se pagó así, aunque la suma cuadre', async () => {
+      montar()
+      await buscar(CON_SALDO)
+      await userEvent.click(screen.getByRole('button', { name: /anular toda la venta/i }))
+      await dinero(/^por tarjeta/i, 45000)
+      await dinero(/^saldo a favor/i, 14500)
+      expect(screen.getByText(/lo que se pagó con saldo a favor vuelve como saldo/i)).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /confirmar devolución/i })).toBeDisabled()
+    })
+
+    it('el efectivo cuenta igual que la tarjeta: nunca se vuelve efectivo lo pagado con saldo', async () => {
+      montar()
+      await buscar(CON_SALDO)
+      await userEvent.click(screen.getByRole('button', { name: /anular toda la venta/i }))
+      await dinero(/^efectivo$/i, 59500)
+      await dinero(/^saldo a favor/i, 0)
+      expect(screen.getByRole('button', { name: /confirmar devolución/i })).toBeDisabled()
+    })
+
+    it('si lo devuelto cabe en lo pagado sin saldo, el saldo no se preselecciona', async () => {
+      montar()
+      await buscar(CON_SALDO)
+      await cantidad('Tornillo M6', 1)
+      expect(screen.getByLabelText(/^saldo a favor/i)).toHaveValue('')
+      expect(screen.queryByText(/se pagaron/i)).not.toBeInTheDocument()
+    })
+
+    it('las devoluciones anteriores gastan primero lo pagado sin saldo', async () => {
+      // 59.500 pagados (40.000 sin saldo + 19.500 con saldo); ya se devolvieron 35.700 (el tornillo).
+      const parcial = {
+        ...CON_SALDO,
+        lineas: [
+          { ...CON_SALDO.lineas[0], cantidadDevuelta: 3, valorDevuelto: 35700 },
+          CON_SALDO.lineas[1],
+        ],
+      }
+      montar()
+      await buscar(parcial)
+      await cantidad('Pintura blanca', 1)
+      // Quedan 40.000 - 35.700 = 4.300 sin saldo: de los 23.800, 19.500 vuelven como saldo.
+      expect(screen.getByLabelText(/^saldo a favor/i)).toHaveValue('19500')
+    })
   })
 })

@@ -239,3 +239,57 @@ describe('una venta ambigua sobrevive a recargar la pestaña (M12-R1)', () => {
     }
   })
 })
+
+describe('M12-R1, ronda 1: guardar antes de enviar y no entrar en bucle', () => {
+  const guardado = () => JSON.parse(sessionStorage.getItem(CLAVE_VENTA_PENDIENTE))
+
+  it('guarda la clave y el cuerpo ANTES de enviar: una recarga con el envío en vuelo se puede reintentar', async () => {
+    let responder
+    registrarVenta.mockImplementationOnce(() => new Promise((resolver) => { responder = resolver }))
+    const hook = renderHook(() => useVentaEnCurso())
+    let envio
+    act(() => { envio = hook.result.current.enviar(construir, undefined, ['Descuento en la venta']) })
+    expect(guardado()).toEqual({
+      clave: hook.result.current.clave, cuerpo: construir(hook.result.current.clave), motivos: ['Descuento en la venta'],
+    })
+    await act(async () => { responder(VENTA); await envio })
+    // Una respuesta definitiva (aquí, la venta) lo borra.
+    expect(sessionStorage.getItem(CLAVE_VENTA_PENDIENTE)).toBeNull()
+  })
+
+  it('un error definitivo borra lo guardado antes de enviar', async () => {
+    registrarVenta.mockRejectedValueOnce(new ErrorApi(400, 'Datos inválidos'))
+    const hook = renderHook(() => useVentaEnCurso())
+    await enviar(hook)
+    expect(sessionStorage.getItem(CLAVE_VENTA_PENDIENTE)).toBeNull()
+  })
+
+  async function restaurada() {
+    sessionStorage.setItem(CLAVE_VENTA_PENDIENTE, JSON.stringify({
+      clave: 'k-1', cuerpo: { ...construir('k-1') }, motivos: ['Descuento en la venta'],
+    }))
+    return renderHook(() => useVentaEnCurso())
+  }
+
+  it('un 403 que no es de PIN en una venta restaurada la descarta y avisa, sin dejarla en bucle', async () => {
+    const hook = await restaurada()
+    registrarVenta.mockRejectedValueOnce(new ErrorApi(403, 'Tu empresa está en modo de consulta.', 'urn:sgip:empresa:solo-consulta'))
+    let r
+    await act(async () => { r = await hook.result.current.enviar(construir, { administradorId: 3, pin: '4821' }) })
+    expect(r.error).toBe('Tu empresa está en modo de consulta.')
+    expect(r.descartada).toBe(true)
+    expect(hook.result.current.estado).toBe('libre')
+    expect(hook.result.current.restaurada).toBe(false)
+    expect(sessionStorage.getItem(CLAVE_VENTA_PENDIENTE)).toBeNull()
+  })
+
+  it('un 403 de PIN, por su tipo, conserva el cuerpo aunque el texto no diga PIN', async () => {
+    const hook = await restaurada()
+    registrarVenta.mockRejectedValueOnce(new ErrorApi(403, 'La credencial no es válida.', 'urn:sgip:caja:pin-invalido'))
+    let r
+    await act(async () => { r = await hook.result.current.enviar(construir, { administradorId: 3, pin: '0000' }) })
+    expect(r.descartada).toBeUndefined()
+    expect(hook.result.current.estado).toBe('ambiguo')
+    expect(guardado()).not.toBeNull()
+  })
+})

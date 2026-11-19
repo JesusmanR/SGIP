@@ -98,6 +98,14 @@ describe('cierre del turno', () => {
     expect(cerrar()).toBeEnabled()
   })
 
+  it('un resumen nulo (204, sin turno) se trata como «no hay turno abierto» y no revienta', async () => {
+    resumenDelTurno.mockResolvedValue(null)
+    render(<MemoryRouter><CierreTurno /></MemoryRouter>)
+    expect(await screen.findByText(/no hay un turno abierto/i)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /volver a la caja/i })).toBeInTheDocument()
+    expect(screen.queryByLabelText(/efectivo contado/i)).not.toBeInTheDocument()
+  })
+
   it('sin turno abierto lo dice y lleva a la caja', async () => {
     resumenDelTurno.mockRejectedValue(errorApi(404, 'No hay un turno abierto.'))
     render(<MemoryRouter><CierreTurno /></MemoryRouter>)

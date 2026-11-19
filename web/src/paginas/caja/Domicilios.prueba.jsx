@@ -19,6 +19,7 @@ const COBRAR = {
   ventaId: 101, consecutivo: 'V-0043', cliente: 'Luis Soto', clienteId: 8, direccion: 'Carrera 5 # 6-7',
   ciudad: 'Cali', telefono: '3009998877', recibe: 'Luis', contraEntrega: true, valorPorCobrar: 85000, antiguedadDias: 3,
 }
+const COBRAR_ENTREGADO = { ...COBRAR, ventaId: 103, consecutivo: 'V-0045', entregado: true }
 const COBRAR_HOY = { ...COBRAR, ventaId: 102, consecutivo: 'V-0044', valorPorCobrar: 12000, antiguedadDias: 0 }
 
 function montar() {
@@ -117,5 +118,15 @@ describe('domicilios', () => {
     expect(await screen.findByText(/no hay domicilios por despachar/i)).toBeInTheDocument()
     await userEvent.click(screen.getByRole('tab', { name: /por cobrar/i }))
     expect(await screen.findByText(/no hay domicilios por cobrar/i)).toBeInTheDocument()
+  })
+
+  it('en «Por cobrar» no ofrece «Marcar entregado» a lo que ya se entregó, pero sí cobrarlo', async () => {
+    listarDomicilios.mockImplementation(async (estado) => (estado === 'POR_COBRAR' ? [COBRAR, COBRAR_ENTREGADO] : []))
+    montar()
+    await userEvent.click(screen.getByRole('tab', { name: /por cobrar/i }))
+    await screen.findByText('V-0045')
+    expect(screen.queryByRole('button', { name: /marcar entregado.*V-0045/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /registrar cobro.*V-0045/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /marcar entregado.*V-0043/i })).toBeInTheDocument()
   })
 })

@@ -883,3 +883,27 @@ describe('caja: una venta ambigua sobrevive a recargar la pestaña (M12-R1)', ()
     expect(registrarVenta.mock.calls[0][0].claveIdempotencia).toBe('k-1')
   })
 })
+
+describe('caja: una venta restaurada que da un 403 que no es de PIN', () => {
+  it('cierra el diálogo, borra lo guardado y muestra el mensaje, sin quedar en bucle', async () => {
+    entrar('VENDEDOR')
+    sessionStorage.setItem(CLAVE_VENTA_PENDIENTE, JSON.stringify({
+      clave: 'k-2',
+      cuerpo: { claveIdempotencia: 'k-2', lineas: [{ cantidad: 1, productoId: 30, descuento: { tipo: 'PORCENTAJE', valor: 10 } }], pagos: [] },
+      motivos: ['Descuento en la venta'],
+    }))
+    registrarVenta.mockRejectedValueOnce(errorApi(403, 'Tu empresa está en modo de consulta.', 'urn:sgip:empresa:solo-consulta'))
+    render(<MemoryRouter><Caja /></MemoryRouter>)
+    await screen.findByText(/no sabemos si se registró/i)
+    await userEvent.click(screen.getByRole('button', { name: /reintentar el cobro/i }))
+    const dialogo = await screen.findByRole('dialog', { name: /autorización del administrador/i })
+    await userEvent.selectOptions(within(dialogo).getByLabelText(/administrador/i), '3')
+    await userEvent.type(within(dialogo).getByLabelText(/^pin$/i), '4821')
+    await userEvent.click(within(dialogo).getByRole('button', { name: /autorizar y cobrar/i }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(screen.getByRole('alert')).toHaveTextContent('Tu empresa está en modo de consulta.')
+    expect(sessionStorage.getItem(CLAVE_VENTA_PENDIENTE)).toBeNull()
+    expect(screen.queryByText(/no sabemos si se registró/i)).not.toBeInTheDocument()
+    expect(await screen.findByLabelText(/buscar producto/i)).toBeInTheDocument()
+  })
+})

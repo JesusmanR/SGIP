@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -9,7 +9,7 @@ import Encargos from './Encargos.jsx'
 vi.mock('../../servicios/api/caja.js')
 
 const PENDIENTE = {
-  itemId: 71, consecutivo: 'V-0042', cliente: 'Ana Pérez', producto: 'Pintura blanca', cantidad: 2,
+  itemId: 71, consecutivo: 'V-0042', cliente: 'Ana Pérez', producto: 'Pintura blanca', cantidad: 5, cantidadEncargo: 2,
   entregaEstimada: '2026-11-25', estado: 'PENDIENTE',
 }
 const LLEGO = {
@@ -37,6 +37,13 @@ describe('encargos', () => {
     expect(await screen.findByText('Tornillo M6')).toBeInTheDocument()
     expect(listarEncargos).toHaveBeenCalledWith('LLEGO')
     expect(screen.queryByText('Pintura blanca')).not.toBeInTheDocument()
+  })
+
+  it('muestra las unidades que de verdad esperan existencia, no las de la línea', async () => {
+    render(<Encargos />)
+    const fila = (await screen.findByText('Pintura blanca')).closest('tr')
+    expect(within(fila).getByText('2')).toBeInTheDocument()
+    expect(within(fila).queryByText('5')).not.toBeInTheDocument()
   })
 
   it('«Marcar entregado» entrega la línea y la saca de la lista', async () => {
