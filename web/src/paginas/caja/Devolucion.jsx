@@ -95,16 +95,21 @@ export default function Devolucion() {
   const diferencia = valorTotal - repartido
 
   // Lo que se pagó con saldo a favor vuelve SOLO como saldo a favor: nunca se vuelve efectivo ni tarjeta.
-  // Lo que se puede devolver por efectivo o medios es lo pagado sin saldo, menos lo ya devuelto antes (se
-  // supone que las devoluciones anteriores gastaron primero eso). Si algún pago no trae su monto no se puede
-  // saber y no se limita aquí: el servidor tiene la última palabra.
+  // Lo que se puede devolver por efectivo o medios es lo pagado sin saldo, menos lo ya reembolsado así: el
+  // servidor lo dice en `reembolsadoSinSaldo`; si no viene, se estima suponiendo que las devoluciones
+  // anteriores gastaron primero eso. Si algún pago no trae su monto no se puede saber y no se limita aquí:
+  // el servidor tiene la última palabra.
   const pagos = venta?.pagos ?? []
   const sabePagos = pagos.every((p) => Number.isFinite(Number(p.monto)))
   const pagadoConSaldo = pagos.filter((p) => p.tipo === 'SALDO_A_FAVOR').reduce((a, p) => a + Number(p.monto), 0)
   const pagadoSinSaldo = pagos.filter((p) => p.tipo !== 'SALDO_A_FAVOR').reduce((a, p) => a + Number(p.monto), 0)
   const yaDevuelto = lineas.reduce((a, l) => a + Number(l.valorDevuelto ?? 0), 0)
+  const reembolsadoSinSaldo = venta?.reembolsadoSinSaldo
+  const yaSinSaldo = reembolsadoSinSaldo != null && Number.isFinite(Number(reembolsadoSinSaldo))
+    ? Number(reembolsadoSinSaldo)
+    : Math.min(yaDevuelto, pagadoSinSaldo)
   const capacidad = sabePagos && !pendiente
-    ? Math.max(0, pagadoSinSaldo - Math.min(yaDevuelto, pagadoSinSaldo))
+    ? Math.max(0, pagadoSinSaldo - yaSinSaldo)
     : Number.POSITIVE_INFINITY
   const saldoMinimo = Number.isFinite(capacidad) ? Math.max(0, valorTotal - capacidad) : 0
   const sinSaldo = montoInvalido ? 0 : montos.reduce((a, n, i) => (claves[i] === 'saldo' ? a : a + n), 0)

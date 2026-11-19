@@ -7,12 +7,20 @@ import { nuevaClaveDeVenta } from './venta.js'
 export const MENSAJE_AMBIGUO = 'No sabemos si se registró. Reintenta: no se cobrará dos veces.'
 export const MENSAJE_CLAVE_EN_USO = 'Esta venta ya se registró con otros datos. Revisa las ventas del turno.'
 
+/** Los `type` de los 403 que se arreglan con otro PIN o pidiéndolo otra vez (contrato del backend). */
+const TIPOS_DE_PIN = new Set([
+  'urn:sgip:caja:pin-invalido',
+  'urn:sgip:caja:pin-bloqueado',
+  'urn:sgip:caja:autorizacion-requerida',
+])
+
 /**
- * Si un 403 viene del PIN (se puede volver a intentar con otro) y no de otra causa, como una empresa sin
- * permiso de escritura. Se reconoce por el `type` del problema; sin tipo, por el texto.
+ * Si un 403 viene del PIN (se puede volver a intentar) y no de otra causa, como una empresa sin permiso de
+ * escritura. Se reconoce por el `type` del problema; solo sin tipo (o `about:blank`) se decide por el texto.
  */
 function esErrorDePin(error) {
-  return error.tipo ? /pin/i.test(error.tipo) : /\bPIN\b/i.test(error.message ?? '')
+  if (error.tipo && error.tipo !== 'about:blank') return TIPOS_DE_PIN.has(error.tipo)
+  return /\bPIN\b/i.test(error.message ?? '')
 }
 
 /** Un error que no deja claro si el servidor llegó a registrar la venta: sin respuesta, 5xx o tiempo agotado. */
