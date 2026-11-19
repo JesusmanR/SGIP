@@ -71,6 +71,23 @@ describe('hoja de estilos de la caja', () => {
     expect(css).toMatch(/@media print/)
   })
 
+  it('el mensaje de por qué no se puede cobrar conserva su color de aviso y su peso', () => {
+    const regla = css.match(/\.caja-total-mensaje\s*\{([^}]*)\}/)
+    expect(regla, 'falta la regla .caja-total-mensaje').not.toBeNull()
+    expect(regla[1]).toMatch(/color:\s*var\(--aviso\)/)
+    expect(regla[1]).toMatch(/font-weight:\s*(600|700)/)
+  })
+
+  it('el resumen fijo no deja «Cobrar» fuera de alcance en una pantalla baja', () => {
+    const regla = css.match(/\.caja-columna-resumen\s*\{([^}]*)\}/)
+    expect(regla[1]).toMatch(/max-height:\s*calc\(100vh/)
+    expect(regla[1]).toMatch(/overflow-y:\s*auto/)
+  })
+
+  it('las dos columnas pasan a una sola por debajo de 72 rem', () => {
+    expect(css).toMatch(/@media \(max-width: 72rem\)\s*\{\s*\.caja-rejilla/)
+  })
+
   it('no escribe colores sueltos: todo sale de tokens.css', () => {
     const sinComentarios = css.replace(/\/\*[\s\S]*?\*\//g, '')
     expect(sinComentarios).not.toMatch(/#[0-9a-fA-F]{3,8}\b/)
