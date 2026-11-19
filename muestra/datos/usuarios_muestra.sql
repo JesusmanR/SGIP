@@ -1,15 +1,17 @@
 -- Usuarios de la muestra local de SGIP.
 --
--- Lo carga muestra/lib/muestra.sh una sola vez, DESPUÉS de que el backend
+-- Lo carga muestra/lib/muestra.sh en cada arranque, DESPUÉS de que el backend
 -- haya aplicado sus migraciones. Espera estas variables de sesión (el
 -- guion las calcula; los hashes salen con PBKDF2, igual que el backend):
 --   @correo_admin, @correo_vendedor, @correo_plataforma
 --   @h_admin, @h_vendedor, @h_plataforma, @h_pin
 --
--- Las claves de prueba están solo en muestra/LEEME.md. Aquí solo hay hashes
--- que se generan al vuelo, y nunca van a producción.
+-- Las claves de prueba están en muestra/LEEME.md y, como valores por defecto,
+-- en muestra/lib/muestra.sh (que genera los hashes al vuelo). Este archivo no
+-- lleva ninguna clave, y nada de esto va a producción.
 --
--- Es repetible: cada alta se apoya en el correo, que es único.
+-- Es repetible: cada alta se apoya en el correo, que es único, y al repetirla
+-- repone nombre, rol, empresa, hash de la clave y estado de la cuenta.
 
 SET time_zone = '-05:00';
 
@@ -26,24 +28,31 @@ INSERT INTO usuarios (empresa_id, rol_id, nombre, correo, clave_hash,
                       activo, bloqueado, intentos_fallidos, cambio_clave_req)
 SELECT 1, r.rol_id, 'Administrador de la muestra', @correo_admin, @h_admin, 1, 0, 0, 0
   FROM roles r WHERE r.nombre = 'ADMINISTRADOR'
-ON DUPLICATE KEY UPDATE nombre = VALUES(nombre);
+ON DUPLICATE KEY UPDATE nombre = VALUES(nombre), rol_id = VALUES(rol_id),
+  empresa_id = VALUES(empresa_id), clave_hash = VALUES(clave_hash),
+  activo = 1, bloqueado = 0, intentos_fallidos = 0, cambio_clave_req = 0;
 
 INSERT INTO usuarios (empresa_id, rol_id, nombre, correo, clave_hash,
                       activo, bloqueado, intentos_fallidos, cambio_clave_req)
 SELECT 1, r.rol_id, 'Vendedor de la muestra', @correo_vendedor, @h_vendedor, 1, 0, 0, 0
   FROM roles r WHERE r.nombre = 'VENDEDOR'
-ON DUPLICATE KEY UPDATE nombre = VALUES(nombre);
+ON DUPLICATE KEY UPDATE nombre = VALUES(nombre), rol_id = VALUES(rol_id),
+  empresa_id = VALUES(empresa_id), clave_hash = VALUES(clave_hash),
+  activo = 1, bloqueado = 0, intentos_fallidos = 0, cambio_clave_req = 0;
 
 -- El usuario de la plataforma no pertenece a ninguna empresa.
 INSERT INTO usuarios (empresa_id, rol_id, nombre, correo, clave_hash,
                       activo, bloqueado, intentos_fallidos, cambio_clave_req)
 SELECT NULL, r.rol_id, 'Plataforma de la muestra', @correo_plataforma, @h_plataforma, 1, 0, 0, 0
   FROM roles r WHERE r.nombre = 'SUPER_ADMIN'
-ON DUPLICATE KEY UPDATE nombre = VALUES(nombre);
+ON DUPLICATE KEY UPDATE nombre = VALUES(nombre), rol_id = VALUES(rol_id),
+  empresa_id = VALUES(empresa_id), clave_hash = VALUES(clave_hash),
+  activo = 1, bloqueado = 0, intentos_fallidos = 0, cambio_clave_req = 0;
 
--- PIN del administrador (autorizaciones de la caja). En develop todavía no
--- existe la columna: se omite sin error. La rama de la muestra, que sí trae
--- la caja, debe ajustar el nombre de la columna aquí si no es `pin_hash`.
+-- PIN del administrador (autorizaciones de la caja), también en cada arranque.
+-- En develop todavía no existe la columna (la trae la V42 de la caja): se
+-- omite sin error. La rama de la muestra sí la tiene; si la columna no se
+-- llamara `pin_hash`, se ajusta aquí y en verificar_muestra.sh.
 SET @tiene_pin = (SELECT COUNT(*) FROM information_schema.columns
                    WHERE table_schema = DATABASE() AND table_name = 'usuarios'
                      AND column_name = 'pin_hash');

@@ -10,7 +10,7 @@
 #      127.0.0.1, puerto libre al azar entre 34000 y 34999);
 #   3. carga el esquema y los datos de la tienda de ejemplo (V8) una sola vez;
 #   4. arranca el backend (Flyway aplica de la V32 en adelante);
-#   5. crea los usuarios de la muestra una sola vez;
+#   5. crea (o repone) los usuarios de la muestra en cada arranque;
 #   6. arranca la web y abre el navegador.
 #
 # Nunca toca el servicio MySQL del usuario ni su base: no usa su puerto, ni
@@ -19,14 +19,23 @@
 #
 # Los procesos se lanzan ocultos y desligados de la ventana (PowerShell
 # Start-Process), de modo que cerrar la ventana negra no apaga la muestra.
-# Sus PID y puertos quedan en .muestra-datos/estado.
+# Sus PID y puertos quedan en .muestra-datos/estado. Un PID del estado solo
+# se mata si se prueba que es de esta muestra (ver es_nuestro).
 
 RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 DATOS="${MUESTRA_DATOS:-$RAIZ/.muestra-datos}"
 ESTADO="$DATOS/estado"
 
+# Todo borrado (rm -rf) cuelga de DATOS: tiene que ser la carpeta propia de
+# la muestra y nada más.
+case "$DATOS" in
+  */.muestra-datos) ;;
+  *) echo "La carpeta de datos de la muestra debe llamarse .muestra-datos (ahora: '${DATOS}')." >&2
+     return 1 2>/dev/null || exit 1 ;;
+esac
+
 # Usuarios de la muestra. Son claves de prueba SOLO locales; la guía para
-# quien presenta está en muestra/LEEME.md.
+# quien presenta está en muestra/LEEME.md (y la prueba las lee de aquí).
 MUESTRA_CORREO_ADMIN="admin@muestra.com"
 MUESTRA_CLAVE_ADMIN="Admin-Muestra-26"
 MUESTRA_CORREO_VENDEDOR="vendedor@muestra.com"
@@ -44,6 +53,7 @@ fallar() { echo >&2; echo "No se pudo continuar: $*" >&2; _FALLO=1; return 1; }
 
 # ---- Utilidades de proceso y puerto -------------------------------------
 proceso_vivo() { # proceso_vivo PID [imagen.exe]
+  [[ "${1:-}" =~ ^[0-9]+$ ]] || return 1
   local salida
   salida=$(tasklist //FI "PID eq $1" //NH 2>/dev/null | tr -d '\r')
   echo "$salida" | grep -qE "[[:space:]]$1[[:space:]]" || return 1
@@ -52,8 +62,15 @@ proceso_vivo() { # proceso_vivo PID [imagen.exe]
 
 puerto_escucha() {
   [[ -n "${1:-}" ]] || return 1
-  netstat -ano -p TCP 2>/dev/null | tr -d '\r' \
+  # Sin «-p TCP»: así también cuentan los que escuchan en IPv6 ([::1]).
+  netstat -ano 2>/dev/null | tr -d '\r' \
     | grep -qE ":$1[[:space:]]+[^[:space:]]+[[:space:]]+LISTENING"
+}
+
+puerto_pid() { # PID que escucha en el puerto (vacío si nadie)
+  [[ -n "${1:-}" ]] || return 0
+  netstat -ano 2>/dev/null | tr -d '\r' \
+    | awk -v p=":$1" '$4=="LISTENING" && substr($2,length($2)-length(p)+1)==p {print $5; exit}'
 }
 
 puerto_libre_al_azar() { # imprime un puerto libre entre 34000 y 34999
@@ -71,21 +88,45 @@ puerto_libre_al_azar() { # imprime un puerto libre entre 34000 y 34999
 
 winpath() { cygpath -m "$1"; }
 
+linea_de_comando() { # línea de comando de un PID de Windows
+  [[ "${1:-}" =~ ^[0-9]+$ ]] || return 0
+  timeout 20 powershell.exe -NoProfile -NonInteractive -Command \
+    "(Get-CimInstance Win32_Process -Filter 'ProcessId=$1').CommandLine" 2>/dev/null </dev/null | tr -d '\r'
+}
+
+# Un PID del archivo de estado puede ser viejo y haber pasado a otro
+# programa (el MySQL del usuario, por ejemplo). Nada se mata sin probar
+# antes que es de ESTA muestra: o lo lanzamos en esta misma ejecución, o su
+# línea de comando lleva la carpeta de datos de esta muestra (mysqld, java),
+# o es el Vite de la muestra en su puerto.
+es_nuestro() { # es_nuestro PID imagen.exe [puerto]
+  proceso_vivo "$1" "$2" || return 1
+  [[ " ${_LANZADOS:-} " == *" $1 "* ]] && return 0
+  local c d
+  c=$(linea_de_comando "$1"); d="$(winpath "$DATOS")"
+  case "$2" in
+    node.exe) [[ "$c" == *vite.js* && "$c" == *"--port ${3:-x} --strictPort"* ]] ;;
+    *)        [[ "$c" == *"$d"* ]] ;;
+  esac
+}
+
 # Lanza un programa oculto y desligado de esta ventana; imprime su PID de Windows.
 # El PID vuelve por un archivo y no por la salida de PowerShell: si volviera
 # por una tubería, quien llama esperaría hasta que el programa lanzado
 # terminara (hereda el extremo de la tubería) y el arranque se colgaría.
 lanzar_oculto() { # lanzar_oculto exe "argumentos" carpeta registro
-  local pidf
+  local pidf pid
   pidf="$(dirname "$4")/.pid.$$.$RANDOM"
   MZ_EXE="$(winpath "$1")" MZ_ARGS="$2" MZ_DIR="$(winpath "$3")" MZ_LOG="$(winpath "$4")" \
   MZ_PID="$(winpath "$pidf")" \
-  powershell.exe -NoProfile -NonInteractive -Command '
+  timeout 60 powershell.exe -NoProfile -NonInteractive -Command '
     $p = Start-Process -FilePath $env:MZ_EXE -ArgumentList $env:MZ_ARGS `
          -WorkingDirectory $env:MZ_DIR -WindowStyle Hidden `
          -RedirectStandardOutput $env:MZ_LOG -RedirectStandardError ($env:MZ_LOG + ".err") -PassThru
     [IO.File]::WriteAllText($env:MZ_PID, [string]$p.Id)' >/dev/null 2>&1 </dev/null
-  tr -d '\r\n' < "$pidf"; rm -f "$pidf"
+  pid=$(tr -d '\r\n' < "$pidf" 2>/dev/null); rm -f "$pidf"
+  [[ "$pid" =~ ^[0-9]+$ ]] || return 1
+  echo "$pid"
 }
 
 # ---- Estado en disco ----------------------------------------------------
@@ -108,6 +149,38 @@ guardar_estado() {
   } > "$ESTADO.nuevo" && mv -f "$ESTADO.nuevo" "$ESTADO"
 }
 
+# ---- Cerrojo contra el arranque doble ------------------------------------
+liberar_cerrojo() {
+  if [[ -n "${_CERROJO:-}" && "$_CERROJO" == */.muestra-datos/.lock ]]; then
+    rm -rf "$_CERROJO"
+  fi
+}
+
+# 0 = lo tenemos; 2 = otra ejecución viva ya está arrancando.
+adquirir_cerrojo() {
+  local lock="$DATOS/.lock" yo dueno intento
+  yo=$(cat /proc/$$/winpid 2>/dev/null || echo $$)
+  for intento in 1 2; do
+    if mkdir "$lock" 2>/dev/null; then
+      echo "$yo" > "$lock/pid"
+      _CERROJO="$lock"
+      trap liberar_cerrojo EXIT
+      trap 'exit 130' INT TERM
+      return 0
+    fi
+    dueno=$(tr -d '\r\n' < "$lock/pid" 2>/dev/null)
+    if [[ -z "$dueno" ]]; then sleep 1; dueno=$(tr -d '\r\n' < "$lock/pid" 2>/dev/null); fi
+    if [[ -n "$dueno" ]] && proceso_vivo "$dueno" bash.exe \
+       && [[ "$(linea_de_comando "$dueno")" == *muestra.sh* ]]; then
+      decir "La muestra ya se está iniciando, espera unos minutos."
+      return 2
+    fi
+    # Cerrojo viejo: su dueño ya no existe o no es una ejecución de la muestra.
+    [[ "$lock" == */.muestra-datos/.lock ]] && rm -rf "$lock"
+  done
+  return 2
+}
+
 # ---- Herramientas -------------------------------------------------------
 buscar_mysql() {
   local d
@@ -116,6 +189,7 @@ buscar_mysql() {
            "/c/Program Files/MySQL"/MySQL\ Server\ */bin; do
     [[ -n "$d" && -x "$d/mysqld.exe" && -x "$d/mysql.exe" ]] || continue
     MYSQLD_BIN="$d/mysqld.exe"; MYSQL_BIN="$d/mysql.exe"
+    break   # gana el mysqld del PATH; si no, el primero de Program Files
   done
   [[ -n "$MYSQLD_BIN" ]]
 }
@@ -126,7 +200,8 @@ comprobar_herramientas() {
     echo "Falta Java. Instala Java 25 (Temurin/Adoptium) y vuelve a abrir este archivo." >&2
     faltan=1
   else
-    v=$(java -version 2>&1 | head -1 | sed -E 's/.*version "([0-9]+).*/\1/')
+    # Se salta «Picked up JAVA_TOOL_OPTIONS…» y cualquier otra línea previa.
+    v=$(java -version 2>&1 | grep -m1 ' version "' | sed -E 's/.*version "([0-9]+).*/\1/')
     if [[ ! "$v" =~ ^[0-9]+$ || "$v" -lt 25 ]]; then
       echo "Tu Java es demasiado viejo (versión ${v:-?}). Hace falta Java 25 o superior." >&2
       faltan=1
@@ -141,6 +216,10 @@ comprobar_herramientas() {
     faltan=1
   fi
   [[ $faltan -eq 0 ]] || return 1
+  v=$(node -v 2>/dev/null | sed -E 's/^v([0-9]+).*/\1/')
+  [[ "$v" == "24" ]] || echo "Aviso: la muestra se probó con Node 24 y tienes Node ${v:-?}. Seguimos." >&2
+  v=$("$MYSQLD_BIN" --no-defaults --version 2>/dev/null | sed -nE 's/.*Ver ([0-9]+\.[0-9]+).*/\1/p' | head -1)
+  [[ "$v" == "9.7" ]] || echo "Aviso: la muestra se probó con MySQL 9.7 y tienes ${v:-?}. Seguimos." >&2
   JAVA_BIN="$(command -v java)"; NODE_BIN="$(command -v node)"
   export MUESTRA_MYSQL_BIN="$MYSQL_BIN"
   return 0
@@ -165,9 +244,10 @@ iniciar_mysql() {
   if [[ ! -f "$DATOS/mysql.inicializado" ]]; then
     decir "Preparando la base de datos de la muestra (solo la primera vez, puede tardar un minuto)…"
     # Solo se borra la ruta exacta de la base de la muestra.
-    [[ "$dd" == "$DATOS/mysql" ]] && rm -rf "$dd"
+    [[ "$dd" == */.muestra-datos/mysql ]] || { fallar "ruta de datos inesperada."; return 1; }
+    rm -rf "$dd"
     "$MYSQLD_BIN" --no-defaults --initialize-insecure \
-      --datadir="$(winpath "$dd")" --log-error="$(winpath "$log/mysql-init.log")" \
+      "--datadir=$(winpath "$dd")" "--log-error=$(winpath "$log/mysql-init.log")" \
       >/dev/null 2>&1 || { fallar "no se pudo preparar la base. Mira $log/mysql-init.log"; return 1; }
     touch "$DATOS/mysql.inicializado"
   fi
@@ -175,8 +255,9 @@ iniciar_mysql() {
   export MYSQL_PUERTO
   decir "Iniciando la base de datos de la muestra…"
   MYSQL_PID=$(lanzar_oculto "$MYSQLD_BIN" \
-    "--no-defaults --datadir=$(winpath "$dd") --port=$MYSQL_PUERTO --bind-address=127.0.0.1 --mysqlx=OFF --log-error=$(winpath "$log/mysql.log") --character-set-server=utf8mb4 --collation-server=utf8mb4_0900_ai_ci --innodb-buffer-pool-size=128M" \
-    "$DATOS" "$log/mysql-salida.log")
+    "--no-defaults \"--datadir=$(winpath "$dd")\" --port=$MYSQL_PUERTO --bind-address=127.0.0.1 --mysqlx=OFF \"--log-error=$(winpath "$log/mysql.log")\" --character-set-server=utf8mb4 --collation-server=utf8mb4_0900_ai_ci --innodb-buffer-pool-size=128M" \
+    "$DATOS" "$log/mysql-salida.log") || { fallar "no se pudo iniciar la base de la muestra."; return 1; }
+  _LANZADOS="${_LANZADOS:-} $MYSQL_PID"
   guardar_estado
   local i
   for i in $(seq 1 60); do
@@ -226,9 +307,12 @@ iniciar_backend() {
   decir "Iniciando el sistema (aplica las últimas migraciones)…"
   local url="jdbc:mysql://127.0.0.1:$MYSQL_PUERTO/sgip?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=America/Bogota"
   export SGIP_ARCHIVOS_RAIZ="$(winpath "$DATOS/archivos")"
+  # -Dmuestra.datos no lo lee nadie: solo deja la carpeta de datos en la
+  # línea de comando para poder probar luego que el proceso es de la muestra.
   BACK_PID=$(lanzar_oculto "$JAVA_BIN" \
-    "-jar \"$(winpath "$BACK_JAR")\" --server.port=$BACK_PUERTO --server.address=127.0.0.1 \"--spring.datasource.url=$url\" --spring.datasource.username=root --spring.datasource.password= --spring.jpa.open-in-view=false" \
-    "$DATOS" "$DATOS/registros/backend.log")
+    "\"-Dmuestra.datos=$(winpath "$DATOS")\" -jar \"$(winpath "$BACK_JAR")\" --server.port=$BACK_PUERTO --server.address=127.0.0.1 \"--spring.datasource.url=$url\" --spring.datasource.username=root --spring.datasource.password= --spring.jpa.open-in-view=false" \
+    "$DATOS" "$DATOS/registros/backend.log") || { fallar "no se pudo iniciar el sistema."; return 1; }
+  _LANZADOS="${_LANZADOS:-} $BACK_PID"
   guardar_estado
   local i
   for i in $(seq 1 120); do
@@ -243,9 +327,10 @@ hash_de() { # PBKDF2 en el mismo formato que util/Seguridad.derivar del backend
   node -e 'const c=require("crypto");const s=c.randomBytes(16);const h=c.pbkdf2Sync(process.argv[1],s,120000,32,"sha256");const b=x=>x.toString("base64").replace(/=+$/,"");console.log("pbkdf2$120000$"+b(s)+"$"+b(h))' "$1"
 }
 
+# En cada arranque y repetible: repone claves, PIN y desbloqueos, y así la
+# muestra siempre abre con los mismos usuarios.
 cargar_usuarios() {
-  [[ -f "$DATOS/usuarios.cargados" ]] && return 0
-  decir "Creando los usuarios de la muestra…"
+  decir "Preparando los usuarios de la muestra…"
   {
     echo "SET NAMES utf8mb4;"
     echo "SET @correo_admin='$MUESTRA_CORREO_ADMIN', @correo_vendedor='$MUESTRA_CORREO_VENDEDOR', @correo_plataforma='$MUESTRA_CORREO_PLATAFORMA';"
@@ -255,8 +340,7 @@ cargar_usuarios() {
     echo "SET @h_pin='$(hash_de "$MUESTRA_PIN_ADMIN")';"
     cat "$RAIZ/muestra/datos/usuarios_muestra.sql"
   } | mysql_muestra sgip >"$DATOS/registros/usuarios.log" 2>&1 \
-    || { fallar "no se pudieron crear los usuarios. Mira $DATOS/registros/usuarios.log"; return 1; }
-  touch "$DATOS/usuarios.cargados"
+    || { fallar "no se pudieron preparar los usuarios. Mira $DATOS/registros/usuarios.log"; return 1; }
 }
 
 iniciar_web() {
@@ -274,7 +358,8 @@ iniciar_web() {
   export SGIP_API_URL="http://127.0.0.1:$BACK_PUERTO"
   WEB_PID=$(lanzar_oculto "$NODE_BIN" \
     "\"$(winpath "$RAIZ/web/node_modules/vite/bin/vite.js")\" --host 127.0.0.1 --port $WEB_PUERTO --strictPort" \
-    "$RAIZ/web" "$DATOS/registros/web.log")
+    "$RAIZ/web" "$DATOS/registros/web.log") || { fallar "no se pudo iniciar la pantalla."; return 1; }
+  _LANZADOS="${_LANZADOS:-} $WEB_PID"
   guardar_estado
   local i
   for i in $(seq 1 45); do
@@ -287,14 +372,14 @@ iniciar_web() {
 
 abrir_navegador() {
   [[ -n "${MUESTRA_SIN_NAVEGADOR:-}" ]] && return 0
-  cmd.exe //c start "" "http://localhost:$WEB_PUERTO" >/dev/null 2>&1
+  cmd.exe //c start "" "http://127.0.0.1:$WEB_PUERTO" >/dev/null 2>&1
   return 0
 }
 
 en_marcha() {
   [[ -n "$MYSQL_PID" && -n "$BACK_PID" && -n "$WEB_PID" ]] || return 1
-  proceso_vivo "$MYSQL_PID" mysqld.exe && proceso_vivo "$BACK_PID" java.exe \
-    && proceso_vivo "$WEB_PID" node.exe && puerto_escucha "$WEB_PUERTO" \
+  es_nuestro "$MYSQL_PID" mysqld.exe && es_nuestro "$BACK_PID" java.exe \
+    && es_nuestro "$WEB_PID" node.exe "$WEB_PUERTO" && puerto_escucha "$WEB_PUERTO" \
     && puerto_escucha "$BACK_PUERTO" && puerto_escucha "$MYSQL_PUERTO"
 }
 
@@ -303,16 +388,17 @@ arrancar() {
   _FALLO=0
   comprobar_herramientas || return 1
   mkdir -p "$DATOS/registros"
+  adquirir_cerrojo || return 0
   leer_estado
   if en_marcha; then
     decir "La muestra ya está en marcha."
-    decir "Listo: abre http://localhost:$WEB_PUERTO"
+    decir "Listo: abre http://127.0.0.1:$WEB_PUERTO"
     abrir_navegador
     return 0
   fi
   if [[ -f "$ESTADO" ]]; then
-    decir "Había una ejecución anterior a medias; la limpio primero…"
-    detener >/dev/null 2>&1
+    decir "Había una ejecución anterior a medias o ya apagada; la limpio primero…"
+    detener
   fi
   limpiar_estado_en_memoria
   iniciar_mysql && cargar_esquema_y_tienda && iniciar_backend \
@@ -321,17 +407,25 @@ arrancar() {
     detener >/dev/null 2>&1
     return 1
   fi
-  decir "Listo: abre http://localhost:$WEB_PUERTO"
+  decir "Listo: abre http://127.0.0.1:$WEB_PUERTO"
   decir "(Usuarios y claves: muestra/LEEME.md. Para apagar todo: detener-muestra.cmd)"
   abrir_navegador
   return 0
 }
 
-matar_arbol() { # matar_arbol PID imagen.exe
-  if [[ -n "$1" ]] && proceso_vivo "$1" "$2"; then
-    taskkill //PID "$1" //T //F >/dev/null 2>&1
-  fi
+matar_arbol() { # matar_arbol PID
+  taskkill //PID "$1" //T //F >/dev/null 2>&1
   return 0
+}
+
+# Clasifica un PID del estado: 0 = es nuestro (hay que apagarlo);
+# 1 = ya no existe; 2 = existe pero NO es de la muestra (no se toca).
+clasificar() { # clasificar "nombre" PID imagen.exe [puerto]
+  [[ -n "$2" ]] || return 1
+  proceso_vivo "$2" || return 1
+  if es_nuestro "$2" "$3" "${4:-}"; then return 0; fi
+  decir "El registro anterior apuntaba a $1 (PID $2), que no es de la muestra; no lo toco."
+  return 2
 }
 
 detener() {
@@ -341,11 +435,15 @@ detener() {
   fi
   leer_estado
   decir "Apagando la muestra…"
-  matar_arbol "$WEB_PID" node.exe
-  matar_arbol "$BACK_PID" java.exe
-  if [[ -n "$MYSQL_PID" ]] && proceso_vivo "$MYSQL_PID" mysqld.exe; then
+  local web=1 back=1 base=1
+  clasificar "la pantalla" "$WEB_PID" node.exe "$WEB_PUERTO"; web=$?
+  clasificar "el sistema" "$BACK_PID" java.exe; back=$?
+  clasificar "la base de datos" "$MYSQL_PID" mysqld.exe; base=$?
+  [[ $web -eq 0 ]] && matar_arbol "$WEB_PID"
+  [[ $back -eq 0 ]] && matar_arbol "$BACK_PID"
+  if [[ $base -eq 0 ]]; then
     # Primero el apagado ordenado, para no dejar la base a medias.
-    if buscar_mysql; then
+    if buscar_mysql && [[ -n "$MYSQL_PUERTO" ]]; then
       MUESTRA_MYSQL_BIN="$MYSQL_BIN" mysql_muestra -e "SHUTDOWN" >/dev/null 2>&1
     fi
     local i
@@ -353,11 +451,15 @@ detener() {
       proceso_vivo "$MYSQL_PID" mysqld.exe || break
       sleep 1
     done
-    matar_arbol "$MYSQL_PID" mysqld.exe
+    proceso_vivo "$MYSQL_PID" mysqld.exe && matar_arbol "$MYSQL_PID"
   fi
-  local p restos=0
-  for p in "$WEB_PUERTO" "$BACK_PUERTO" "$MYSQL_PUERTO"; do
-    puerto_escucha "$p" && restos=1
+  # Solo cuenta como resto lo que escuche un proceso que era nuestro.
+  local restos=0 dueno
+  for par in "$web:$WEB_PUERTO:$WEB_PID" "$back:$BACK_PUERTO:$BACK_PID" "$base:$MYSQL_PUERTO:$MYSQL_PID"; do
+    IFS=: read -r cls pto pid <<<"$par"
+    [[ "$cls" == "0" && -n "$pto" ]] || continue
+    dueno=$(puerto_pid "$pto")
+    [[ -n "$dueno" && "$dueno" == "$pid" ]] && restos=1
   done
   rm -f "$ESTADO"
   if [[ $restos -eq 1 ]]; then

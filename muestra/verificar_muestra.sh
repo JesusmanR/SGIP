@@ -164,6 +164,7 @@ done
 paso "8. Un registro viejo con un PID ajeno no mata nada"
 node -e 'setTimeout(()=>{},600000)' &
 AJENO=$!
+sleep 1
 AJENO_W=$(cat /proc/$AJENO/winpid)
 mkdir -p "$DATOS"
 printf 'MYSQL_PID=
