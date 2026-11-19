@@ -270,6 +270,18 @@ final class CajaDePrueba {
                 .query(Integer.class).single();
     }
 
+    /** Los movimientos de kárdex de ese tipo en toda la empresa. */
+    int movimientosDeTipo(String tipo) {
+        return jdbc.sql("SELECT COUNT(*) FROM movimientos_inventario WHERE empresa_id = :e AND tipo = :t")
+                .param("e", empresa.empresaId).param("t", tipo).query(Integer.class).single();
+    }
+
+    /** Los movimientos del saldo a favor de ese tipo (ABONO o USO) en toda la empresa. */
+    int movimientosDeSaldo(String tipo) {
+        return jdbc.sql("SELECT COUNT(*) FROM movimientos_saldo WHERE empresa_id = :e AND tipo = :t")
+                .param("e", empresa.empresaId).param("t", tipo).query(Integer.class).single();
+    }
+
     void borrar() {
         jdbc.sql("DELETE FROM auditoria_accesos WHERE correo LIKE :patron")
                 .param("patron", "%" + marca.toLowerCase() + "%").update();

@@ -32,6 +32,9 @@ public final class LimitesDeVenta {
      */
     public static final int PRODUCTOS_NUEVOS = 10;
 
+    /** {@code devoluciones.motivo}. */
+    public static final int MOTIVO_DE_LA_DEVOLUCION = 200;
+
     /** {@code productos.nombre}. */
     public static final int NOMBRE_DEL_PRODUCTO = 160;
 

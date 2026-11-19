@@ -131,6 +131,11 @@ public class ServicioDomicilios {
         return totalDeLaVenta;
     }
 
+    /** Firma mínima: lo que falta por cobrar descontando lo devuelto. */
+    static BigDecimal saldoPorCobrar(BigDecimal totalDeLaVenta, BigDecimal devuelto) {
+        return totalDeLaVenta;
+    }
+
     /**
      * Los días de Bogotá desde que se vendió hasta hoy según el reloj de la aplicación; nunca negativos.
      */

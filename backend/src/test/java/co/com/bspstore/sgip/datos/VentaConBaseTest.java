@@ -520,14 +520,15 @@ class VentaConBaseTest {
     }
 
     @Test
-    void elSaldoAFavorAunNoEstaDisponible() {
+    void pagarConSaldoAFavorSinTenerSaldoEs400YNoGuardaNada() {
+        // El saldo a favor ya existe (RF-68): se paga con él lo que hay, y lo que no hay es un 400.
         Integer producto = caja.producto("A", 5, "10000");
         var pago = new PagoSolicitado(caja.saldoAFavorId, new BigDecimal("10000"), null, null);
 
         VentaInvalidaException e = assertThrows(VentaInvalidaException.class,
                 () -> ventas.procesar(venta(linea(producto, 1), pago)));
 
-        assertEquals("El saldo a favor aún no está disponible", e.getMessage());
+        assertEquals("No hay saldo a favor suficiente para ese pago.", e.getMessage());
         nadaGuardado(producto);
     }
 

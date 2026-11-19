@@ -22,9 +22,20 @@ class ServicioDomiciliosTest {
     private static final Clock RELOJ = Clock.fixed(Instant.parse("2026-11-12T13:30:45Z"), ZoneOffset.UTC);
 
     @Test
-    void elSaldoPorCobrarEsElTotalDeLaVentaMientrasNoHayaDevoluciones() {
-        // La tarea 9 (devoluciones) lo reducirá en este único método: el cobro y las listas lo usan.
-        assertEquals(0, new BigDecimal("23800.00").compareTo(ServicioDomicilios.saldoPorCobrar(new BigDecimal("23800.00"))));
+    void elSaldoPorCobrarEsElTotalDeLaVentaMenosLoDevuelto() {
+        // El cobro y las listas lo calculan aquí: una devolución parcial rebaja lo que queda por cobrar.
+        assertEquals(0, new BigDecimal("23800").compareTo(
+                ServicioDomicilios.saldoPorCobrar(new BigDecimal("23800.00"), BigDecimal.ZERO)));
+        assertEquals(0, new BigDecimal("6000").compareTo(
+                ServicioDomicilios.saldoPorCobrar(new BigDecimal("9000.00"), new BigDecimal("3000.00"))));
+        assertEquals(0, BigDecimal.ZERO.compareTo(
+                ServicioDomicilios.saldoPorCobrar(new BigDecimal("9000.00"), new BigDecimal("9000.00"))));
+    }
+
+    @Test
+    void elSaldoPorCobrarNuncaEsNegativo() {
+        assertEquals(0, BigDecimal.ZERO.compareTo(
+                ServicioDomicilios.saldoPorCobrar(new BigDecimal("100.00"), new BigDecimal("200.00"))));
     }
 
     @Test

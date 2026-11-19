@@ -1,0 +1,207 @@
+package co.com.bspstore.sgip.logica;
+
+import co.com.bspstore.sgip.api.dto.DevolucionRegistrada;
+import co.com.bspstore.sgip.api.dto.Reembolso;
+import co.com.bspstore.sgip.api.dto.SolicitudAutorizacion;
+import co.com.bspstore.sgip.api.dto.SolicitudDevolucion;
+import co.com.bspstore.sgip.api.dto.UnidadDevuelta;
+import co.com.bspstore.sgip.config.UsuarioAutenticado;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+
+import java.math.BigDecimal;
+import java.util.List;
+import java.util.Set;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anySet;
+import static org.mockito.ArgumentMatchers.same;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
+
+/**
+ * La fachada de la devolución (RF-68): lo que decide ANTES de abrir la transacción. Valida la forma de
+ * la solicitud (400 con texto fijo, sin eco del dato), fusiona las unidades repetidas, pide la
+ * autorización DEVOLUCION y solo entonces entrega la solicitud ya normalizada al bean transaccional.
+ *
+ * Lo que depende de la base (la venta, lo ya devuelto, los medios, el saldo) está en
+ * {@code DevolucionesConBaseTest}.
+ */
+@ExtendWith(MockitoExtension.class)
+class ServicioDevolucionesTest {
+
+    private static final Set<ExcepcionAutorizable> DEVOLUCION = Set.of(ExcepcionAutorizable.DEVOLUCION);
+    private static final SolicitudAutorizacion PIN = new SolicitudAutorizacion(2, "483920");
+
+    @Mock ServicioAutorizacion autorizacion;
+    @Mock RegistradorDeDevolucion registrador;
+
+    private ServicioDevoluciones servicio;
+
+    @BeforeEach
+    void comoVendedor() {
+        entrar("VENDEDOR");
+        servicio = new ServicioDevoluciones(autorizacion, registrador);
+    }
+
+    @AfterEach
+    void limpiar() {
+        SecurityContextHolder.clearContext();
+        TransactionSynchronizationManager.setActualTransactionActive(false);
+    }
+
+    private static void entrar(String rol) {
+        var u = new UsuarioAutenticado(7, "ana@tienda.co", rol, 3);
+        SecurityContext c = SecurityContextHolder.createEmptyContext();
+        c.setAuthentication(new UsernamePasswordAuthenticationToken(u, null, List.of()));
+        SecurityContextHolder.setContext(c);
+    }
+
+    private static SolicitudDevolucion devolucion(String motivo, List<UnidadDevuelta> unidades,
+                                                  List<Reembolso> reembolsos) {
+        return new SolicitudDevolucion(9L, unidades, motivo, reembolsos, PIN);
+    }
+
+    private static SolicitudDevolucion buena() {
+        return devolucion("El cliente se arrepintió", List.of(new UnidadDevuelta(1, 1)),
+                List.of(new Reembolso(5, new BigDecimal("10000"), null)));
+    }
+
+    private void esUn400(SolicitudDevolucion s) {
+        assertThrows(VentaInvalidaException.class, () -> servicio.registrar(s));
+        verifyNoInteractions(autorizacion, registrador);
+    }
+
+    // ------------------------------------------------------- la forma, antes del PIN
+
+    @Test
+    void motivoVacioEs400() {
+        for (String motivo : new String[]{null, "", "   ", "\t \n"}) {
+            esUn400(devolucion(motivo, List.of(new UnidadDevuelta(1, 1)), List.of()));
+        }
+    }
+
+    @Test
+    void unMotivoDeMasDe200CaracteresEs400() {
+        esUn400(devolucion("x".repeat(201), List.of(new UnidadDevuelta(1, 1)), List.of()));
+    }
+
+    @Test
+    void sinVentaOSinListaDeUnidadesEs400() {
+        esUn400(new SolicitudDevolucion(null, List.of(), "Motivo", List.of(), PIN));
+        esUn400(new SolicitudDevolucion(0L, List.of(), "Motivo", List.of(), PIN));
+        esUn400(devolucion("Motivo", null, List.of()));
+        esUn400(null);
+    }
+
+    @Test
+    void unaUnidadSinProductoOConCantidadNoPositivaEs400() {
+        esUn400(devolucion("Motivo", List.of(new UnidadDevuelta(null, 1)), List.of()));
+        esUn400(devolucion("Motivo", List.of(new UnidadDevuelta(1, 0)), List.of()));
+        esUn400(devolucion("Motivo", List.of(new UnidadDevuelta(1, -2)), List.of()));
+    }
+
+    @Test
+    void unReembolsoMalFormadoEs400() {
+        List<UnidadDevuelta> unidades = List.of(new UnidadDevuelta(1, 1));
+        esUn400(devolucion("Motivo", unidades, List.of(new Reembolso(null, new BigDecimal("100"), null))));
+        esUn400(devolucion("Motivo", unidades, List.of(new Reembolso(5, null, null))));
+        esUn400(devolucion("Motivo", unidades, List.of(new Reembolso(5, BigDecimal.ZERO, null))));
+        esUn400(devolucion("Motivo", unidades, List.of(new Reembolso(5, new BigDecimal("-100"), null))));
+        esUn400(devolucion("Motivo", unidades, List.of(new Reembolso(5, new BigDecimal("100.50"), null))));
+        esUn400(devolucion("Motivo", unidades, List.of(new Reembolso(5, new BigDecimal("100"), "R".repeat(61)))));
+    }
+
+    // ------------------------------------------------------- el PIN
+
+    @Test
+    void devolverSinPinEs403YNoLlegaALaTransaccion() {
+        doThrow(new AutorizacionRequeridaException()).when(autorizacion).autorizar(any(), anySet());
+
+        assertThrows(AutorizacionRequeridaException.class, () -> servicio.registrar(buena()));
+
+        verify(autorizacion).autorizar(PIN, DEVOLUCION);
+        verifyNoInteractions(registrador);
+    }
+
+    @Test
+    void unPinErradoEsUnPinInvalidoYTampocoLlegaALaTransaccion() {
+        doThrow(new PinInvalidoException(15)).when(autorizacion).autorizar(any(), anySet());
+
+        assertThrows(PinInvalidoException.class, () -> servicio.registrar(buena()));
+
+        verifyNoInteractions(registrador);
+    }
+
+    @Test
+    void conLaAutorizacionEntregaAlBeanTransaccionalLaSolicitudNormalizada() {
+        Autorizacion autorizada = new Autorizacion(2, DEVOLUCION);
+        when(autorizacion.autorizar(PIN, DEVOLUCION)).thenReturn(autorizada);
+        DevolucionRegistrada respuesta = new DevolucionRegistrada(1L, "D-00000001", new BigDecimal("10000"),
+                new BigDecimal("10000"), BigDecimal.ZERO, "DEVUELTA_PARCIAL", List.of());
+        when(registrador.registrar(any(), any())).thenReturn(respuesta);
+        SolicitudDevolucion pedida = devolucion("  El cliente se arrepintió  ",
+                List.of(new UnidadDevuelta(3, 1), new UnidadDevuelta(1, 2), new UnidadDevuelta(3, 2)),
+                List.of(new Reembolso(5, new BigDecimal("10000.00"), "  ")));
+
+        DevolucionRegistrada r = servicio.registrar(pedida);
+
+        assertSame(respuesta, r);
+        ArgumentCaptor<SolicitudDevolucion> enviada = ArgumentCaptor.forClass(SolicitudDevolucion.class);
+        verify(registrador).registrar(enviada.capture(), same(autorizada));
+        SolicitudDevolucion n = enviada.getValue();
+        assertEquals("El cliente se arrepintió", n.motivo(), "el motivo va sin espacios sobrantes");
+        assertEquals(List.of(new UnidadDevuelta(1, 2), new UnidadDevuelta(3, 3)), n.unidades(),
+                "las unidades repetidas se fusionan y van por producto");
+        assertEquals(1, n.reembolsos().size());
+        assertEquals(0, new BigDecimal("10000").compareTo(n.reembolsos().get(0).monto()));
+        assertNull(n.reembolsos().get(0).referencia(), "una referencia en blanco es ninguna");
+    }
+
+    @Test
+    void unaListaVaciaDeUnidadesEsUnaAnulacionYSePermite() {
+        when(autorizacion.autorizar(PIN, DEVOLUCION)).thenReturn(new Autorizacion(2, DEVOLUCION));
+
+        servicio.registrar(devolucion("Anulada por error de digitación", List.of(), null));
+
+        ArgumentCaptor<SolicitudDevolucion> enviada = ArgumentCaptor.forClass(SolicitudDevolucion.class);
+        verify(registrador).registrar(enviada.capture(), any());
+        assertEquals(List.of(), enviada.getValue().unidades());
+        assertEquals(List.of(), enviada.getValue().reembolsos(), "sin reembolsos es una lista vacía, no nula");
+    }
+
+    @Test
+    void elAdministradorTambienPasaPorLaAutorizacionQueSeAutorizaASiMisma() {
+        entrar("ADMINISTRADOR");
+        when(autorizacion.autorizar(any(), anySet())).thenReturn(new Autorizacion(7, DEVOLUCION));
+
+        servicio.registrar(new SolicitudDevolucion(9L, List.of(), "Motivo", List.of(), null));
+
+        verify(autorizacion).autorizar(null, DEVOLUCION);
+        verify(registrador).registrar(any(), any());
+    }
+
+    @Test
+    void noSePuedeLlamarDentroDeUnaTransaccion() {
+        TransactionSynchronizationManager.setActualTransactionActive(true);
+
+        assertThrows(IllegalStateException.class, () -> servicio.registrar(buena()));
+
+        verifyNoInteractions(autorizacion, registrador);
+    }
+}
