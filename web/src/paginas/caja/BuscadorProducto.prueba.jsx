@@ -2,7 +2,7 @@ import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { productoPorCodigo, productosPorTexto } from '../../servicios/api/caja.js'
+import { BusquedaAgotada, productoPorCodigo, productosPorTexto } from '../../servicios/api/caja.js'
 import { PINTURA, SIN_PRECIO, TORNILLO, prepararApi } from './ayuda.js'
 import BuscadorProducto from './BuscadorProducto.jsx'
 
@@ -57,6 +57,18 @@ describe('buscador de producto', () => {
     // Se atiende (o se descarta) a propósito, no se borra solo.
     await userEvent.click(screen.getByRole('button', { name: /descartar el código 000/i }))
     expect(screen.queryByText(/no encontramos ese código/i)).not.toBeInTheDocument()
+  })
+
+  it('un código que no se pudo consultar (tiempo agotado) queda a la vista, la cola sigue y se puede reintentar', async () => {
+    productoPorCodigo.mockRejectedValueOnce(new BusquedaAgotada())
+    montar()
+    await userEvent.type(campo(), '111{Enter}7709990001112{Enter}')
+    await waitFor(() => expect(alAgregar).toHaveBeenCalledWith(PINTURA))
+    expect(screen.getByText(/no se pudo consultar el código 111/i)).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: /reintentar el código 111/i }))
+    await waitFor(() => expect(productoPorCodigo).toHaveBeenCalledTimes(3))
+    expect(productoPorCodigo).toHaveBeenLastCalledWith('111')
+    expect(screen.queryByText(/no se pudo consultar el código 111/i)).not.toBeInTheDocument()
   })
 
   it('varios códigos desconocidos se listan todos', async () => {

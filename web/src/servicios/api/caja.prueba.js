@@ -4,7 +4,7 @@ import { ErrorApi, pedir } from '../api.js'
 import {
   abrirTurno, actualizarCliente, administradores, clientePorIdentificacion, crearCliente,
   datosDeLaEmpresa, mediosDePago, productoPorCodigo, productosPorTexto, registrarVenta,
-  saldoDeCliente, turnoActual, CLAVE_EN_USO,
+  saldoDeCliente, turnoActual, CLAVE_EN_USO, BusquedaAgotada,
 } from './caja.js'
 
 vi.mock('../api.js', async (original) => ({ ...(await original()), pedir: vi.fn(async () => ({ ok: true })) }))
@@ -21,11 +21,31 @@ describe('servicio de la caja', () => {
 
   it('busca por código con el código codificado, y un 404 es «no existe», no un error', async () => {
     await productoPorCodigo('770 1/2')
-    expect(pedir).toHaveBeenCalledWith('/caja/productos?codigo=770%201%2F2')
+    expect(pedir).toHaveBeenCalledWith('/caja/productos?codigo=770%201%2F2', { signal: expect.any(AbortSignal) })
     pedir.mockRejectedValueOnce(new ErrorApi(404, 'No hay ningún producto con ese código.'))
     expect(await productoPorCodigo('x')).toBeNull()
     pedir.mockRejectedValueOnce(new ErrorApi(500, 'Falló'))
     await expect(productoPorCodigo('x')).rejects.toThrow('Falló')
+  })
+
+  it('la búsqueda por código se corta a los 10 s y lo dice con un error propio', async () => {
+    vi.useFakeTimers()
+    try {
+      pedir.mockImplementationOnce((_ruta, opciones) => new Promise((_resolver, rechazar) => {
+        opciones.signal.addEventListener('abort', () => rechazar(new DOMException('Aborted', 'AbortError')))
+      }))
+      const captura = productoPorCodigo('123').catch((e) => e)
+      await vi.advanceTimersByTimeAsync(9999)
+      let resuelta = false
+      captura.then(() => { resuelta = true })
+      await Promise.resolve()
+      expect(resuelta).toBe(false)
+      await vi.advanceTimersByTimeAsync(1)
+      expect(await captura).toBeInstanceOf(BusquedaAgotada)
+      expect(pedir.mock.calls[0][1].signal).toBeInstanceOf(AbortSignal)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('busca por texto', async () => {

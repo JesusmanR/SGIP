@@ -444,6 +444,30 @@ describe('caja: reintentos y conexión', () => {
     expect(registrarVenta.mock.calls[1][0].claveIdempotencia).not.toBe(registrarVenta.mock.calls[0][0].claveIdempotencia)
   })
 
+  it('abandonar no se puede confirmar mientras un reintento está en vuelo: la clave y el cuerpo guardado se conservan', async () => {
+    registrarVenta.mockRejectedValueOnce(new TypeError('Failed to fetch'))
+    await abrir()
+    await agregar()
+    await pagarTodo()
+    await userEvent.click(cobrar())
+    await screen.findByText(/no sabemos si se registró/i)
+    await userEvent.click(screen.getByRole('button', { name: /abandonar esta venta/i }))
+    let rechazar
+    registrarVenta.mockImplementationOnce(() => new Promise((_resolver, rej) => { rechazar = rej }))
+    await userEvent.click(screen.getByRole('button', { name: /reintentar el cobro/i }))
+    await waitFor(() => expect(registrarVenta).toHaveBeenCalledTimes(2))
+    const confirmar = screen.getByRole('button', { name: /sí, abandonar/i })
+    expect(confirmar).toBeDisabled()
+    await userEvent.click(confirmar)
+    expect(screen.getByLabelText('Cantidad de Tornillo M6')).toBeInTheDocument()
+    rechazar(new TypeError('Failed to fetch'))
+    await screen.findByText(/no sabemos si se registró/i)
+    await userEvent.click(screen.getByRole('button', { name: /reintentar el cobro/i }))
+    await waitFor(() => expect(registrarVenta).toHaveBeenCalledTimes(3))
+    expect(registrarVenta.mock.calls[2][0]).toEqual(registrarVenta.mock.calls[0][0])
+    expect(registrarVenta.mock.calls[1][0].claveIdempotencia).toBe(registrarVenta.mock.calls[0][0].claveIdempotencia)
+  })
+
   it('reintentar respeta la conexión: sin red no se puede', async () => {
     registrarVenta.mockRejectedValueOnce(new TypeError('Failed to fetch'))
     const enLinea = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(true)

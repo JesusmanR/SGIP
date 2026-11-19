@@ -103,6 +103,19 @@ describe('la venta en curso', () => {
     await act(async () => { responder(VENTA); await primero })
   })
 
+  it('si armar el cuerpo falla, el envío no queda trabado y el siguiente funciona', async () => {
+    registrarVenta.mockResolvedValue(VENTA)
+    const hook = renderHook(() => useVentaEnCurso())
+    let primero
+    await act(async () => { primero = await hook.result.current.enviar(() => { throw new Error('datos rotos') }) })
+    expect(primero.error).toMatch(/no se pudo preparar/i)
+    expect(registrarVenta).not.toHaveBeenCalled()
+    expect(hook.result.current.enviando).toBe(false)
+    expect(hook.result.current.estado).toBe('libre')
+    const segundo = await enviar(hook)
+    expect(segundo.venta).toBe(VENTA)
+  })
+
   it('abandonar renueva la clave y deja libre', async () => {
     registrarVenta.mockRejectedValueOnce(new TypeError('x'))
     const hook = renderHook(() => useVentaEnCurso())
