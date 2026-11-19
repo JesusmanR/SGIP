@@ -4,13 +4,14 @@
  * si alguien cambia una fila sin querer, aquí se nota.
  */
 import { describe, expect, it } from 'vitest'
-import { puedeVer, secciones, seccionesDe } from './secciones.js'
+import { puedeVer, seccionDe, secciones, seccionesDe } from './secciones.js'
 
 const ADMIN = ['ADMINISTRADOR']
 const VENDEN = ['ADMINISTRADOR', 'VENDEDOR']
 const TODOS = ['ADMINISTRADOR', 'VENDEDOR', 'CLIENTE']
 const ESPERADO = [
   ['/caja', 'Caja', VENDEN, 'Operación'],
+  ['/caja/turnos', 'Turnos de caja', ADMIN, 'Operación'],
   ['/panel', 'Panel', ADMIN, 'Operación'],
   ['/catalogo', 'Catálogo', TODOS, 'Operación'],
   ['/importar', 'Importar precios', ADMIN, 'Operación'],
@@ -33,6 +34,22 @@ describe('tabla de secciones', () => {
     expect(puedeVer('/caja', 'CLIENTE')).toBe(false)
     expect(puedeVer('/caja', 'SUPER_ADMIN')).toBe(false)
     expect(secciones[0].ruta).toBe('/caja')
+  })
+
+  it('rutasDeLaCajaPorRol: turnos solo del administrador; el cierre y los cierres propios cuelgan de /caja', () => {
+    for (const ruta of ['/caja/turnos']) {
+      expect(puedeVer(ruta, 'ADMINISTRADOR'), ruta).toBe(true)
+      for (const rol of ['VENDEDOR', 'CLIENTE', 'SUPER_ADMIN']) expect(puedeVer(ruta, rol), `${ruta} ${rol}`).toBe(false)
+    }
+    // El cierre y los cierres propios cuelgan de /caja: no tienen entrada de menú propia.
+    expect(puedeVer('/caja/cierre', 'VENDEDOR')).toBe(true)
+    expect(puedeVer('/caja/mis-cierres', 'VENDEDOR')).toBe(true)
+    expect(secciones.some((s) => s.ruta === '/caja/cierre' || s.ruta === '/caja/mis-cierres')).toBe(false)
+  })
+
+  it('manda la sección más específica: /caja/turnos no hereda los roles de /caja', () => {
+    expect(seccionDe('/caja/turnos/5')?.ruta).toBe('/caja/turnos')
+    expect(seccionDe('/caja/cierre')?.ruta).toBe('/caja')
   })
 
   it('tiene exactamente las filas del encargo', () => {

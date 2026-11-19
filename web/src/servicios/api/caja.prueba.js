@@ -5,6 +5,7 @@ import {
   abrirTurno, actualizarCliente, administradores, clientePorIdentificacion, crearCliente,
   datosDeLaEmpresa, mediosDePago, productoPorCodigo, productosPorTexto, registrarVenta,
   saldoDeCliente, turnoActual, CLAVE_EN_USO, BusquedaAgotada,
+  cerrarTurno, listarTurnos, resumenDelTurno,
 } from './caja.js'
 
 vi.mock('../api.js', async (original) => ({ ...(await original()), pedir: vi.fn(async () => ({ ok: true })) }))
@@ -90,5 +91,17 @@ describe('servicio de la caja', () => {
     const solicitud = { claveIdempotencia: 'u', lineas: [], pagos: [] }
     await registrarVenta(solicitud)
     expect(pedir).toHaveBeenCalledWith('/caja/ventas', { method: 'POST', body: solicitud })
+  })
+})
+
+
+describe('servicio de la caja: cierre y listado de turnos', () => {
+  it('el resumen, el cierre y el listado del turno', async () => {
+    await resumenDelTurno()
+    expect(pedir).toHaveBeenLastCalledWith('/caja/turnos/actual/resumen')
+    await cerrarTurno({ efectivoContado: 150000, observacion: null })
+    expect(pedir).toHaveBeenLastCalledWith('/caja/turnos/actual/cierre', { method: 'POST', body: { efectivoContado: 150000, observacion: null } })
+    await listarTurnos({ desde: '2026-11-01', hasta: '2026-11-30' })
+    expect(pedir).toHaveBeenLastCalledWith('/caja/turnos?desde=2026-11-01&hasta=2026-11-30')
   })
 })

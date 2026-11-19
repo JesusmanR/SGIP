@@ -1,5 +1,6 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { hoyISO, sumarDias } from '../../servicios/fechas.js'
@@ -23,7 +24,7 @@ const cobrar = () => screen.getByRole('button', { name: /^cobrar$/i })
 const total = () => screen.getByTestId('total-a-cobrar')
 
 async function abrir() {
-  render(<Caja />)
+  render(<MemoryRouter><Caja /></MemoryRouter>)
   await screen.findByLabelText(/buscar producto/i)
 }
 async function agregar(producto = TORNILLO) {
@@ -39,7 +40,7 @@ describe('caja: turno', () => {
   it('sinTurnoMuestraAbrirTurno: pide la base y, al abrir, muestra la venta', async () => {
     turnoActual.mockResolvedValue(null)
     abrirTurno.mockResolvedValue({ id: 6 })
-    render(<Caja />)
+    render(<MemoryRouter><Caja /></MemoryRouter>)
     expect(await screen.findByRole('heading', { name: /abrir turno/i })).toBeInTheDocument()
     expect(screen.queryByLabelText(/buscar producto/i)).not.toBeInTheDocument()
     await userEvent.type(screen.getByLabelText(/base de efectivo/i), '50000')
@@ -50,7 +51,7 @@ describe('caja: turno', () => {
 
   it('la base es obligatoria y entera', async () => {
     turnoActual.mockResolvedValue(null)
-    render(<Caja />)
+    render(<MemoryRouter><Caja /></MemoryRouter>)
     await screen.findByRole('heading', { name: /abrir turno/i })
     await userEvent.click(screen.getByRole('button', { name: /^abrir turno$/i }))
     expect(screen.getByText(/escribe la base de efectivo/i)).toBeInTheDocument()
@@ -60,7 +61,7 @@ describe('caja: turno', () => {
   it('un error al abrir el turno se anuncia', async () => {
     turnoActual.mockResolvedValue(null)
     abrirTurno.mockRejectedValue(errorApi(409, 'Ya tienes un turno abierto.'))
-    render(<Caja />)
+    render(<MemoryRouter><Caja /></MemoryRouter>)
     await screen.findByRole('heading', { name: /abrir turno/i })
     await userEvent.type(screen.getByLabelText(/base de efectivo/i), '0')
     await userEvent.click(screen.getByRole('button', { name: /^abrir turno$/i }))
@@ -69,7 +70,7 @@ describe('caja: turno', () => {
 
   it('un fallo al leer el turno se muestra con reintento', async () => {
     turnoActual.mockRejectedValueOnce(errorApi(500, 'Se cayó'))
-    render(<Caja />)
+    render(<MemoryRouter><Caja /></MemoryRouter>)
     expect(await screen.findByRole('alert')).toHaveTextContent('Se cayó')
     await userEvent.click(screen.getByRole('button', { name: /reintentar/i }))
     expect(await screen.findByLabelText(/buscar producto/i)).toBeInTheDocument()
@@ -706,7 +707,7 @@ describe('caja: lo que no se ve', () => {
       const conCosto = { ...TORNILLO, costo: 7777, margen: 31, utilidad: 2223 }
       const { productoPorCodigo } = await import('../../servicios/api/caja.js')
       productoPorCodigo.mockResolvedValue(conCosto)
-      const { unmount } = render(<Caja />)
+      const { unmount } = render(<MemoryRouter><Caja /></MemoryRouter>)
       await screen.findByLabelText(/buscar producto/i)
       await userEvent.type(buscador(), 'x{Enter}')
       await screen.findByLabelText('Cantidad de Tornillo M6')
@@ -777,5 +778,21 @@ describe('caja: estructura de la pantalla', () => {
     expect(within(resumen).getByRole('button', { name: /^cobrar$/i })).toBeInTheDocument()
     expect(within(resumen).getByText(/^IVA$/)).toBeInTheDocument()
     expect(within(resumen).getByLabelText(/medio de pago/i)).toBeInTheDocument()
+  })
+})
+
+
+describe('caja: enlaces al cierre y a los cierres propios', () => {
+  it('con un turno abierto ofrece cerrar el turno y ver mis cierres', async () => {
+    await abrir()
+    expect(screen.getByRole('link', { name: /cerrar turno/i })).toHaveAttribute('href', '/caja/cierre')
+    expect(screen.getByRole('link', { name: /mis cierres/i })).toHaveAttribute('href', '/caja/mis-cierres')
+  })
+
+  it('sin turno abierto no ofrece cerrarlo', async () => {
+    turnoActual.mockResolvedValue(null)
+    render(<MemoryRouter><Caja /></MemoryRouter>)
+    await screen.findByRole('heading', { name: /abrir turno/i })
+    expect(screen.queryByRole('link', { name: /cerrar turno/i })).not.toBeInTheDocument()
   })
 })
