@@ -75,6 +75,11 @@
   --radio-tarjeta:   10px;
   --radio-control:   6px;
   --radio-insignia:  999px;
+  /* Tarjeta de trabajo de la caja (diseño nuevo): un poco más redonda que la
+     tarjeta común, con una sombra suave y no un borde grueso. La sombra es
+     tinta al 7 %: no es un color nuevo, es la misma tinta aclarada. */
+  --radio-panel:     13px;
+  --sombra-panel:    0 3px 12px rgba(30, 27, 46, .07);
 
   /* ── Espacio ────────────────────────────────────────────────────────
      Malla de ocho. El 4 existe para separar una etiqueta de su campo,

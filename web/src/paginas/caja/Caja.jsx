@@ -3,7 +3,6 @@ import Aviso from '../../componentes/comun/Aviso.jsx'
 import AvisoConexion from '../../componentes/comun/AvisoConexion.jsx'
 import Campo from '../../componentes/comun/Campo.jsx'
 import Confirmacion from '../../componentes/comun/Confirmacion.jsx'
-import EncabezadoPagina from '../../componentes/comun/EncabezadoPagina.jsx'
 import EstadoCarga from '../../componentes/comun/EstadoCarga.jsx'
 import EstadoError from '../../componentes/comun/EstadoError.jsx'
 import EstadoSinPermiso from '../../componentes/comun/EstadoSinPermiso.jsx'
@@ -22,6 +21,7 @@ import DatosCliente from './DatosCliente.jsx'
 import DialogoPin from './DialogoPin.jsx'
 import ProductoNuevo from './ProductoNuevo.jsx'
 import ReciboImprimible from './ReciboImprimible.jsx'
+import SeccionCaja from './SeccionCaja.jsx'
 import useVentaEnCurso, { MENSAJE_AMBIGUO } from './useVentaEnCurso.js'
 import {
   agregarProducto, armarRecibo, armarSolicitud, bloqueoDeVenta, descuentoDe, lineaDeProductoNuevo,
@@ -238,6 +238,9 @@ function Venta({ turno }) {
       return null
     }
     if (resultado.ignorado) return { ignorado: true }
+    // Un error definitivo o una clave en uso no son un resultado ambiguo: la confirmación de
+    // abandonar ya no corresponde y no debe reaparecer sola ante un ambiguo posterior.
+    if (resultado.error !== MENSAJE_AMBIGUO) setAbandonando(false)
     if (resultado.error) setMensaje(resultado.error)
     return resultado.error ?? null
   }
@@ -276,31 +279,29 @@ function Venta({ turno }) {
   return (
     <>
       <div className="caja-rejilla">
-        <div className="caja-area-buscador">
-          <fieldset className="caja-congelable" disabled={congelado}>
-            <BuscadorProducto
-              entradaRef={buscador} alAgregar={agregarDelCatalogo} alCambiarPendientes={(n) => setEscaneando(n > 0)}
-              alCrearProducto={(codigo) => { setCodigoNuevo(codigo); setDialogo('producto') }}
-            />
-          </fieldset>
-        </div>
-
-        <div className="caja-area-carrito">
-          <fieldset className="caja-congelable" disabled={congelado}>
-            <Carrito
-              lineas={lineas} vista={vista} alCambiar={cambiarLinea} alQuitar={quitarLinea}
-              descuentoTotal={descuentoTotal}
-              alCambiarDescuentoTotal={(d) => { if (congeladoAhora.current) return; setDescuentoTotal(d); setPagos([]) }}
-              motivoEncargo={motivoEncargo} alCambiarMotivo={cambiarMotivo}
-            />
+        <div className="caja-columna-principal">
+          {/* Un fieldset deshabilitado apaga todo lo de dentro mientras la venta está congelada. */}
+          <fieldset className="caja-congelable caja-secciones" disabled={congelado}>
             <DatosCliente
               key={epoca} cliente={cliente} alCambiarCliente={cambiarCliente}
               domicilio={domicilio} alCambiarDomicilio={cambiarDomicilio}
             />
+            <SeccionCaja numero="02" titulo="Productos" descripcion="Escanea o busca y agrega los artículos de esta venta.">
+              <BuscadorProducto
+                entradaRef={buscador} alAgregar={agregarDelCatalogo} alCambiarPendientes={(n) => setEscaneando(n > 0)}
+                alCrearProducto={(codigo) => { setCodigoNuevo(codigo); setDialogo('producto') }}
+              />
+              <Carrito
+                lineas={lineas} vista={vista} alCambiar={cambiarLinea} alQuitar={quitarLinea}
+                descuentoTotal={descuentoTotal}
+                alCambiarDescuentoTotal={(d) => { if (congeladoAhora.current) return; setDescuentoTotal(d); setPagos([]) }}
+                motivoEncargo={motivoEncargo} alCambiarMotivo={cambiarMotivo}
+              />
+            </SeccionCaja>
           </fieldset>
         </div>
 
-        <div className="caja-area-cobro">
+        <div className="caja-columna-resumen">
           {envio.estado === 'ambiguo' && (
             <Aviso tipo="aviso">
               {MENSAJE_AMBIGUO}
@@ -329,6 +330,7 @@ function Venta({ turno }) {
             </>
           )}
           {envio.estado === 'libre' && mensaje && !dialogo && <Aviso tipo="peligro">{mensaje}</Aviso>}
+
           <Cobro
             vista={vista} medios={medios.datos ?? []} saldo={saldo} pagos={pagos} alCambiarPagos={setPagos}
             bloqueo={bloqueo} contraEntrega={contraEntrega} sinConexion={sinConexion}
@@ -368,10 +370,13 @@ export default function Caja() {
 
   return (
     <div className="contenido seccion-caja">
-      <EncabezadoPagina
-        titulo="Caja"
-        descripcion={actual?.cajero ? `Turno de ${actual.cajero} · base ${PESOS.format(actual.baseEfectivo)}` : 'Vender y cobrar en el mostrador.'}
-      />
+      <header className="caja-cabecera">
+        <p className="caja-eyebrow">Ventas</p>
+        <h1>Caja</h1>
+        <p className="caja-subtitulo">
+          {actual?.cajero ? `Turno de ${actual.cajero} · base ${PESOS.format(actual.baseEfectivo)}` : 'Vender y cobrar en el mostrador.'}
+        </p>
+      </header>
       <AvisoConexion />
       {cuerpo}
     </div>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import Campo from '../../componentes/comun/Campo.jsx'
 import { PESOS } from '../../servicios/formato.js'
 import '../../estilos/caja.css'
@@ -30,6 +30,7 @@ export default function Cobro({
   const pendiente = Math.max(0, total - pagado)
   const cambio = pagos.reduce((a, p) => a + (p.tipo === 'EFECTIVO' && p.recibido ? Math.max(0, p.recibido - p.monto) : 0), 0)
 
+  const idTitulo = useId()
   const [medioId, setMedioId] = useState(null)
   const [monto, setMonto] = useState(String(pendiente))
   const [recibido, setRecibido] = useState('')
@@ -73,22 +74,20 @@ export default function Cobro({
   const textoBoton = contraEntrega ? 'Registrar para cobrar en la entrega' : enviando ? 'Cobrando…' : 'Cobrar'
 
   return (
-    <section className="caja-cobro" aria-label="Cobro">
-      <div className="caja-total">
-        <div className="caja-total-cifra">
-          <p className="caja-total-rotulo">Total a cobrar</p>
-          <p className="caja-total-valor cifra" data-testid="total-a-cobrar">{PESOS.format(total)}</p>
-        </div>
-        <button type="button" className="boton caja-cobrar" disabled={!habilitado} onClick={alCobrar}>{textoBoton}</button>
-        {/* La región existe siempre, vacía si no hay nada que decir: así el lector anuncia el cambio. */}
-        <p className="caja-total-mensaje" role="status">{mensaje}</p>
-      </div>
+    <section className="caja-cobro caja-resumen" aria-labelledby={idTitulo}>
+      <p className="caja-eyebrow" aria-hidden="true">Resumen</p>
+      <h2 id={idTitulo} className="caja-resumen-titulo">Resumen de la venta</h2>
 
       <dl className="caja-desglose">
         <div><dt>Subtotal</dt><dd className="cifra">{PESOS.format(vista.subtotal)}</dd></div>
-        <div><dt>Descuento</dt><dd className="cifra">{PESOS.format(vista.descuento)}</dd></div>
         <div><dt>IVA</dt><dd className="cifra">{PESOS.format(vista.iva)}</dd></div>
+        <div><dt>Descuento</dt><dd className="cifra">{PESOS.format(vista.descuento)}</dd></div>
       </dl>
+
+      <div className="caja-total">
+        <p className="caja-total-rotulo">Total a cobrar</p>
+        <p className="caja-total-valor cifra" data-testid="total-a-cobrar">{PESOS.format(total)}</p>
+      </div>
 
       {contraEntrega ? (
         <p className="nota">El cliente pagará al recibir el pedido. La mercancía sale de la tienda al registrarlo.</p>
@@ -159,6 +158,12 @@ export default function Cobro({
           </div>
         </fieldset>
       )}
+
+      <div className="caja-cobrar-bloque">
+        <button type="button" className="boton caja-cobrar" disabled={!habilitado} onClick={alCobrar}>{textoBoton}</button>
+        {/* La región existe siempre, vacía si no hay nada que decir: así el lector anuncia el cambio. */}
+        <p className="caja-total-mensaje" role="status">{mensaje}</p>
+      </div>
     </section>
   )
 }

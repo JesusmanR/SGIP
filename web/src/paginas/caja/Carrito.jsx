@@ -75,9 +75,9 @@ export default function Carrito({
 }) {
   if (lineas.length === 0) {
     return (
-      <section className="caja-carrito" aria-label="Venta">
+      <div className="caja-carrito">
         <p className="caja-vacio">Escanea o busca un producto para empezar la venta.</p>
-      </section>
+      </div>
     )
   }
 
@@ -117,7 +117,7 @@ export default function Carrito({
   ]
 
   return (
-    <section className="caja-carrito" aria-label="Venta">
+    <div className="caja-carrito">
       <TablaOTarjetas etiqueta="Productos de la venta" columnas={columnas} filas={filas} claveFila={(l) => l.clave} />
       <div className="caja-pie-carrito">
         {tieneEncargo(lineas) && (
@@ -145,6 +145,6 @@ export default function Carrito({
           </span>
         </div>
       </div>
-    </section>
+    </div>
   )
 }

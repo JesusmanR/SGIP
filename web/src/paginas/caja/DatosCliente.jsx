@@ -3,6 +3,7 @@ import Aviso from '../../componentes/comun/Aviso.jsx'
 import Campo from '../../componentes/comun/Campo.jsx'
 import { actualizarCliente, clientePorIdentificacion, crearCliente } from '../../servicios/api/caja.js'
 import '../../estilos/caja.css'
+import SeccionCaja from './SeccionCaja.jsx'
 import { domicilioVacio } from './venta.js'
 
 const TIPOS_DOCUMENTO = [['CC', 'Cédula de ciudadanía'], ['NIT', 'NIT'], ['CE', 'Cédula de extranjería'], ['PASAPORTE', 'Pasaporte']]
@@ -158,8 +159,7 @@ export default function DatosCliente({ cliente, alCambiarCliente, domicilio, alC
   }
 
   return (
-    <section className="caja-cliente" aria-label="Cliente">
-      <h2 className="caja-titulo-seccion">Cliente</h2>
+    <SeccionCaja numero="01" titulo="Cliente" descripcion="Elige quién compra y, si va a domicilio, a dónde se lleva.">
       <div className="caja-acciones" role="group" aria-label="Quién compra">
         <button type="button" className="boton secundario caja-opcion" aria-pressed={!cliente} onClick={irAConsumidorFinal}>
           Consumidor final
@@ -234,6 +234,6 @@ export default function DatosCliente({ cliente, alCambiarCliente, domicilio, alC
         Domicilio
       </label>
       {domicilio && <DatosDeDomicilio domicilio={domicilio} cliente={cliente} alCambiar={alCambiarDomicilio} />}
-    </section>
+    </SeccionCaja>
   )
 }
