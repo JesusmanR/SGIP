@@ -27,3 +27,9 @@ export function fechaHora(iso) {
     day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false,
   })
 }
+
+/** Una fecha de documento, dd/mm/aaaa (RNF-16), a partir de «aaaa-mm-dd»; «—» si no hay. */
+export function fechaDocumento(iso) {
+  const partes = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso ?? '')
+  return partes ? `${partes[3]}/${partes[2]}/${partes[1]}` : '—'
+}

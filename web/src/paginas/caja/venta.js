@@ -145,7 +145,7 @@ export function puedeCobrar({ bloqueo, vista, pagos, contraEntrega, sinConexion,
 }
 
 /** Un pago como lo espera el servidor: solo los datos que su medio usa. */
-function pagoParaApi(p) {
+export function pagoParaApi(p) {
   const pago = { medioId: p.medioId, monto: p.monto }
   if (p.tipo === 'EFECTIVO') pago.recibido = p.recibido ?? p.monto
   else if (p.tipo === 'TARJETA' || p.tipo === 'TRANSFERENCIA') pago.referencia = p.referencia

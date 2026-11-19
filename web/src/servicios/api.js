@@ -183,6 +183,10 @@ export const api = {
   rechazarCarga: (cargaId) =>
     pedir(`/importaciones/${cargaId}/rechazar`, { method: 'POST' }),
   empresa: () => pedir('/empresa'),
+  // El PIN de autorización del administrador (caja). Nunca se lee: solo se sabe si ya hay uno.
+  estadoPin: () => pedir('/perfil/pin'),
+  fijarPin: (pinActual, pinNuevo) =>
+    pedir('/perfil/pin', { method: 'PUT', body: { pinActual, pinNuevo } }),
   subirLogo: (archivo) => subir('/empresa/logo', archivo),
   subirImagen: (productoId, archivo) => subir(`/productos/${productoId}/imagenes`, archivo),
   imagenesDe: (productoId) => pedir(`/productos/${productoId}/imagenes`),

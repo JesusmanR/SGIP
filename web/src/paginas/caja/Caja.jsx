@@ -23,6 +23,7 @@ import DialogoPin from './DialogoPin.jsx'
 import ProductoNuevo from './ProductoNuevo.jsx'
 import ReciboImprimible from './ReciboImprimible.jsx'
 import SeccionCaja from './SeccionCaja.jsx'
+import useEnLinea from './useEnLinea.js'
 import useVentaEnCurso, { MENSAJE_AMBIGUO } from './useVentaEnCurso.js'
 import {
   agregarProducto, armarRecibo, armarSolicitud, bloqueoDeVenta, descuentoDe, lineaDeProductoNuevo,
@@ -69,21 +70,6 @@ function AbrirTurno({ alAbrir }) {
       </form>
     </section>
   )
-}
-
-function useEnLinea() {
-  const [enLinea, setEnLinea] = useState(() => navigator.onLine !== false)
-  useEffect(() => {
-    const alPerder = () => setEnLinea(false)
-    const alVolver = () => setEnLinea(true)
-    window.addEventListener('offline', alPerder)
-    window.addEventListener('online', alVolver)
-    return () => {
-      window.removeEventListener('offline', alPerder)
-      window.removeEventListener('online', alVolver)
-    }
-  }, [])
-  return enLinea
 }
 
 /**

@@ -8,9 +8,10 @@
  *   empresa de la sesión, y SUPER_ADMIN no pertenece a ninguna; por eso
  *   solo los ven los roles de empresa.
  * - /plataforma/* es de SUPER_ADMIN.
- * - /caja la usan quienes venden: administrador y vendedor, nunca CLIENTE. Los turnos de
- *   todos son solo del administrador; el cierre del turno y los cierres propios no tienen
- *   entrada de menú: cuelgan de /caja.
+ * - /caja la usan quienes venden: administrador y vendedor, nunca CLIENTE. Sus subpantallas
+ *   mandan por separado: domicilios y devoluciones las usan quienes venden; turnos, encargos
+ *   y medios de pago son solo del administrador. El cierre del turno y los cierres propios no
+ *   tienen entrada: cuelgan de /caja.
  * - Todo lo demás es de ADMINISTRADOR.
  */
 const ADMIN = ['ADMINISTRADOR']
@@ -20,6 +21,9 @@ const PLATAFORMA = ['SUPER_ADMIN']
 
 export const secciones = [
   { ruta: '/caja', etiqueta: 'Caja', roles: VENDEN, grupo: 'Operación' },
+  { ruta: '/caja/domicilios', etiqueta: 'Domicilios', roles: VENDEN, grupo: 'Operación' },
+  { ruta: '/caja/devoluciones', etiqueta: 'Devoluciones', roles: VENDEN, grupo: 'Operación' },
+  { ruta: '/caja/encargos', etiqueta: 'Encargos', roles: ADMIN, grupo: 'Operación' },
   { ruta: '/caja/turnos', etiqueta: 'Turnos de caja', roles: ADMIN, grupo: 'Operación' },
   { ruta: '/panel', etiqueta: 'Panel', roles: ADMIN, grupo: 'Operación' },
   { ruta: '/catalogo', etiqueta: 'Catálogo', roles: DE_EMPRESA, grupo: 'Operación' },
@@ -29,6 +33,7 @@ export const secciones = [
   { ruta: '/inventario', etiqueta: 'Inventario', roles: ADMIN, grupo: 'Inventario' },
   { ruta: '/precios', etiqueta: 'Reglas de ganancia', roles: ADMIN, grupo: 'Configuración' },
   { ruta: '/impuestos', etiqueta: 'Impuestos', roles: ADMIN, grupo: 'Configuración' },
+  { ruta: '/caja/medios-pago', etiqueta: 'Medios de pago', roles: ADMIN, grupo: 'Configuración' },
   { ruta: '/usuarios', etiqueta: 'Usuarios', roles: ADMIN, grupo: 'Configuración' },
   { ruta: '/empresa', etiqueta: 'Mi empresa', roles: DE_EMPRESA, grupo: 'Configuración' },
   { ruta: '/plataforma/empresas', etiqueta: 'Empresas', roles: PLATAFORMA, grupo: 'Plataforma' },

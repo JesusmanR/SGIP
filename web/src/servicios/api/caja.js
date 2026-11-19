@@ -6,7 +6,10 @@ import { ErrorApi, pedir } from '../api.js'
  *
  * Supuestos que el backend de esta rama todavía no cumple (se simulan en las
  * pruebas y se ajustan aquí cuando existan):
- * - `saldoDeCliente`: GET /caja/clientes/{id}/saldo responde `{ saldo }`.
+ * - `saldoDeCliente`: GET /caja/clientes/{id}/saldo responde `{ saldo, medioId }`, con el
+ *   medio de sistema SALDO_A_FAVOR con el que se paga con el saldo.
+ * - Tareas 8 a 11 (domicilios, encargos, devoluciones, cierre): las formas de respuesta de las
+ *   listas y de `GET /caja/ventas?consecutivo=` están descritas en las pantallas que las usan.
  * - Una venta con `domicilio` o con un `productoNuevo` hoy responde 400
  *   «aún no disponible»; el cuerpo que se arma ya es el definitivo.
  * - El medio de pago «Saldo a favor» (de sistema) llega en `mediosDePago`
@@ -32,6 +35,15 @@ export const cerrarTurno = (solicitud) =>
 /** El administrador recibe todos los turnos de la empresa; el vendedor, solo los suyos (lo decide el servidor). */
 export const listarTurnos = ({ desde, hasta }) =>
   pedir(`/caja/turnos?desde=${encodeURIComponent(desde)}&hasta=${encodeURIComponent(hasta)}`)
+
+export const listarDomicilios = (estado) => pedir(`/caja/domicilios?estado=${encodeURIComponent(estado)}`)
+export const entregarDomicilio = (ventaId) => pedir(`/caja/domicilios/${ventaId}/entrega`, { method: 'POST' })
+/** El cuerpo es la lista de pagos, por el saldo por cobrar actual de la venta. */
+export const cobrarDomicilio = (ventaId, pagos) =>
+  pedir(`/caja/domicilios/${ventaId}/cobro`, { method: 'POST', body: pagos })
+
+export const listarEncargos = (estado) => pedir(`/caja/encargos?estado=${encodeURIComponent(estado)}`)
+export const entregarEncargo = (itemId) => pedir(`/caja/encargos/${itemId}/entrega`, { method: 'POST' })
 
 /** La consulta por código no respondió a tiempo: no se sabe si el producto existe. */
 export class BusquedaAgotada extends Error {
@@ -77,6 +89,15 @@ export const saldoDeCliente = (id) => pedir(`/caja/clientes/${id}/saldo`)
 export const mediosDePago = () => pedir('/caja/medios-pago')
 export const administradores = () => pedir('/caja/administradores')
 export const datosDeLaEmpresa = () => pedir('/empresa')
+
+/** La venta que se va a devolver, con lo ya devuelto de cada línea; un 404 es «no hay una con ese consecutivo». */
+export const ventaPorConsecutivo = (consecutivo) =>
+  olvidandoElNoEncontrado(pedir(`/caja/ventas?consecutivo=${encodeURIComponent(consecutivo)}`))
+export const registrarDevolucion = (solicitud) => pedir('/caja/devoluciones', { method: 'POST', body: solicitud })
+
+/** Los medios de pago del administrador: todos, también los inactivos y el de sistema. */
+export const listarMedios = () => pedir('/medios-pago')
+export const cambiarActivoMedio = (id, activo) => pedir(`/medios-pago/${id}`, { method: 'PATCH', body: { activo } })
 
 export const registrarVenta = (solicitud) => pedir('/caja/ventas', { method: 'POST', body: solicitud })
 
