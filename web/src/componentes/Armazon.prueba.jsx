@@ -6,7 +6,7 @@
  * porque la petición no llegó es lo peor de los dos mundos: parece que
  * salió y no salió.
  */
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -238,6 +238,141 @@ describe('armazón', () => {
       dentro.at(-1).focus()
       await teclado.tab()
       expect(container.querySelector('.armazon-columna').contains(document.activeElement)).toBe(false)
+    })
+
+    describe('el foco solo se mueve cuando lo de atrás ya no está inerte', () => {
+      // jsdom ignora `inert`: se comprueba la invariante directamente. Un focus()
+      // dentro de un subárbol inerte no hace nada en un navegador real.
+      let llamadas
+      let original
+      beforeEach(() => {
+        llamadas = []
+        original = HTMLElement.prototype.focus
+        HTMLElement.prototype.focus = function foco(...args) {
+          llamadas.push({ el: this, inerte: Boolean(this.closest('[inert]')) })
+          return original.apply(this, args)
+        }
+      })
+      afterEach(() => { HTMLElement.prototype.focus = original })
+
+      const delBoton = () => llamadas.filter((l) => l.el.classList.contains('armazon-boton-menu'))
+
+      it('Escape devuelve el foco al botón fuera de lo inerte', async () => {
+        const teclado = userEvent.setup()
+        montar()
+        await teclado.click(screen.getByRole('button', { name: /^menú$/i }))
+        llamadas.length = 0
+        await teclado.keyboard('{Escape}')
+        expect(delBoton().length).toBeGreaterThan(0)
+        expect(delBoton().every((l) => !l.inerte)).toBe(true)
+        expect(screen.getByRole('button', { name: /^menú$/i })).toHaveFocus()
+      })
+
+      it('el botón de cerrar devuelve el foco al botón fuera de lo inerte', async () => {
+        const teclado = userEvent.setup()
+        montar()
+        await teclado.click(screen.getByRole('button', { name: /^menú$/i }))
+        llamadas.length = 0
+        await teclado.click(screen.getByRole('button', { name: /cerrar navegación/i }))
+        expect(delBoton().length).toBeGreaterThan(0)
+        expect(delBoton().every((l) => !l.inerte)).toBe(true)
+      })
+
+      it('tocar el velo devuelve el foco al botón fuera de lo inerte', async () => {
+        const teclado = userEvent.setup()
+        const { container } = montar()
+        await teclado.click(screen.getByRole('button', { name: /^menú$/i }))
+        llamadas.length = 0
+        await teclado.click(container.querySelector('.armazon-velo'))
+        expect(delBoton().length).toBeGreaterThan(0)
+        expect(delBoton().every((l) => !l.inerte)).toBe(true)
+      })
+
+      it('navegar desde un enlace del cajón enfoca el h1 fuera de lo inerte y no roba el foco al botón', async () => {
+        const teclado = userEvent.setup()
+        montar('/panel')
+        await teclado.click(screen.getByRole('button', { name: /^menú$/i }))
+        llamadas.length = 0
+        await teclado.click(screen.getByRole('link', { name: 'Catálogo' }))
+        const h1 = screen.getByRole('heading', { level: 1 })
+        const deH1 = llamadas.filter((l) => l.el === h1)
+        expect(deH1.length).toBeGreaterThan(0)
+        expect(deH1.every((l) => !l.inerte)).toBe(true)
+        expect(h1).toHaveFocus()
+        expect(delBoton()).toHaveLength(0)
+      })
+    })
+
+    describe('al pasar a escritorio con el cajón abierto', () => {
+      let oyentes
+      let coincide
+      beforeEach(() => {
+        oyentes = []
+        coincide = true
+        window.matchMedia = vi.fn((consulta) => ({
+          media: consulta,
+          get matches() { return coincide },
+          addEventListener: (_, f) => oyentes.push(f),
+          removeEventListener: (_, f) => { oyentes = oyentes.filter((x) => x !== f) },
+        }))
+      })
+      afterEach(() => { delete window.matchMedia })
+      const agrandar = () => act(() => { coincide = false; oyentes.forEach((f) => f({ matches: false })) })
+
+      it('usa la misma consulta que el CSS del celular y cierra el cajón', async () => {
+        const teclado = userEvent.setup()
+        montar()
+        await teclado.click(screen.getByRole('button', { name: /^menú$/i }))
+        expect(window.matchMedia).toHaveBeenCalledWith('(max-width: 48rem)')
+        agrandar()
+        expect(screen.getByRole('button', { name: /^menú$/i })).toHaveAttribute('aria-expanded', 'false')
+      })
+
+      it('si el foco estaba dentro del cajón, pasa al botón del menú', async () => {
+        const teclado = userEvent.setup()
+        montar()
+        const boton = screen.getByRole('button', { name: /^menú$/i })
+        await teclado.click(boton)
+        agrandar()
+        expect(boton).toHaveFocus()
+      })
+
+      it('si el foco estaba fuera del cajón, lo deja donde está', async () => {
+        const teclado = userEvent.setup()
+        montar()
+        await teclado.click(screen.getByRole('button', { name: /^menú$/i }))
+        document.activeElement.blur()
+        agrandar()
+        expect(screen.getByRole('button', { name: /^menú$/i })).not.toHaveFocus()
+      })
+    })
+
+    describe('altura real de la barra', () => {
+      let observadores
+      beforeEach(() => {
+        observadores = []
+        globalThis.ResizeObserver = class {
+          constructor(f) { this.f = f; this.desconectado = false; observadores.push(this) }
+          observe(el) { this.el = el }
+          disconnect() { this.desconectado = true }
+        }
+      })
+      afterEach(() => {
+        delete globalThis.ResizeObserver
+        document.documentElement.style.removeProperty('--alto-barra')
+      })
+
+      it('escribe la altura medida de la barra en --alto-barra y se desconecta al salir', () => {
+        const { unmount } = montar()
+        expect(observadores).toHaveLength(1)
+        const barra = document.querySelector('.armazon-barra')
+        expect(observadores[0].el).toBe(barra)
+        Object.defineProperty(barra, 'offsetHeight', { configurable: true, value: 92 })
+        act(() => observadores[0].f([]))
+        expect(document.documentElement.style.getPropertyValue('--alto-barra')).toBe('92px')
+        unmount()
+        expect(observadores[0].desconectado).toBe(true)
+      })
     })
 
     it('tocar el velo detrás del menú lo cierra', async () => {
