@@ -72,6 +72,13 @@ verificar_caja() { # verificar_caja token_vendedor
   fallo "la caja existe (HTTP $codigo) pero verificar_caja() no está implementada"
 }
 
+paso "0. Un puerto en IPv6 también cuenta como ocupado"
+node -e 'require("net").createServer().listen(34997,"::1");setTimeout(()=>{},30000)' &
+IP6=$!
+sleep 2
+if puerto_escucha 34997; then ok "el puerto 34997 en [::1] se ve como ocupado"; else fallo "no ve el puerto en [::1]"; fi
+kill $IP6 2>/dev/null
+
 paso "1. Detener y arrancar"
 bash "$LIB" detener >/dev/null 2>&1
 comprobar "arranca sin error" bash "$LIB" arrancar
@@ -128,6 +135,13 @@ CLIENTES_2=$(contar "SELECT COUNT(*) FROM clientes")
 [[ -n "$CLIENTES_1" && "$CLIENTES_1" == "$CLIENTES_2" ]] && ok "clientes: $CLIENTES_2" || fallo "clientes $CLIENTES_1 -> $CLIENTES_2"
 DUP=$(contar "SELECT COUNT(*) FROM (SELECT correo FROM usuarios GROUP BY correo HAVING COUNT(*)>1) x")
 [[ "$DUP" == "0" ]] && ok "ningún correo repetido" || fallo "correos repetidos: $DUP"
+TIENE_PIN=$(contar "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='sgip' AND table_name='usuarios' AND column_name='pin_hash'")
+if [[ "$TIENE_PIN" == "1" ]]; then
+  PIN=$(contar "SELECT pin_hash IS NOT NULL FROM usuarios WHERE correo='$MUESTRA_CORREO_ADMIN'")
+  [[ "$PIN" == "1" ]] && ok "el administrador tiene PIN" || fallo "el administrador no tiene PIN"
+else
+  echo "  OMITIDO el PIN: esta rama no tiene la columna usuarios.pin_hash"
+fi
 T2=$(ingresar "$MUESTRA_CORREO_VENDEDOR" "$MUESTRA_CLAVE_VENDEDOR")
 [[ -n "$T2" ]] && ok "el vendedor sigue entrando" || fallo "el vendedor no entra tras reiniciar"
 
@@ -137,6 +151,55 @@ SALIDA=$(bash "$LIB" arrancar 2>&1)
 echo "$SALIDA" | grep -qi "ya está en marcha" && ok "avisa que ya estaba en marcha" || fallo "no detectó el arranque doble"
 leer_estado
 [[ "$BACK_PID" == "$BACK_2" && "$WEB_PID" == "$WEB_2" ]] && ok "los procesos son los mismos" || fallo "se duplicaron procesos"
+echo "$SALIDA" | grep -q "http://127.0.0.1:$WEB_PUERTO" && ok "abre en 127.0.0.1" || fallo "la dirección no es http://127.0.0.1:$WEB_PUERTO"
+
+paso "7b. Detener"
+PUERTOS=("$MYSQL_PUERTO" "$BACK_PUERTO" "$WEB_PUERTO")
+bash "$LIB" detener >/dev/null 2>&1
+sleep 2
+for p in "${PUERTOS[@]}"; do
+  if puerto_escucha "$p"; then fallo "el puerto $p sigue escuchando"; else ok "puerto $p libre"; fi
+done
+
+paso "8. Un registro viejo con un PID ajeno no mata nada"
+node -e 'setTimeout(()=>{},600000)' &
+AJENO=$!
+AJENO_W=$(cat /proc/$AJENO/winpid)
+mkdir -p "$DATOS"
+printf 'MYSQL_PID=
+MYSQL_PUERTO=
+BACK_PID=
+BACK_PUERTO=
+WEB_PID=%s
+WEB_PUERTO=34998
+' "$AJENO_W" > "$ESTADO"
+SALIDA=$(bash "$LIB" detener 2>&1)
+proceso_vivo "$AJENO_W" node.exe && ok "el proceso ajeno sigue vivo" || fallo "se mató un proceso ajeno"
+echo "$SALIDA" | grep -q "no es de la muestra" && ok "lo explica en claro" || fallo "no explicó el registro viejo"
+[[ ! -f "$ESTADO" ]] && ok "el registro viejo se borró" || fallo "el registro viejo sigue ahí"
+printf 'MYSQL_PID=
+MYSQL_PUERTO=
+BACK_PID=
+BACK_PUERTO=
+WEB_PID=%s
+WEB_PUERTO=34998
+' "$AJENO_W" > "$ESTADO"
+
+paso "9. Cerrojo viejo y arranque doble mientras arranca"
+mkdir -p "$DATOS/.lock"; echo 999999 > "$DATOS/.lock/pid"
+SAL1="$DATOS/primero.log"
+( bash "$LIB" arrancar > "$SAL1" 2>&1 ) &
+PRIMERO=$!
+sleep 5
+SEGUNDO=$(bash "$LIB" arrancar 2>&1)
+echo "$SEGUNDO" | grep -q "ya se está iniciando" && ok "el segundo aviso: ya se está iniciando" || fallo "el segundo no detectó el cerrojo: $SEGUNDO"
+wait $PRIMERO
+leer_estado
+comprobar "el primero terminó y todo está en marcha" en_marcha
+comprobar "el backend responde" esperar_backend
+proceso_vivo "$AJENO_W" node.exe && ok "el proceso ajeno sigue vivo tras arrancar" || fallo "arrancar mató el proceso ajeno"
+[[ ! -d "$DATOS/.lock" ]] && ok "el cerrojo se quitó" || fallo "el cerrojo quedó"
+kill $AJENO 2>/dev/null
 
 paso "Cierre"
 PUERTOS=("$MYSQL_PUERTO" "$BACK_PUERTO" "$WEB_PUERTO")
