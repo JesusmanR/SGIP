@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
+// SGIP_API_URL apunta el proxy a otro backend (la muestra local lo usa).
 // El front y el backend corren en puertos distintos durante el
 // desarrollo. El proxy evita tener que habilitar CORS en el backend solo
 // para trabajar en local: el navegador ve un único origen.
@@ -9,7 +10,7 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api': { target: 'http://localhost:8080', changeOrigin: true },
+      '/api': { target: process.env.SGIP_API_URL || 'http://localhost:8080', changeOrigin: true },
     },
   },
   test: {
