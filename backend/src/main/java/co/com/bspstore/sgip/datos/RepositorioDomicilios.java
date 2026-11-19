@@ -35,11 +35,22 @@ public class RepositorioDomicilios {
     /** Una fila de las listas; el valor por cobrar y la antigüedad los calcula quien llama. */
     public record FilaDeDomicilio(Long ventaId, String consecutivo, LocalDateTime fecha, String cliente,
                                   String direccion, String ciudad, String telefono, String recibe,
-                                  boolean contraEntrega, String estadoPago, BigDecimal total) {}
+                                  boolean contraEntrega, String estadoPago, BigDecimal total, BigDecimal devuelto) {}
 
+    /**
+     * {@code devuelto} es lo que ya se devolvió de la venta (RF-68): lo que falta por cobrar es el total
+     * menos eso. Va como subconsulta correlacionada que repite el filtro por empresa, de modo que cada
+     * lista sigue siendo una sola consulta.
+     */
     private static final String COLUMNAS = """
             SELECT v.venta_id, v.consecutivo, v.fecha, c.razon_social AS cliente, d.direccion, d.ciudad,
-                   d.telefono, d.recibe, v.pago_contra_entrega AS contra_entrega, v.estado_pago, v.total
+                   d.telefono, d.recibe, v.pago_contra_entrega AS contra_entrega, v.estado_pago, v.total,
+                   COALESCE((SELECT SUM(di.valor)
+                               FROM devolucion_items di
+                               JOIN devoluciones dv ON dv.empresa_id = di.empresa_id
+                                                   AND dv.devolucion_id = di.devolucion_id
+                              WHERE dv.empresa_id = :empresa AND di.empresa_id = :empresa
+                                AND dv.venta_id = v.venta_id), 0) AS devuelto
               FROM domicilios_venta d
               JOIN ventas v ON v.empresa_id = d.empresa_id AND v.venta_id = d.venta_id
               JOIN clientes c ON c.empresa_id = v.empresa_id AND c.cliente_id = v.cliente_id
@@ -49,7 +60,7 @@ public class RepositorioDomicilios {
     public List<FilaDeDomicilio> listarPorDespachar(Integer empresaId, int tope) {
         return jdbc.sql(COLUMNAS + """
                          WHERE d.empresa_id = :empresa AND v.empresa_id = :empresa AND d.entregado_en IS NULL
-                           AND v.estado = 'REGISTRADA'
+                           AND v.estado <> 'ANULADA'
                          ORDER BY v.fecha, v.venta_id
                          LIMIT :tope
                         """)
@@ -63,7 +74,7 @@ public class RepositorioDomicilios {
     public List<FilaDeDomicilio> listarPorCobrar(Integer empresaId, int tope) {
         return jdbc.sql(COLUMNAS + """
                          WHERE d.empresa_id = :empresa AND v.empresa_id = :empresa AND v.pago_contra_entrega = TRUE
-                           AND v.estado_pago = 'PENDIENTE' AND v.estado = 'REGISTRADA'
+                           AND v.estado_pago = 'PENDIENTE' AND v.estado <> 'ANULADA'
                          ORDER BY v.fecha, v.venta_id
                          LIMIT :tope
                         """)
@@ -99,7 +110,7 @@ public class RepositorioDomicilios {
 
     public Optional<EstadoDelDomicilio> estadoDelDomicilio(Integer empresaId, Long ventaId) {
         return jdbc.sql("""
-                        SELECT d.entregado_en IS NOT NULL AS entregado, v.estado = 'REGISTRADA' AS venta_vigente
+                        SELECT d.entregado_en IS NOT NULL AS entregado, v.estado <> 'ANULADA' AS venta_vigente
                           FROM domicilios_venta d
                           JOIN ventas v ON v.empresa_id = d.empresa_id AND v.venta_id = d.venta_id
                          WHERE d.empresa_id = :empresa AND d.venta_id = :venta
@@ -114,7 +125,7 @@ public class RepositorioDomicilios {
 
     /** Lo que el cobro necesita saber de la venta, ya bloqueada. */
     public record VentaPorCobrar(Long ventaId, String consecutivo, BigDecimal total, String estado, String estadoPago,
-                                 boolean contraEntrega) {}
+                                 boolean contraEntrega, BigDecimal devuelto) {}
 
     /**
      * La venta, con su fila tomada {@code FOR UPDATE} por clave primaria hasta el fin de la transacción:
@@ -123,11 +134,22 @@ public class RepositorioDomicilios {
      * la caja). {@code FORCE INDEX (PRIMARY)} como el bloqueo de los productos y del turno: sin él el
      * optimizador podría recorrer otro índice y bloquear en otro orden. Vacío si la venta no es de la
      * empresa.
+     *
+     * Trae también lo devuelto hasta ahora (RF-68), con una subconsulta en la misma sentencia: en
+     * {@code SELECT ... FOR UPDATE} el bloqueo es solo de la tabla de la consulta externa, así que no toma
+     * ninguna fila de las devoluciones, y como toda devolución bloquea antes esta misma fila de la venta,
+     * ninguna puede confirmarse mientras el cobro la tiene.
      */
     public Optional<VentaPorCobrar> bloquearVenta(Integer empresaId, Long ventaId) {
         return jdbc.sql("""
                         SELECT venta_id, consecutivo, total, estado, estado_pago,
-                               pago_contra_entrega AS contra_entrega
+                               pago_contra_entrega AS contra_entrega,
+                               COALESCE((SELECT SUM(di.valor)
+                                           FROM devolucion_items di
+                                           JOIN devoluciones dv ON dv.empresa_id = di.empresa_id
+                                                               AND dv.devolucion_id = di.devolucion_id
+                                          WHERE dv.empresa_id = :empresa AND di.empresa_id = :empresa
+                                            AND dv.venta_id = :venta), 0) AS devuelto
                           FROM ventas FORCE INDEX (PRIMARY)
                          WHERE venta_id = :venta AND empresa_id = :empresa
                            FOR UPDATE

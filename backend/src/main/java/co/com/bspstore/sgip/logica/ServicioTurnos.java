@@ -134,6 +134,18 @@ public class ServicioTurnos {
     }
 
     /**
+     * El turno abierto del usuario en sesión, con el mismo bloqueo {@code FOR SHARE} que
+     * {@link #exigirTurnoAbierto()}, pero <b>sin fallar</b> si no tiene: vacío. Es para las operaciones
+     * que solo necesitan turno si mueven dinero y no pueden saberlo antes de bloquear la venta (la
+     * devolución: una venta contra entrega sin cobrar no pagó nada). El orden de bloqueos de la caja pone
+     * el turno antes que la venta, así que se toma primero y quien llama decide después si lo exige.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public Optional<Long> intentarTurnoAbierto() {
+        return turnos.bloquearAbiertoDe(ContextoEmpresa.empresaActual(), cajeroEnSesion());
+    }
+
+    /**
      * Pesos enteros, de cero en adelante y de hasta 12 dígitos. Devuelve la base sin
      * decimales ni exponente, lista para guardar.
      */

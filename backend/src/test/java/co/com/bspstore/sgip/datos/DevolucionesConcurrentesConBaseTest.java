@@ -373,11 +373,13 @@ class DevolucionesConcurrentesConBaseTest {
 
     @Test
     void dosAbonosAlSaldoDelMismoClienteSeSumanSinPerderse() throws Exception {
+        // Productos distintos: si compartieran uno, la segunda esperaría al primero en el producto y no en el saldo.
         Integer producto = caja.producto("A", 20, "10000");
+        Integer otroProducto = caja.producto("B", 20, "10000");
         VentaRegistrada semilla = vender(producto, 1, "10000");
         devoluciones.registrar(delAdministrador(semilla.id(), List.of(), enSaldo("10000")));
         VentaRegistrada una = vender(producto, 1, "10000");
-        VentaRegistrada otra = vender(producto, 1, "10000");
+        VentaRegistrada otra = vender(otroProducto, 1, "10000");
         Future<DevolucionRegistrada> primera;
         Future<DevolucionRegistrada> segunda;
         // La fila del saldo del cliente, tomada desde fuera.

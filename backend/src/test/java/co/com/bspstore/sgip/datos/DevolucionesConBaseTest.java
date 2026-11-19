@@ -159,10 +159,18 @@ class DevolucionesConBaseTest {
                 .param("e", caja.empresa.empresaId).param("c", cliente).query(BigDecimal.class).single();
     }
 
-    /** Le deja saldo al cliente como lo hace el sistema: vendiéndole y devolviendo todo al saldo. */
-    private void darSaldo(Integer cliente, Integer producto, String monto) {
-        VentaRegistrada v = vender(cliente, producto, 1, efectivo(monto));
-        anular(v.id(), enSaldo(monto));
+    /**
+     * Le deja saldo al cliente como lo hace el sistema: le vende una unidad del producto (de ese precio) y la
+     * devuelve, el {@code monto} al saldo y el resto en efectivo.
+     */
+    private void darSaldo(Integer cliente, Integer producto, String precio, String monto) {
+        VentaRegistrada v = vender(cliente, producto, 1, efectivo(precio));
+        BigDecimal resto = new BigDecimal(precio).subtract(new BigDecimal(monto));
+        if (resto.signum() == 0) {
+            anular(v.id(), enSaldo(monto));
+        } else {
+            anular(v.id(), enSaldo(monto), enEfectivo(resto.toPlainString()));
+        }
     }
 
     private void nadaDevuelto(Integer producto, int existencia) {
@@ -549,7 +557,7 @@ class DevolucionesConBaseTest {
     @Test
     void saldoAFavorSeUsaEnUnaCompraPosterior() {
         Integer producto = caja.producto("A", 10, "10000");
-        darSaldo(caja.clienteId, producto, "10000");
+        darSaldo(caja.clienteId, producto, "10000", "10000");
         igual("10000", saldoGuardado(caja.clienteId));
 
         VentaRegistrada v = vender(caja.clienteId, producto, 1, saldo("10000"));
@@ -562,7 +570,7 @@ class DevolucionesConBaseTest {
     @Test
     void unaCompraPuedePagarseMitadConSaldoYMitadEnEfectivo() {
         Integer producto = caja.producto("A", 10, "10000");
-        darSaldo(caja.clienteId, producto, "6000");
+        darSaldo(caja.clienteId, producto, "10000", "6000");
         VentaRegistrada v = vender(caja.clienteId, producto, 1, saldo("6000"), efectivo("4000"));
 
         igual("10000", v.total());
@@ -574,7 +582,7 @@ class DevolucionesConBaseTest {
     @Test
     void noSePuedeUsarMasSaldoDelQueHay() {
         Integer producto = caja.producto("A", 10, "10000");
-        darSaldo(caja.clienteId, producto, "4000");
+        darSaldo(caja.clienteId, producto, "10000", "4000");
         int ventasAntes = caja.cuantas("ventas");
         int existencia = caja.existencia(producto);
 
@@ -602,7 +610,7 @@ class DevolucionesConBaseTest {
     @Test
     void elPagoConSaldoNoLlevaCierreYDejaMovimientoDeUso() {
         Integer producto = caja.producto("A", 10, "10000");
-        darSaldo(caja.clienteId, producto, "10000");
+        darSaldo(caja.clienteId, producto, "10000", "10000");
 
         VentaRegistrada v = vender(caja.clienteId, producto, 1, saldo("7000"), efectivo("3000"));
 
@@ -640,7 +648,7 @@ class DevolucionesConBaseTest {
     @Test
     void elSaldoDelClienteSeConsultaYEsDeLaEmpresa() {
         Integer producto = caja.producto("A", 10, "10000");
-        darSaldo(caja.clienteId, producto, "10000");
+        darSaldo(caja.clienteId, producto, "10000", "10000");
         CajaDePrueba ajena = CajaDePrueba.crear("Ajena", jdbc, plataforma, categorias, proveedores, clientes);
         try {
             caja.entrarComoVendedor();
@@ -760,7 +768,7 @@ class DevolucionesConBaseTest {
     @Test
     void elContraEntregaNoSePagaConSaldoAFavor() {
         Integer producto = caja.producto("A", 5, "3000");
-        darSaldo(caja.clienteId, producto, "3000");
+        darSaldo(caja.clienteId, producto, "3000", "3000");
         VentaRegistrada v = contraEntrega(producto, 1);
 
         assertThrows(VentaInvalidaException.class, () -> domicilios.cobrar(v.id(), List.of(saldo("3000"))));

@@ -50,7 +50,7 @@ public class RepositorioEncargos {
                           JOIN clientes c ON c.empresa_id = v.empresa_id AND c.cliente_id = v.cliente_id
                           JOIN productos p ON p.empresa_id = i.empresa_id AND p.producto_id = i.producto_id
                          WHERE i.empresa_id = :empresa AND i.cantidad_encargo > 0
-                           AND i.encargo_entregado_en IS NULL AND v.estado = 'REGISTRADA'
+                           AND i.encargo_entregado_en IS NULL AND v.estado <> 'ANULADA'
                            AND (p.existencia >= 0) = :llego
                          ORDER BY i.entrega_estimada, i.item_id
                          LIMIT :tope
@@ -85,7 +85,7 @@ public class RepositorioEncargos {
 
     public Optional<EstadoDelEncargo> estadoDelEncargo(Integer empresaId, Long itemId) {
         return jdbc.sql("""
-                        SELECT i.encargo_entregado_en IS NOT NULL AS entregado, v.estado = 'REGISTRADA' AS venta_vigente
+                        SELECT i.encargo_entregado_en IS NOT NULL AS entregado, v.estado <> 'ANULADA' AS venta_vigente
                           FROM venta_items i
                           JOIN ventas v ON v.empresa_id = i.empresa_id AND v.venta_id = i.venta_id
                          WHERE i.empresa_id = :empresa AND i.item_id = :item AND i.cantidad_encargo > 0

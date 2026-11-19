@@ -3,6 +3,7 @@ package co.com.bspstore.sgip.logica;
 import co.com.bspstore.sgip.api.dto.Cliente;
 import co.com.bspstore.sgip.api.dto.Domicilio;
 import co.com.bspstore.sgip.api.dto.LineaSolicitada;
+import co.com.bspstore.sgip.api.dto.MedioDePago;
 import co.com.bspstore.sgip.api.dto.SolicitudVenta;
 import co.com.bspstore.sgip.api.dto.VentaRegistrada;
 import co.com.bspstore.sgip.config.ContextoEmpresa;
@@ -60,7 +61,10 @@ import java.util.Optional;
  *   <li>la <b>venta</b> ({@code FOR UPDATE}): solo devoluciones y cobros contra entrega; esta
  *       operación crea la suya y no la bloquea;</li>
  *   <li>los <b>productos</b>, por {@code producto_id} ascendente con {@code FORCE INDEX (PRIMARY)};</li>
- *   <li>el <b>saldo del cliente</b>: el saldo a favor aún no está disponible;</li>
+ *   <li>el <b>saldo del cliente</b> ({@code saldos_cliente}, {@code FOR UPDATE}): solo si la venta paga con
+ *       saldo a favor (RF-68). Se toma al principio, con el cliente resuelto y antes de crear nada, porque
+ *       una venta con productos nuevos toma enseguida el consecutivo de {@code PRODUCTO_RAPIDO} y el
+ *       saldo va antes que cualquier consecutivo;</li>
  *   <li>el <b>consecutivo</b>, {@code FOR UPDATE}, el último antes de insertar: primero el de
  *       {@code PRODUCTO_RAPIDO}, si la venta crea productos nuevos, y después el de {@code VENTA};</li>
  *   <li>el <b>kárdex</b>.</li>
@@ -140,12 +144,13 @@ public class RegistradorDeVenta {
     private final ServicioClientes servicioClientes;
     private final ServicioProductoNuevo productosNuevos;
     private final ValidadorDePagos validador;
+    private final ServicioSaldoAFavor saldos;
     private final Clock reloj;
 
     public RegistradorDeVenta(ServicioTurnos turnos, RepositorioVentas ventas, RepositorioConsecutivos consecutivos,
                               RepositorioInventario inventario, RepositorioClientes clientes,
                               ServicioClientes servicioClientes, ServicioProductoNuevo productosNuevos,
-                              ValidadorDePagos validador, Clock reloj) {
+                              ValidadorDePagos validador, ServicioSaldoAFavor saldos, Clock reloj) {
         this.turnos = turnos;
         this.ventas = ventas;
         this.consecutivos = consecutivos;
@@ -154,6 +159,7 @@ public class RegistradorDeVenta {
         this.servicioClientes = servicioClientes;
         this.productosNuevos = productosNuevos;
         this.validador = validador;
+        this.saldos = saldos;
         this.reloj = reloj;
     }
 
@@ -189,7 +195,9 @@ public class RegistradorDeVenta {
             return repetida(empresa, existente.get(), huella);
         }
 
-        // 5. El saldo del cliente: el medio SALDO_A_FAVOR se rechaza más abajo (tarea 9).
+        // 5. El cliente y, si algún pago es con saldo a favor, la fila de su saldo (FOR UPDATE): va antes
+        //    de cualquier consecutivo, y el del producto nuevo se toma en el paso siguiente. Los medios se
+        //    leen aquí una vez y el validador los reutiliza; una venta sin saldo no gana ninguna consulta.
         Cliente cliente = cliente(empresa, s.clienteId());
         // Un domicilio exige un cliente identificado con sus datos: se mira antes de crear nada.
         Domicilio domicilio = s.domicilio();
@@ -198,6 +206,12 @@ public class RegistradorDeVenta {
         if (domicilio != null) {
             servicioClientes.exigirDatosDeDomicilio(cliente);
             ciudadDelDomicilio = ciudadDelDomicilio(empresa, domicilio);
+        }
+        Map<Integer, MedioDePago> medios = s.pagos().isEmpty() ? Map.of() : validador.medios(empresa, s.pagos());
+        BigDecimal saldoDisponible = BigDecimal.ZERO;
+        if (ValidadorDePagos.usaSaldo(medios, s.pagos())) {
+            saldos.exigirIdentificado(cliente);
+            saldoDisponible = saldos.bloquear(empresa, cliente.id());
         }
 
         // 6. Los productos nuevos: cada línea de producto nuevo se vuelve una línea del producto que
@@ -237,7 +251,10 @@ public class RegistradorDeVenta {
         // Los pagos, contra los medios de la empresa. El contra entrega no trae ninguno: queda por cobrar.
         Validados pagos = contraEntrega
                 ? sinPagos(calculada.total())
-                : validador.validar(empresa, s.pagos(), calculada.total(), ValidadorDePagos.NO_SUMAN_EL_TOTAL);
+                : validador.validar(s.pagos(), calculada.total(), ValidadorDePagos.NO_SUMAN_EL_TOTAL, medios, true);
+        // Lo que se paga con saldo no puede pasar de lo que hay (con la fila ya bloqueada): se decide antes
+        // de tomar el consecutivo, que es lo último que se bloquea.
+        saldos.exigirSuficiente(pagos.saldoUsado(), saldoDisponible);
 
         // 8. El consecutivo (FOR UPDATE), el último bloqueo antes de insertar.
         String consecutivo = "V-%08d".formatted(consecutivos.tomarSiguiente(empresa, TipoConsecutivo.VENTA));
@@ -266,6 +283,9 @@ public class RegistradorDeVenta {
         ventas.insertarLineas(empresa, ventaId, lineas);
         if (!pagos.pagos().isEmpty()) {
             ventas.insertarPagos(empresa, ventaId, turno, cajero, ahora, pagos.pagos());
+        }
+        if (pagos.saldoUsado().signum() > 0) {
+            saldos.usar(empresa, cliente.id(), ventaId, pagos.saldoUsado(), saldoDisponible, ahora);
         }
         List<Egreso> egresos = new ArrayList<>(existencias.size());
         for (Existencia e : existencias) {

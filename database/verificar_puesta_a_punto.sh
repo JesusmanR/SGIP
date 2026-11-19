@@ -570,6 +570,66 @@ rechaza "la entrega de un encargo en una línea que no lo es" 3819 ck_venitems_e
            (SELECT usuario_id FROM usuarios WHERE empresa_id = 1 LIMIT 1));
    ROLLBACK;"
 
+# ── Devoluciones y saldo a favor (V46) ──────────────────────────────────
+# Lo que la V46 impide aunque la aplicación se equivoque: un saldo negativo, un movimiento del saldo sin
+# su origen, una devolución sin motivo, un reembolso de cero y un saldo de un cliente de otra empresa. Las
+# filas se crean dentro de una transacción que se deshace, como en la sección de la V45; solo se mira la
+# empresa 1, que existía antes de la V46.
+echo
+echo "── devoluciones y saldo a favor (V46) ──"
+
+VENTA_V46="INSERT INTO ventas (empresa_id, consecutivo, cliente_id, usuario_id, forma_pago, tipo_entrega)
+   SELECT 1, 'PAP-V46D', (SELECT cliente_id FROM clientes WHERE empresa_id = 1 LIMIT 1),
+          (SELECT usuario_id FROM usuarios WHERE empresa_id = 1 LIMIT 1), 'CONTADO', 'MOSTRADOR';
+   SET @venta_v46 = LAST_INSERT_ID();"
+DEVOLUCION_V46="INSERT INTO devoluciones (empresa_id, consecutivo, venta_id, motivo, autorizado_por, registrado_por,
+                              creado_en)
+   SELECT 1, 'PAP-D46', @venta_v46, 'Prueba', u.usuario_id, u.usuario_id, '2026-11-12 09:00:00'
+     FROM usuarios u WHERE u.empresa_id = 1 LIMIT 1;
+   SET @devolucion_v46 = LAST_INSERT_ID();"
+CLIENTE1=$(consulta "SELECT cliente_id FROM clientes WHERE empresa_id = 1 LIMIT 1;")
+
+igual "una venta admite el estado DEVUELTA_PARCIAL" "enum('REGISTRADA','ANULADA','DEVUELTA_PARCIAL')"   "$(consulta "SELECT column_type FROM information_schema.columns
+                WHERE table_schema = DATABASE() AND table_name = 'ventas' AND column_name = 'estado';")"
+acepta "una devolución con motivo, venta, autorizador y quien la hizo se guarda" "START TRANSACTION;
+   $VENTA_V46
+   $DEVOLUCION_V46
+   ROLLBACK;"
+rechaza "una devolución con el motivo en blanco" 3819 ck_devoluciones_motivo "START TRANSACTION;
+   $VENTA_V46
+   INSERT INTO devoluciones (empresa_id, consecutivo, venta_id, motivo, autorizado_por, registrado_por, creado_en)
+   SELECT 1, 'PAP-D46B', @venta_v46, '   ', u.usuario_id, u.usuario_id, '2026-11-12 09:00:00'
+     FROM usuarios u WHERE u.empresa_id = 1 LIMIT 1;
+   ROLLBACK;"
+rechaza "un reembolso de cero pesos" 3819 ck_reembolsos_monto "START TRANSACTION;
+   $VENTA_V46
+   $DEVOLUCION_V46
+   INSERT INTO reembolsos (devolucion_id, empresa_id, medio_id, monto)
+   SELECT @devolucion_v46, 1, m.medio_id, 0 FROM medios_pago m WHERE m.empresa_id = 1 LIMIT 1;
+   ROLLBACK;"
+rechaza "un ítem de devolución con cero unidades" 3819 ck_devitems_importes "START TRANSACTION;
+   $VENTA_V46
+   $DEVOLUCION_V46
+   INSERT INTO devolucion_items (devolucion_id, empresa_id, producto_id, cantidad, valor)
+   SELECT @devolucion_v46, 1, p.producto_id, 0, 100 FROM productos p WHERE p.empresa_id = 1 LIMIT 1;
+   ROLLBACK;"
+rechaza "un saldo a favor negativo" 3819 ck_saldos_cliente_saldo "START TRANSACTION;
+   INSERT INTO saldos_cliente (empresa_id, cliente_id, saldo) VALUES (1, $CLIENTE1, -1);
+   ROLLBACK;"
+rechaza "el saldo a favor de un cliente de otra empresa" 1452 fk_saldos_cliente_emp "START TRANSACTION;
+   INSERT INTO saldos_cliente (empresa_id, cliente_id, saldo) VALUES ($AJENA, $CLIENTE1, 10);
+   ROLLBACK;"
+rechaza "un abono al saldo que no viene de una devolución" 3819 ck_movsaldo_origen "START TRANSACTION;
+   INSERT INTO movimientos_saldo (empresa_id, cliente_id, tipo, monto, creado_en)
+   VALUES (1, $CLIENTE1, 'ABONO', 100, '2026-11-12 09:00:00');
+   ROLLBACK;"
+rechaza "un uso del saldo que no se hizo en una venta" 3819 ck_movsaldo_origen "START TRANSACTION;
+   $VENTA_V46
+   $DEVOLUCION_V46
+   INSERT INTO movimientos_saldo (empresa_id, cliente_id, tipo, monto, devolucion_id, creado_en)
+   VALUES (1, $CLIENTE1, 'USO', 100, @devolucion_v46, '2026-11-12 09:00:00');
+   ROLLBACK;"
+
 echo
 if [[ "$fallos" -eq 0 ]]; then
   echo "TODO EN VERDE"

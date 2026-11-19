@@ -41,8 +41,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @SpringBootTest
 class DevolucionConsultasConBaseTest {
 
-    /** Una devolución del administrador cuesta unas 15 sentencias (medido en el commit verde); el tope deja un margen corto. */
-    private static final int TOPE_DE_SENTENCIAS = 22;
+    /** Una devolución del administrador cuesta 10 sentencias (medido: el turno, la venta, las líneas con lo ya devuelto, los medios, los productos, el consecutivo con su actualización, la devolución y la venta); el tope deja un margen corto. */
+    private static final int TOPE_DE_SENTENCIAS = 11;
 
     @Autowired ServicioVentas ventas;
     @Autowired ServicioDevoluciones devoluciones;

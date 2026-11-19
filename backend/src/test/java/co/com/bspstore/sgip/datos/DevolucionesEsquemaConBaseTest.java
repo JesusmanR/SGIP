@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.jdbc.UncategorizedSQLException;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
@@ -21,7 +22,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.fail;
 
 /**
  * El esquema de la V46 (RF-68): lo que la base impide aunque la aplicación se equivoque. El saldo no es
@@ -72,6 +73,24 @@ class DevolucionesEsquemaConBaseTest {
 
     // ------------------------------------------------------- ayudas
 
+    /**
+     * Lo que la base rechaza: una clave foránea o única llega como {@code DataIntegrityViolationException} y
+     * un CHECK (MySQL 3819) como {@code UncategorizedSQLException}, que {@code ManejadorErrores} responde
+     * 400. Las dos son la base diciendo que no.
+     */
+    private static void laBaseRechaza(Runnable escritura) {
+        laBaseRechaza(escritura, "la escritura");
+    }
+
+    private static void laBaseRechaza(Runnable escritura, String que) {
+        try {
+            escritura.run();
+        } catch (DataIntegrityViolationException | UncategorizedSQLException esperada) {
+            return;
+        }
+        fail("la base debía rechazar: " + que);
+    }
+
     private Long insertarDevolucion(CajaDePrueba de, Long ventaId, String consecutivo, Long cierre) {
         KeyHolder llave = new GeneratedKeyHolder();
         jdbc.sql("""
@@ -114,7 +133,7 @@ class DevolucionesEsquemaConBaseTest {
     void elConsecutivoNoSeRepiteEnLaEmpresaPeroSiEntreEmpresas() {
         insertarDevolucion(caja, venta, "D-00000001", turno);
 
-        assertThrows(DataIntegrityViolationException.class, () -> insertarDevolucion(caja, venta, "D-00000001", turno));
+        laBaseRechaza(() -> insertarDevolucion(caja, venta, "D-00000001", turno));
         // Otra empresa numera desde uno: su D-00000001 no choca con el de esta.
         ajena.abrirTurno(ajena.administradorId);
         ajena.entrarComoAdministrador();
@@ -134,16 +153,14 @@ class DevolucionesEsquemaConBaseTest {
                 List.of(new LineaSolicitada(productoAjeno, null, 1, null, null)), null,
                 List.of(new PagoSolicitado(ajena.efectivoId, new BigDecimal("10000"), null, null)), null, null, null));
 
-        assertThrows(DataIntegrityViolationException.class,
-                () -> insertarDevolucion(caja, deLaAjena.id(), "D-00000009", turno));
+        laBaseRechaza(() -> insertarDevolucion(caja, deLaAjena.id(), "D-00000009", turno));
     }
 
     @Test
     void unaDevolucionNoPuedeUsarElTurnoDeOtraEmpresa() {
         Long turnoAjeno = ajena.abrirTurno(ajena.administradorId);
 
-        assertThrows(DataIntegrityViolationException.class,
-                () -> insertarDevolucion(caja, venta, "D-00000002", turnoAjeno));
+        laBaseRechaza(() -> insertarDevolucion(caja, venta, "D-00000002", turnoAjeno));
     }
 
     @Test
@@ -151,7 +168,7 @@ class DevolucionesEsquemaConBaseTest {
         Long devolucion = insertarDevolucion(caja, venta, "D-00000003", turno);
 
         for (Object[] caso : new Object[][]{{ajena.efectivoId, "1000"}, {caja.efectivoId, "0"}, {caja.efectivoId, "-5"}}) {
-            assertThrows(DataIntegrityViolationException.class, () -> jdbc.sql("""
+            laBaseRechaza(() -> jdbc.sql("""
                     INSERT INTO reembolsos (empresa_id, devolucion_id, medio_id, monto)
                     VALUES (:e, :d, :m, :monto)
                     """).param("e", caja.empresa.empresaId).param("d", devolucion).param("m", caso[0])
@@ -167,7 +184,7 @@ class DevolucionesEsquemaConBaseTest {
         Integer ajeno = ajena.producto("Z", 1, "10000");
 
         for (Object[] caso : new Object[][]{{propio, 0, "100"}, {propio, 1, "-1"}, {ajeno, 1, "100"}}) {
-            assertThrows(DataIntegrityViolationException.class, () -> jdbc.sql("""
+            laBaseRechaza(() -> jdbc.sql("""
                     INSERT INTO devolucion_items (devolucion_id, empresa_id, producto_id, cantidad, valor)
                     VALUES (:d, :e, :p, :c, :v)
                     """).param("d", devolucion).param("e", caja.empresa.empresaId).param("p", caso[0])
@@ -177,7 +194,7 @@ class DevolucionesEsquemaConBaseTest {
                 INSERT INTO devolucion_items (devolucion_id, empresa_id, producto_id, cantidad, valor)
                 VALUES (:d, :e, :p, 1, 10000)
                 """).param("d", devolucion).param("e", caja.empresa.empresaId).param("p", propio).update();
-        assertThrows(DataIntegrityViolationException.class, () -> jdbc.sql("""
+        laBaseRechaza(() -> jdbc.sql("""
                 INSERT INTO devolucion_items (devolucion_id, empresa_id, producto_id, cantidad, valor)
                 VALUES (:d, :e, :p, 1, 10000)
                 """).param("d", devolucion).param("e", caja.empresa.empresaId).param("p", propio).update(),
@@ -190,16 +207,16 @@ class DevolucionesEsquemaConBaseTest {
     void elSaldoNoPuedeSerNegativo() {
         insertarSaldo(caja, caja.clienteId, "100");
 
-        assertThrows(DataIntegrityViolationException.class, () -> jdbc.sql("""
+        laBaseRechaza(() -> jdbc.sql("""
                 UPDATE saldos_cliente SET saldo = -1 WHERE empresa_id = :e AND cliente_id = :c
                 """).param("e", caja.empresa.empresaId).param("c", caja.clienteId).update());
-        assertThrows(DataIntegrityViolationException.class, () -> insertarSaldo(caja, caja.clienteId, "5"),
+        laBaseRechaza(() -> insertarSaldo(caja, caja.clienteId, "5"),
                 "un cliente tiene una sola fila de saldo");
     }
 
     @Test
     void elSaldoNoPuedeSerDeUnClienteDeOtraEmpresa() {
-        assertThrows(DataIntegrityViolationException.class, () -> jdbc.sql("""
+        laBaseRechaza(() -> jdbc.sql("""
                 INSERT INTO saldos_cliente (empresa_id, cliente_id, saldo) VALUES (:e, :c, 10)
                 """).param("e", caja.empresa.empresaId).param("c", ajena.clienteId).update());
     }
@@ -212,15 +229,15 @@ class DevolucionesEsquemaConBaseTest {
         insertarMovimiento("ABONO", "100", devolucion, null);
         insertarMovimiento("USO", "50", null, venta);
 
-        assertThrows(DataIntegrityViolationException.class, () -> insertarMovimiento("ABONO", "10", null, null),
+        laBaseRechaza(() -> insertarMovimiento("ABONO", "10", null, null),
                 "un abono viene de una devolución");
-        assertThrows(DataIntegrityViolationException.class, () -> insertarMovimiento("ABONO", "10", null, venta),
+        laBaseRechaza(() -> insertarMovimiento("ABONO", "10", null, venta),
                 "un abono no viene de una venta");
-        assertThrows(DataIntegrityViolationException.class, () -> insertarMovimiento("USO", "10", null, null),
+        laBaseRechaza(() -> insertarMovimiento("USO", "10", null, null),
                 "un uso se hace en una venta");
-        assertThrows(DataIntegrityViolationException.class, () -> insertarMovimiento("USO", "10", devolucion, venta),
+        laBaseRechaza(() -> insertarMovimiento("USO", "10", devolucion, venta),
                 "un uso no viene de una devolución");
-        assertThrows(DataIntegrityViolationException.class, () -> insertarMovimiento("ABONO", "0", devolucion, null),
+        laBaseRechaza(() -> insertarMovimiento("ABONO", "0", devolucion, null),
                 "un monto positivo");
     }
 }

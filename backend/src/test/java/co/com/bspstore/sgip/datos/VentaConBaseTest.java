@@ -84,6 +84,7 @@ class VentaConBaseTest {
     @Autowired RepositorioConsecutivos consecutivos;
     @Autowired ServicioProductoNuevo productosNuevos;
     @Autowired ServicioClientes servicioClientes;
+    @Autowired co.com.bspstore.sgip.logica.ServicioSaldoAFavor saldos;
     @Autowired co.com.bspstore.sgip.logica.ValidadorDePagos validadorDePagos;
     @Autowired PlatformTransactionManager transacciones;
     @Autowired JdbcClient jdbc;
@@ -525,9 +526,14 @@ class VentaConBaseTest {
         Integer producto = caja.producto("A", 5, "10000");
         var pago = new PagoSolicitado(caja.saldoAFavorId, new BigDecimal("10000"), null, null);
 
-        VentaInvalidaException e = assertThrows(VentaInvalidaException.class,
+        // Con el Consumidor final el saldo ni existe; con un cliente identificado, simplemente no tiene.
+        VentaInvalidaException deConsumidor = assertThrows(VentaInvalidaException.class,
                 () -> ventas.procesar(venta(linea(producto, 1), pago)));
+        VentaInvalidaException e = assertThrows(VentaInvalidaException.class,
+                () -> ventas.procesar(new SolicitudVenta(UUID.randomUUID(), caja.clienteId,
+                        List.of(linea(producto, 1)), null, List.of(pago), null, null, null)));
 
+        assertEquals("El saldo a favor solo existe para clientes identificados.", deConsumidor.getMessage());
         assertEquals("No hay saldo a favor suficiente para ese pago.", e.getMessage());
         nadaGuardado(producto);
     }
@@ -898,7 +904,7 @@ class VentaConBaseTest {
         Integer producto = caja.producto("A", 5, "10000");
         Clock utc = Clock.fixed(Instant.parse("2026-11-12T13:30:45.678Z"), ZoneOffset.UTC);
         RegistradorDeVenta conRelojFijo = new RegistradorDeVenta(turnos, repositorioVentas, consecutivos, kardex,
-                clientes, servicioClientes, productosNuevos, validadorDePagos, utc);
+                clientes, servicioClientes, productosNuevos, validadorDePagos, saldos, utc);
         SolicitudVenta solicitud = venta(linea(producto, 1), efectivo("10000"));
 
         ResultadoDeVenta r = new TransactionTemplate(transacciones).execute(estado ->

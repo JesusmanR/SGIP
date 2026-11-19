@@ -231,7 +231,16 @@ public class RepositorioVentas {
         plantilla.batchUpdate(INSERTAR_LINEA, valores);
     }
 
-    public record NuevoPago(Integer medioId, BigDecimal monto, String referencia, BigDecimal recibido) {}
+    /**
+     * Un pago por guardar. {@code deSaldo} marca el del medio de sistema «Saldo a favor»: no pasa por la
+     * caja y por eso se guarda sin turno ({@code cierre_id} nulo).
+     */
+    public record NuevoPago(Integer medioId, BigDecimal monto, String referencia, BigDecimal recibido,
+                            boolean deSaldo) {
+        public NuevoPago(Integer medioId, BigDecimal monto, String referencia, BigDecimal recibido) {
+            this(medioId, monto, referencia, recibido, false);
+        }
+    }
 
     private static final String INSERTAR_PAGO = """
             INSERT INTO pagos_venta (empresa_id, venta_id, medio_id, monto, referencia, recibido, cierre_id,
@@ -239,13 +248,16 @@ public class RepositorioVentas {
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """;
 
-    /** Los pagos de la venta, en un solo lote, todos con el turno y el cajero de la venta. */
+    /**
+     * Los pagos de la venta, en un solo lote, con el cajero y la hora de la venta y el turno de quien
+     * cobra, salvo el pago con saldo a favor, que no lleva turno.
+     */
     public void insertarPagos(Integer empresaId, Long ventaId, Long cierreId, Integer registradoPor,
                               LocalDateTime registradoEn, List<NuevoPago> pagos) {
         List<Object[]> valores = new ArrayList<>(pagos.size());
         for (NuevoPago p : pagos) {
             valores.add(new Object[]{empresaId, ventaId, p.medioId(), p.monto(), p.referencia(), p.recibido(),
-                    cierreId, registradoPor, registradoEn});
+                    p.deSaldo() ? null : cierreId, registradoPor, registradoEn});
         }
         plantilla.batchUpdate(INSERTAR_PAGO, valores);
     }

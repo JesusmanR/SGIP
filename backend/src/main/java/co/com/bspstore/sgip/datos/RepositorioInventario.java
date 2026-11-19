@@ -167,6 +167,34 @@ public class RepositorioInventario {
         plantilla.batchUpdate(FIJAR_SALDO, saldos);
     }
 
+    /** Lo que vuelve a la bodega de un producto con una devolución: unidades y saldo antes y después. */
+    public record Reingreso(Integer productoId, int cantidad, int anterior, int posterior) {}
+
+    private static final String INSERTAR_DEVOLUCION = """
+            INSERT INTO movimientos_inventario
+                   (empresa_id, producto_id, usuario_id, tipo, cantidad,
+                    existencia_anterior, existencia_posterior, documento)
+            VALUES (?, ?, ?, 'DEVOLUCION', ?, ?, ?, ?)
+            """;
+
+    /**
+     * Los reingresos de una devolución: un movimiento DEVOLUCION por producto y el saldo nuevo en cada uno,
+     * en un solo lote cada cosa, como {@link #registrarEgresos}. {@code documento} es el consecutivo de la
+     * devolución. Quien llama tiene los productos bloqueados ({@code FOR UPDATE}) y de ahí salen
+     * {@code anterior} y {@code posterior}; {@code ck_movimientos_coherencia} rechaza una fila que no cuadre.
+     */
+    public void registrarReingresos(Integer empresaId, Integer usuarioId, String documento, List<Reingreso> reingresos) {
+        List<Object[]> movimientos = new ArrayList<>(reingresos.size());
+        List<Object[]> saldos = new ArrayList<>(reingresos.size());
+        for (Reingreso r : reingresos) {
+            movimientos.add(new Object[]{empresaId, r.productoId(), usuarioId, r.cantidad(), r.anterior(),
+                    r.posterior(), documento});
+            saldos.add(new Object[]{r.posterior(), empresaId, r.productoId()});
+        }
+        plantilla.batchUpdate(INSERTAR_DEVOLUCION, movimientos);
+        plantilla.batchUpdate(FIJAR_SALDO, saldos);
+    }
+
     /**
      * Deja el saldo nuevo en el producto.
      *

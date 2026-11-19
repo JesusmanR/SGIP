@@ -104,7 +104,7 @@ public class ServicioDomicilios {
     }
 
     private DomicilioPendiente pendiente(FilaDeDomicilio f) {
-        BigDecimal porCobrar = "PENDIENTE".equals(f.estadoPago()) ? saldoPorCobrar(f.total()) : BigDecimal.ZERO;
+        BigDecimal porCobrar = "PENDIENTE".equals(f.estadoPago()) ? saldoPorCobrar(f.total(), f.devuelto()) : BigDecimal.ZERO;
         return new DomicilioPendiente(f.ventaId(), f.consecutivo(), f.fecha().atZone(Hoy.ZONA).toOffsetDateTime(),
                 f.cliente(), f.direccion(), f.ciudad(), f.telefono(), f.recibe(), f.contraEntrega(), f.estadoPago(),
                 f.total(), porCobrar, antiguedadEnDias(f.fecha(), reloj));
@@ -124,16 +124,11 @@ public class ServicioDomicilios {
 
     /**
      * Lo que falta por cobrar de una venta a domicilio: <b>el único sitio</b> donde se calcula, y lo usan
-     * el cobro y las listas. Hoy es el total de la venta; la tarea de devoluciones lo reducirá por lo
-     * devuelto (una devolución parcial rebaja lo que queda por cobrar) sin tocar a quienes lo llaman.
+     * el cobro y las listas. Es el total de la venta menos lo ya devuelto (RF-68): una devolución parcial
+     * rebaja lo que queda por cobrar. Nunca es negativo.
      */
-    static BigDecimal saldoPorCobrar(BigDecimal totalDeLaVenta) {
-        return totalDeLaVenta;
-    }
-
-    /** Firma mínima: lo que falta por cobrar descontando lo devuelto. */
     static BigDecimal saldoPorCobrar(BigDecimal totalDeLaVenta, BigDecimal devuelto) {
-        return totalDeLaVenta;
+        return totalDeLaVenta.subtract(devuelto).max(BigDecimal.ZERO);
     }
 
     /**
@@ -198,14 +193,14 @@ public class ServicioDomicilios {
         if (!venta.contraEntrega()) {
             throw new EstadoNoAdmiteLaOperacionException(NO_ES_CONTRA_ENTREGA);
         }
-        if (!"REGISTRADA".equals(venta.estado())) {
+        if ("ANULADA".equals(venta.estado())) {
             throw new EstadoNoAdmiteLaOperacionException(VENTA_ANULADA);
         }
         if (!"PENDIENTE".equals(venta.estadoPago())) {
             throw new EstadoNoAdmiteLaOperacionException(YA_ESTA_PAGADA);
         }
 
-        BigDecimal saldo = saldoPorCobrar(venta.total());
+        BigDecimal saldo = saldoPorCobrar(venta.total(), venta.devuelto());
         Validados validados = validador.validar(empresa, pagos, saldo, ValidadorDePagos.NO_SUMAN_EL_SALDO);
         repositorioVentas.insertarPagos(empresa, ventaId, turno, usuarioEnSesion(), ahora, validados.pagos());
         domicilios.marcarPagada(empresa, ventaId);
