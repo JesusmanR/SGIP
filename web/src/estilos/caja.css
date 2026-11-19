@@ -58,7 +58,13 @@
   grid-template-columns: minmax(0, 1fr) minmax(19rem, 22rem);
 }
 .caja-columna-principal { min-width: 0; }
-.caja-columna-resumen { min-width: 0; position: sticky; top: var(--espacio-4); display: grid; gap: var(--espacio-3); }
+.caja-columna-resumen {
+  min-width: 0; position: sticky; top: var(--espacio-4); display: grid; gap: var(--espacio-3);
+  /* En una pantalla baja el resumen se desplaza por dentro y «Cobrar» no queda fuera de alcance.
+     El relleno (con el margen que lo compensa) deja sitio al anillo de foco, que si no se recortaría. */
+  max-height: calc(100vh - 2 * var(--espacio-4)); overflow-y: auto;
+  padding: var(--espacio-2); margin: calc(-1 * var(--espacio-2));
+}
 .caja-secciones { display: grid; gap: var(--espacio-4); }
 
 /* ── Tarjetas numeradas ────────────────────────────────────────────── */
@@ -132,6 +138,7 @@
   overflow-wrap: anywhere; text-align: right;
 }
 .caja-cobrar-bloque { display: grid; gap: var(--espacio-2); }
+.caja-total-mensaje { margin: 0; color: var(--aviso); font-weight: 600; font-size: var(--t-cuerpo); }
 .seccion-caja .boton.caja-cobrar { width: 100%; font-size: 1.05rem; min-height: 3.25rem; }
 .caja-desglose { margin: 0; display: grid; gap: var(--espacio-2); padding-top: var(--espacio-3); font-size: var(--t-cuerpo); }
 .caja-desglose div, .caja-falta-pagar, .caja-cambio {
@@ -185,9 +192,9 @@
 .recibo-pie { margin-top: var(--espacio-3); text-align: center; color: var(--tinta-2); font-size: var(--t-etiqueta); }
 
 /* ── Celular: una columna, las tarjetas se apilan y el resumen queda debajo ── */
-@media (max-width: 64rem) {
+@media (max-width: 72rem) {
   .caja-rejilla { grid-template-columns: minmax(0, 1fr); }
-  .caja-columna-resumen { position: static; }
+  .caja-columna-resumen { position: static; max-height: none; overflow-y: visible; }
 }
 @media (max-width: 48rem) {
   .caja-seccion, .caja-resumen { padding: var(--espacio-4); }
