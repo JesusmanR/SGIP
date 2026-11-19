@@ -22,9 +22,11 @@ export function cantidadAdevolver(linea, texto) {
  */
 export function valorDeUnidades(linea, k) {
   if (!(k > 0)) return 0
-  const yaDevuelto = Number(linea.valorDevuelto ?? 0)
-  if (k === restantes(linea)) return Number(linea.total) - yaDevuelto
-  return Math.floor((2 * Number(linea.total) * k + linea.cantidad) / (2 * linea.cantidad))
+  const queda = Number(linea.total) - Number(linea.valorDevuelto ?? 0)
+  if (k === restantes(linea)) return Math.max(0, queda)
+  // Como el servidor: lo proporcional, sin pasar de lo que queda por devolver de la línea.
+  const proporcional = Math.floor((2 * Number(linea.total) * k + linea.cantidad) / (2 * linea.cantidad))
+  return Math.max(0, Math.min(proporcional, queda))
 }
 
 /**

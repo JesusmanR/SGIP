@@ -7,6 +7,14 @@ import { nuevaClaveDeVenta } from './venta.js'
 export const MENSAJE_AMBIGUO = 'No sabemos si se registró. Reintenta: no se cobrará dos veces.'
 export const MENSAJE_CLAVE_EN_USO = 'Esta venta ya se registró con otros datos. Revisa las ventas del turno.'
 
+/**
+ * Si un 403 viene del PIN (se puede volver a intentar con otro) y no de otra causa, como una empresa sin
+ * permiso de escritura. Se reconoce por el `type` del problema; sin tipo, por el texto.
+ */
+function esErrorDePin(error) {
+  return error.tipo ? /pin/i.test(error.tipo) : /\bPIN\b/i.test(error.message ?? '')
+}
+
 /** Un error que no deja claro si el servidor llegó a registrar la venta: sin respuesta, 5xx o tiempo agotado. */
 function esAmbiguo(error) {
   if (!(error instanceof ErrorApi)) return true
@@ -26,9 +34,12 @@ function esAmbiguo(error) {
  *   pide de nuevo.
  * - Recargar la pestaña no pierde una venta ambigua (M12-R1): la clave, el cuerpo exacto y los
  *   motivos de autorización se guardan en sessionStorage y, al volver, la venta arranca
- *   «ambigua» y `restaurada`. Se borran al confirmarse, ante un error definitivo, una clave en uso
+ *   «ambigua» y `restaurada`. Se guardan ANTES de enviar (una recarga con el envío en vuelo también se
+ *   recupera) y se borran al confirmarse, ante un error definitivo, una clave en uso
  *   o al abandonar. Un PIN rechazado en una venta restaurada no borra nada: el cajero ya no tiene
- *   el carrito para armarla de nuevo, así que lo único que tiene es ese cuerpo.
+ *   el carrito para armarla de nuevo, así que lo único que tiene es ese cuerpo. Otro 403 (una empresa sin
+ *   permiso de escritura, por ejemplo) no se arregla reintentando: se descarta y el resultado trae
+ *   `descartada: true`, para no dejar a la pantalla en bucle.
  * - Un error definitivo (400, 403, 409 de existencia…) quiere decir que no se registró: la venta
  *   queda libre y conserva su clave. El 409 de clave en uso (otro cuerpo con la misma clave) no se
  *   puede reintentar: solo queda empezar otra venta.
@@ -46,6 +57,7 @@ export default function useVentaEnCurso() {
   const claveActual = useRef(clave)
   const pendiente = useRef(guardada?.cuerpo ?? null)
   const restauradaAhora = useRef(Boolean(guardada))
+  const motivosAhora = useRef(guardada?.motivos ?? [])
   const ocupado = useRef(false)
 
   /** Suelta el cuerpo guardado, en memoria y en el almacenamiento. */
@@ -65,7 +77,7 @@ export default function useVentaEnCurso() {
     setEstado('libre')
   }, [soltar])
 
-  const enviar = useCallback(async (construir, autorizacion, motivosDelEnvio = []) => {
+  const enviar = useCallback(async (construir, autorizacion, motivosDelEnvio) => {
     // Un segundo envío con otro en vuelo no es un éxito ni un error: se ignora con un valor propio.
     if (ocupado.current) return { ignorado: true }
     ocupado.current = true
@@ -80,6 +92,10 @@ export default function useVentaEnCurso() {
         return { error: 'No se pudo preparar la venta. Revisa los datos e inténtalo otra vez.' }
       }
       pendiente.current = cuerpo
+      if (motivosDelEnvio) motivosAhora.current = motivosDelEnvio
+      // Antes de enviar y no después: si la pestaña se recarga con la petición en vuelo, la venta se puede
+      // reintentar con la misma clave. El PIN no va aquí.
+      guardarVentaPendiente({ clave: claveActual.current, cuerpo, motivos: motivosAhora.current })
       const venta = await registrarVenta(autorizacion ? { ...cuerpo, autorizacion } : cuerpo)
       renovar()
       return { venta }
@@ -92,14 +108,14 @@ export default function useVentaEnCurso() {
       if (!esAmbiguo(error)) {
         // Una venta restaurada no tiene carrito del que volver a armarla: si solo falló el PIN, el
         // cuerpo guardado es lo único que queda y se conserva para intentarlo otra vez.
-        if (restauradaAhora.current && autorizacion && error.estado === 403) return { error: error.message }
+        const eraRestaurada = restauradaAhora.current
+        if (eraRestaurada && autorizacion && error.estado === 403 && esErrorDePin(error)) return { error: error.message }
         soltar()
         setEstado('libre')
-        return { error: error.message }
+        return eraRestaurada ? { error: error.message, descartada: true } : { error: error.message }
       }
       // Ambiguo: lo exacto que se envió se guarda por si la pestaña se recarga. El PIN no va aquí.
-      guardarVentaPendiente({ clave: claveActual.current, cuerpo: pendiente.current, motivos: motivosDelEnvio })
-      setMotivos(motivosDelEnvio)
+      setMotivos(motivosAhora.current)
       setEstado('ambiguo')
       return { error: MENSAJE_AMBIGUO }
     } finally {

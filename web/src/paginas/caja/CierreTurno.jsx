@@ -96,7 +96,8 @@ export default function CierreTurno() {
   if (cerrado) cuerpo = <Cerrado turno={cerrado} />
   else if (turno.cargando) cuerpo = <EstadoCarga />
   else if (turno.sinPermiso) cuerpo = <EstadoSinPermiso />
-  else if (turno.error?.estado === 404) {
+  // Un 404 o un resumen vacío (204) quieren decir lo mismo: no hay turno abierto.
+  else if (turno.error?.estado === 404 || (!turno.error && !resumen)) {
     cuerpo = (
       <>
         <Aviso tipo="aviso">No hay un turno abierto. Ábrelo desde la caja para poder venderle.</Aviso>

@@ -136,12 +136,15 @@ export default function Domicilios() {
               Registrar cobro
             </button>
           )}
-          <button
-            type="button" className="boton secundario menudo" disabled={entregando === d.ventaId}
-            aria-label={`Marcar entregado ${d.consecutivo}`} onClick={() => entregar(d)}
-          >
-            Marcar entregado
-          </button>
+          {/* Lo que ya se entregó y solo espera su cobro no se vuelve a entregar. */}
+          {!(porCobrar && d.entregado) && (
+            <button
+              type="button" className="boton secundario menudo" disabled={entregando === d.ventaId}
+              aria-label={`Marcar entregado ${d.consecutivo}`} onClick={() => entregar(d)}
+            >
+              Marcar entregado
+            </button>
+          )}
         </span>
       ),
     },

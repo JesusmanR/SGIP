@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import Aviso from '../../componentes/comun/Aviso.jsx'
 import Campo from '../../componentes/comun/Campo.jsx'
@@ -17,6 +17,7 @@ import SeccionCaja from './SeccionCaja.jsx'
 import useEnLinea from './useEnLinea.js'
 
 const ENTERO = /^\d{1,12}$/
+const MOTIVO_MAXIMO = 200 // el límite del servidor
 
 /** Lo escrito como pesos enteros: vacío es 0, y algo que no vale es NaN. */
 function pesosDe(texto) {
@@ -61,6 +62,7 @@ export default function Devolucion() {
   const [dialogo, setDialogo] = useState(false)
   const [enviando, setEnviando] = useState(false)
   const [hecho, setHecho] = useState(null)
+  const saldoAuto = useRef('')
 
   const pendiente = venta?.estadoPago === 'PENDIENTE'
   const clienteIdentificado = Boolean(venta?.cliente && !venta.cliente.consumidorFinal)
@@ -92,8 +94,33 @@ export default function Devolucion() {
   const repartido = montoInvalido ? 0 : montos.reduce((a, n) => a + n, 0)
   const diferencia = valorTotal - repartido
 
+  // Lo que se pagó con saldo a favor vuelve SOLO como saldo a favor: nunca se vuelve efectivo ni tarjeta.
+  // Lo que se puede devolver por efectivo o medios es lo pagado sin saldo, menos lo ya devuelto antes (se
+  // supone que las devoluciones anteriores gastaron primero eso). Si algún pago no trae su monto no se puede
+  // saber y no se limita aquí: el servidor tiene la última palabra.
+  const pagos = venta?.pagos ?? []
+  const sabePagos = pagos.every((p) => Number.isFinite(Number(p.monto)))
+  const pagadoConSaldo = pagos.filter((p) => p.tipo === 'SALDO_A_FAVOR').reduce((a, p) => a + Number(p.monto), 0)
+  const pagadoSinSaldo = pagos.filter((p) => p.tipo !== 'SALDO_A_FAVOR').reduce((a, p) => a + Number(p.monto), 0)
+  const yaDevuelto = lineas.reduce((a, l) => a + Number(l.valorDevuelto ?? 0), 0)
+  const capacidad = sabePagos && !pendiente
+    ? Math.max(0, pagadoSinSaldo - Math.min(yaDevuelto, pagadoSinSaldo))
+    : Number.POSITIVE_INFINITY
+  const saldoMinimo = Number.isFinite(capacidad) ? Math.max(0, valorTotal - capacidad) : 0
+  const sinSaldo = montoInvalido ? 0 : montos.reduce((a, n, i) => (claves[i] === 'saldo' ? a : a + n), 0)
+  const pasaDeLoPagadoSinSaldo = sinSaldo > capacidad
+
+  // La parte que debe volver como saldo se deja escrita; si el cajero la cambió a mano, no se le pisa.
+  useEffect(() => {
+    const nuevo = saldoMinimo > 0 ? String(saldoMinimo) : ''
+    // El valor anterior se copia antes: la función de `setDinero` corre después de esta línea.
+    const anterior = saldoAuto.current
+    saldoAuto.current = nuevo
+    setDinero((d) => ((d.saldo ?? '') === anterior ? { ...d, saldo: nuevo } : d))
+  }, [saldoMinimo])
+
   const puede = Boolean(venta) && venta.estado !== 'ANULADA' && valorTotal > 0 && !cantidadInvalida && !enviando && enLinea
-    && (pendiente || (!montoInvalido && diferencia === 0))
+    && (pendiente || (!montoInvalido && diferencia === 0 && !pasaDeLoPagadoSinSaldo))
 
   async function buscar(evento) {
     evento.preventDefault()
@@ -109,6 +136,7 @@ export default function Devolucion() {
       setCantidades({})
       setMotivo('')
       setDinero({})
+      saldoAuto.current = ''
       setReferencias({})
       setErrores({})
     } catch (error) {
@@ -289,7 +317,7 @@ export default function Devolucion() {
 
                 <SeccionCaja numero="03" titulo="Motivo" descripcion="Queda guardado junto a la devolución.">
                   <Campo etiqueta="Motivo de la devolución" motivo={errores.motivo}>
-                    <textarea rows={3} maxLength={300} value={motivo} onChange={(e) => setMotivo(e.target.value)} />
+                    <textarea rows={3} maxLength={MOTIVO_MAXIMO} value={motivo} onChange={(e) => setMotivo(e.target.value)} />
                   </Campo>
                 </SeccionCaja>
 
@@ -301,6 +329,11 @@ export default function Devolucion() {
                     <p className="nota">Esta venta todavía no se cobró, así que no hay dinero que devolver.</p>
                   ) : (
                     <div className="caja-reembolso">
+                      {saldoMinimo > 0 && (
+                        <p className="nota">
+                          Se pagaron {PESOS.format(pagadoConSaldo)} con saldo a favor: esa parte solo puede volver como saldo a favor.
+                        </p>
+                      )}
                       <Campo etiqueta="Efectivo" motivo={errores.efectivo} ayuda={efectivo ? 'Sale del cajón.' : undefined}>
                         <input
                           type="text" inputMode="numeric" autoComplete="off" disabled={!efectivo}
@@ -361,7 +394,12 @@ export default function Devolucion() {
                     {montoInvalido && <p className="caja-error-texto">Escribe los montos en pesos enteros.</p>}
                     {!montoInvalido && diferencia > 0 && <p className="caja-falta-pagar">Falta repartir {PESOS.format(diferencia)}</p>}
                     {!montoInvalido && diferencia < 0 && <p className="caja-falta-pagar">Te pasas por {PESOS.format(-diferencia)}</p>}
-                    {!montoInvalido && diferencia === 0 && <p className="caja-cambio">Todo repartido</p>}
+                    {!montoInvalido && pasaDeLoPagadoSinSaldo && (
+                      <p className="caja-error-texto">
+                        Lo que se pagó con saldo a favor vuelve como saldo: por efectivo o por tarjeta solo se pueden devolver {PESOS.format(capacidad)}.
+                      </p>
+                    )}
+                    {!montoInvalido && diferencia === 0 && !pasaDeLoPagadoSinSaldo && <p className="caja-cambio">Todo repartido</p>}
                   </div>
                 )}
                 {fallo && venta && <Aviso tipo="peligro">{fallo}</Aviso>}

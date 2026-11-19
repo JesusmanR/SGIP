@@ -246,6 +246,9 @@ function Venta({ turno }) {
       return null
     }
     if (resultado.ignorado) return { ignorado: true }
+    // Una venta restaurada que el servidor rechazó por otra causa que el PIN ya no se puede reintentar: se
+    // cierra el diálogo y se dice por qué, en lugar de pedir el PIN una y otra vez.
+    if (resultado.descartada) setDialogo(null)
     // Un error definitivo o una clave en uso no son un resultado ambiguo: la confirmación de
     // abandonar ya no corresponde y no debe reaparecer sola ante un ambiguo posterior.
     if (resultado.error !== MENSAJE_AMBIGUO) setAbandonando(false)

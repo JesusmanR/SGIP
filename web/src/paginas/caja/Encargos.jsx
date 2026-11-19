@@ -47,7 +47,8 @@ export default function Encargos() {
 
   const columnas = [
     { clave: 'producto', titulo: 'Producto', principal: true, render: (e) => e.producto },
-    { clave: 'cantidad', titulo: 'Cantidad', numerica: true, render: (e) => e.cantidad },
+    // Las unidades que de verdad esperan existencia, no las de toda la línea.
+    { clave: 'cantidad', titulo: 'Por llegar', numerica: true, render: (e) => e.cantidadEncargo ?? e.cantidad },
     { clave: 'cliente', titulo: 'Cliente', render: (e) => e.cliente },
     { clave: 'venta', titulo: 'Venta', render: (e) => e.consecutivo },
     { clave: 'entrega', titulo: 'Entrega estimada', render: (e) => fechaDocumento(e.entregaEstimada) },
