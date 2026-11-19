@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import Aviso from '../../componentes/comun/Aviso.jsx'
-import { productoPorCodigo, productosPorTexto } from '../../servicios/api/caja.js'
+import { BusquedaAgotada, productoPorCodigo, productosPorTexto } from '../../servicios/api/caja.js'
 import '../../estilos/caja.css'
 import Dialogo from './Dialogo.jsx'
 
@@ -93,6 +93,8 @@ export default function BuscadorProducto({ alAgregar, alCrearProducto, entradaRe
   const [pendientes, setPendientes] = useState(0)
   // Los códigos que no existen se quedan a la vista hasta que alguien los atienda o los descarte.
   const [desconocidos, setDesconocidos] = useState([])
+  // Los que no se pudieron consultar (tiempo agotado): se ven igual y se pueden reintentar.
+  const [sinConsultar, setSinConsultar] = useState([])
   const [resultados, setResultados] = useState(null)
   const [resultadosDe, setResultadosDe] = useState(null)
   const [aviso, setAviso] = useState(null)
@@ -140,7 +142,11 @@ export default function BuscadorProducto({ alAgregar, alCrearProducto, entradaRe
         campo.current?.focus()
       }
     } catch (error) {
-      setFallo(error.message || 'No se pudo buscar. Inténtalo otra vez.')
+      if (error instanceof BusquedaAgotada) {
+        setSinConsultar((lista) => (lista.includes(codigo) ? lista : [...lista, codigo]))
+      } else {
+        setFallo(error.message || 'No se pudo buscar. Inténtalo otra vez.')
+      }
     }
   }
 
@@ -191,6 +197,26 @@ export default function BuscadorProducto({ alAgregar, alCrearProducto, entradaRe
 
       {aviso && <Aviso tipo="aviso">{aviso}</Aviso>}
       {fallo && <Aviso tipo="peligro">{fallo}</Aviso>}
+
+      {sinConsultar.map((codigo) => (
+        <div className="caja-no-encontrado" key={codigo}>
+          <Aviso tipo="aviso">No se pudo consultar el código {codigo}. Intente de nuevo.</Aviso>
+          <div className="caja-acciones">
+            <button
+              type="button" className="boton secundario" aria-label={`Reintentar el código ${codigo}`}
+              onClick={() => { setSinConsultar((lista) => lista.filter((c) => c !== codigo)); encolar(codigo) }}
+            >
+              Reintentar
+            </button>
+            <button
+              type="button" className="enlace" aria-label={`Descartar el código ${codigo}`}
+              onClick={() => setSinConsultar((lista) => lista.filter((c) => c !== codigo))}
+            >
+              Descartar
+            </button>
+          </div>
+        </div>
+      ))}
 
       {desconocidos.map((codigo) => (
         <div className="caja-no-encontrado" key={codigo}>

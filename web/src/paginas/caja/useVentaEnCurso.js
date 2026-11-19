@@ -50,10 +50,16 @@ export default function useVentaEnCurso() {
     if (ocupado.current) return { ignorado: true }
     ocupado.current = true
     setEnviando(true)
-    // Se guarda antes de enviar: si la respuesta no llega, este es el cuerpo que se reenvía.
-    const cuerpo = pendiente.current ?? construir(claveActual.current)
-    pendiente.current = cuerpo
     try {
+      // Se guarda antes de enviar: si la respuesta no llega, este es el cuerpo que se reenvía.
+      let cuerpo
+      try {
+        cuerpo = pendiente.current ?? construir(claveActual.current)
+      } catch {
+        // No es un resultado ambiguo: nada salió hacia el servidor.
+        return { error: 'No se pudo preparar la venta. Revisa los datos e inténtalo otra vez.' }
+      }
+      pendiente.current = cuerpo
       const venta = await registrarVenta(autorizacion ? { ...cuerpo, autorizacion } : cuerpo)
       renovar()
       return { venta }

@@ -27,8 +27,35 @@ export const turnoActual = () => pedir('/caja/turnos/actual')
 export const abrirTurno = (baseEfectivo) =>
   pedir('/caja/turnos', { method: 'POST', body: { baseEfectivo } })
 
-export const productoPorCodigo = (codigo) =>
-  olvidandoElNoEncontrado(pedir(`/caja/productos?codigo=${encodeURIComponent(codigo)}`))
+/** La consulta por código no respondió a tiempo: no se sabe si el producto existe. */
+export class BusquedaAgotada extends Error {
+  constructor() {
+    super('La consulta del código tardó demasiado.')
+    this.name = 'BusquedaAgotada'
+  }
+}
+
+/** Lo que se espera a que responda la consulta por código antes de darla por perdida. */
+export const PLAZO_DE_BUSQUEDA_MS = 10000
+
+/**
+ * Solo esta consulta tiene plazo: un lector manda códigos sin parar y una consulta colgada
+ * dejaría la cola de escaneos (y «Cobrar») esperando para siempre.
+ */
+export async function productoPorCodigo(codigo) {
+  const control = new AbortController()
+  const plazo = setTimeout(() => control.abort(), PLAZO_DE_BUSQUEDA_MS)
+  try {
+    return await olvidandoElNoEncontrado(
+      pedir(`/caja/productos?codigo=${encodeURIComponent(codigo)}`, { signal: control.signal }),
+    )
+  } catch (error) {
+    if (error?.name === 'AbortError') throw new BusquedaAgotada()
+    throw error
+  } finally {
+    clearTimeout(plazo)
+  }
+}
 export const productosPorTexto = (texto) =>
   pedir(`/caja/productos?q=${encodeURIComponent(texto)}`)
 

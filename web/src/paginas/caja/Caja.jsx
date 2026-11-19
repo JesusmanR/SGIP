@@ -149,6 +149,8 @@ function Venta({ turno }) {
   // Los manejadores que llegan de una cola (escaneos) leen esto al ejecutarse, no al crearse.
   const congeladoAhora = useRef(false)
   congeladoAhora.current = congelado
+  const enviandoAhora = useRef(false)
+  enviandoAhora.current = envio.enviando
   const sinConexion = !enLinea
 
   function cambiarLinea(claveLinea, cambios) {
@@ -167,6 +169,8 @@ function Venta({ turno }) {
   }
 
   function vaciar() {
+    // Con un envío en vuelo no se renueva la clave ni se suelta el cuerpo guardado.
+    if (enviandoAhora.current) return
     setLineas([])
     setCliente(null)
     setDomicilio(null)
@@ -185,6 +189,16 @@ function Venta({ turno }) {
     setCliente(nuevo)
     // El saldo a favor es de un cliente: con otro, esos pagos ya no valen.
     setPagos((actuales) => actuales.filter((p) => p.tipo !== 'SALDO_A_FAVOR'))
+  }
+
+  function cambiarDomicilio(nuevo) {
+    if (congeladoAhora.current) return
+    setDomicilio(nuevo)
+  }
+
+  function cambiarMotivo(texto) {
+    if (congeladoAhora.current) return
+    setMotivoEncargo(texto)
   }
 
   function agregarDelCatalogo(producto) {
@@ -277,11 +291,11 @@ function Venta({ turno }) {
               lineas={lineas} vista={vista} alCambiar={cambiarLinea} alQuitar={quitarLinea}
               descuentoTotal={descuentoTotal}
               alCambiarDescuentoTotal={(d) => { if (congeladoAhora.current) return; setDescuentoTotal(d); setPagos([]) }}
-              motivoEncargo={motivoEncargo} alCambiarMotivo={setMotivoEncargo}
+              motivoEncargo={motivoEncargo} alCambiarMotivo={cambiarMotivo}
             />
             <DatosCliente
               key={epoca} cliente={cliente} alCambiarCliente={cambiarCliente}
-              domicilio={domicilio} alCambiarDomicilio={setDomicilio}
+              domicilio={domicilio} alCambiarDomicilio={cambiarDomicilio}
             />
           </fieldset>
         </div>
@@ -304,7 +318,7 @@ function Venta({ turno }) {
             <Confirmacion
               pregunta="¿Abandonar esta venta sin saber si se registró?"
               detalle="Si el cobro sí se registró, el cliente podría quedar cobrado y la venta tendría que revisarse en las ventas del turno. Si no estás segura, reintenta."
-              textoConfirmar="Sí, abandonar" textoCancelar="Seguir reintentando"
+              textoConfirmar="Sí, abandonar" textoCancelar="Seguir reintentando" enviando={envio.enviando}
               alConfirmar={vaciar} alCancelar={() => setAbandonando(false)}
             />
           )}
