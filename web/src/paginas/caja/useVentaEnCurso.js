@@ -27,7 +27,7 @@ function esAmbiguo(error) {
  *   queda libre y conserva su clave. El 409 de clave en uso (otro cuerpo con la misma clave) no se
  *   puede reintentar: solo queda empezar otra venta.
  *
- * `enviar(construir, autorizacion)` devuelve `{ venta }` o `{ error }`.
+ * `enviar(construir, autorizacion)` devuelve `{ venta }`, `{ error }` o `{ ignorado: true }` (había otro envío en vuelo).
  */
 export default function useVentaEnCurso() {
   const [clave, setClave] = useState(nuevaClaveDeVenta)
@@ -46,7 +46,8 @@ export default function useVentaEnCurso() {
   }, [])
 
   const enviar = useCallback(async (construir, autorizacion) => {
-    if (ocupado.current) return { error: null }
+    // Un segundo envío con otro en vuelo no es un éxito ni un error: se ignora con un valor propio.
+    if (ocupado.current) return { ignorado: true }
     ocupado.current = true
     setEnviando(true)
     // Se guarda antes de enviar: si la respuesta no llega, este es el cuerpo que se reenvía.

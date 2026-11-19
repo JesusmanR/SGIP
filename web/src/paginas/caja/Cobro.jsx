@@ -17,7 +17,7 @@ const sumar = (pagos, filtro = () => true) => pagos.filter(filtro).reduce((a, p)
  * hay pagos: se registra para cobrar al entregar). Sin conexión no se cobra nada.
  */
 export default function Cobro({
-  vista, medios, saldo, pagos, alCambiarPagos, bloqueo, contraEntrega, sinConexion, enviando, congelado = false, alCobrar,
+  vista, medios, saldo, pagos, alCambiarPagos, bloqueo, contraEntrega, sinConexion, enviando, congelado = false, esperando = false, alCobrar,
 }) {
   const saldoUsado = sumar(pagos, (p) => p.tipo === 'SALDO_A_FAVOR')
   const saldoDisponible = Math.max(0, saldo - saldoUsado)
@@ -68,7 +68,7 @@ export default function Cobro({
   }
 
   // Con la venta congelada (resultado ambiguo) solo se reintenta: «Cobrar» queda quieto.
-  const habilitado = puedeCobrar({ bloqueo, vista, pagos, contraEntrega, sinConexion, enviando: enviando || congelado })
+  const habilitado = puedeCobrar({ bloqueo, vista, pagos, contraEntrega, sinConexion, enviando: enviando || congelado || esperando })
   const mensaje = bloqueo ?? (sinConexion ? 'Sin conexión: no se puede cobrar.' : '')
   const textoBoton = contraEntrega ? 'Registrar para cobrar en la entrega' : enviando ? 'Cobrando…' : 'Cobrar'
 

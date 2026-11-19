@@ -53,7 +53,7 @@ describe('buscador de producto', () => {
     await userEvent.type(campo(), '000{Enter}7709990001112{Enter}')
     await waitFor(() => expect(alAgregar).toHaveBeenCalledWith(PINTURA))
     expect(screen.getByText(/no encontramos ese código: 000/i)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /crear producto (requiere administrador)/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /crear producto \(requiere administrador\)/i })).toBeInTheDocument()
     // Se atiende (o se descarta) a propósito, no se borra solo.
     await userEvent.click(screen.getByRole('button', { name: /descartar el código 000/i }))
     expect(screen.queryByText(/no encontramos ese código/i)).not.toBeInTheDocument()

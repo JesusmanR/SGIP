@@ -109,6 +109,8 @@ function Venta({ turno }) {
   const [impreso, setImpreso] = useState(false)
   // Cada venta nueva estrena el formulario del cliente: no queda nada del anterior.
   const [epoca, setEpoca] = useState(0)
+  // Cuántos escaneos siguen buscándose: mientras haya, no se cobra (podrían entrar a la venta).
+  const [escaneando, setEscaneando] = useState(false)
   const buscador = useRef(null)
   const tituloRecibo = useRef(null)
 
@@ -143,15 +145,20 @@ function Venta({ turno }) {
   const necesitaPin = motivos.length > 0 && !esAdministrador(sesion)
   const contraEntrega = Boolean(domicilio?.contraEntrega)
   // Con un resultado ambiguo o una clave en uso no se edita nada: solo se reintenta o se abandona.
-  const congelado = envio.estado !== 'libre'
+  const congelado = envio.enviando || envio.estado !== 'libre'
+  // Los manejadores que llegan de una cola (escaneos) leen esto al ejecutarse, no al crearse.
+  const congeladoAhora = useRef(false)
+  congeladoAhora.current = congelado
   const sinConexion = !enLinea
 
   function cambiarLinea(claveLinea, cambios) {
+    if (congeladoAhora.current) return
     setLineas((actuales) => actuales.map((l) => (l.clave === claveLinea ? { ...l, ...cambios } : l)))
     setPagos([])
   }
 
   function quitarLinea(claveLinea) {
+    if (congeladoAhora.current) return
     const quedan = lineas.filter((l) => l.clave !== claveLinea)
     setLineas(quedan)
     setPagos([])
@@ -174,17 +181,20 @@ function Venta({ turno }) {
   }
 
   function cambiarCliente(nuevo) {
+    if (congeladoAhora.current) return
     setCliente(nuevo)
     // El saldo a favor es de un cliente: con otro, esos pagos ya no valen.
     setPagos((actuales) => actuales.filter((p) => p.tipo !== 'SALDO_A_FAVOR'))
   }
 
   function agregarDelCatalogo(producto) {
+    if (congeladoAhora.current) return
     setLineas((actuales) => agregarProducto(actuales, producto))
     setPagos([])
   }
 
   function agregarNuevo(datos) {
+    if (congeladoAhora.current) return
     setLineas((actuales) => [...actuales, lineaDeProductoNuevo(datos)])
     if (datos.motivo) setMotivoEncargo(datos.motivo)
     setPagos([])
@@ -213,6 +223,7 @@ function Venta({ turno }) {
       setEpoca((n) => n + 1)
       return null
     }
+    if (resultado.ignorado) return { ignorado: true }
     if (resultado.error) setMensaje(resultado.error)
     return resultado.error ?? null
   }
@@ -223,7 +234,9 @@ function Venta({ turno }) {
   }
 
   // «Reintentar» respeta lo mismo que «Cobrar»: bloqueos, pagos que cuadran y conexión.
-  const puedeReintentar = puedeCobrar({ bloqueo, vista, pagos, contraEntrega, sinConexion, enviando: envio.enviando })
+  const puedeReintentar = puedeCobrar({
+    bloqueo, vista, pagos, contraEntrega, sinConexion, enviando: envio.enviando || escaneando,
+  })
 
   if (recibo) {
     return (
@@ -252,7 +265,7 @@ function Venta({ turno }) {
         <div className="caja-area-buscador">
           <fieldset className="caja-congelable" disabled={congelado}>
             <BuscadorProducto
-              entradaRef={buscador} alAgregar={agregarDelCatalogo}
+              entradaRef={buscador} alAgregar={agregarDelCatalogo} alCambiarPendientes={(n) => setEscaneando(n > 0)}
               alCrearProducto={(codigo) => { setCodigoNuevo(codigo); setDialogo('producto') }}
             />
           </fieldset>
@@ -263,7 +276,7 @@ function Venta({ turno }) {
             <Carrito
               lineas={lineas} vista={vista} alCambiar={cambiarLinea} alQuitar={quitarLinea}
               descuentoTotal={descuentoTotal}
-              alCambiarDescuentoTotal={(d) => { setDescuentoTotal(d); setPagos([]) }}
+              alCambiarDescuentoTotal={(d) => { if (congeladoAhora.current) return; setDescuentoTotal(d); setPagos([]) }}
               motivoEncargo={motivoEncargo} alCambiarMotivo={setMotivoEncargo}
             />
             <DatosCliente
@@ -305,7 +318,7 @@ function Venta({ turno }) {
           <Cobro
             vista={vista} medios={medios.datos ?? []} saldo={saldo} pagos={pagos} alCambiarPagos={setPagos}
             bloqueo={bloqueo} contraEntrega={contraEntrega} sinConexion={sinConexion}
-            enviando={envio.enviando} congelado={congelado} alCobrar={iniciarCobro}
+            enviando={envio.enviando} congelado={congelado} esperando={escaneando} alCobrar={iniciarCobro}
           />
         </div>
       </div>

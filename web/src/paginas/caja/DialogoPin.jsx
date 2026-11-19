@@ -47,6 +47,8 @@ export default function DialogoPin({ motivos, alConfirmar, alCerrar }) {
     setEnviando(true)
     setError(null)
     const mensaje = await alConfirmar({ administradorId: Number(administradorId), pin })
+    // Ignorado: ya había un envío en vuelo, que es quien cierra o avisa; aquí se sigue esperando.
+    if (mensaje?.ignorado) return
     setEnviando(false)
     if (mensaje) {
       setError(mensaje)
