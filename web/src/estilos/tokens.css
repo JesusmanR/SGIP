@@ -16,8 +16,17 @@
   /* ── Superficie ─────────────────────────────────────────────────── */
   --lienzo:          #F7F7F9;
   --tarjeta:         #FFFFFF;
-  --chrome:          #2B2250;   /* barra lateral y cabecera */
-  --chrome-activo:   #3D3270;
+  --chrome:          #2B2250;   /* panel oscuro de la pantalla de acceso */
+
+  /* Marco de la app (ADR-0032): menú lateral blanco. Los grises del
+     diseño de Figma (#72717D, #AAA8B3) se oscurecieron hasta llegar a
+     4,5:1 (RNF-13): el rótulo de grupo en #AAA8B3 daba 2,4:1. */
+  --menu-fondo:         #FFFFFF;
+  --menu-hover:         #F7F6FB;
+  --menu-activo:        #F0EDFF;   /* fondo del enlace de la sección actual */
+  --menu-activo-texto:  #5E47CC;   /* 5,6:1 sobre --menu-activo */
+  --menu-texto:         #67647A;   /* enlace en reposo */
+  --menu-rotulo:        #6A6778;   /* título de grupo */
 
   /* ── Acento ─────────────────────────────────────────────────────── */
   --acento:          #6C54DF;
@@ -33,6 +42,7 @@
 
   /* ── Línea ──────────────────────────────────────────────────────── */
   --borde:           #DEDCE6;   /* separación entre superficies */
+  --borde-suave:     #E9E8ED;   /* línea decorativa del marco: no es un control */
   --borde-control:   #8A869A;   /* perímetro de un control: exige 3:1 */
 
   /* ── Neutros de marca ───────────────────────────────────────────── */
@@ -86,13 +96,14 @@
   --espacio-5:       24px;
 
   /* ── Tipografía ─────────────────────────────────────────────────────
-     Una sola familia en cuatro pesos. El carácter lo da la escala y la
-     jerarquía, no la mezcla de fuentes. Inter es de licencia abierta y
-     se distribuye con la aplicación, de modo que no depende de lo que
-     el usuario tenga instalado.                                        */
-  --familia: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+     DM Sans para el texto y Manrope para los títulos (ADR-0032, que
+     reemplaza a Inter). Ambas viajan con la aplicación (@fontsource):
+     no dependen de internet ni de lo que el usuario tenga instalado.   */
+  --familia: "DM Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --familia-titulo: "Manrope", "DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
 
   --t-titulo-pantalla: 20px;  /* 700 · interlineado 28 */
+  --t-titulo-pagina:   28px;  /* encabezado de página, Manrope 700 */
   --t-titulo-tarjeta:  14px;  /* 600 · interlineado 20 */
   --t-cifra:           26px;  /* 700 · interlineado 32 */
   --t-cuerpo:          13px;  /* 400 o 600 · interlineado 20 */

@@ -6,11 +6,12 @@
 
 body {
   margin: 0;
-  font-family: Inter, 'Helvetica Neue', Arial, sans-serif;
+  font-family: var(--familia);
   background: var(--lienzo);
   color: var(--tinta);
 }
 
+h1, h2, h3 { font-family: var(--familia-titulo); }
 button { font-family: inherit; cursor: pointer; }
 input  { font-family: inherit; }
 /* Los enlaces de texto toman el acento; sin esto salen en el azul del navegador. */

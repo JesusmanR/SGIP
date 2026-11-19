@@ -44,3 +44,15 @@ export function puedeVer(ruta, rol) {
 export function seccionesDe(rol) {
   return rol ? secciones.filter((s) => s.roles.includes(rol)) : []
 }
+
+const ROLES = {
+  ADMINISTRADOR: 'Administrador',
+  VENDEDOR: 'Vendedor',
+  CLIENTE: 'Cliente',
+  SUPER_ADMIN: 'Super administrador',
+}
+
+/** El rol en palabras, para mostrarlo; un rol desconocido se muestra tal cual. */
+export function etiquetaDeRol(rol) {
+  return ROLES[rol] ?? rol ?? ''
+}

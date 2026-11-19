@@ -10,8 +10,8 @@ import MenuLateral from './MenuLateral.jsx'
 import '../estilos/armazon.css'
 
 /**
- * Armazón de las pantallas con sesión: menú lateral en escritorio, barra
- * superior con menú desplegable en celular, y el único <main>.
+ * Armazón de las pantallas con sesión: menú lateral blanco (cajón en el
+ * celular), barra superior con migas y el único <main>.
  */
 export default function Armazon() {
   const navegar = useNavigate()
@@ -86,28 +86,45 @@ export default function Armazon() {
     navegar('/acceso', { replace: true })
   }
 
+  const seccionActual = seccionDe(pathname)
+  function cerrarMenu() {
+    setAbierto(false)
+    boton.current?.focus()
+  }
+
   return (
     <div className="armazon">
       <a className="saltar" href="#contenido-principal">Saltar al contenido</a>
-      <header className="armazon-barra">
-        <span className="marca">SGIP</span>
-        <ContadorPrueba rol={sesion?.rol} />
-        <button
-          ref={boton}
-          type="button"
-          className="armazon-boton-menu"
-          aria-expanded={abierto}
-          aria-controls="menu-principal"
-          onClick={() => setAbierto((a) => !a)}
-        >
-          Menú
-        </button>
-      </header>
-      <MenuLateral id="menu-principal" rol={sesion?.rol} abierto={abierto} nombre={sesion?.nombre} alSalir={salir} />
-      <main ref={contenido} id="contenido-principal" className="armazon-contenido" tabIndex={-1}>
-        <AvisoConexion />
-        <ErrorBoundary reinicio={pathname}><Outlet /></ErrorBoundary>
-      </main>
+      <MenuLateral
+        id="menu-principal" rol={sesion?.rol} abierto={abierto} nombre={sesion?.nombre}
+        alSalir={salir} alCerrar={cerrarMenu}
+      />
+      {abierto && <div className="armazon-velo" aria-hidden="true" onClick={cerrarMenu} />}
+      <div className="armazon-columna">
+        <header className="armazon-barra">
+          <button
+            ref={boton}
+            type="button"
+            className="armazon-boton-menu"
+            aria-expanded={abierto}
+            aria-controls="menu-principal"
+            onClick={() => setAbierto((a) => !a)}
+          >
+            Menú
+          </button>
+          <nav className="migas" aria-label="Ruta de navegación">
+            <ol>
+              <li className="miga-raiz">Espacio de trabajo</li>
+              {seccionActual && <li><span aria-current="page">{seccionActual.etiqueta}</span></li>}
+            </ol>
+          </nav>
+          <ContadorPrueba rol={sesion?.rol} />
+        </header>
+        <main ref={contenido} id="contenido-principal" className="armazon-contenido" tabIndex={-1}>
+          <AvisoConexion />
+          <ErrorBoundary reinicio={pathname}><Outlet /></ErrorBoundary>
+        </main>
+      </div>
     </div>
   )
 }

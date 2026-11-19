@@ -42,9 +42,12 @@ describe('tabla de tarjetas', () => {
 })
 
 describe('menú móvil', () => {
-  it('la altura de la barra es una variable que usan la barra y el menú', () => {
-    expect(armazon).toMatch(/--alto-barra-movil:\s*[\d.]+rem/)
-    expect((armazon.match(/var\(--alto-barra-movil\)/g) ?? []).length).toBeGreaterThanOrEqual(2)
+  it('la barra tiene una altura mínima en variable y el cajón queda por encima de la barra', () => {
+    expect(armazon).toMatch(/--alto-barra-movil:\s*[\d.]+(rem|px)/)
+    expect((armazon.match(/var\(--alto-barra-movil\)/g) ?? []).length).toBeGreaterThanOrEqual(1)
+    const barra = Number(regla(armazon, '.armazon-barra').match(/z-index:\s*(\d+)/)[1])
+    const velo = Number(armazon.match(/\.armazon-velo\s*\{[^}]*z-index:\s*(\d+)/)[1])
+    expect(velo).toBeGreaterThan(barra)
   })
 })
 
