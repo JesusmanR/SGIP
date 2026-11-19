@@ -114,6 +114,12 @@ paso "5. Detener: no queda nada escuchando"
 PRODUCTOS_1=$(contar "SELECT COUNT(*) FROM productos")
 USUARIOS_1=$(contar "SELECT COUNT(*) FROM usuarios")
 CLIENTES_1=$(contar "SELECT COUNT(*) FROM clientes")
+# Si la caja trae bloqueo de PIN, simular un bloqueo en plena demostración:
+# al reiniciar tiene que borrarse.
+PIN_BLOQUEO=$(contar "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='sgip' AND table_name='usuarios' AND column_name IN ('pin_intentos','pin_bloqueado_en','pin_errados_emitidos','pin_emision_bloqueada_en')")
+if [[ "$PIN_BLOQUEO" == "4" ]]; then
+  mysql_muestra sgip -e "UPDATE usuarios SET pin_intentos=5, pin_bloqueado_en=NOW(), pin_errados_emitidos=3, pin_emision_bloqueada_en=NOW() WHERE correo='$MUESTRA_CORREO_ADMIN'" >/dev/null 2>&1
+fi
 comprobar "detiene sin error" bash "$LIB" detener
 sleep 2
 for p in "${PUERTOS[@]}"; do
@@ -141,6 +147,12 @@ if [[ "$TIENE_PIN" == "1" ]]; then
   [[ "$PIN" == "1" ]] && ok "el administrador tiene PIN" || fallo "el administrador no tiene PIN"
 else
   echo "  OMITIDO el PIN: esta rama no tiene la columna usuarios.pin_hash"
+fi
+if [[ "$PIN_BLOQUEO" == "4" ]]; then
+  LIMPIO=$(contar "SELECT pin_intentos=0 AND pin_bloqueado_en IS NULL AND pin_errados_emitidos=0 AND pin_emision_bloqueada_en IS NULL FROM usuarios WHERE correo='$MUESTRA_CORREO_ADMIN'")
+  [[ "$LIMPIO" == "1" ]] && ok "reiniciar borra el bloqueo del PIN" || fallo "el bloqueo del PIN sobrevivió al reinicio"
+else
+  echo "  OMITIDO el bloqueo del PIN: esta rama no tiene esas columnas"
 fi
 T2=$(ingresar "$MUESTRA_CORREO_VENDEDOR" "$MUESTRA_CLAVE_VENDEDOR")
 [[ -n "$T2" ]] && ok "el vendedor sigue entrando" || fallo "el vendedor no entra tras reiniciar"
@@ -201,6 +213,18 @@ comprobar "el backend responde" esperar_backend
 proceso_vivo "$AJENO_W" node.exe && ok "el proceso ajeno sigue vivo tras arrancar" || fallo "arrancar mató el proceso ajeno"
 [[ ! -d "$DATOS/.lock" ]] && ok "el cerrojo se quitó" || fallo "el cerrojo quedó"
 kill $AJENO 2>/dev/null
+
+paso "10. Si el cerrojo no se consigue, lo dice y falla"
+CODIGO=$( ( mkdir() { return 1; }; rm() { :; }; adquirir_cerrojo >/dev/null 2>&1; echo $? ) )
+[[ "$CODIGO" == "3" ]] && ok "adquirir_cerrojo distingue «perdí los dos intentos» (3)" || fallo "adquirir_cerrojo devolvió $CODIGO, se esperaba 3"
+SALIDA=$( ( mkdir() { return 1; }; rm() { :; }; arrancar 2>&1; echo "rc=$?" ) )
+echo "$SALIDA" | grep -q "otra ejecución tiene el cerrojo" && ok "arrancar explica el cerrojo" || fallo "arrancar no explicó el cerrojo"
+echo "$SALIDA" | grep -q "rc=1" && ok "arrancar sale con error" || fallo "arrancar no salió con error"
+
+paso "11. La línea de comando de Vite lleva la carpeta web de esta copia"
+leer_estado
+CMD=$(linea_de_comando "$WEB_PID")
+echo "$CMD" | grep -qF "$(winpath "$RAIZ/web")" && ok "la línea de comando de Vite incluye $(winpath "$RAIZ/web")" || fallo "no incluye la ruta web: $CMD"
 
 paso "Cierre"
 PUERTOS=("$MYSQL_PUERTO" "$BACK_PUERTO" "$WEB_PUERTO")
