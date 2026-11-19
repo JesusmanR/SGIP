@@ -6,7 +6,7 @@
  * porque la petición no llegó es lo peor de los dos mundos: parece que
  * salió y no salió.
  */
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -168,6 +168,221 @@ describe('armazón', () => {
       await teclado.click(boton)
       await teclado.click(screen.getByRole('link', { name: 'Panel' }))
       expect(boton).toHaveAttribute('aria-expanded', 'false')
+    })
+  })
+
+  describe('barra superior y perfil', () => {
+    it.each([
+      ['/panel', 'Panel'],
+      ['/catalogo', 'Catálogo'],
+      ['/compras/ordenes/5', 'Órdenes de compra'],
+      ['/precios', 'Reglas de ganancia'],
+    ])('en %s la ruta de migas termina en «%s»', (ruta, seccion) => {
+      montar(ruta)
+      const migas = screen.getByRole('navigation', { name: /ruta/i })
+      expect(within(migas).getByText('Espacio de trabajo')).toBeInTheDocument()
+      expect(within(migas).getByText(seccion)).toHaveAttribute('aria-current', 'page')
+    })
+
+    it('en una ruta sin sección solo muestra el espacio de trabajo', () => {
+      montar('/sin-seccion')
+      const migas = screen.getByRole('navigation', { name: /ruta/i })
+      expect(within(migas).getByText('Espacio de trabajo')).toBeInTheDocument()
+      expect(migas.querySelector('[aria-current]')).toBeNull()
+    })
+
+    it('el perfil muestra las iniciales, el nombre y el rol en palabras', () => {
+      guardarSesion({ token: 'abc', nombre: 'Jesús Manuel', rol: 'SUPER_ADMIN' })
+      montar()
+      const perfil = screen.getByRole('region', { name: /tu perfil/i })
+      expect(within(perfil).getByText('JM')).toBeInTheDocument()
+      expect(within(perfil).getByText('Jesús Manuel')).toBeInTheDocument()
+      expect(within(perfil).getByText('Super administrador')).toBeInTheDocument()
+    })
+
+    it('con un solo nombre, una inicial', () => {
+      guardarSesion({ token: 'abc', nombre: 'Ana', rol: 'VENDEDOR' })
+      montar()
+      expect(within(screen.getByRole('region', { name: /tu perfil/i })).getByText('A')).toBeInTheDocument()
+    })
+
+    it('el menú del celular trae su botón de cerrar, que devuelve el foco al botón del menú', async () => {
+      const teclado = userEvent.setup()
+      montar()
+      const boton = screen.getByRole('button', { name: /^menú$/i })
+      await teclado.click(boton)
+      await teclado.click(screen.getByRole('button', { name: /cerrar navegación/i }))
+      expect(boton).toHaveAttribute('aria-expanded', 'false')
+      expect(boton).toHaveFocus()
+    })
+
+    it('al abrir el cajón el foco entra en él y lo de atrás queda inerte; al cerrar se revierte', async () => {
+      const teclado = userEvent.setup()
+      const { container } = montar()
+      const columna = container.querySelector('.armazon-columna')
+      expect(columna).not.toHaveAttribute('inert')
+      const boton = screen.getByRole('button', { name: /^menú$/i })
+      await teclado.click(boton)
+      expect(columna).toHaveAttribute('inert')
+      expect(document.getElementById('menu-principal')).toContainElement(document.activeElement)
+      await teclado.keyboard('{Escape}')
+      expect(columna).not.toHaveAttribute('inert')
+      expect(boton).toHaveFocus()
+    })
+
+    it('Tab desde el último elemento del cajón no cae en la página de atrás', async () => {
+      const teclado = userEvent.setup()
+      const { container } = montar()
+      await teclado.click(screen.getByRole('button', { name: /^menú$/i }))
+      const dentro = [...document.getElementById('menu-principal').querySelectorAll('a, button')]
+      dentro.at(-1).focus()
+      await teclado.tab()
+      expect(container.querySelector('.armazon-columna').contains(document.activeElement)).toBe(false)
+    })
+
+    describe('el foco solo se mueve cuando lo de atrás ya no está inerte', () => {
+      // jsdom ignora `inert`: se comprueba la invariante directamente. Un focus()
+      // dentro de un subárbol inerte no hace nada en un navegador real.
+      let llamadas
+      let original
+      beforeEach(() => {
+        llamadas = []
+        original = HTMLElement.prototype.focus
+        HTMLElement.prototype.focus = function foco(...args) {
+          llamadas.push({ el: this, inerte: Boolean(this.closest('[inert]')) })
+          return original.apply(this, args)
+        }
+      })
+      afterEach(() => { HTMLElement.prototype.focus = original })
+
+      const delBoton = () => llamadas.filter((l) => l.el.classList.contains('armazon-boton-menu'))
+
+      it('Escape devuelve el foco al botón fuera de lo inerte', async () => {
+        const teclado = userEvent.setup()
+        montar()
+        await teclado.click(screen.getByRole('button', { name: /^menú$/i }))
+        llamadas.length = 0
+        await teclado.keyboard('{Escape}')
+        expect(delBoton().length).toBeGreaterThan(0)
+        expect(delBoton().every((l) => !l.inerte)).toBe(true)
+        expect(screen.getByRole('button', { name: /^menú$/i })).toHaveFocus()
+      })
+
+      it('el botón de cerrar devuelve el foco al botón fuera de lo inerte', async () => {
+        const teclado = userEvent.setup()
+        montar()
+        await teclado.click(screen.getByRole('button', { name: /^menú$/i }))
+        llamadas.length = 0
+        await teclado.click(screen.getByRole('button', { name: /cerrar navegación/i }))
+        expect(delBoton().length).toBeGreaterThan(0)
+        expect(delBoton().every((l) => !l.inerte)).toBe(true)
+      })
+
+      it('tocar el velo devuelve el foco al botón fuera de lo inerte', async () => {
+        const teclado = userEvent.setup()
+        const { container } = montar()
+        await teclado.click(screen.getByRole('button', { name: /^menú$/i }))
+        llamadas.length = 0
+        await teclado.click(container.querySelector('.armazon-velo'))
+        expect(delBoton().length).toBeGreaterThan(0)
+        expect(delBoton().every((l) => !l.inerte)).toBe(true)
+      })
+
+      it('navegar desde un enlace del cajón enfoca el h1 fuera de lo inerte y no roba el foco al botón', async () => {
+        const teclado = userEvent.setup()
+        montar('/panel')
+        await teclado.click(screen.getByRole('button', { name: /^menú$/i }))
+        llamadas.length = 0
+        await teclado.click(screen.getByRole('link', { name: 'Catálogo' }))
+        const h1 = screen.getByRole('heading', { level: 1 })
+        const deH1 = llamadas.filter((l) => l.el === h1)
+        expect(deH1.length).toBeGreaterThan(0)
+        expect(deH1.every((l) => !l.inerte)).toBe(true)
+        expect(h1).toHaveFocus()
+        expect(delBoton()).toHaveLength(0)
+      })
+    })
+
+    describe('al pasar a escritorio con el cajón abierto', () => {
+      let oyentes
+      let coincide
+      beforeEach(() => {
+        oyentes = []
+        coincide = true
+        window.matchMedia = vi.fn((consulta) => ({
+          media: consulta,
+          get matches() { return coincide },
+          addEventListener: (_, f) => oyentes.push(f),
+          removeEventListener: (_, f) => { oyentes = oyentes.filter((x) => x !== f) },
+        }))
+      })
+      afterEach(() => { delete window.matchMedia })
+      const agrandar = () => act(() => { coincide = false; oyentes.forEach((f) => f({ matches: false })) })
+
+      it('usa la misma consulta que el CSS del celular y cierra el cajón', async () => {
+        const teclado = userEvent.setup()
+        montar()
+        await teclado.click(screen.getByRole('button', { name: /^menú$/i }))
+        expect(window.matchMedia).toHaveBeenCalledWith('(max-width: 48rem)')
+        agrandar()
+        expect(screen.getByRole('button', { name: /^menú$/i })).toHaveAttribute('aria-expanded', 'false')
+      })
+
+      it('si el foco estaba dentro del cajón, pasa al título de la página (el botón del menú ya no se ve)', async () => {
+        const teclado = userEvent.setup()
+        montar()
+        await teclado.click(screen.getByRole('button', { name: /^menú$/i }))
+        agrandar()
+        expect(screen.getByRole('heading', { level: 1 })).toHaveFocus()
+        expect(screen.getByRole('button', { name: /^menú$/i })).not.toHaveFocus()
+      })
+
+      it('si el foco estaba fuera del cajón, lo deja donde está', async () => {
+        const teclado = userEvent.setup()
+        montar()
+        await teclado.click(screen.getByRole('button', { name: /^menú$/i }))
+        document.activeElement.blur()
+        agrandar()
+        expect(screen.getByRole('button', { name: /^menú$/i })).not.toHaveFocus()
+      })
+    })
+
+    describe('altura real de la barra', () => {
+      let observadores
+      beforeEach(() => {
+        observadores = []
+        globalThis.ResizeObserver = class {
+          constructor(f) { this.f = f; this.desconectado = false; observadores.push(this) }
+          observe(el) { this.el = el }
+          disconnect() { this.desconectado = true }
+        }
+      })
+      afterEach(() => {
+        delete globalThis.ResizeObserver
+        document.documentElement.style.removeProperty('--alto-barra-real')
+      })
+
+      it('escribe la altura medida de la barra en --alto-barra y se desconecta al salir', () => {
+        const { unmount } = montar()
+        expect(observadores).toHaveLength(1)
+        const barra = document.querySelector('.armazon-barra')
+        expect(observadores[0].el).toBe(barra)
+        Object.defineProperty(barra, 'offsetHeight', { configurable: true, value: 92 })
+        act(() => observadores[0].f([]))
+        const raiz = document.documentElement.style
+        expect(raiz.getPropertyValue('--alto-barra-real')).toBe('92px')
+        expect(raiz.getPropertyValue('--alto-barra')).toBe('')
+        unmount()
+        expect(observadores[0].desconectado).toBe(true)
+      })
+    })
+
+    it('tocar el velo detrás del menú lo cierra', async () => {
+      const teclado = userEvent.setup()
+      const { container } = montar()
+      await teclado.click(screen.getByRole('button', { name: /^menú$/i }))
+      await teclado.click(container.querySelector('.armazon-velo'))
+      expect(screen.getByRole('button', { name: /^menú$/i })).toHaveAttribute('aria-expanded', 'false')
     })
   })
 

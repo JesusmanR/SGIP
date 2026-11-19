@@ -5,7 +5,8 @@ on:
     # Las ramas de corrección y de mantenimiento se quedaban fuera: una
     # rama fix/** no ejecutaba nada hasta que se abría la solicitud de
     # incorporación, que es justo cuando ya es tarde para enterarse.
-    branches: [main, develop, 'feature/**', 'fix/**', 'chore/**']
+    # feat/, refactor/, docs/ y demo/ también son prefijos del manual de ramas.
+    branches: [main, develop, 'feature/**', 'feat/**', 'fix/**', 'chore/**', 'refactor/**', 'docs/**', 'demo/**']
   pull_request:
     branches: [main, develop]
 

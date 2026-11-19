@@ -1,12 +1,28 @@
+import { useInRouterContext, useLocation } from 'react-router-dom'
+import { seccionDe } from '../../secciones.js'
 import '../../estilos/comun.css'
 
-/** Cabecera de página: el único h1 de la pantalla, con descripción y acciones opcionales. */
-export default function EncabezadoPagina({ titulo, descripcion, acciones }) {
+/** Etiqueta por defecto: el grupo de la sección donde está la pantalla. */
+function EtiquetaDeGrupo() {
+  const grupo = seccionDe(useLocation().pathname)?.grupo
+  return grupo ? <p className="etiqueta-pagina">{grupo}</p> : null
+}
+
+/**
+ * Cabecera de página: etiqueta pequeña, el único h1 de la pantalla, subtítulo
+ * y acciones opcionales. Sin `etiqueta`, usa el grupo de la sección (si hay
+ * ruta).
+ * @param props.descripcion Obsoleto (deprecated): alias antiguo de `subtitulo`, se conserva para no tocar las pantallas.
+ */
+export default function EncabezadoPagina({ etiqueta, titulo, subtitulo, descripcion, acciones }) {
+  const enRuta = useInRouterContext()
+  const texto = subtitulo ?? descripcion
   return (
     <header className="encabezado-pagina">
       <div className="encabezado-texto">
+        {etiqueta ? <p className="etiqueta-pagina">{etiqueta}</p> : enRuta && <EtiquetaDeGrupo />}
         <h1>{titulo}</h1>
-        {descripcion && <p>{descripcion}</p>}
+        {texto && <p className="subtitulo-pagina">{texto}</p>}
       </div>
       {acciones && <div className="encabezado-acciones">{acciones}</div>}
     </header>

@@ -24,7 +24,7 @@ nueva. La decisión original se deja tal como se escribió.
 | 0006 | El umbral de envío se mide sobre el subtotal | vigente |
 | 0007 | La lectura de listas de precios se abstrae tras una interfaz | vigente |
 | 0008 | MySQL 9.7 LTS como motor | vigente · ver nota |
-| 0009 | Sistema de diseño de la interfaz | vigente · ver nota |
+| 0009 | Sistema de diseño de la interfaz | vigente · ver nota; en parte reemplazada por 0034 (tipografía y marco) |
 | 0010 | React y React Native en lugar de Kotlin y Swing | vigente · ver nota |
 | 0011 | Aislamiento multiempresa por columna, en una sola base | vigente |
 | 0012 | Operación sin conexión con cola e idempotencia | vigente |
@@ -47,6 +47,7 @@ nueva. La decisión original se deja tal como se escribió.
 | 0029 | El precio se calcula solo para la empresa que pregunta | vigente |
 | 0030 | «Hoy» lo pone la aplicación, en la hora de Bogotá, y se pasa a cada consulta | vigente |
 | 0031 | La prueba son 30 días | vigente |
+| 0034 | El marco de la app pasa al diseño nuevo | vigente |
 
 ## Las cuatro que conviene leer antes de escribir código
 

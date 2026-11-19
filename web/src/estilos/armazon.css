@@ -1,15 +1,16 @@
-/* Armazón: menú lateral en escritorio, barra superior con menú desplegable en celular.
+/* Armazón: menú lateral blanco de 248 px y barra superior de 70 px en
+   escritorio; en el celular el menú es un cajón que sale desde la izquierda.
    El color sale solo de tokens.css. */
 
-/* Alto real de la barra móvil: botón de 44 px más el relleno vertical. */
-:root { --alto-barra-movil: 3.75rem; }
+:root { --ancho-menu: 248px; --alto-barra: 70px; --alto-barra-movil: 62px; }
+/* La barra fija no tapa lo que recibe el foco (WCAG 2.2, foco no oculto). */
+/* --alto-barra-real la escribe el armazón con la altura medida (la barra del
+   celular puede crecer una fila); nunca alimenta el min-height de la barra. */
+html { scroll-padding-top: var(--alto-barra-real, var(--alto-barra)); }
 
-.armazon {
-  min-height: 100vh; display: grid; grid-template-columns: 15rem minmax(0, 1fr);
-  grid-template-rows: auto 1fr;
-}
-.armazon-barra { display: none; }
-.armazon-contenido { grid-column: 2; grid-row: 2; min-width: 0; }
+.armazon { min-height: 100vh; display: grid; grid-template-columns: var(--ancho-menu) minmax(0, 1fr); }
+.armazon-columna { grid-column: 2; min-width: 0; display: flex; flex-direction: column; }
+.armazon-contenido { flex: 1; min-width: 0; }
 .armazon-contenido:focus { outline: none; }
 /* El aviso de conexión va arriba del contenido, con el mismo margen lateral que la página.
    La región existe siempre (así se anuncia el cambio); vacía no ocupa sitio. */
@@ -19,75 +20,111 @@
 }
 
 .saltar {
-  position: absolute; left: var(--espacio-2); top: -4rem; z-index: 30;
+  position: absolute; left: var(--espacio-2); top: -4rem; z-index: 35;
   background: var(--tarjeta); color: var(--tinta); padding: var(--espacio-2) var(--espacio-3);
   border-radius: var(--radio-control);
 }
 .saltar:focus { top: var(--espacio-2); }
 
+/* ── Menú lateral ──────────────────────────────────────────────────── */
 .menu-lateral {
-  grid-column: 1; grid-row: 1 / span 2; background: var(--chrome); color: var(--sobre-acento);
-  display: flex; flex-direction: column; gap: var(--espacio-4);
-  padding: var(--espacio-4) var(--espacio-3); position: sticky; top: 0; height: 100vh; overflow-y: auto;
+  grid-column: 1; grid-row: 1; background: var(--menu-fondo); border-right: 1px solid var(--borde-suave);
+  display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh;
+  padding: 25px 18px 18px;
 }
+.menu-cabeza { display: flex; align-items: center; justify-content: space-between; padding: 0 10px 27px; }
+.marca {
+  display: flex; align-items: center; gap: 10px;
+  font: 800 20px/1 var(--familia-titulo); letter-spacing: -.035em; color: var(--tinta);
+}
+.marca-sello {
+  width: 31px; height: 31px; border-radius: 9px; background: var(--acento);
+  display: flex; justify-content: center; align-items: flex-end; gap: 2px; padding-bottom: 8px;
+}
+.marca-sello i { display: block; width: 4px; border-radius: 4px; background: var(--sobre-acento); transform: rotate(30deg); }
+.marca-sello i:nth-child(1) { height: 7px; }
+.marca-sello i:nth-child(2) { height: 12px; }
+.marca-sello i:nth-child(3) { height: 16px; }
+.menu-cerrar { display: none; }
+
+.menu-lateral nav { flex: 1; overflow-y: auto; min-height: 0; }
+.menu-grupo { margin-bottom: 26px; }
 .menu-grupo-titulo {
-  margin: 0 0 var(--espacio-1); padding: 0 var(--espacio-3);
-  font-size: var(--t-etiqueta); font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
-  color: var(--salvia);
+  margin: 0 12px 9px; font-size: var(--t-etiqueta); font-weight: 700; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--menu-rotulo);
 }
 .menu-grupo ul { list-style: none; margin: 0; padding: 0; }
-.menu-lateral a {
-  display: block; padding: var(--espacio-2) var(--espacio-3); border-radius: var(--radio-control);
-  color: var(--sobre-acento); text-decoration: none; font-size: var(--t-cuerpo);
+.menu-lateral nav a {
+  display: flex; align-items: center; min-height: 43px; margin: 2px 0; padding: 0 12px;
+  border-radius: 10px; color: var(--menu-texto); text-decoration: none;
+  font-size: 14px; font-weight: 500; transition: background-color .18s ease, color .18s ease;
 }
-.menu-lateral a:hover { background: var(--chrome-activo); }
-.menu-lateral a[aria-current="page"] { background: var(--chrome-activo); font-weight: 600; }
-.menu-sesion {
-  margin-top: auto; display: flex; flex-direction: column; gap: var(--espacio-2);
-  padding: var(--espacio-3) var(--espacio-3) 0; border-top: 1px solid var(--chrome-activo);
+.menu-lateral nav a:hover { background: var(--menu-hover); color: var(--tinta); }
+.menu-lateral nav a[aria-current="page"] {
+  background: var(--menu-activo); color: var(--menu-activo-texto); font-weight: 700;
 }
-.menu-nombre { font-size: var(--t-cuerpo); overflow-wrap: anywhere; }
 
+/* ── Perfil ────────────────────────────────────────────────────────── */
+.menu-perfil {
+  margin-top: auto; border-top: 1px solid var(--borde-suave); padding: 15px 5px 0;
+  display: flex; align-items: center; gap: 9px;
+}
+.menu-avatar {
+  flex: none; width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center;
+  background: var(--acento); color: var(--sobre-acento); font-size: 11px; font-weight: 700;
+}
+.menu-perfil-texto { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.menu-nombre { font-size: 12px; font-weight: 700; color: var(--tinta); overflow-wrap: anywhere; }
+.menu-perfil small { font-size: 11px; color: var(--tinta-3); }
+.menu-salir { flex: none; padding: 0 12px; min-height: var(--alto-control); font-size: 12px; }
+
+/* ── Barra superior ────────────────────────────────────────────────── */
+.armazon-barra {
+  position: sticky; top: 0; z-index: 10; min-height: var(--alto-barra);
+  display: flex; align-items: center; gap: var(--espacio-4); padding: 0 38px;
+  background: var(--tarjeta); border-bottom: 1px solid var(--borde-suave);
+}
 .armazon-boton-menu {
-  margin-left: auto; min-height: var(--toque-minimo); padding: 0 var(--espacio-4);
-  background: transparent; color: var(--sobre-acento); border: 1px solid var(--salvia);
+  display: none; min-height: var(--toque-minimo); padding: 0 var(--espacio-4);
+  background: transparent; color: var(--tinta); border: 1px solid var(--borde-control);
   border-radius: var(--radio-control); font-size: var(--t-cuerpo); font-weight: 600;
 }
+.migas { min-width: 0; }
+.migas ol { list-style: none; margin: 0; padding: 0; display: flex; gap: 6px; font-size: 12px; }
+.migas li { min-width: 0; display: flex; }
+.migas li + li::before { content: "/"; margin-right: 6px; color: var(--tinta-3); }
+.miga-raiz { color: var(--tinta-3); }
+.migas [aria-current="page"] { display: block; min-width: 0; font-weight: 700; color: var(--tinta); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* El contador de la prueba (RF-73) va a la derecha de la barra. */
+.armazon-barra .contador-prueba { margin-left: auto; }
 
-/* En escritorio la barra solo aparece si lleva el contador de la prueba (RF-73):
-   una franja fija sobre el contenido. La marca y el botón del menú son del celular. */
-@media (min-width: 48.0625rem) {
-  .armazon-barra:has(.contador-prueba) {
-    display: flex; align-items: center; grid-column: 2; grid-row: 1;
-    position: sticky; top: 0; z-index: 10; min-height: var(--alto-control);
-    padding: var(--espacio-2) var(--espacio-5); background: var(--chrome); color: var(--sobre-acento);
-  }
-  .armazon-barra .marca,
-  .armazon-barra .armazon-boton-menu { display: none; }
-}
+.armazon-velo { display: none; }
 
 @media (max-width: 48rem) {
+  :root { --alto-barra: var(--alto-barra-movil); }
   .armazon { display: block; }
-  .armazon-barra {
-    display: flex; align-items: center; box-sizing: border-box; height: var(--alto-barra-movil);
-    background: var(--chrome); color: var(--sobre-acento);
-    padding: 0 var(--espacio-4); position: sticky; top: 0; z-index: 20;
+  .armazon-barra { padding: 0 14px; min-height: var(--alto-barra-movil); flex-wrap: wrap; gap: var(--espacio-2) var(--espacio-3); }
+  .armazon-boton-menu { display: inline-flex; align-items: center; }
+  /* Cerrado, el cajón sale del árbol de accesibilidad (visibility): no se enfoca ni se lee. */
+  .menu-lateral {
+    position: fixed; inset: 0 auto 0 0; width: min(var(--ancho-menu), 86vw); z-index: 30;
+    height: 100vh; height: 100dvh;
+    transform: translateX(-100%); visibility: hidden;
+    transition: transform .25s ease, visibility 0s linear .25s; overflow-y: auto;
   }
-  .armazon-barra .marca { font-weight: 700; }
-  /* Con el contador la barra crece una fila; el menú abierto la tapa desde
-     --alto-barra-movil, que sigue siendo la altura de la primera fila. */
-  .armazon-barra:has(.contador-prueba) {
-    height: auto; min-height: var(--alto-barra-movil); flex-wrap: wrap;
-    padding-top: var(--espacio-2); padding-bottom: var(--espacio-2);
+  .menu-lateral.abierto { transform: none; visibility: visible; transition: transform .25s ease; }
+  .menu-cerrar {
+    display: grid; place-items: center; width: var(--toque-minimo); height: var(--toque-minimo);
+    background: transparent; border: 0; color: var(--tinta-3); font-size: 24px; line-height: 1;
+    border-radius: var(--radio-control);
   }
-  /* Cerrado, el menú sale del árbol de accesibilidad: no se enfoca ni se lee.
-     Abierto, cubre el resto de la pantalla y es lo único que se desplaza. */
-  .menu-lateral { display: none; }
-  .menu-lateral.abierto {
-    display: flex; position: fixed; z-index: 20; height: auto;
-    top: var(--alto-barra-movil); left: 0; right: 0; bottom: 0; overflow-y: auto;
-  }
-  /* Con el menú abierto la página de atrás no se desplaza: una sola barra. */
+  .armazon-velo { display: block; position: fixed; inset: 0; background: var(--velo); z-index: 29; }
+  /* Con el cajón abierto la página de atrás no se desplaza. */
   html:has(.menu-lateral.abierto) { overflow: hidden; }
-  .menu-lateral a { min-height: var(--toque-minimo); display: flex; align-items: center; }
+  .menu-lateral nav a { min-height: var(--toque-minimo); }
+  .armazon-barra .contador-prueba { order: 3; flex-basis: 100%; margin-left: 0; padding-bottom: var(--espacio-2); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .menu-lateral, .menu-lateral nav a { transition: none; }
 }
