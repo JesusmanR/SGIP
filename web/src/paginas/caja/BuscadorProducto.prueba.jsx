@@ -48,6 +48,37 @@ describe('buscador de producto', () => {
     expect(alAgregar.mock.calls.map((c) => c[0])).toEqual([TORNILLO, PINTURA])
   })
 
+  it('un código desconocido sigue a la vista, con su código, aunque otro escaneo llegue detrás', async () => {
+    montar()
+    await userEvent.type(campo(), '000{Enter}7709990001112{Enter}')
+    await waitFor(() => expect(alAgregar).toHaveBeenCalledWith(PINTURA))
+    expect(screen.getByText(/no encontramos ese código: 000/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /crear producto (requiere administrador)/i })).toBeInTheDocument()
+    // Se atiende (o se descarta) a propósito, no se borra solo.
+    await userEvent.click(screen.getByRole('button', { name: /descartar el código 000/i }))
+    expect(screen.queryByText(/no encontramos ese código/i)).not.toBeInTheDocument()
+  })
+
+  it('varios códigos desconocidos se listan todos', async () => {
+    montar()
+    await userEvent.type(campo(), '111{Enter}222{Enter}')
+    expect(await screen.findByText(/no encontramos ese código: 111/i)).toBeInTheDocument()
+    expect(await screen.findByText(/no encontramos ese código: 222/i)).toBeInTheDocument()
+    await userEvent.click(screen.getAllByRole('button', { name: /crear producto/i })[1])
+    expect(alCrearProducto).toHaveBeenCalledWith('222')
+  })
+
+  it('avisa a la pantalla cuántos escaneos siguen pendientes', async () => {
+    const alCambiarPendientes = vi.fn()
+    let soltar
+    productoPorCodigo.mockImplementationOnce(() => new Promise((resolver) => { soltar = () => resolver(TORNILLO) }))
+    render(<BuscadorProducto alAgregar={alAgregar} alCrearProducto={alCrearProducto} alCambiarPendientes={alCambiarPendientes} />)
+    await userEvent.type(campo(), '7701234567890{Enter}')
+    expect(alCambiarPendientes).toHaveBeenLastCalledWith(1)
+    soltar()
+    await waitFor(() => expect(alCambiarPendientes).toHaveBeenLastCalledWith(0))
+  })
+
   it('un código que no existe dice «No encontramos ese código» y ofrece buscar por nombre o crear', async () => {
     montar()
     await userEvent.type(campo(), '000{Enter}')

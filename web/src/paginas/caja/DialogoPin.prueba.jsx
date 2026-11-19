@@ -71,6 +71,19 @@ describe('diálogo del PIN', () => {
     expect(document.body).not.toHaveTextContent('0000')
   })
 
+  it('un envío ignorado (ya hay otro en vuelo) no se toma por éxito ni por error: el diálogo sigue esperando', async () => {
+    alConfirmar.mockResolvedValue({ ignorado: true })
+    montar()
+    await screen.findByRole('option', { name: 'Laura Pérez' })
+    await userEvent.selectOptions(screen.getByLabelText(/^administrador$/i), 'Laura Pérez')
+    await userEvent.type(pin(), '1234')
+    await userEvent.click(screen.getByRole('button', { name: /autorizar y cobrar/i }))
+    await waitFor(() => expect(alConfirmar).toHaveBeenCalled())
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(pin()).toHaveValue('1234')
+    expect(screen.getByRole('button', { name: /cobrando/i })).toBeDisabled()
+  })
+
   it('Escape y Cancelar cierran', async () => {
     montar()
     await userEvent.keyboard('{Escape}')

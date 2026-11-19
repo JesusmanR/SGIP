@@ -4,9 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { hoyISO, sumarDias } from '../../servicios/fechas.js'
 import {
-  abrirTurno, CLAVE_EN_USO, registrarVenta, saldoDeCliente, turnoActual,
+  abrirTurno, CLAVE_EN_USO, productoPorCodigo, registrarVenta, saldoDeCliente, turnoActual,
 } from '../../servicios/api/caja.js'
-import { ANA, LLAVE_A, LLAVE_B, PINTURA, TORNILLO, entrar, errorApi, pesos, prepararApi } from './ayuda.js'
+import { ANA, LLAVE_A, LLAVE_B, PINTURA, TORNILLO, entrar, errorApi, pesos, prepararApi, ventaDelServidor } from './ayuda.js'
 import Caja from './Caja.jsx'
 
 vi.mock('../../servicios/api/caja.js')
@@ -602,6 +602,75 @@ describe('caja: reintentos y conexión', () => {
     const alerta = await screen.findByRole('alert')
     expect(alerta).toHaveTextContent('No hay existencia suficiente de Tornillo M6.')
     expect(alerta).not.toHaveTextContent(/otra vez/i)
+    expect(cobrar()).toBeEnabled()
+  })
+})
+
+describe('caja: mientras el envío está en vuelo', () => {
+  /** Un envío que no responde hasta que la prueba lo decida. */
+  function envioPendiente() {
+    const control = {}
+    registrarVenta.mockImplementationOnce(() => new Promise((resolver, rechazar) => {
+      control.resolver = resolver
+      control.rechazar = rechazar
+    }))
+    return control
+  }
+  async function cobrarYEsperar() {
+    await abrir()
+    await agregar()
+    await pagarTodo()
+    const control = envioPendiente()
+    await userEvent.click(cobrar())
+    await waitFor(() => expect(registrarVenta).toHaveBeenCalledTimes(1))
+    return control
+  }
+
+  it('el carrito, el cliente, los descuentos y los pagos quedan quietos: quitar o vaciar no hace nada', async () => {
+    const control = await cobrarYEsperar()
+    expect(screen.getByLabelText('Cantidad de Tornillo M6')).toBeDisabled()
+    expect(screen.getByLabelText('Descuento de Tornillo M6')).toBeDisabled()
+    expect(screen.getByLabelText('Descuento de toda la compra')).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Quitar Tornillo M6' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /identificar cliente/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /quitar pago de efectivo/i })).toBeDisabled()
+    expect(buscador()).toBeDisabled()
+    await userEvent.click(screen.getByRole('button', { name: 'Quitar Tornillo M6' }))
+    await userEvent.type(screen.getByLabelText('Cantidad de Tornillo M6'), '5')
+    expect(screen.getByLabelText('Cantidad de Tornillo M6')).toHaveValue('1')
+    expect(total()).toHaveTextContent(pesos(11900))
+    control.resolver(ventaDelServidor(registrarVenta.mock.calls[0][0]))
+    expect(await screen.findByText(/venta registrada/i)).toBeInTheDocument()
+  })
+
+  it('si el envío en vuelo falla por red, «Reintentar» está habilitado y manda el mismo cuerpo con la misma clave', async () => {
+    const control = await cobrarYEsperar()
+    await userEvent.type(screen.getByLabelText('Cantidad de Tornillo M6'), '5')
+    control.rechazar(new TypeError('Failed to fetch'))
+    await screen.findByText(/no sabemos si se registró/i)
+    expect(screen.getByLabelText('Cantidad de Tornillo M6')).toHaveValue('1')
+    const reintentar = screen.getByRole('button', { name: /reintentar el cobro/i })
+    expect(reintentar).toBeEnabled()
+    await userEvent.click(reintentar)
+    await waitFor(() => expect(registrarVenta).toHaveBeenCalledTimes(2))
+    expect(registrarVenta.mock.calls[1][0]).toEqual(registrarVenta.mock.calls[0][0])
+    expect(await screen.findByText(/venta registrada/i)).toBeInTheDocument()
+  })
+
+  it('un código leído justo antes de «Cobrar» entra al carrito antes del envío: mientras la cola no está vacía no se cobra', async () => {
+    await abrir()
+    await agregar()
+    await pagarTodo()
+    let soltar
+    productoPorCodigo.mockImplementationOnce(() => new Promise((resolver) => { soltar = () => resolver(PINTURA) }))
+    await userEvent.type(buscador(), `${PINTURA.codigoBarras}{Enter}`)
+    expect(cobrar()).toBeDisabled()
+    soltar()
+    await screen.findByLabelText('Cantidad de Pintura blanca')
+    // La línea nueva cambió el total: los pagos se borraron y hay que volver a cuadrar.
+    expect(cobrar()).toBeDisabled()
+    expect(registrarVenta).not.toHaveBeenCalled()
+    await pagarTodo()
     expect(cobrar()).toBeEnabled()
   })
 })

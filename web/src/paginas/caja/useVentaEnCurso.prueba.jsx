@@ -89,6 +89,20 @@ describe('la venta en curso', () => {
     expect(r.error).not.toMatch(/clave|idempotencia/i)
   })
 
+  it('un segundo envío mientras el primero sigue en vuelo se ignora con un valor propio', async () => {
+    let responder
+    registrarVenta.mockImplementationOnce(() => new Promise((resolver) => { responder = resolver }))
+    const hook = renderHook(() => useVentaEnCurso())
+    let primero
+    act(() => { primero = hook.result.current.enviar(construir) })
+    expect(hook.result.current.enviando).toBe(true)
+    let segundo
+    await act(async () => { segundo = await hook.result.current.enviar(construir) })
+    expect(segundo).toEqual({ ignorado: true })
+    expect(registrarVenta).toHaveBeenCalledTimes(1)
+    await act(async () => { responder(VENTA); await primero })
+  })
+
   it('abandonar renueva la clave y deja libre', async () => {
     registrarVenta.mockRejectedValueOnce(new TypeError('x'))
     const hook = renderHook(() => useVentaEnCurso())
