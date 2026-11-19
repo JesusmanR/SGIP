@@ -48,6 +48,31 @@ describe('menú móvil', () => {
     const barra = Number(regla(armazon, '.armazon-barra').match(/z-index:\s*(\d+)/)[1])
     const velo = Number(armazon.match(/\.armazon-velo\s*\{[^}]*z-index:\s*(\d+)/)[1])
     expect(velo).toBeGreaterThan(barra)
+    const cajon = Number(armazon.match(/\.menu-lateral\s*\{[^}]*z-index:\s*(\d+)/)[1])
+    expect(cajon).toBeGreaterThan(velo)
+  })
+
+  // --alto-barra-movil se usa una sola vez (la barra del celular): el cajón ya
+  // no cuelga de ella porque es de altura completa, así que no hay un segundo uso.
+  it('el marco deja sitio a la barra fija al enfocar (WCAG 2.2, foco no oculto)', () => {
+    expect(armazon).toMatch(/html\s*\{[^}]*scroll-padding-top:\s*var\(--alto-barra\)/)
+    const movil = armazon.slice(armazon.indexOf('@media (max-width'))
+    expect(movil).toMatch(/--alto-barra:\s*var\(--alto-barra-movil\)/)
+  })
+
+  it('el cajón del celular usa la altura dinámica, con 100vh de reserva', () => {
+    const movil = armazon.slice(armazon.indexOf('@media (max-width'))
+    expect(movil).toMatch(/height:\s*100vh;\s*height:\s*100dvh/)
+  })
+
+  it('los títulos largos de la miga se recortan: overflow en un bloque con min-width 0', () => {
+    expect(regla(armazon, '.migas [aria-current="page"]')).toMatch(/display:\s*block/)
+    expect(regla(armazon, '.migas [aria-current="page"]')).toMatch(/text-overflow:\s*ellipsis/)
+  })
+
+  it('en el celular el contador gana en especificidad al margen de escritorio', () => {
+    const movil = armazon.slice(armazon.indexOf('@media (max-width'))
+    expect(movil).toMatch(/\.armazon-barra \.contador-prueba\s*\{[^}]*margin-left:\s*0/)
   })
 })
 

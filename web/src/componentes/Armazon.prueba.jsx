@@ -216,6 +216,30 @@ describe('armazón', () => {
       expect(boton).toHaveFocus()
     })
 
+    it('al abrir el cajón el foco entra en él y lo de atrás queda inerte; al cerrar se revierte', async () => {
+      const teclado = userEvent.setup()
+      const { container } = montar()
+      const columna = container.querySelector('.armazon-columna')
+      expect(columna).not.toHaveAttribute('inert')
+      const boton = screen.getByRole('button', { name: /^menú$/i })
+      await teclado.click(boton)
+      expect(columna).toHaveAttribute('inert')
+      expect(document.getElementById('menu-principal')).toContainElement(document.activeElement)
+      await teclado.keyboard('{Escape}')
+      expect(columna).not.toHaveAttribute('inert')
+      expect(boton).toHaveFocus()
+    })
+
+    it('Tab desde el último elemento del cajón no cae en la página de atrás', async () => {
+      const teclado = userEvent.setup()
+      const { container } = montar()
+      await teclado.click(screen.getByRole('button', { name: /^menú$/i }))
+      const dentro = [...document.getElementById('menu-principal').querySelectorAll('a, button')]
+      dentro.at(-1).focus()
+      await teclado.tab()
+      expect(container.querySelector('.armazon-columna').contains(document.activeElement)).toBe(false)
+    })
+
     it('tocar el velo detrás del menú lo cierra', async () => {
       const teclado = userEvent.setup()
       const { container } = montar()
