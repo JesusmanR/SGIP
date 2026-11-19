@@ -292,4 +292,42 @@ describe('M12-R1, ronda 1: guardar antes de enviar y no entrar en bucle', () => 
     expect(hook.result.current.estado).toBe('ambiguo')
     expect(guardado()).not.toBeNull()
   })
+
+  it.each([
+    ['urn:sgip:caja:autorizacion-requerida'],
+    ['urn:sgip:caja:pin-bloqueado'],
+    ['urn:sgip:caja:pin-invalido'],
+  ])('un 403 de tipo %s es de PIN: la venta restaurada conserva su cuerpo y vuelve a pedir el PIN', async (tipo) => {
+    const hook = await restaurada()
+    registrarVenta.mockRejectedValueOnce(new ErrorApi(403, 'Falta la autorización de un administrador.', tipo))
+    let r
+    await act(async () => { r = await hook.result.current.enviar(construir, { administradorId: 3, pin: '0000' }) })
+    expect(r.descartada).toBeUndefined()
+    expect(hook.result.current.estado).toBe('ambiguo')
+    expect(guardado()).not.toBeNull()
+  })
+
+  it('un 403 con tipo que solo contiene «pin» dentro de otra palabra no se toma por error de PIN', async () => {
+    const hook = await restaurada()
+    registrarVenta.mockRejectedValueOnce(new ErrorApi(403, 'El envío está cerrado.', 'urn:sgip:caja:shipping-cerrado'))
+    let r
+    await act(async () => { r = await hook.result.current.enviar(construir, { administradorId: 3, pin: '0000' }) })
+    expect(r.descartada).toBe(true)
+    expect(sessionStorage.getItem(CLAVE_VENTA_PENDIENTE)).toBeNull()
+  })
+
+  it('con el tipo ausente o about:blank se decide por el texto: «PIN» conserva, otra cosa descarta', async () => {
+    const conservada = await restaurada()
+    registrarVenta.mockRejectedValueOnce(new ErrorApi(403, 'El PIN no es correcto.', 'about:blank'))
+    let r
+    await act(async () => { r = await conservada.result.current.enviar(construir, { administradorId: 3, pin: '0000' }) })
+    expect(r.descartada).toBeUndefined()
+    expect(guardado()).not.toBeNull()
+    conservada.unmount()
+
+    const descartada = await restaurada()
+    registrarVenta.mockRejectedValueOnce(new ErrorApi(403, 'Tu empresa está en modo de consulta.', 'about:blank'))
+    await act(async () => { r = await descartada.result.current.enviar(construir, { administradorId: 3, pin: '0000' }) })
+    expect(r.descartada).toBe(true)
+  })
 })

@@ -338,20 +338,64 @@ describe('devolución', () => {
       expect(screen.queryByText(/se pagaron/i)).not.toBeInTheDocument()
     })
 
-    it('las devoluciones anteriores gastan primero lo pagado sin saldo', async () => {
-      // 59.500 pagados (40.000 sin saldo + 19.500 con saldo); ya se devolvieron 35.700 (el tornillo).
-      const parcial = {
+    describe('lo ya devuelto antes', () => {
+      // 59.500 pagados (40.000 sin saldo + 19.500 con saldo); el tornillo ya se devolvió completo (35.700).
+      const parcial = (extra = {}) => ({
         ...CON_SALDO,
+        ...extra,
         lineas: [
           { ...CON_SALDO.lineas[0], cantidadDevuelta: 3, valorDevuelto: 35700 },
           CON_SALDO.lineas[1],
         ],
-      }
-      montar()
-      await buscar(parcial)
-      await cantidad('Pintura blanca', 1)
-      // Quedan 40.000 - 35.700 = 4.300 sin saldo: de los 23.800, 19.500 vuelven como saldo.
-      expect(screen.getByLabelText(/^saldo a favor/i)).toHaveValue('19500')
+      })
+
+      it('sin reembolsadoSinSaldo se estima: lo devuelto antes gastó primero lo pagado sin saldo', async () => {
+        montar()
+        await buscar(parcial())
+        await cantidad('Pintura blanca', 1)
+        // Quedan 40.000 - 35.700 = 4.300 sin saldo: de los 23.800, 19.500 vuelven como saldo.
+        expect(screen.getByLabelText(/^saldo a favor/i)).toHaveValue('19500')
+      })
+
+      it('con reembolsadoSinSaldo manda el dato del servidor', async () => {
+        montar()
+        await buscar(parcial({ reembolsadoSinSaldo: 35700 }))
+        await cantidad('Pintura blanca', 1)
+        expect(screen.getByLabelText(/^saldo a favor/i)).toHaveValue('19500')
+      })
+
+      it('con reembolsadoSinSaldo en 0 no se estima nada: todo lo pagado sin saldo sigue disponible', async () => {
+        montar()
+        await buscar(parcial({ reembolsadoSinSaldo: 0 }))
+        await cantidad('Pintura blanca', 1)
+        expect(screen.getByLabelText(/^saldo a favor/i)).toHaveValue('')
+      })
+
+      it('el caso del revisor: 40.000 por tarjeta, 10.000 devueltos antes como saldo y ahora 49.500', async () => {
+        const antes = (extra) => ({
+          ...CON_SALDO,
+          ...extra,
+          lineas: [
+            { ...CON_SALDO.lineas[0], cantidadDevuelta: 1, valorDevuelto: 10000 },
+            CON_SALDO.lineas[1],
+          ],
+        })
+        // Con el dato del servidor (0 reembolsado sin saldo) pueden salir 40.000 por tarjeta: 9.500 van como saldo.
+        const primera = montar()
+        await buscar(antes({ reembolsadoSinSaldo: 0 }))
+        await userEvent.click(screen.getByRole('button', { name: /anular toda la venta/i }))
+        expect(screen.getByTestId('valor-a-devolver')).toHaveTextContent(pesos(49500))
+        expect(screen.getByLabelText(/^saldo a favor/i)).toHaveValue('9500')
+        await dinero(/^por tarjeta/i, 40000)
+        expect(screen.getByRole('button', { name: /confirmar devolución/i })).toBeEnabled()
+        primera.unmount()
+
+        // Sin el dato se estima lo más prudente: lo devuelto antes gastó primero lo pagado sin saldo.
+        montar()
+        await buscar(antes({}))
+        await userEvent.click(screen.getByRole('button', { name: /anular toda la venta/i }))
+        expect(screen.getByLabelText(/^saldo a favor/i)).toHaveValue('19500')
+      })
     })
   })
 })
