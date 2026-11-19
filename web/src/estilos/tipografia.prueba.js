@@ -1,5 +1,5 @@
 /**
- * Las fuentes viajan con la aplicación (ADR-0032): sin Google Fonts, porque
+ * Las fuentes viajan con la aplicación (ADR-0034): sin Google Fonts, porque
  * la tienda puede estar sin internet y una petición externa filtra visitas.
  */
 import { readFileSync } from 'node:fs'

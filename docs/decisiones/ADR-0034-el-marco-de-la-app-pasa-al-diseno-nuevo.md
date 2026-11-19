@@ -1,4 +1,4 @@
-# ADR-0032 · El marco de la app pasa al diseño nuevo: menú blanco, barra con migas y DM Sans + Manrope
+# ADR-0034 · El marco de la app pasa al diseño nuevo: menú blanco, barra con migas y DM Sans + Manrope
 
 Estado: aceptada · 2026-11-19 · reemplaza la tipografía de la ADR-0009 (Inter) y el menú oscuro (`--chrome`)
 

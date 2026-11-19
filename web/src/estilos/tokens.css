@@ -18,7 +18,7 @@
   --tarjeta:         #FFFFFF;
   --chrome:          #2B2250;   /* panel oscuro de la pantalla de acceso */
 
-  /* Marco de la app (ADR-0032): menú lateral blanco. Los grises del
+  /* Marco de la app (ADR-0034): menú lateral blanco. Los grises del
      diseño de Figma (#72717D, #AAA8B3) se oscurecieron hasta llegar a
      4,5:1 (RNF-13): el rótulo de grupo en #AAA8B3 daba 2,4:1. */
   --menu-fondo:         #FFFFFF;
@@ -96,7 +96,7 @@
   --espacio-5:       24px;
 
   /* ── Tipografía ─────────────────────────────────────────────────────
-     DM Sans para el texto y Manrope para los títulos (ADR-0032, que
+     DM Sans para el texto y Manrope para los títulos (ADR-0034, que
      reemplaza a Inter). Ambas viajan con la aplicación (@fontsource):
      no dependen de internet ni de lo que el usuario tenga instalado.   */
   --familia: "DM Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
