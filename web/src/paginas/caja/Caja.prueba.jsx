@@ -725,3 +725,57 @@ describe('caja: lo que no se ve', () => {
     expect(Object.keys(localStorage)).toEqual([])
   })
 })
+
+describe('caja: el aviso de abandonar no reaparece solo (T12-P1)', () => {
+  it('tras un error definitivo del reintento, un nuevo resultado ambiguo no trae de vuelta la confirmación', async () => {
+    registrarVenta.mockRejectedValueOnce(new TypeError('Failed to fetch'))
+    await abrir()
+    await agregar()
+    await pagarTodo()
+    await userEvent.click(cobrar())
+    await screen.findByText(/no sabemos si se registró/i)
+    await userEvent.click(screen.getByRole('button', { name: /abandonar esta venta/i }))
+    expect(screen.getByText(/podría quedar cobrado/i)).toBeInTheDocument()
+
+    registrarVenta.mockRejectedValueOnce(errorApi(400, 'Los datos de la venta no son válidos.'))
+    await userEvent.click(screen.getByRole('button', { name: /reintentar el cobro/i }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Los datos de la venta no son válidos.')
+    expect(screen.queryByText(/podría quedar cobrado/i)).not.toBeInTheDocument()
+
+    registrarVenta.mockRejectedValueOnce(new TypeError('Failed to fetch'))
+    await userEvent.click(cobrar())
+    await screen.findByText(/no sabemos si se registró/i)
+    expect(screen.getByRole('button', { name: /abandonar esta venta/i })).toBeInTheDocument()
+    expect(screen.queryByText(/podría quedar cobrado/i)).not.toBeInTheDocument()
+  })
+})
+
+describe('caja: estructura de la pantalla', () => {
+  it('lleva un encabezado propio con el título «Caja» como h1', async () => {
+    await abrir()
+    expect(screen.getByRole('heading', { level: 1, name: 'Caja' })).toBeInTheDocument()
+    expect(screen.getByText('Ventas')).toBeInTheDocument()
+  })
+
+  it('las secciones Cliente y Productos son encabezados con su región; el buscador y el carrito viven en Productos', async () => {
+    await abrir()
+    expect(screen.getByRole('heading', { level: 2, name: /^cliente$/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 2, name: /^productos$/i })).toBeInTheDocument()
+    const productos = screen.getByRole('region', { name: /^productos$/i })
+    expect(within(productos).getByLabelText(/buscar producto/i)).toBeInTheDocument()
+    await agregar()
+    expect(within(screen.getByRole('region', { name: /^productos$/i })).getByLabelText('Cantidad de Tornillo M6')).toBeInTheDocument()
+    const cliente = screen.getByRole('region', { name: /^cliente$/i })
+    expect(within(cliente).getByRole('button', { name: 'Consumidor final' })).toBeInTheDocument()
+  })
+
+  it('el resumen tiene nombre, muestra el total y contiene «Cobrar»', async () => {
+    await abrir()
+    await agregar()
+    const resumen = screen.getByRole('region', { name: /resumen de la venta/i })
+    expect(within(resumen).getByTestId('total-a-cobrar')).toHaveTextContent(pesos(11900))
+    expect(within(resumen).getByRole('button', { name: /^cobrar$/i })).toBeInTheDocument()
+    expect(within(resumen).getByText(/^IVA$/)).toBeInTheDocument()
+    expect(within(resumen).getByLabelText(/medio de pago/i)).toBeInTheDocument()
+  })
+})
