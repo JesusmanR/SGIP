@@ -10,10 +10,17 @@ import Dialogo from './Dialogo.jsx'
  * necesita. El PIN vive solo en el estado de este diálogo: se borra al cerrarlo o
  * tras un intento, y no va al almacenamiento ni a la consola ni a un mensaje.
  *
+ * Sirve para cualquier cosa que un administrador autoriza (una venta, una devolución):
+ * `descripcion` y `textoAccion` cambian el texto; por omisión es el de la venta.
+ *
  * `alConfirmar` recibe `{ administradorId, pin }` y devuelve el texto del error, o
  * null si todo salió bien (entonces la pantalla cierra el diálogo).
  */
-export default function DialogoPin({ motivos, alConfirmar, alCerrar }) {
+export default function DialogoPin({
+  motivos, alConfirmar, alCerrar,
+  descripcion = 'Un administrador debe autorizar esta venta con su PIN. Se usa una sola vez.',
+  textoAccion = 'Autorizar y cobrar', textoEnviando = 'Cobrando…',
+}) {
   const [lista, setLista] = useState(null)
   const [fallo, setFallo] = useState(null)
   const [administradorId, setAdministradorId] = useState('')
@@ -58,7 +65,7 @@ export default function DialogoPin({ motivos, alConfirmar, alCerrar }) {
 
   return (
     <Dialogo titulo="Autorización del administrador" alCerrar={() => { if (!enviando) alCerrar() }}>
-      <p className="nota">Un administrador debe autorizar esta venta con su PIN. Se usa una sola vez.</p>
+      <p className="nota">{descripcion}</p>
       <ul className="caja-autorizar" aria-label="Lo que se va a autorizar">
         {motivos.map((m) => <li key={m}>{m}</li>)}
       </ul>
@@ -79,7 +86,7 @@ export default function DialogoPin({ motivos, alConfirmar, alCerrar }) {
         </Campo>
         <div className="caja-acciones">
           <button type="submit" className="boton" disabled={!puede}>
-            {enviando ? 'Cobrando…' : 'Autorizar y cobrar'}
+            {enviando ? textoEnviando : textoAccion}
           </button>
           <button type="button" className="boton secundario" disabled={enviando} onClick={alCerrar}>Cancelar</button>
         </div>

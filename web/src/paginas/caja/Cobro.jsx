@@ -15,15 +15,21 @@ const sumar = (pagos, filtro = () => true) => pagos.filter(filtro).reduce((a, p)
  *
  * «Cobrar» solo se habilita cuando lo pagado es igual al total (en contra entrega no
  * hay pagos: se registra para cobrar al entregar). Sin conexión no se cobra nada.
+ *
+ * Se reutiliza para cobrar un domicilio contra entrega: `titulo` y `rotulo` cambian el
+ * encabezado, `desglose={false}` oculta subtotal/IVA/descuento (el saldo por cobrar no los
+ * tiene) y `medioSaldoId` es el medio de sistema con el que se paga con saldo a favor.
  */
 export default function Cobro({
-  vista, medios, saldo, pagos, alCambiarPagos, bloqueo, contraEntrega, sinConexion, enviando, congelado = false, esperando = false, alCobrar,
+  vista, medios, saldo, medioSaldoId = null, pagos, alCambiarPagos, bloqueo, contraEntrega, sinConexion, enviando,
+  congelado = false, esperando = false, alCobrar,
+  titulo = 'Resumen de la venta', rotulo = 'Resumen', desglose = true, totalRotulo = 'Total a cobrar',
 }) {
   const saldoUsado = sumar(pagos, (p) => p.tipo === 'SALDO_A_FAVOR')
   const saldoDisponible = Math.max(0, saldo - saldoUsado)
   const opciones = medios.filter((m) => m.tipo !== 'SALDO_A_FAVOR' && m.activo !== false)
   const medioDeSaldo = medios.find((m) => m.tipo === 'SALDO_A_FAVOR')
-  if (saldoDisponible > 0) opciones.push({ id: medioDeSaldo?.id ?? null, nombre: 'Saldo a favor', tipo: 'SALDO_A_FAVOR' })
+  if (saldoDisponible > 0) opciones.push({ id: medioSaldoId ?? medioDeSaldo?.id ?? null, nombre: 'Saldo a favor', tipo: 'SALDO_A_FAVOR' })
 
   const total = vista.total
   const pagado = sumar(pagos)
@@ -75,17 +81,19 @@ export default function Cobro({
 
   return (
     <section className="caja-cobro caja-resumen" aria-labelledby={idTitulo}>
-      <p className="caja-eyebrow" aria-hidden="true">Resumen</p>
-      <h2 id={idTitulo} className="caja-resumen-titulo">Resumen de la venta</h2>
+      <p className="caja-eyebrow" aria-hidden="true">{rotulo}</p>
+      <h2 id={idTitulo} className="caja-resumen-titulo">{titulo}</h2>
 
-      <dl className="caja-desglose">
-        <div><dt>Subtotal</dt><dd className="cifra">{PESOS.format(vista.subtotal)}</dd></div>
-        <div><dt>IVA</dt><dd className="cifra">{PESOS.format(vista.iva)}</dd></div>
-        <div><dt>Descuento</dt><dd className="cifra">{PESOS.format(vista.descuento)}</dd></div>
-      </dl>
+      {desglose && (
+        <dl className="caja-desglose">
+          <div><dt>Subtotal</dt><dd className="cifra">{PESOS.format(vista.subtotal)}</dd></div>
+          <div><dt>IVA</dt><dd className="cifra">{PESOS.format(vista.iva)}</dd></div>
+          <div><dt>Descuento</dt><dd className="cifra">{PESOS.format(vista.descuento)}</dd></div>
+        </dl>
+      )}
 
       <div className="caja-total">
-        <p className="caja-total-rotulo">Total a cobrar</p>
+        <p className="caja-total-rotulo">{totalRotulo}</p>
         <p className="caja-total-valor cifra" data-testid="total-a-cobrar">{PESOS.format(total)}</p>
       </div>
 

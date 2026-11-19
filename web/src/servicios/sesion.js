@@ -1,3 +1,5 @@
+import { borrarVentaPendiente } from './ventaPendiente.js'
+
 /**
  * Dónde vive el token de la sesión.
  *
@@ -32,6 +34,8 @@ export function leerSesion() {
 
 export function borrarSesion() {
   sessionStorage.removeItem(CLAVE)
+  // Una venta de la caja sin confirmar es de quien la hizo: no pasa a quien entre después.
+  borrarVentaPendiente()
 }
 
 export function haySesion() {

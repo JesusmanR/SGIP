@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from 'react'
 import { ErrorApi } from '../../servicios/api.js'
 import { CLAVE_EN_USO, registrarVenta } from '../../servicios/api/caja.js'
+import { borrarVentaPendiente, guardarVentaPendiente, leerVentaPendiente } from '../../servicios/ventaPendiente.js'
 import { nuevaClaveDeVenta } from './venta.js'
 
 export const MENSAJE_AMBIGUO = 'No sabemos si se registró. Reintenta: no se cobrará dos veces.'
@@ -22,30 +23,49 @@ function esAmbiguo(error) {
  *   clave (el servidor responde 201 si no la tenía o 200 con la venta si ya la había registrado).
  *   La pantalla congela el carrito mientras tanto.
  * - La autorización (con el PIN) viaja en el envío y no se guarda en ese cuerpo: un reintento la
- *   pide de nuevo. El cuerpo vive solo en memoria; recargar la pestaña lo pierde (limitación conocida).
+ *   pide de nuevo.
+ * - Recargar la pestaña no pierde una venta ambigua (M12-R1): la clave, el cuerpo exacto y los
+ *   motivos de autorización se guardan en sessionStorage y, al volver, la venta arranca
+ *   «ambigua» y `restaurada`. Se borran al confirmarse, ante un error definitivo, una clave en uso
+ *   o al abandonar. Un PIN rechazado en una venta restaurada no borra nada: el cajero ya no tiene
+ *   el carrito para armarla de nuevo, así que lo único que tiene es ese cuerpo.
  * - Un error definitivo (400, 403, 409 de existencia…) quiere decir que no se registró: la venta
  *   queda libre y conserva su clave. El 409 de clave en uso (otro cuerpo con la misma clave) no se
  *   puede reintentar: solo queda empezar otra venta.
  *
- * `enviar(construir, autorizacion)` devuelve `{ venta }`, `{ error }` o `{ ignorado: true }` (había otro envío en vuelo).
+ * `enviar(construir, autorizacion, motivos)` devuelve `{ venta }`, `{ error }` o `{ ignorado: true }` (había otro envío en vuelo).
  */
 export default function useVentaEnCurso() {
-  const [clave, setClave] = useState(nuevaClaveDeVenta)
-  const [estado, setEstado] = useState('libre') // libre | ambiguo | claveEnUso
+  // Lo guardado antes de recargar, leído una sola vez al nacer el hook.
+  const [guardada] = useState(leerVentaPendiente)
+  const [clave, setClave] = useState(() => guardada?.clave ?? nuevaClaveDeVenta())
+  const [estado, setEstado] = useState(guardada ? 'ambiguo' : 'libre') // libre | ambiguo | claveEnUso
   const [enviando, setEnviando] = useState(false)
+  const [restaurada, setRestaurada] = useState(Boolean(guardada))
+  const [motivos, setMotivos] = useState(guardada?.motivos ?? [])
   const claveActual = useRef(clave)
-  const pendiente = useRef(null)
+  const pendiente = useRef(guardada?.cuerpo ?? null)
+  const restauradaAhora = useRef(Boolean(guardada))
   const ocupado = useRef(false)
+
+  /** Suelta el cuerpo guardado, en memoria y en el almacenamiento. */
+  const soltar = useCallback(() => {
+    pendiente.current = null
+    restauradaAhora.current = false
+    borrarVentaPendiente()
+    setRestaurada(false)
+    setMotivos([])
+  }, [])
 
   const renovar = useCallback(() => {
     const nueva = nuevaClaveDeVenta()
     claveActual.current = nueva
-    pendiente.current = null
+    soltar()
     setClave(nueva)
     setEstado('libre')
-  }, [])
+  }, [soltar])
 
-  const enviar = useCallback(async (construir, autorizacion) => {
+  const enviar = useCallback(async (construir, autorizacion, motivosDelEnvio = []) => {
     // Un segundo envío con otro en vuelo no es un éxito ni un error: se ignora con un valor propio.
     if (ocupado.current) return { ignorado: true }
     ocupado.current = true
@@ -65,22 +85,28 @@ export default function useVentaEnCurso() {
       return { venta }
     } catch (error) {
       if (error instanceof ErrorApi && error.estado === 409 && error.tipo === CLAVE_EN_USO) {
-        pendiente.current = null
+        soltar()
         setEstado('claveEnUso')
         return { error: MENSAJE_CLAVE_EN_USO }
       }
       if (!esAmbiguo(error)) {
-        pendiente.current = null
+        // Una venta restaurada no tiene carrito del que volver a armarla: si solo falló el PIN, el
+        // cuerpo guardado es lo único que queda y se conserva para intentarlo otra vez.
+        if (restauradaAhora.current && autorizacion && error.estado === 403) return { error: error.message }
+        soltar()
         setEstado('libre')
         return { error: error.message }
       }
+      // Ambiguo: lo exacto que se envió se guarda por si la pestaña se recarga. El PIN no va aquí.
+      guardarVentaPendiente({ clave: claveActual.current, cuerpo: pendiente.current, motivos: motivosDelEnvio })
+      setMotivos(motivosDelEnvio)
       setEstado('ambiguo')
       return { error: MENSAJE_AMBIGUO }
     } finally {
       ocupado.current = false
       setEnviando(false)
     }
-  }, [renovar])
+  }, [renovar, soltar])
 
-  return { clave, estado, enviando, enviar, abandonar: renovar }
+  return { clave, estado, enviando, enviar, abandonar: renovar, restaurada, motivos }
 }

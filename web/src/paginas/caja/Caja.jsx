@@ -86,7 +86,10 @@ function useEnLinea() {
   return enLinea
 }
 
-/** La venta en curso. Todo su estado vive aquí, en memoria: nada va al almacenamiento del navegador. */
+/**
+ * La venta en curso. Su estado vive aquí, en memoria. Lo único que se guarda en sessionStorage es una
+ * venta que quedó sin saber si se registró (clave y cuerpo exacto, nunca el PIN): ver `useVentaEnCurso`.
+ */
 function Venta({ turno }) {
   const sesion = leerSesion()
   const enLinea = useEnLinea()
@@ -102,6 +105,9 @@ function Venta({ turno }) {
   const [motivoEncargo, setMotivoEncargo] = useState('')
   const [pagos, setPagos] = useState([])
   const [saldo, setSaldo] = useState(0)
+  const [medioSaldoId, setMedioSaldoId] = useState(null)
+  // Una venta restaurada tras recargar: ya no hay carrito, solo se puede reintentar su cuerpo guardado o abandonarla.
+  const [registrada, setRegistrada] = useState(null)
   const [dialogo, setDialogo] = useState(null) // 'producto' | 'pin' | null
   const [codigoNuevo, setCodigoNuevo] = useState('')
   const [mensaje, setMensaje] = useState(null)
@@ -128,11 +134,16 @@ function Venta({ turno }) {
   useEffect(() => {
     if (!cliente) {
       setSaldo(0)
+      setMedioSaldoId(null)
       return undefined
     }
     let vigente = true
     saldoDeCliente(cliente.id)
-      .then((r) => { if (vigente) setSaldo(Number(r?.saldo) || 0) })
+      .then((r) => {
+        if (!vigente) return
+        setSaldo(Number(r?.saldo) || 0)
+        setMedioSaldoId(r?.medioId ?? null)
+      })
       .catch(() => { if (vigente) setSaldo(0) })
     return () => { vigente = false }
   }, [cliente])
@@ -142,7 +153,9 @@ function Venta({ turno }) {
     [lineas, descuentoTotal],
   )
   const bloqueo = bloqueoDeVenta({ lineas, vista, cliente, domicilio, motivoEncargo })
-  const motivos = motivosDeAutorizacion(lineas, descuentoTotal)
+  // Sin carrito y con una venta ambigua solo puede haber una restaurada: sus motivos vienen de lo guardado.
+  const restaurada = envio.restaurada && lineas.length === 0 && envio.estado === 'ambiguo'
+  const motivos = restaurada ? envio.motivos : motivosDeAutorizacion(lineas, descuentoTotal)
   const necesitaPin = motivos.length > 0 && !esAdministrador(sesion)
   const contraEntrega = Boolean(domicilio?.contraEntrega)
   // Con un resultado ambiguo o una clave en uso no se edita nada: solo se reintenta o se abandona.
@@ -219,9 +232,17 @@ function Venta({ turno }) {
   /** Envía la venta. Devuelve el texto del error, o null si quedó registrada. */
   async function enviar(autorizacion) {
     setMensaje(null)
+    const eraRestaurada = restaurada
     const resultado = await envio.enviar((clave) => armarSolicitud({
       claveIdempotencia: clave, cliente, lineas, descuentoTotal, pagos, motivoEncargo, domicilio,
-    }), autorizacion)
+    }), autorizacion, motivos)
+    if (resultado.venta && eraRestaurada) {
+      // No hay carrito del que armar el recibo: se confirma la venta y su recibo se consulta aparte.
+      setRegistrada({ consecutivo: resultado.venta.consecutivo, total: Number(resultado.venta.total) })
+      setDialogo(null)
+      setAbandonando(false)
+      return null
+    }
     if (resultado.venta) {
       setRecibo(armarRecibo({
         empresa: empresa.datos ?? { razonSocial: '' }, venta: resultado.venta, lineas, pagos, cliente,
@@ -252,9 +273,24 @@ function Venta({ turno }) {
   }
 
   // «Reintentar» respeta lo mismo que «Cobrar»: bloqueos, pagos que cuadran y conexión.
-  const puedeReintentar = puedeCobrar({
-    bloqueo, vista, pagos, contraEntrega, sinConexion, enviando: envio.enviando || escaneando,
-  })
+  const puedeReintentar = restaurada
+    ? !sinConexion && !envio.enviando
+    : puedeCobrar({ bloqueo, vista, pagos, contraEntrega, sinConexion, enviando: envio.enviando || escaneando })
+
+  if (registrada) {
+    return (
+      <div className="caja-recibo-pantalla">
+        <div className="caja-recibo-acciones">
+          <h2 ref={tituloRecibo} tabIndex={-1}>Venta registrada</h2>
+          <p className="nota">
+            La venta {registrada.consecutivo} por {PESOS.format(registrada.total)} quedó registrada. Como la página se
+            recargó, el recibo se consulta en las ventas del turno.
+          </p>
+          <button type="button" className="boton" onClick={() => setRegistrada(null)}>Nueva venta</button>
+        </div>
+      </div>
+    )
+  }
 
   if (recibo) {
     return (
@@ -306,6 +342,7 @@ function Venta({ turno }) {
           {envio.estado === 'ambiguo' && (
             <Aviso tipo="aviso">
               {MENSAJE_AMBIGUO}
+              {restaurada && ' La página se recargó con esta venta a medias: reintenta y quedará registrada una sola vez.'}
               <span className="caja-acciones">
                 <button type="button" className="boton" disabled={!puedeReintentar} onClick={iniciarCobro}>
                   Reintentar el cobro
@@ -333,7 +370,7 @@ function Venta({ turno }) {
           {envio.estado === 'libre' && mensaje && !dialogo && <Aviso tipo="peligro">{mensaje}</Aviso>}
 
           <Cobro
-            vista={vista} medios={medios.datos ?? []} saldo={saldo} pagos={pagos} alCambiarPagos={setPagos}
+            vista={vista} medios={medios.datos ?? []} saldo={saldo} medioSaldoId={medioSaldoId} pagos={pagos} alCambiarPagos={setPagos}
             bloqueo={bloqueo} contraEntrega={contraEntrega} sinConexion={sinConexion}
             enviando={envio.enviando} congelado={congelado} esperando={escaneando} alCobrar={iniciarCobro}
           />
