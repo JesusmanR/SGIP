@@ -20,7 +20,7 @@ export default function Armazon() {
   const [abierto, setAbierto] = useState(false)
   const boton = useRef(null)
   const barra = useRef(null)
-  // Si al cerrar el cajón hay que devolver el foco al botón del menú. Se hace en
+  // Adónde devolver el foco al cerrar el cajón: al botón del menú, a la página o a ninguna parte. Se hace en
   // un efecto, cuando `inert` ya salió del DOM: antes, focus() no haría nada.
   const devolverFoco = useRef(false)
   const eraAbierto = useRef(false)
@@ -84,8 +84,12 @@ export default function Armazon() {
   useEffect(() => {
     if (abierto) {
       document.getElementById('menu-principal')?.querySelector('.menu-cerrar')?.focus()
-    } else if (eraAbierto.current && devolverFoco.current) {
+    } else if (eraAbierto.current && devolverFoco.current === 'boton') {
       boton.current?.focus()
+    } else if (eraAbierto.current && devolverFoco.current === 'pagina') {
+      // En escritorio el botón del menú no se ve: el foco no puede quedarse allí.
+      const h1 = contenido.current?.querySelector('h1')
+      if (h1) { h1.setAttribute('tabindex', '-1'); h1.focus() } else contenido.current?.focus()
     }
     if (!abierto) devolverFoco.current = false
     eraAbierto.current = abierto
@@ -100,7 +104,7 @@ export default function Armazon() {
     const alCambiar = (e) => {
       if (e.matches) return
       const menu = document.getElementById('menu-principal')
-      cerrarMenu(Boolean(menu?.contains(document.activeElement)))
+      cerrarMenu(menu?.contains(document.activeElement) ? 'pagina' : false)
     }
     celular.addEventListener('change', alCambiar)
     return () => celular.removeEventListener('change', alCambiar)
@@ -112,10 +116,10 @@ export default function Armazon() {
     const el = barra.current
     if (!el || typeof ResizeObserver === 'undefined') return undefined
     const raiz = document.documentElement
-    const medir = () => raiz.style.setProperty('--alto-barra', `${el.offsetHeight}px`)
+    const medir = () => raiz.style.setProperty('--alto-barra-real', `${el.offsetHeight}px`)
     const observador = new ResizeObserver(medir)
     observador.observe(el)
-    return () => { observador.disconnect(); raiz.style.removeProperty('--alto-barra') }
+    return () => { observador.disconnect(); raiz.style.removeProperty('--alto-barra-real') }
   }, [])
 
   async function salir() {
@@ -131,7 +135,8 @@ export default function Armazon() {
   }
 
   const seccionActual = seccionDe(pathname)
-  function cerrarMenu(devolver = true) {
+  /** `devolver`: 'boton' (por defecto), 'pagina' o false (no mover el foco). */
+  function cerrarMenu(devolver = 'boton') {
     devolverFoco.current = devolver
     setAbierto(false)
   }

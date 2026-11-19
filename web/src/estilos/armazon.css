@@ -4,7 +4,9 @@
 
 :root { --ancho-menu: 248px; --alto-barra: 70px; --alto-barra-movil: 62px; }
 /* La barra fija no tapa lo que recibe el foco (WCAG 2.2, foco no oculto). */
-html { scroll-padding-top: var(--alto-barra); }
+/* --alto-barra-real la escribe el armazón con la altura medida (la barra del
+   celular puede crecer una fila); nunca alimenta el min-height de la barra. */
+html { scroll-padding-top: var(--alto-barra-real, var(--alto-barra)); }
 
 .armazon { min-height: 100vh; display: grid; grid-template-columns: var(--ancho-menu) minmax(0, 1fr); }
 .armazon-columna { grid-column: 2; min-width: 0; display: flex; flex-direction: column; }

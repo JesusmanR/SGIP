@@ -55,7 +55,7 @@ describe('menú móvil', () => {
   // --alto-barra-movil se usa una sola vez (la barra del celular): el cajón ya
   // no cuelga de ella porque es de altura completa, así que no hay un segundo uso.
   it('el marco deja sitio a la barra fija al enfocar (WCAG 2.2, foco no oculto)', () => {
-    expect(armazon).toMatch(/html\s*\{[^}]*scroll-padding-top:\s*var\(--alto-barra\)/)
+    expect(armazon).toMatch(/html\s*\{[^}]*scroll-padding-top:\s*var\(--alto-barra-real,\s*var\(--alto-barra\)\)/)
     const movil = armazon.slice(armazon.indexOf('@media (max-width'))
     expect(movil).toMatch(/--alto-barra:\s*var\(--alto-barra-movil\)/)
   })

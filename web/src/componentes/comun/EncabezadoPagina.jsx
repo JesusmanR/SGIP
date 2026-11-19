@@ -11,9 +11,9 @@ function EtiquetaDeGrupo() {
 /**
  * Cabecera de página: etiqueta pequeña, el único h1 de la pantalla, subtítulo
  * y acciones opcionales. Sin `etiqueta`, usa el grupo de la sección (si hay
- * ruta). `descripcion` es el nombre anterior de `subtitulo`.
+ * ruta).
+ * @param props.descripcion Obsoleto (deprecated): alias antiguo de `subtitulo`, se conserva para no tocar las pantallas.
  */
-// `descripcion` es el alias antiguo de `subtitulo`; se conserva para no tocar las pantallas.
 export default function EncabezadoPagina({ etiqueta, titulo, subtitulo, descripcion, acciones }) {
   const enRuta = useInRouterContext()
   const texto = subtitulo ?? descripcion
