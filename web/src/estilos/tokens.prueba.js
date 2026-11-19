@@ -34,8 +34,11 @@ const texto = [
   ['acento', 'tarjeta'], ['acento', 'lienzo'],
   ['acento', 'acento-sutil'], // .zona-archivo al pasar el cursor o arrastrar
   ['acento', 'aviso-fondo'], // enlaces dentro de un aviso del panel
-  ['salvia', 'chrome'], // rótulos de grupo del menú lateral
-  ['sobre-acento', 'chrome-activo'], // enlace activo del menú lateral
+  ['menu-texto', 'menu-fondo'], ['menu-texto', 'menu-hover'], // enlace del menú lateral blanco
+  ['menu-rotulo', 'menu-fondo'], // rótulo de grupo: el gris del diseño (#AAA8B3) no llegaba
+  ['menu-activo-texto', 'menu-activo'], // enlace activo del menú lateral
+  ['tinta-3', 'menu-fondo'], // migas y rol del perfil sobre la barra blanca
+  ['acento', 'menu-activo'],
   ['tinta', 'tarjeta'], ['tinta', 'lienzo'],
   ['tinta-2', 'tarjeta'], ['tinta-2', 'lienzo'],
   ['tinta-3', 'tarjeta'], ['tinta-3', 'lienzo'],
@@ -45,6 +48,15 @@ const texto = [
   ['tinta-3', 'exito-fondo'], ['tinta-3', 'aviso-fondo'],
   ['tinta-3', 'peligro-fondo'], ['tinta-3', 'info-fondo'], ['tinta-3', 'borde'],
 ]
+
+describe('tokens del marco', () => {
+  it('el marco ya no usa el menú oscuro', () => {
+    expect(css).not.toMatch(/--chrome-activo:/)
+  })
+  it.each(['menu-fondo', 'menu-hover', 'menu-activo', 'menu-activo-texto', 'menu-texto', 'menu-rotulo', 'borde-suave'])(
+    'existe --%s', (n) => { expect(token(n)).toMatch(/^#/) },
+  )
+})
 
 describe('tokens de color', () => {
   it('el acento es el morado del producto', () => {

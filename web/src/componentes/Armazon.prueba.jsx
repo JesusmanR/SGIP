@@ -171,6 +171,60 @@ describe('armazón', () => {
     })
   })
 
+  describe('barra superior y perfil', () => {
+    it.each([
+      ['/panel', 'Panel'],
+      ['/catalogo', 'Catálogo'],
+      ['/compras/ordenes/5', 'Órdenes de compra'],
+      ['/precios', 'Reglas de ganancia'],
+    ])('en %s la ruta de migas termina en «%s»', (ruta, seccion) => {
+      montar(ruta)
+      const migas = screen.getByRole('navigation', { name: /ruta/i })
+      expect(within(migas).getByText('Espacio de trabajo')).toBeInTheDocument()
+      expect(within(migas).getByText(seccion)).toHaveAttribute('aria-current', 'page')
+    })
+
+    it('en una ruta sin sección solo muestra el espacio de trabajo', () => {
+      montar('/sin-seccion')
+      const migas = screen.getByRole('navigation', { name: /ruta/i })
+      expect(within(migas).getByText('Espacio de trabajo')).toBeInTheDocument()
+      expect(migas.querySelector('[aria-current]')).toBeNull()
+    })
+
+    it('el perfil muestra las iniciales, el nombre y el rol en palabras', () => {
+      guardarSesion({ token: 'abc', nombre: 'Jesús Manuel', rol: 'SUPER_ADMIN' })
+      montar()
+      const perfil = screen.getByRole('region', { name: /tu perfil/i })
+      expect(within(perfil).getByText('JM')).toBeInTheDocument()
+      expect(within(perfil).getByText('Jesús Manuel')).toBeInTheDocument()
+      expect(within(perfil).getByText('Super administrador')).toBeInTheDocument()
+    })
+
+    it('con un solo nombre, una inicial', () => {
+      guardarSesion({ token: 'abc', nombre: 'Ana', rol: 'VENDEDOR' })
+      montar()
+      expect(within(screen.getByRole('region', { name: /tu perfil/i })).getByText('A')).toBeInTheDocument()
+    })
+
+    it('el menú del celular trae su botón de cerrar, que devuelve el foco al botón del menú', async () => {
+      const teclado = userEvent.setup()
+      montar()
+      const boton = screen.getByRole('button', { name: /^menú$/i })
+      await teclado.click(boton)
+      await teclado.click(screen.getByRole('button', { name: /cerrar navegación/i }))
+      expect(boton).toHaveAttribute('aria-expanded', 'false')
+      expect(boton).toHaveFocus()
+    })
+
+    it('tocar el velo detrás del menú lo cierra', async () => {
+      const teclado = userEvent.setup()
+      const { container } = montar()
+      await teclado.click(screen.getByRole('button', { name: /^menú$/i }))
+      await teclado.click(container.querySelector('.armazon-velo'))
+      expect(screen.getByRole('button', { name: /^menú$/i })).toHaveAttribute('aria-expanded', 'false')
+    })
+  })
+
   it('al salir cierra la sesión y vuelve al acceso', async () => {
     const teclado = userEvent.setup()
     api.salir.mockResolvedValue({})

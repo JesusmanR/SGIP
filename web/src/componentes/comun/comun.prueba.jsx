@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ErrorApi } from '../../servicios/api.js'
+import { MemoryRouter } from 'react-router-dom'
 import Aviso from './Aviso.jsx'
 import AvisoConexion from './AvisoConexion.jsx'
 import EncabezadoPagina from './EncabezadoPagina.jsx'
@@ -20,6 +21,23 @@ describe('EncabezadoPagina', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'Usuarios' })).toBeInTheDocument()
     expect(screen.getByText('Quién entra')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Nuevo' })).toBeInTheDocument()
+  })
+
+  it('lleva la etiqueta, el título en el h1 y el subtítulo', () => {
+    render(<EncabezadoPagina etiqueta="Compras" titulo="Proveedores" subtitulo="A quién le compras" />)
+    expect(screen.getByText('Compras')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: 'Proveedores' })).toBeInTheDocument()
+    expect(screen.getByText('A quién le compras')).toBeInTheDocument()
+  })
+
+  it('sin etiqueta y dentro de una sección toma el grupo de la sección', () => {
+    render(<MemoryRouter initialEntries={['/compras/ordenes/5']}><EncabezadoPagina titulo="Orden 5" /></MemoryRouter>)
+    expect(screen.getByText('Compras')).toBeInTheDocument()
+  })
+
+  it('el h1 sigue siendo lo único que nombra a la página: la etiqueta no es un encabezado', () => {
+    render(<EncabezadoPagina etiqueta="Compras" titulo="Proveedores" />)
+    expect(screen.getAllByRole('heading')).toHaveLength(1)
   })
 
   it('sin descripción ni acciones no pinta huecos', () => {
