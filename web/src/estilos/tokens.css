@@ -20,7 +20,7 @@
 
   /* Marco de la app (ADR-0034): menú lateral blanco. Los grises del
      diseño de Figma (#72717D, #AAA8B3) se oscurecieron hasta llegar a
-     4,5:1 (RNF-13): el rótulo de grupo en #AAA8B3 daba 2,4:1. */
+     4,5:1 (RNF-13): el rótulo de grupo en #AAA8B3 daba 2,3:1. */
   --menu-fondo:         #FFFFFF;
   --menu-hover:         #F7F6FB;
   --menu-activo:        #F0EDFF;   /* fondo del enlace de la sección actual */

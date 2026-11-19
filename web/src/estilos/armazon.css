@@ -3,6 +3,8 @@
    El color sale solo de tokens.css. */
 
 :root { --ancho-menu: 248px; --alto-barra: 70px; --alto-barra-movil: 62px; }
+/* La barra fija no tapa lo que recibe el foco (WCAG 2.2, foco no oculto). */
+html { scroll-padding-top: var(--alto-barra); }
 
 .armazon { min-height: 100vh; display: grid; grid-template-columns: var(--ancho-menu) minmax(0, 1fr); }
 .armazon-columna { grid-column: 2; min-width: 0; display: flex; flex-direction: column; }
@@ -87,22 +89,24 @@
 }
 .migas { min-width: 0; }
 .migas ol { list-style: none; margin: 0; padding: 0; display: flex; gap: 6px; font-size: 12px; }
-.migas li { min-width: 0; }
+.migas li { min-width: 0; display: flex; }
 .migas li + li::before { content: "/"; margin-right: 6px; color: var(--tinta-3); }
 .miga-raiz { color: var(--tinta-3); }
-.migas [aria-current="page"] { font-weight: 700; color: var(--tinta); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.migas [aria-current="page"] { display: block; min-width: 0; font-weight: 700; color: var(--tinta); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* El contador de la prueba (RF-73) va a la derecha de la barra. */
 .armazon-barra .contador-prueba { margin-left: auto; }
 
 .armazon-velo { display: none; }
 
 @media (max-width: 48rem) {
+  :root { --alto-barra: var(--alto-barra-movil); }
   .armazon { display: block; }
   .armazon-barra { padding: 0 14px; min-height: var(--alto-barra-movil); flex-wrap: wrap; gap: var(--espacio-2) var(--espacio-3); }
   .armazon-boton-menu { display: inline-flex; align-items: center; }
   /* Cerrado, el cajón sale del árbol de accesibilidad (visibility): no se enfoca ni se lee. */
   .menu-lateral {
     position: fixed; inset: 0 auto 0 0; width: min(var(--ancho-menu), 86vw); z-index: 30;
+    height: 100vh; height: 100dvh;
     transform: translateX(-100%); visibility: hidden;
     transition: transform .25s ease, visibility 0s linear .25s; overflow-y: auto;
   }
@@ -116,7 +120,7 @@
   /* Con el cajón abierto la página de atrás no se desplaza. */
   html:has(.menu-lateral.abierto) { overflow: hidden; }
   .menu-lateral nav a { min-height: var(--toque-minimo); }
-  .contador-prueba { order: 3; flex-basis: 100%; margin-left: 0; padding-bottom: var(--espacio-2); }
+  .armazon-barra .contador-prueba { order: 3; flex-basis: 100%; margin-left: 0; padding-bottom: var(--espacio-2); }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -74,6 +74,21 @@ export default function Armazon() {
     return () => document.removeEventListener('keydown', alTeclear)
   }, [abierto])
 
+  // Abierto el cajón, el foco entra en él (en «Cerrar navegación», lo primero
+  // que se necesita para salir) y se quita al cerrar con el botón o con Escape.
+  useEffect(() => {
+    if (abierto) document.getElementById('menu-principal')?.querySelector('.menu-cerrar')?.focus()
+  }, [abierto])
+
+  // Si se agranda la ventana con el cajón abierto, deja de ser cajón: se cierra.
+  useEffect(() => {
+    if (!abierto || !window.matchMedia) return undefined
+    const escritorio = window.matchMedia('(min-width: 48.0625rem)')
+    const alCambiar = (e) => { if (e.matches) setAbierto(false) }
+    escritorio.addEventListener('change', alCambiar)
+    return () => escritorio.removeEventListener('change', alCambiar)
+  }, [abierto])
+
   async function salir() {
     try {
       await api.salir()
@@ -94,13 +109,14 @@ export default function Armazon() {
 
   return (
     <div className="armazon">
-      <a className="saltar" href="#contenido-principal">Saltar al contenido</a>
+      <a className="saltar" href="#contenido-principal" inert={abierto ? '' : undefined}>Saltar al contenido</a>
       <MenuLateral
         id="menu-principal" rol={sesion?.rol} abierto={abierto} nombre={sesion?.nombre}
         alSalir={salir} alCerrar={cerrarMenu}
       />
       {abierto && <div className="armazon-velo" aria-hidden="true" onClick={cerrarMenu} />}
-      <div className="armazon-columna">
+      {/* Con el cajón abierto lo de atrás no se alcanza con teclado ni lector. */}
+      <div className="armazon-columna" inert={abierto ? '' : undefined}>
         <header className="armazon-barra">
           <button
             ref={boton}

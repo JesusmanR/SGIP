@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 import { NavLink } from 'react-router-dom'
 import { etiquetaDeRol, seccionesDe } from '../secciones.js'
 
@@ -24,8 +25,21 @@ export function iniciales(nombre) {
  * el CSS, así que no hay dos copias que mantener ni leer.
  */
 export default function MenuLateral({ id, rol, abierto, nombre, alSalir, alCerrar }) {
+  const raiz = useRef(null)
+
+  // Abierto como cajón, Tab da la vuelta dentro de él: lo de atrás está inerte,
+  // pero así el foco no se escapa a la barra del navegador a mitad del menú.
+  function alTeclear(e) {
+    if (!abierto || e.key !== 'Tab') return
+    const dentro = [...raiz.current.querySelectorAll('a[href], button:not([disabled])')]
+    const primero = dentro[0]
+    const ultimo = dentro[dentro.length - 1]
+    if (e.shiftKey && document.activeElement === primero) { e.preventDefault(); ultimo.focus() }
+    else if (!e.shiftKey && document.activeElement === ultimo) { e.preventDefault(); primero.focus() }
+  }
+
   return (
-    <aside id={id} className={`menu-lateral${abierto ? ' abierto' : ''}`}>
+    <aside ref={raiz} id={id} className={`menu-lateral${abierto ? ' abierto' : ''}`} onKeyDown={alTeclear}>
       <div className="menu-cabeza">
         <span className="marca"><span className="marca-sello" aria-hidden="true"><i /><i /><i /></span>SGIP</span>
         <button type="button" className="menu-cerrar" aria-label="Cerrar navegación" onClick={alCerrar}>
