@@ -1,6 +1,8 @@
 package co.com.bspstore.sgip.logica;
 
+import co.com.bspstore.sgip.api.dto.ResumenDeTurno;
 import co.com.bspstore.sgip.api.dto.SolicitudApertura;
+import co.com.bspstore.sgip.api.dto.SolicitudCierre;
 import co.com.bspstore.sgip.api.dto.Turno;
 import co.com.bspstore.sgip.config.ContextoEmpresa;
 import co.com.bspstore.sgip.datos.RepositorioTurnos;
@@ -12,7 +14,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.Clock;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -143,6 +147,18 @@ public class ServicioTurnos {
     @Transactional(propagation = Propagation.MANDATORY)
     public Optional<Long> intentarTurnoAbierto() {
         return turnos.bloquearAbiertoDe(ContextoEmpresa.empresaActual(), cajeroEnSesion());
+    }
+
+    public ResumenDeTurno cerrar(SolicitudCierre solicitud) {
+        throw new UnsupportedOperationException("Tarea 10");
+    }
+
+    public ResumenDeTurno resumenActual() {
+        throw new UnsupportedOperationException("Tarea 10");
+    }
+
+    public List<ResumenDeTurno> listar(LocalDate desde, LocalDate hasta) {
+        throw new UnsupportedOperationException("Tarea 10");
     }
 
     /**

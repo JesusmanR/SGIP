@@ -141,11 +141,17 @@ final class CajaDePrueba {
 
     /** Abre un turno para el cajero, sin pasar por el servicio. */
     Long abrirTurno(Integer cajero) {
+        return abrirTurno(cajero, "0");
+    }
+
+    /** Abre un turno con esa base de efectivo, sin pasar por el servicio. */
+    Long abrirTurno(Integer cajero, String base) {
         KeyHolder llave = new GeneratedKeyHolder();
         jdbc.sql("""
                 INSERT INTO cierres_caja (empresa_id, usuario_id, apertura, base_efectivo)
-                VALUES (:e, :u, '2026-11-12 08:00:00', 0)
-                """).param("e", empresa.empresaId).param("u", cajero).update(llave);
+                VALUES (:e, :u, '2026-11-12 08:00:00', :base)
+                """).param("e", empresa.empresaId).param("u", cajero).param("base", new BigDecimal(base))
+                .update(llave);
         return llave.getKeyAs(Number.class).longValue();
     }
 

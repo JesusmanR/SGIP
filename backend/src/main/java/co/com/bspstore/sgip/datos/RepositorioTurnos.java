@@ -1,6 +1,7 @@
 package co.com.bspstore.sgip.datos;
 
 import co.com.bspstore.sgip.api.dto.Turno;
+import co.com.bspstore.sgip.modelo.TipoMedio;
 import co.com.bspstore.sgip.util.Hoy;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
@@ -13,6 +14,8 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -136,6 +139,46 @@ public class RepositorioTurnos {
             throw new IllegalStateException("El motor no devolvió el identificador del turno recién abierto.");
         }
         return clave.longValue();
+    }
+
+    /** El turno que el cierre tiene bloqueado: su identificador y la base con que se abrió. */
+    public record TurnoPorCerrar(Long id, BigDecimal baseEfectivo) {
+    }
+
+    /** Un turno de la lista con lo que guarda {@code cierres_caja}: lo esperado, lo contado y la observación. */
+    public record TurnoDeLista(Turno turno, BigDecimal esperado, BigDecimal contado, String observacion) {
+    }
+
+    public Optional<TurnoPorCerrar> bloquearParaCerrar(Integer empresa, Integer cajero) {
+        throw new UnsupportedOperationException("Tarea 10");
+    }
+
+    public Map<TipoMedio, BigDecimal> pagosPorMedio(Integer empresa, Long turno) {
+        throw new UnsupportedOperationException("Tarea 10");
+    }
+
+    public BigDecimal reembolsosEnEfectivo(Integer empresa, Long turno) {
+        throw new UnsupportedOperationException("Tarea 10");
+    }
+
+    public void registrarCierre(Integer empresa, Long turno, LocalDateTime cierre, BigDecimal esperado,
+                                BigDecimal contado, String observacion) {
+        throw new UnsupportedOperationException("Tarea 10");
+    }
+
+    public List<TurnoDeLista> turnosDelPeriodo(Integer empresa, LocalDateTime desde, LocalDateTime hasta,
+                                               Integer cajeroONulo) {
+        throw new UnsupportedOperationException("Tarea 10");
+    }
+
+    public Map<Long, Map<TipoMedio, BigDecimal>> pagosPorMedioDelPeriodo(Integer empresa, LocalDateTime desde,
+                                                                         LocalDateTime hasta, Integer cajeroONulo) {
+        throw new UnsupportedOperationException("Tarea 10");
+    }
+
+    public Map<Long, BigDecimal> reembolsosEnEfectivoDelPeriodo(Integer empresa, LocalDateTime desde,
+                                                               LocalDateTime hasta, Integer cajeroONulo) {
+        throw new UnsupportedOperationException("Tarea 10");
     }
 
     private static Turno turno(ResultSet fila, int numero) throws SQLException {
