@@ -184,25 +184,25 @@ class DevolucionesAutorizacionTest {
 
     @Test
     void losErroresDeLaReglaLleganConSuEstado() throws Exception {
-        doThrow(new AutorizacionRequeridaException()).when(devoluciones).registrar(any());
+        doThrow(new AutorizacionRequeridaException()).when(devoluciones).procesar(any());
         devolver("VENDEDOR", CUERPO).andExpect(status().isForbidden())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
 
-        doThrow(new PinInvalidoException(15)).when(devoluciones).registrar(any());
+        doThrow(new PinInvalidoException(15)).when(devoluciones).procesar(any());
         devolver("VENDEDOR", CUERPO).andExpect(status().isForbidden());
 
-        doThrow(new RecursoNoEncontradoException("La venta no existe.")).when(devoluciones).registrar(any());
+        doThrow(new RecursoNoEncontradoException("La venta no existe.")).when(devoluciones).procesar(any());
         devolver("VENDEDOR", CUERPO).andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.detail").value("La venta no existe."));
 
-        doThrow(new EstadoNoAdmiteLaOperacionException("La venta ya está anulada.")).when(devoluciones).registrar(any());
+        doThrow(new EstadoNoAdmiteLaOperacionException("La venta ya está anulada.")).when(devoluciones).procesar(any());
         devolver("VENDEDOR", CUERPO).andExpect(status().isConflict())
                 .andExpect(jsonPath("$.detail").value("La venta ya está anulada."));
 
-        doThrow(new SinTurnoAbiertoException()).when(devoluciones).registrar(any());
+        doThrow(new SinTurnoAbiertoException()).when(devoluciones).procesar(any());
         devolver("VENDEDOR", CUERPO).andExpect(status().isConflict()).andExpect(jsonPath("$.title").value("Sin turno abierto"));
 
-        doThrow(new VentaInvalidaException("No se puede devolver más de lo vendido.")).when(devoluciones).registrar(any());
+        doThrow(new VentaInvalidaException("No se puede devolver más de lo vendido.")).when(devoluciones).procesar(any());
         devolver("VENDEDOR", CUERPO).andExpect(status().isBadRequest())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
     }

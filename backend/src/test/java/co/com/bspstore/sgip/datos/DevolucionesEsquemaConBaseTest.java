@@ -95,9 +95,12 @@ class DevolucionesEsquemaConBaseTest {
         KeyHolder llave = new GeneratedKeyHolder();
         jdbc.sql("""
                 INSERT INTO devoluciones (empresa_id, consecutivo, venta_id, motivo, autorizado_por, registrado_por,
-                                          cierre_id, creado_en)
-                VALUES (:e, :c, :v, 'Motivo', :u, :u, :cierre, '2026-11-12 09:00:00')
+                                          cierre_id, creado_en, clave_idempotencia, huella_carga, estado_resultante,
+                                          saldo_por_cobrar)
+                VALUES (:e, :c, :v, 'Motivo', :u, :u, :cierre, '2026-11-12 09:00:00', :clave, :huella,
+                        'DEVUELTA_PARCIAL', 0)
                 """).param("e", de.empresa.empresaId).param("c", consecutivo).param("v", ventaId)
+                .param("clave", UUID.randomUUID().toString()).param("huella", "0".repeat(64))
                 .param("u", de.administradorId).param("cierre", cierre).update(llave);
         return llave.getKeyAs(Number.class).longValue();
     }

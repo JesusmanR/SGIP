@@ -107,7 +107,7 @@ public class ServicioDomicilios {
         BigDecimal porCobrar = "PENDIENTE".equals(f.estadoPago()) ? saldoPorCobrar(f.total(), f.devuelto()) : BigDecimal.ZERO;
         return new DomicilioPendiente(f.ventaId(), f.consecutivo(), f.fecha().atZone(Hoy.ZONA).toOffsetDateTime(),
                 f.cliente(), f.direccion(), f.ciudad(), f.telefono(), f.recibe(), f.contraEntrega(), f.estadoPago(),
-                f.total(), porCobrar, antiguedadEnDias(f.fecha(), reloj), null, false);
+                f.total(), porCobrar, antiguedadEnDias(f.fecha(), reloj), f.clienteId(), f.entregado());
     }
 
     private static Estado interpretar(String texto) {
@@ -126,6 +126,10 @@ public class ServicioDomicilios {
      * Lo que falta por cobrar de una venta a domicilio: <b>el único sitio</b> donde se calcula, y lo usan
      * el cobro y las listas. Es el total de la venta menos lo ya devuelto (RF-68): una devolución parcial
      * rebaja lo que queda por cobrar. Nunca es negativo.
+     *
+     * Se supone que {@code ventas.envio} es cero: el total de la venta de la caja es
+     * {@code subtotal − descuento + iva} y las líneas devueltas suman exactamente eso. Si algún día un domicilio
+     * cobra envío, lo devuelto habrá que descontarlo del total sin él y el envío no tiene línea que lo devuelva.
      */
     static BigDecimal saldoPorCobrar(BigDecimal totalDeLaVenta, BigDecimal devuelto) {
         return totalDeLaVenta.subtract(devuelto).max(BigDecimal.ZERO);

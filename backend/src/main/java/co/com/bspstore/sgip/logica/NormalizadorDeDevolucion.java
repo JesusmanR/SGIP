@@ -7,7 +7,11 @@ import co.com.bspstore.sgip.logica.venta.LimitesDeVenta;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
@@ -34,6 +38,9 @@ final class NormalizadorDeDevolucion {
         if (s == null) {
             throw invalida("La devolución está vacía.");
         }
+        if (s.clave() == null) {
+            throw invalida("La clave de idempotencia es obligatoria.");
+        }
         if (s.ventaId() == null || s.ventaId() <= 0) {
             throw invalida("La venta no es válida.");
         }
@@ -48,9 +55,30 @@ final class NormalizadorDeDevolucion {
                 s.autorizacion());
     }
 
-    /** Firma mínima. */
+    /**
+     * El SHA-256 de la carga normalizada, en hexadecimal: la venta, el motivo, las unidades (ya por
+     * producto) y los reembolsos (por medio, monto y referencia, de modo que reordenarlos no la cambia). Sin
+     * la clave ni el PIN ni quién autoriza: la autorización no es parte de la devolución sino de la petición, y
+     * dos envíos de la misma devolución pueden llevar a administradores distintos.
+     */
     static String huella(SolicitudDevolucion n) {
-        return "";
+        StringBuilder canon = new StringBuilder("devolucion1|").append(n.ventaId()).append('|')
+                .append(n.motivo().length()).append(':').append(n.motivo()).append("|u");
+        for (UnidadDevuelta u : n.unidades()) {
+            canon.append(';').append(u.productoId()).append(':').append(u.cantidad());
+        }
+        canon.append("|r");
+        n.reembolsos().stream()
+                .map(r -> r.medioId() + ":" + r.monto().toPlainString() + ":"
+                        + (r.referencia() == null ? "-" : r.referencia().length() + ":" + r.referencia()))
+                .sorted()
+                .forEach(r -> canon.append(';').append(r));
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest(canon.toString().getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 no está disponible en esta JVM.", e);
+        }
     }
 
     private static List<UnidadDevuelta> unidades(List<UnidadDevuelta> pedidas) {

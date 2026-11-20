@@ -37,7 +37,8 @@ public class RepositorioEncargos {
                                 int cantidadEncargo, LocalDate entregaEstimada, int existencia) {}
 
     /**
-     * Los encargos sin entregar de una venta vigente cuyo producto ya llegó ({@code llego}) o todavía
+     * Los encargos sin entregar de una venta vigente (no anulada) y de una línea que no se devolvió por
+     * completo (RF-68; la subconsulta repite el filtro por empresa) cuyo producto ya llegó ({@code llego}) o todavía
      * no. Del que prometió la fecha más cercana al más lejano: es lo que hay que perseguir primero.
      */
     public List<FilaDeEncargo> listar(Integer empresaId, boolean llego, int tope) {
@@ -51,6 +52,13 @@ public class RepositorioEncargos {
                           JOIN productos p ON p.empresa_id = i.empresa_id AND p.producto_id = i.producto_id
                          WHERE i.empresa_id = :empresa AND i.cantidad_encargo > 0
                            AND i.encargo_entregado_en IS NULL AND v.estado <> 'ANULADA'
+                           AND i.cantidad > (SELECT COALESCE(SUM(di.cantidad), 0)
+                                   FROM devolucion_items di
+                                   JOIN devoluciones dv ON dv.empresa_id = di.empresa_id
+                                                       AND dv.devolucion_id = di.devolucion_id
+                                  WHERE dv.empresa_id = :empresa AND di.empresa_id = :empresa
+                                    AND dv.venta_id = i.venta_id AND di.producto_id = i.producto_id)
+
                            AND (p.existencia >= 0) = :llego
                          ORDER BY i.entrega_estimada, i.item_id
                          LIMIT :tope
@@ -81,11 +89,18 @@ public class RepositorioEncargos {
     }
 
     /** Cómo está una línea de encargo: si ya se entregó y si su venta sigue vigente. Vacío si no es un encargo de la empresa. */
-    public record EstadoDelEncargo(boolean entregado, boolean ventaVigente) {}
+    public record EstadoDelEncargo(boolean entregado, boolean ventaVigente, boolean devuelto) {}
 
     public Optional<EstadoDelEncargo> estadoDelEncargo(Integer empresaId, Long itemId) {
         return jdbc.sql("""
-                        SELECT i.encargo_entregado_en IS NOT NULL AS entregado, v.estado <> 'ANULADA' AS venta_vigente
+                        SELECT i.encargo_entregado_en IS NOT NULL AS entregado, v.estado <> 'ANULADA' AS venta_vigente,
+                               i.cantidad <= (SELECT COALESCE(SUM(di.cantidad), 0)
+                                   FROM devolucion_items di
+                                   JOIN devoluciones dv ON dv.empresa_id = di.empresa_id
+                                                       AND dv.devolucion_id = di.devolucion_id
+                                  WHERE dv.empresa_id = :empresa AND di.empresa_id = :empresa
+                                    AND dv.venta_id = i.venta_id AND di.producto_id = i.producto_id)
+ AS devuelto
                           FROM venta_items i
                           JOIN ventas v ON v.empresa_id = i.empresa_id AND v.venta_id = i.venta_id
                          WHERE i.empresa_id = :empresa AND i.item_id = :item AND i.cantidad_encargo > 0

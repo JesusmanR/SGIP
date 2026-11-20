@@ -46,6 +46,7 @@ public class ServicioEncargos {
     static final String NO_EXISTE = "El encargo no existe.";
     static final String YA_SE_ENTREGO = "Este encargo ya fue entregado.";
     static final String VENTA_ANULADA = "La venta de este encargo está anulada.";
+    static final String YA_SE_DEVOLVIO = "El producto de este encargo ya se devolvió.";
 
     private final RepositorioEncargos encargos;
     private final Clock reloj;
@@ -100,11 +101,13 @@ public class ServicioEncargos {
         EstadoDelEncargo estado = encargos.estadoDelEncargo(empresa, itemId)
                 .orElseThrow(() -> new RecursoNoEncontradoException(NO_EXISTE));
         if (filas == 0) {
-            throw new EstadoNoAdmiteLaOperacionException(estado.entregado() ? YA_SE_ENTREGO : VENTA_ANULADA);
+            throw new EstadoNoAdmiteLaOperacionException(estado.entregado() ? YA_SE_ENTREGO
+                    : estado.devuelto() ? YA_SE_DEVOLVIO : VENTA_ANULADA);
         }
-        if (!estado.ventaVigente()) {
-            // Se marcó, pero la venta está anulada: la transacción se deshace y no queda marca.
-            throw new EstadoNoAdmiteLaOperacionException(VENTA_ANULADA);
+        if (!estado.ventaVigente() || estado.devuelto()) {
+            // Se marcó, pero la venta está anulada o el producto se devolvió: la transacción se deshace y no
+            // queda marca.
+            throw new EstadoNoAdmiteLaOperacionException(estado.ventaVigente() ? YA_SE_DEVOLVIO : VENTA_ANULADA);
         }
         return new EntregaRegistrada(itemId, cuando.atZone(Hoy.ZONA).toOffsetDateTime(), quien);
     }

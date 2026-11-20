@@ -35,7 +35,8 @@ public class RepositorioDomicilios {
     /** Una fila de las listas; el valor por cobrar y la antigüedad los calcula quien llama. */
     public record FilaDeDomicilio(Long ventaId, String consecutivo, LocalDateTime fecha, String cliente,
                                   String direccion, String ciudad, String telefono, String recibe,
-                                  boolean contraEntrega, String estadoPago, BigDecimal total, BigDecimal devuelto) {}
+                                  boolean contraEntrega, String estadoPago, BigDecimal total, BigDecimal devuelto,
+                                  Long clienteId, boolean entregado) {}
 
     /**
      * {@code devuelto} es lo que ya se devolvió de la venta (RF-68): lo que falta por cobrar es el total
@@ -45,6 +46,7 @@ public class RepositorioDomicilios {
     private static final String COLUMNAS = """
             SELECT v.venta_id, v.consecutivo, v.fecha, c.razon_social AS cliente, d.direccion, d.ciudad,
                    d.telefono, d.recibe, v.pago_contra_entrega AS contra_entrega, v.estado_pago, v.total,
+                   v.cliente_id, d.entregado_en IS NOT NULL AS entregado,
                    COALESCE((SELECT SUM(di.valor)
                                FROM devolucion_items di
                                JOIN devoluciones dv ON dv.empresa_id = di.empresa_id

@@ -140,7 +140,7 @@ class ServicioDevolucionesTest {
         assertThrows(AutorizacionRequeridaException.class, () -> servicio.registrar(buena()));
 
         verify(autorizacion).autorizar(PIN, DEVOLUCION);
-        verifyNoInteractions(registrador);
+        verify(registrador, never()).registrar(any(), any());
     }
 
     @Test
@@ -149,7 +149,7 @@ class ServicioDevolucionesTest {
 
         assertThrows(PinInvalidoException.class, () -> servicio.registrar(buena()));
 
-        verifyNoInteractions(registrador);
+        verify(registrador, never()).registrar(any(), any());
     }
 
     @Test
@@ -180,6 +180,7 @@ class ServicioDevolucionesTest {
     @Test
     void unaListaVaciaDeUnidadesEsUnaAnulacionYSePermite() {
         when(autorizacion.autorizar(PIN, DEVOLUCION)).thenReturn(new Autorizacion(2, DEVOLUCION));
+        when(registrador.registrar(any(), any())).thenReturn(new ResultadoDeDevolucion(null, false));
 
         servicio.registrar(devolucion("Anulada por error de digitación", List.of(), null));
 
@@ -193,6 +194,7 @@ class ServicioDevolucionesTest {
     void elAdministradorTambienPasaPorLaAutorizacionQueSeAutorizaASiMisma() {
         entrar("ADMINISTRADOR");
         when(autorizacion.autorizar(any(), anySet())).thenReturn(new Autorizacion(7, DEVOLUCION));
+        when(registrador.registrar(any(), any())).thenReturn(new ResultadoDeDevolucion(null, false));
 
         servicio.registrar(new SolicitudDevolucion(UUID.randomUUID(), 9L, List.of(), "Motivo", List.of(), null));
 

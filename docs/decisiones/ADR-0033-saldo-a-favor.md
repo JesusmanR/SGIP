@@ -43,6 +43,16 @@ cambiar lo que hay.
 **Tampoco se retira en efectivo.** Una vez abonado, el saldo solo se gasta comprando. Para
 devolver el dinero en efectivo hay que hacerlo en la devolución, no después.
 
+**Lo que se pagó con saldo vuelve solo como saldo** (decisión del usuario, 2026-11-19). El saldo
+nunca se convierte en dinero: si una venta se pagó en parte con saldo a favor, esa parte se
+devuelve como saldo y no en efectivo, tarjeta ni transferencia. La regla es por venta y
+acumulada: la suma de lo reembolsado por medios distintos del saldo a favor, contando las
+devoluciones anteriores de esa venta, no puede pasar de la suma de lo pagado por esos mismos
+medios (`pagos_venta`, por monto y no por efectivo recibido). Pasarse es un 400 con un texto
+claro. Lo pagado en efectivo, tarjeta o transferencia sí puede volver como saldo (el cliente lo
+gasta después). `GET /api/v1/caja/ventas?consecutivo=` devuelve `reembolsadoSinSaldo`, lo ya
+reembolsado por esos medios, para que la pantalla acote lo que queda por devolver en ellos.
+
 **El pago con saldo no pasa por la caja.** Un pago con el medio de sistema se guarda sin
 `cierre_id` (V44): no entra al efectivo esperado de ningún turno ni a sus totales por
 medio. En cambio, una devolución cuyo reembolso va a saldo sí se registra en el turno
@@ -84,9 +94,12 @@ venta, y se lee siempre de la base.
   devolver más. Una anulada no.
 - **Una devolución de una venta pagada que se anula queda con `estado_pago = PAGADA`.** El
   dinero se recibió; los reembolsos dicen cuánto se devolvió.
-- **Sin clave de idempotencia.** Un doble envío de una devolución parcial registra dos, cada
-  una dentro de lo que quedaba por devolver (la segunda no puede pasarse de lo vendido); el
-  de una anulación recibe el 409 de «ya anulada».
+- **Idempotencia.** La solicitud lleva `clave` (UUID), como la venta. Se comprueba con la venta
+  ya bloqueada (y antes del PIN, en la fachada): el reintento de una devolución registrada
+  recibe 200 con la respuesta de entonces (el estado en que quedó la venta y lo que quedó por
+  cobrar se guardan con la devolución), sin PIN ni turno. La misma clave con otra carga (la
+  huella no incluye el PIN ni el orden) o en otra venta es un 409 con el tipo
+  `urn:sgip:caja:clave-en-uso`; la segunda la atrapa `uq_devoluciones_idempotencia`.
 
 ## Consecuencias
 

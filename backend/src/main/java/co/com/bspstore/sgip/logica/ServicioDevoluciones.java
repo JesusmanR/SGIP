@@ -5,6 +5,7 @@ import co.com.bspstore.sgip.api.dto.SolicitudDevolucion;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -24,9 +25,9 @@ import java.util.Set;
  * este servicio desde una transacción es un error de programación, no un dato del usuario, y falla en el
  * acto con {@link IllegalStateException}.
  *
- * La devolución no lleva clave de idempotencia: un doble envío de una devolución parcial registraría dos,
- * cada una dentro de lo que quedaba por devolver (la segunda no puede pasarse de lo vendido), y el de una
- * anulación recibe el 409 de «ya está anulada».
+ * La devolución lleva su clave de idempotencia (como la venta): el reintento de una devolución ya registrada
+ * recibe la misma respuesta (200) sin pedir PIN ni turno, y la misma clave con otra carga es un 409. Dos
+ * envíos simultáneos se ponen en fila en el bloqueo de la venta, dentro de la transacción.
  */
 @Service
 public class ServicioDevoluciones {
@@ -50,8 +51,14 @@ public class ServicioDevoluciones {
             throw new IllegalStateException("Registrar una devolución no puede llamarse dentro de una transacción: "
                     + "el PIN se valida en su propia transacción antes de abrir la de la devolución.");
         }
-        // La forma primero: un motivo vacío es un 400 aunque no haya PIN, y no cuenta un intento.
+        // La forma primero: un motivo vacío es un 400 aunque no haya PIN, y no cuenta un intento. Después el
+        // reintento: una devolución ya registrada con esta clave se devuelve aunque el turno se haya cerrado o el
+        // PIN no venga, y no cuenta un intento de PIN.
         SolicitudDevolucion normalizada = NormalizadorDeDevolucion.forma(solicitud);
+        Optional<ResultadoDeDevolucion> yaRegistrada = registrador.siYaExiste(normalizada);
+        if (yaRegistrada.isPresent()) {
+            return yaRegistrada.get();
+        }
         Autorizacion autorizada = autorizacion.autorizar(normalizada.autorizacion(), DEVOLUCION);
         return registrador.registrar(normalizada, autorizada);
     }

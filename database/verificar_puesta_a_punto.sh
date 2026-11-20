@@ -583,8 +583,9 @@ VENTA_V46="INSERT INTO ventas (empresa_id, consecutivo, cliente_id, usuario_id, 
           (SELECT usuario_id FROM usuarios WHERE empresa_id = 1 LIMIT 1), 'CONTADO', 'MOSTRADOR';
    SET @venta_v46 = LAST_INSERT_ID();"
 DEVOLUCION_V46="INSERT INTO devoluciones (empresa_id, consecutivo, venta_id, motivo, autorizado_por, registrado_por,
-                              creado_en)
-   SELECT 1, 'PAP-D46', @venta_v46, 'Prueba', u.usuario_id, u.usuario_id, '2026-11-12 09:00:00'
+                              creado_en, clave_idempotencia, huella_carga, estado_resultante, saldo_por_cobrar)
+   SELECT 1, 'PAP-D46', @venta_v46, 'Prueba', u.usuario_id, u.usuario_id, '2026-11-12 09:00:00',
+          '00000000-0000-0000-0000-0000000046aa', REPEAT('0', 64), 'ANULADA', 0
      FROM usuarios u WHERE u.empresa_id = 1 LIMIT 1;
    SET @devolucion_v46 = LAST_INSERT_ID();"
 CLIENTE1=$(consulta "SELECT cliente_id FROM clientes WHERE empresa_id = 1 LIMIT 1;")
@@ -597,8 +598,19 @@ acepta "una devolución con motivo, venta, autorizador y quien la hizo se guarda
    ROLLBACK;"
 rechaza "una devolución con el motivo en blanco" 3819 ck_devoluciones_motivo "START TRANSACTION;
    $VENTA_V46
-   INSERT INTO devoluciones (empresa_id, consecutivo, venta_id, motivo, autorizado_por, registrado_por, creado_en)
-   SELECT 1, 'PAP-D46B', @venta_v46, '   ', u.usuario_id, u.usuario_id, '2026-11-12 09:00:00'
+   INSERT INTO devoluciones (empresa_id, consecutivo, venta_id, motivo, autorizado_por, registrado_por, creado_en,
+                             clave_idempotencia, huella_carga, estado_resultante, saldo_por_cobrar)
+   SELECT 1, 'PAP-D46B', @venta_v46, '   ', u.usuario_id, u.usuario_id, '2026-11-12 09:00:00',
+          '00000000-0000-0000-0000-0000000046bb', REPEAT('0', 64), 'ANULADA', 0
+     FROM usuarios u WHERE u.empresa_id = 1 LIMIT 1;
+   ROLLBACK;"
+rechaza "la misma clave de idempotencia dos veces en la empresa" 1062 uq_devoluciones_idempotencia "START TRANSACTION;
+   $VENTA_V46
+   $DEVOLUCION_V46
+   INSERT INTO devoluciones (empresa_id, consecutivo, venta_id, motivo, autorizado_por, registrado_por, creado_en,
+                             clave_idempotencia, huella_carga, estado_resultante, saldo_por_cobrar)
+   SELECT 1, 'PAP-D46C', @venta_v46, 'Prueba', u.usuario_id, u.usuario_id, '2026-11-12 09:00:00',
+          '00000000-0000-0000-0000-0000000046aa', REPEAT('0', 64), 'ANULADA', 0
      FROM usuarios u WHERE u.empresa_id = 1 LIMIT 1;
    ROLLBACK;"
 rechaza "un reembolso de cero pesos" 3819 ck_reembolsos_monto "START TRANSACTION;

@@ -93,6 +93,16 @@ public class ManejadorErrores {
     public static final URI TIPO_CORREO_REPETIDO = URI.create("urn:sgip:correo-repetido");
     public static final URI TIPO_CLAVE_ACTUAL_INCORRECTA = URI.create("urn:sgip:clave-actual-incorrecta");
 
+    /**
+     * Los errores de la caja que la pantalla reconoce por el tipo. Los tres del PIN son 403 como cualquier
+     * otro permiso denegado (una empresa sin escritura, un rol que no llega): la pantalla de la caja pide
+     * el PIN de nuevo solo con estos, y los reconoce porque el tipo contiene «pin» o «autorizacion».
+     */
+    public static final URI TIPO_PIN_INVALIDO = URI.create("urn:sgip:caja:pin-invalido");
+    public static final URI TIPO_PIN_BLOQUEADO = URI.create("urn:sgip:caja:pin-bloqueado");
+    public static final URI TIPO_AUTORIZACION_REQUERIDA = URI.create("urn:sgip:caja:autorizacion-requerida");
+    public static final URI TIPO_CLAVE_EN_USO = URI.create("urn:sgip:caja:clave-en-uso");
+
     // Códigos de error de MySQL (no los SQLState, que son los mismos
     // 23000 para casi todo y no distinguen un duplicado de una referencia).
     private static final int MYSQL_ENTRADA_DUPLICADA = 1062;
@@ -170,6 +180,7 @@ public class ManejadorErrores {
         // (ADR-0032).
         ProblemDetail p = ProblemDetail.forStatus(HttpStatus.FORBIDDEN);
         p.setTitle("PIN incorrecto");
+        p.setType(TIPO_PIN_INVALIDO);
         int minutos = e.getMinutosDeBloqueo();
         p.setDetail("El administrador o el PIN no son correctos. Si te equivocas varias veces, "
                 + "la autorización se bloquea durante " + minutos
@@ -183,6 +194,7 @@ public class ManejadorErrores {
         // bloqueado, si el administrador o quien pide: a los dos les sirve esperar.
         ProblemDetail p = ProblemDetail.forStatus(HttpStatus.FORBIDDEN);
         p.setTitle("Autorización bloqueada");
+        p.setType(TIPO_PIN_BLOQUEADO);
         int minutos = e.getMinutosDeBloqueo();
         p.setDetail("Se superó el número de intentos con el PIN. Espera " + minutos
                 + (minutos == 1 ? " minuto" : " minutos")
@@ -196,6 +208,7 @@ public class ManejadorErrores {
         // quería hacer ni qué datos llegaron.
         ProblemDetail p = ProblemDetail.forStatus(HttpStatus.FORBIDDEN);
         p.setTitle("Autorización requerida");
+        p.setType(TIPO_AUTORIZACION_REQUERIDA);
         p.setDetail(e.getMessage());
         return p;
     }
@@ -421,6 +434,7 @@ public class ManejadorErrores {
         // 409: la clave ya registró otra venta. Texto fijo, sin la clave.
         ProblemDetail p = ProblemDetail.forStatus(HttpStatus.CONFLICT);
         p.setTitle("Clave de idempotencia en uso");
+        p.setType(TIPO_CLAVE_EN_USO);
         p.setDetail(e.getMessage());
         return p;
     }

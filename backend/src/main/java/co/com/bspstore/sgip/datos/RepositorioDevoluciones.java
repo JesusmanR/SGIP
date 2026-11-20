@@ -1,6 +1,7 @@
 package co.com.bspstore.sgip.datos;
 
 import co.com.bspstore.sgip.api.dto.Reembolso;
+import co.com.bspstore.sgip.api.dto.VentaConsultada;
 import co.com.bspstore.sgip.logica.devolucion.CalculoDeDevolucion.LineaVendida;
 import co.com.bspstore.sgip.logica.devolucion.CalculoDeDevolucion.UnidadesDevueltas;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -114,17 +115,36 @@ public class RepositorioDevoluciones {
 
     // ------------------------------------------------------------ lo que se escribe
 
-    public record NuevaDevolucion(Integer empresaId, String consecutivo, Long ventaId, String motivo,
-                                  Integer autorizadoPor, Integer registradoPor, Long cierreId, LocalDateTime creadoEn) {}
+    /** La clave de idempotencia que el motor informa cuando dos devoluciones chocan en ella. */
+    public static final String CLAVE_UNICA_DE_IDEMPOTENCIA = "uq_devoluciones_idempotencia";
 
-    /** Inserta la devolución y devuelve su identificador. {@code creado_en} lo pone la aplicación. */
+    /**
+     * Lo que se guarda de una devolución nueva: además de lo suyo, la clave de idempotencia, la huella de la
+     * carga y lo que se respondió (el estado en que quedó la venta y lo que quedó por cobrar), para que el
+     * reintento reciba la misma respuesta.
+     */
+    public record NuevaDevolucion(Integer empresaId, String consecutivo, Long ventaId, String motivo,
+                                  Integer autorizadoPor, Integer registradoPor, Long cierreId, LocalDateTime creadoEn,
+                                  String clave, String huella, String estadoResultante, BigDecimal saldoPorCobrar) {}
+
+    /**
+     * Inserta la devolución y devuelve su identificador. {@code creado_en} lo pone la aplicación. Una clave
+     * de idempotencia ya usada lanza {@link org.springframework.dao.DuplicateKeyException}; quien llama la
+     * distingue de otra clave única por {@link #CLAVE_UNICA_DE_IDEMPOTENCIA}.
+     */
     public Long insertarDevolucion(NuevaDevolucion d) {
         KeyHolder llaves = new GeneratedKeyHolder();
         jdbc.sql("""
                         INSERT INTO devoluciones (empresa_id, consecutivo, venta_id, motivo, autorizado_por,
-                                                  registrado_por, cierre_id, creado_en)
-                        VALUES (:empresa, :consecutivo, :venta, :motivo, :autorizadoPor, :registradoPor, :cierre, :creadoEn)
+                                                  registrado_por, cierre_id, creado_en, clave_idempotencia,
+                                                  huella_carga, estado_resultante, saldo_por_cobrar)
+                        VALUES (:empresa, :consecutivo, :venta, :motivo, :autorizadoPor, :registradoPor, :cierre,
+                                :creadoEn, :clave, :huella, :estado, :saldoPorCobrar)
                         """)
+                .param("clave", d.clave())
+                .param("huella", d.huella())
+                .param("estado", d.estadoResultante())
+                .param("saldoPorCobrar", d.saldoPorCobrar())
                 .param("empresa", d.empresaId())
                 .param("consecutivo", d.consecutivo())
                 .param("venta", d.ventaId())
@@ -139,6 +159,148 @@ public class RepositorioDevoluciones {
             throw new IllegalStateException("El motor no devolvió el identificador de la devolución recién registrada.");
         }
         return clave.longValue();
+    }
+
+    // ------------------------------------------------------------ el reintento
+
+    /** Una devolución ya registrada con esa clave: lo que se respondió entonces. */
+    public record DevolucionPorClave(Long devolucionId, String huella, String consecutivo, String estadoResultante,
+                                     BigDecimal saldoPorCobrar, BigDecimal valorDevuelto, BigDecimal reembolsado) {}
+
+    /**
+     * La devolución de esa clave de idempotencia, si la hay, con lo devuelto y lo reembolsado en la misma
+     * consulta. No bloquea: quien llama tiene la venta bloqueada y, en READ COMMITTED, lee lo último que se
+     * confirmó. Los dos totales son subconsultas que repiten el filtro por empresa.
+     */
+    public Optional<DevolucionPorClave> buscarPorClave(Integer empresaId, String clave) {
+        return jdbc.sql("""
+                        SELECT d.devolucion_id, d.huella_carga AS huella, d.consecutivo, d.estado_resultante,
+                               d.saldo_por_cobrar,
+                               COALESCE((SELECT SUM(di.valor) FROM devolucion_items di
+                                          WHERE di.empresa_id = :empresa AND di.devolucion_id = d.devolucion_id), 0)
+                                   AS valor_devuelto,
+                               COALESCE((SELECT SUM(r.monto) FROM reembolsos r
+                                          WHERE r.empresa_id = :empresa AND r.devolucion_id = d.devolucion_id), 0)
+                                   AS reembolsado
+                          FROM devoluciones d
+                         WHERE d.empresa_id = :empresa AND d.clave_idempotencia = :clave
+                        """)
+                .param("empresa", empresaId)
+                .param("clave", clave)
+                .query(DevolucionPorClave.class)
+                .optional();
+    }
+
+    /** Los reembolsos de una devolución, en el orden en que se guardaron. */
+    public List<Reembolso> reembolsosDe(Integer empresaId, Long devolucionId) {
+        return jdbc.sql("""
+                        SELECT medio_id, monto, referencia FROM reembolsos
+                         WHERE empresa_id = :empresa AND devolucion_id = :devolucion
+                         ORDER BY reembolso_id
+                        """)
+                .param("empresa", empresaId)
+                .param("devolucion", devolucionId)
+                .query(Reembolso.class)
+                .list();
+    }
+
+    // ------------------------------------------------------------ lo que se pagó y se reembolsó sin saldo
+
+    /**
+     * Lo pagado por la venta y lo ya reembolsado de ella por medios que NO son el saldo a favor (RF-68): lo
+     * que el cliente pagó con saldo solo vuelve como saldo, así que lo que sale por los demás medios no
+     * puede pasar de lo que entró por ellos. Una sola consulta, con la venta ya bloqueada.
+     */
+    public record DineroSinSaldo(BigDecimal pagado, BigDecimal reembolsado) {}
+
+    public DineroSinSaldo dineroSinSaldo(Integer empresaId, Long ventaId) {
+        return jdbc.sql("""
+                        SELECT COALESCE((SELECT SUM(p.monto)
+                                           FROM pagos_venta p
+                                           JOIN medios_pago m ON m.empresa_id = p.empresa_id AND m.medio_id = p.medio_id
+                                          WHERE p.empresa_id = :empresa AND p.venta_id = :venta
+                                            AND m.tipo <> 'SALDO_A_FAVOR'), 0) AS pagado,
+                               COALESCE((SELECT SUM(r.monto)
+                                           FROM reembolsos r
+                                           JOIN devoluciones d ON d.empresa_id = r.empresa_id
+                                                              AND d.devolucion_id = r.devolucion_id
+                                           JOIN medios_pago m ON m.empresa_id = r.empresa_id AND m.medio_id = r.medio_id
+                                          WHERE d.empresa_id = :empresa AND d.venta_id = :venta
+                                            AND m.tipo <> 'SALDO_A_FAVOR'), 0) AS reembolsado
+                        """)
+                .param("empresa", empresaId)
+                .param("venta", ventaId)
+                .query(DineroSinSaldo.class)
+                .single();
+    }
+
+    // ------------------------------------------------------------ consultar una venta
+
+    /** La cabecera de la venta consultada, con su cliente y lo reembolsado sin saldo. */
+    public record CabeceraDeVenta(Long ventaId, String consecutivo, String estado, String estadoPago, BigDecimal total,
+                                  Integer clienteId, String cliente, boolean consumidorFinal,
+                                  BigDecimal reembolsadoSinSaldo) {}
+
+    /** La venta de la empresa con ese consecutivo (el de otra empresa no existe para quien pregunta). */
+    public Optional<CabeceraDeVenta> cabeceraPorConsecutivo(Integer empresaId, String consecutivo) {
+        return jdbc.sql("""
+                        SELECT v.venta_id, v.consecutivo, v.estado, v.estado_pago, v.total, v.cliente_id,
+                               c.razon_social AS cliente, c.consumidor_final,
+                               COALESCE((SELECT SUM(r.monto)
+                                           FROM reembolsos r
+                                           JOIN devoluciones d ON d.empresa_id = r.empresa_id
+                                                              AND d.devolucion_id = r.devolucion_id
+                                           JOIN medios_pago m ON m.empresa_id = r.empresa_id AND m.medio_id = r.medio_id
+                                          WHERE d.empresa_id = :empresa AND d.venta_id = v.venta_id
+                                            AND m.tipo <> 'SALDO_A_FAVOR'), 0) AS reembolsado_sin_saldo
+                          FROM ventas v
+                          JOIN clientes c ON c.empresa_id = v.empresa_id AND c.cliente_id = v.cliente_id
+                         WHERE v.empresa_id = :empresa AND v.consecutivo = :consecutivo
+                        """)
+                .param("empresa", empresaId)
+                .param("consecutivo", consecutivo)
+                .query(CabeceraDeVenta.class)
+                .optional();
+    }
+
+    /** Las líneas de la venta con lo devuelto de cada una, en una sola consulta. Nunca el costo ni la utilidad. */
+    public List<VentaConsultada.Linea> lineasConsultadas(Integer empresaId, Long ventaId) {
+        return jdbc.sql("""
+                        SELECT i.producto_id, p.nombre, i.cantidad,
+                               COALESCE(d.cantidad, 0) AS cantidad_devuelta,
+                               i.subtotal - i.descuento + i.valor_iva AS total,
+                               COALESCE(d.valor, 0) AS valor_devuelto
+                          FROM venta_items i
+                          JOIN productos p ON p.empresa_id = i.empresa_id AND p.producto_id = i.producto_id
+                          LEFT JOIN (SELECT di.producto_id, SUM(di.cantidad) AS cantidad, SUM(di.valor) AS valor
+                                       FROM devolucion_items di
+                                       JOIN devoluciones dv ON dv.empresa_id = di.empresa_id
+                                                           AND dv.devolucion_id = di.devolucion_id
+                                      WHERE dv.empresa_id = :empresa AND dv.venta_id = :venta
+                                        AND di.empresa_id = :empresa
+                                      GROUP BY di.producto_id) d ON d.producto_id = i.producto_id
+                         WHERE i.empresa_id = :empresa AND i.venta_id = :venta
+                         ORDER BY i.producto_id
+                        """)
+                .param("empresa", empresaId)
+                .param("venta", ventaId)
+                .query(VentaConsultada.Linea.class)
+                .list();
+    }
+
+    /** Los pagos de la venta con el nombre y la clase de su medio. */
+    public List<VentaConsultada.Pago> pagosConsultados(Integer empresaId, Long ventaId) {
+        return jdbc.sql("""
+                        SELECT p.medio_id, m.nombre AS medio, m.tipo, p.monto
+                          FROM pagos_venta p
+                          JOIN medios_pago m ON m.empresa_id = p.empresa_id AND m.medio_id = p.medio_id
+                         WHERE p.empresa_id = :empresa AND p.venta_id = :venta
+                         ORDER BY p.pago_id
+                        """)
+                .param("empresa", empresaId)
+                .param("venta", ventaId)
+                .query(VentaConsultada.Pago.class)
+                .list();
     }
 
     private static final String INSERTAR_ITEM = """

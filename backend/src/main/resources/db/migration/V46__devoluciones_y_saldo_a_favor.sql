@@ -17,6 +17,13 @@
 --                        salió el dinero y es nulo si la devolución no movió
 --                        dinero (la venta contra entrega sin cobrar no
 --                        pagó nada); esa regla la sostiene la aplicación.
+--                        Lleva la clave de idempotencia de la solicitud
+--                        (un doble envío no la duplica; UNIQUE por empresa),
+--                        la huella de su carga (la misma clave con otra carga
+--                        es un error) y lo que se respondió al registrarla
+--                        (el estado en que dejó la venta y lo que quedó por
+--                        cobrar), para que el reintento reciba la misma
+--                        respuesta aunque la venta haya cambiado después.
 --
 --   devolucion_items     Qué se devolvió: producto, unidades y valor. Una
 --                        venta tiene una sola línea por producto, así que
@@ -67,9 +74,14 @@ CREATE TABLE devoluciones (
   registrado_por INT          NOT NULL,
   cierre_id      BIGINT       NULL,
   creado_en      DATETIME     NOT NULL,
+  clave_idempotencia CHAR(36) NOT NULL,
+  huella_carga       CHAR(64) NOT NULL,
+  estado_resultante  VARCHAR(20)   NOT NULL,
+  saldo_por_cobrar   DECIMAL(14,2) NOT NULL,
   CONSTRAINT pk_devoluciones PRIMARY KEY (devolucion_id),
   CONSTRAINT uq_devoluciones_empresa UNIQUE (empresa_id, devolucion_id),
   CONSTRAINT uq_devoluciones_consecutivo UNIQUE (empresa_id, consecutivo),
+  CONSTRAINT uq_devoluciones_idempotencia UNIQUE (empresa_id, clave_idempotencia),
   CONSTRAINT fk_devoluciones_venta_emp FOREIGN KEY (empresa_id, venta_id)
     REFERENCES ventas (empresa_id, venta_id)
     ON DELETE RESTRICT ON UPDATE RESTRICT,
@@ -83,6 +95,8 @@ CREATE TABLE devoluciones (
     REFERENCES cierres_caja (empresa_id, cierre_id)
     ON DELETE RESTRICT ON UPDATE RESTRICT,
   CONSTRAINT ck_devoluciones_motivo CHECK (CHAR_LENGTH(TRIM(motivo)) > 0),
+  CONSTRAINT ck_devoluciones_resultado CHECK (
+    estado_resultante IN ('DEVUELTA_PARCIAL','ANULADA') AND saldo_por_cobrar >= 0),
   INDEX ix_devoluciones_venta (empresa_id, venta_id),
   INDEX ix_devoluciones_cierre (empresa_id, cierre_id)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci;
