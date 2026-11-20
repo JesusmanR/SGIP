@@ -84,3 +84,6 @@ listas-proveedores/
 # Imágenes subidas por los comercios. Son datos, no código.
 backend/archivos/
 archivos/
+
+# Datos de la muestra local (base propia, registros, estado)
+.muestra-datos/

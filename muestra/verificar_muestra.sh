@@ -1,0 +1,239 @@
+#!/usr/bin/env bash
+# Prueba de punta a punta del arranque de la muestra.
+#
+# Detiene todo, arranca, espera al backend, entra como administrador y como
+# vendedor, pide una página del catálogo, detiene y comprueba que no queda
+# nada escuchando, arranca de nuevo y comprueba que los datos no se
+# duplicaron ni se cargaron dos veces. Termina dejando todo detenido.
+#
+# Uso:  bash muestra/verificar_muestra.sh
+set -u
+
+AQUI="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LIB="$AQUI/lib/muestra.sh"
+FALLOS=0
+
+ok()    { echo "  OK    $*"; }
+fallo() { echo "  FALLO $*"; FALLOS=$((FALLOS + 1)); }
+paso()  { echo; echo "== $*"; }
+comprobar() { # comprobar "descripción" comando...
+  local d="$1"; shift
+  if "$@" >/dev/null 2>&1; then ok "$d"; else fallo "$d"; fi
+}
+
+if [[ ! -f "$LIB" ]]; then
+  echo "FALLO: no existe $LIB (esta es la prueba en rojo: aún no hay arranque)."
+  exit 1
+fi
+# Al ser «sourced» solo define funciones y constantes; no arranca nada.
+# shellcheck source=lib/muestra.sh
+source "$LIB"
+
+export MUESTRA_SIN_NAVEGADOR=1
+
+json() { node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{const o=JSON.parse(d);const v=($1);process.stdout.write(v===undefined||v===null?'':String(v))}catch(e){}})"; }
+
+ingresar() { # ingresar correo clave -> token
+  curl -s -m 20 -X POST "http://127.0.0.1:$BACK_PUERTO/api/v1/auth/login" \
+    -H 'Content-Type: application/json' \
+    -d "{\"correo\":\"$1\",\"clave\":\"$2\"}" | json 'o.token'
+}
+
+esperar_backend() { # hasta 180 s
+  local i
+  for i in $(seq 1 90); do
+    local c
+    c=$(curl -s -m 3 -o /dev/null -w '%{http_code}' \
+        "http://127.0.0.1:$BACK_PUERTO/api/v1/productos" 2>/dev/null)
+    [[ "$c" == "401" ]] && return 0
+    sleep 2
+  done
+  return 1
+}
+
+contar() { # contar "SQL" -> número
+  mysql_muestra -N -B -e "$1" sgip 2>/dev/null | tr -d '\r'
+}
+
+# Gancho de la rama de la muestra: allí existe la caja y esta función abre
+# un turno con base 0 y registra una venta de contado (esperando 201).
+# En develop todavía no existe /api/v1/caja/turnos y se omite.
+verificar_caja() { # verificar_caja token_vendedor
+  local codigo
+  codigo=$(curl -s -m 10 -o /dev/null -w '%{http_code}' \
+    -H "Authorization: Bearer $1" "http://127.0.0.1:$BACK_PUERTO/api/v1/caja/turnos")
+  if [[ "$codigo" == "404" ]]; then
+    echo "  OMITIDO la caja: /api/v1/caja/turnos no existe en esta rama"
+    return 0
+  fi
+  # PENDIENTE (rama de la muestra): abrir turno con base 0 y registrar una
+  # venta en efectivo de un producto del catálogo. Mientras no se escriba,
+  # fallar a propósito para que nadie dé por probada una caja que no se probó.
+  fallo "la caja existe (HTTP $codigo) pero verificar_caja() no está implementada"
+}
+
+paso "0. Un puerto en IPv6 también cuenta como ocupado"
+node -e 'require("net").createServer().listen(34997,"::1");setTimeout(()=>{},30000)' &
+IP6=$!
+sleep 2
+if puerto_escucha 34997; then ok "el puerto 34997 en [::1] se ve como ocupado"; else fallo "no ve el puerto en [::1]"; fi
+kill $IP6 2>/dev/null
+
+paso "1. Detener y arrancar"
+bash "$LIB" detener >/dev/null 2>&1
+comprobar "arranca sin error" bash "$LIB" arrancar
+leer_estado
+BACK_1="${BACK_PID:-}"; WEB_1="${WEB_PID:-}"; MYSQL_1="${MYSQL_PID:-}"
+PUERTOS=("${MYSQL_PUERTO:-0}" "${BACK_PUERTO:-0}" "${WEB_PUERTO:-0}")
+echo "  puertos: mysql=${MYSQL_PUERTO:-?} backend=${BACK_PUERTO:-?} web=${WEB_PUERTO:-?}"
+
+paso "2. El backend responde"
+comprobar "backend sano" esperar_backend
+
+paso "3. Entrar como administrador y como vendedor"
+T_ADMIN=$(ingresar "$MUESTRA_CORREO_ADMIN" "$MUESTRA_CLAVE_ADMIN")
+[[ -n "$T_ADMIN" ]] && ok "administrador entra" || fallo "administrador no entra"
+T_VEND=$(ingresar "$MUESTRA_CORREO_VENDEDOR" "$MUESTRA_CLAVE_VENDEDOR")
+[[ -n "$T_VEND" ]] && ok "vendedor entra" || fallo "vendedor no entra"
+T_PLAT=$(ingresar "$MUESTRA_CORREO_PLATAFORMA" "$MUESTRA_CLAVE_PLATAFORMA")
+[[ -n "$T_PLAT" ]] && ok "usuario de plataforma entra" || fallo "plataforma no entra"
+CAMBIO=$(curl -s -m 20 -X POST "http://127.0.0.1:$BACK_PUERTO/api/v1/auth/login" \
+  -H 'Content-Type: application/json' \
+  -d "{\"correo\":\"$MUESTRA_CORREO_ADMIN\",\"clave\":\"$MUESTRA_CLAVE_ADMIN\"}" | json 'o.debeCambiarClave')
+[[ "$CAMBIO" == "false" ]] && ok "no obliga a cambiar la clave" || fallo "obliga a cambiar la clave ($CAMBIO)"
+
+paso "4. Una página del catálogo con productos"
+N=$(curl -s -m 20 -H "Authorization: Bearer $T_VEND" \
+  "http://127.0.0.1:$BACK_PUERTO/api/v1/productos?limite=50" | json 'Array.isArray(o)?o.length:-1')
+[[ "${N:-0}" -ge 1 ]] && ok "el catálogo trae $N productos" || fallo "el catálogo no trae productos ($N)"
+W=$(curl -s -m 20 "http://127.0.0.1:$WEB_PUERTO/api/v1/productos" -o /dev/null -w '%{http_code}')
+[[ "$W" == "401" ]] && ok "la web reenvía /api al backend" || fallo "la web no reenvía /api (HTTP $W)"
+verificar_caja "$T_VEND"
+
+paso "5. Detener: no queda nada escuchando"
+PRODUCTOS_1=$(contar "SELECT COUNT(*) FROM productos")
+USUARIOS_1=$(contar "SELECT COUNT(*) FROM usuarios")
+CLIENTES_1=$(contar "SELECT COUNT(*) FROM clientes")
+# Si la caja trae bloqueo de PIN, simular un bloqueo en plena demostración:
+# al reiniciar tiene que borrarse.
+PIN_BLOQUEO=$(contar "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='sgip' AND table_name='usuarios' AND column_name IN ('pin_intentos','pin_bloqueado_en','pin_errados_emitidos','pin_emision_bloqueada_en')")
+if [[ "$PIN_BLOQUEO" == "4" ]]; then
+  mysql_muestra sgip -e "UPDATE usuarios SET pin_intentos=5, pin_bloqueado_en=NOW(), pin_errados_emitidos=3, pin_emision_bloqueada_en=NOW() WHERE correo='$MUESTRA_CORREO_ADMIN'" >/dev/null 2>&1
+fi
+comprobar "detiene sin error" bash "$LIB" detener
+sleep 2
+for p in "${PUERTOS[@]}"; do
+  if puerto_escucha "$p"; then fallo "el puerto $p sigue escuchando"; else ok "puerto $p libre"; fi
+done
+for pid in "$BACK_1" "$WEB_1" "$MYSQL_1"; do
+  if [[ -n "$pid" ]] && proceso_vivo "$pid"; then fallo "el proceso $pid sigue vivo"; else ok "proceso ${pid:-?} terminado"; fi
+done
+
+paso "6. Arrancar otra vez: sin duplicados"
+comprobar "arranca de nuevo" bash "$LIB" arrancar
+leer_estado
+comprobar "backend sano otra vez" esperar_backend
+PRODUCTOS_2=$(contar "SELECT COUNT(*) FROM productos")
+USUARIOS_2=$(contar "SELECT COUNT(*) FROM usuarios")
+CLIENTES_2=$(contar "SELECT COUNT(*) FROM clientes")
+[[ -n "$PRODUCTOS_1" && "$PRODUCTOS_1" == "$PRODUCTOS_2" ]] && ok "productos: $PRODUCTOS_2" || fallo "productos $PRODUCTOS_1 -> $PRODUCTOS_2"
+[[ -n "$USUARIOS_1" && "$USUARIOS_1" == "$USUARIOS_2" ]] && ok "usuarios: $USUARIOS_2" || fallo "usuarios $USUARIOS_1 -> $USUARIOS_2"
+[[ -n "$CLIENTES_1" && "$CLIENTES_1" == "$CLIENTES_2" ]] && ok "clientes: $CLIENTES_2" || fallo "clientes $CLIENTES_1 -> $CLIENTES_2"
+DUP=$(contar "SELECT COUNT(*) FROM (SELECT correo FROM usuarios GROUP BY correo HAVING COUNT(*)>1) x")
+[[ "$DUP" == "0" ]] && ok "ningún correo repetido" || fallo "correos repetidos: $DUP"
+TIENE_PIN=$(contar "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='sgip' AND table_name='usuarios' AND column_name='pin_hash'")
+if [[ "$TIENE_PIN" == "1" ]]; then
+  PIN=$(contar "SELECT pin_hash IS NOT NULL FROM usuarios WHERE correo='$MUESTRA_CORREO_ADMIN'")
+  [[ "$PIN" == "1" ]] && ok "el administrador tiene PIN" || fallo "el administrador no tiene PIN"
+else
+  echo "  OMITIDO el PIN: esta rama no tiene la columna usuarios.pin_hash"
+fi
+if [[ "$PIN_BLOQUEO" == "4" ]]; then
+  LIMPIO=$(contar "SELECT pin_intentos=0 AND pin_bloqueado_en IS NULL AND pin_errados_emitidos=0 AND pin_emision_bloqueada_en IS NULL FROM usuarios WHERE correo='$MUESTRA_CORREO_ADMIN'")
+  [[ "$LIMPIO" == "1" ]] && ok "reiniciar borra el bloqueo del PIN" || fallo "el bloqueo del PIN sobrevivió al reinicio"
+else
+  echo "  OMITIDO el bloqueo del PIN: esta rama no tiene esas columnas"
+fi
+T2=$(ingresar "$MUESTRA_CORREO_VENDEDOR" "$MUESTRA_CLAVE_VENDEDOR")
+[[ -n "$T2" ]] && ok "el vendedor sigue entrando" || fallo "el vendedor no entra tras reiniciar"
+
+paso "7. Arranque doble: solo abre el navegador"
+BACK_2="$BACK_PID"; WEB_2="$WEB_PID"
+SALIDA=$(bash "$LIB" arrancar 2>&1)
+echo "$SALIDA" | grep -qi "ya está en marcha" && ok "avisa que ya estaba en marcha" || fallo "no detectó el arranque doble"
+leer_estado
+[[ "$BACK_PID" == "$BACK_2" && "$WEB_PID" == "$WEB_2" ]] && ok "los procesos son los mismos" || fallo "se duplicaron procesos"
+echo "$SALIDA" | grep -q "http://127.0.0.1:$WEB_PUERTO" && ok "abre en 127.0.0.1" || fallo "la dirección no es http://127.0.0.1:$WEB_PUERTO"
+
+paso "7b. Detener"
+PUERTOS=("$MYSQL_PUERTO" "$BACK_PUERTO" "$WEB_PUERTO")
+bash "$LIB" detener >/dev/null 2>&1
+sleep 2
+for p in "${PUERTOS[@]}"; do
+  if puerto_escucha "$p"; then fallo "el puerto $p sigue escuchando"; else ok "puerto $p libre"; fi
+done
+
+paso "8. Un registro viejo con un PID ajeno no mata nada"
+node -e 'setTimeout(()=>{},600000)' &
+AJENO=$!
+sleep 1
+AJENO_W=$(cat /proc/$AJENO/winpid)
+mkdir -p "$DATOS"
+printf 'MYSQL_PID=
+MYSQL_PUERTO=
+BACK_PID=
+BACK_PUERTO=
+WEB_PID=%s
+WEB_PUERTO=34998
+' "$AJENO_W" > "$ESTADO"
+SALIDA=$(bash "$LIB" detener 2>&1)
+proceso_vivo "$AJENO_W" node.exe && ok "el proceso ajeno sigue vivo" || fallo "se mató un proceso ajeno"
+echo "$SALIDA" | grep -q "no es de la muestra" && ok "lo explica en claro" || fallo "no explicó el registro viejo"
+[[ ! -f "$ESTADO" ]] && ok "el registro viejo se borró" || fallo "el registro viejo sigue ahí"
+printf 'MYSQL_PID=
+MYSQL_PUERTO=
+BACK_PID=
+BACK_PUERTO=
+WEB_PID=%s
+WEB_PUERTO=34998
+' "$AJENO_W" > "$ESTADO"
+
+paso "9. Cerrojo viejo y arranque doble mientras arranca"
+mkdir -p "$DATOS/.lock"; echo 999999 > "$DATOS/.lock/pid"
+SAL1="$DATOS/primero.log"
+( bash "$LIB" arrancar > "$SAL1" 2>&1 ) &
+PRIMERO=$!
+sleep 5
+SEGUNDO=$(bash "$LIB" arrancar 2>&1)
+echo "$SEGUNDO" | grep -q "ya se está iniciando" && ok "el segundo aviso: ya se está iniciando" || fallo "el segundo no detectó el cerrojo: $SEGUNDO"
+wait $PRIMERO
+leer_estado
+comprobar "el primero terminó y todo está en marcha" en_marcha
+comprobar "el backend responde" esperar_backend
+proceso_vivo "$AJENO_W" node.exe && ok "el proceso ajeno sigue vivo tras arrancar" || fallo "arrancar mató el proceso ajeno"
+[[ ! -d "$DATOS/.lock" ]] && ok "el cerrojo se quitó" || fallo "el cerrojo quedó"
+kill $AJENO 2>/dev/null
+
+paso "10. Si el cerrojo no se consigue, lo dice y falla"
+CODIGO=$( ( mkdir() { return 1; }; rm() { :; }; adquirir_cerrojo >/dev/null 2>&1; echo $? ) )
+[[ "$CODIGO" == "3" ]] && ok "adquirir_cerrojo distingue «perdí los dos intentos» (3)" || fallo "adquirir_cerrojo devolvió $CODIGO, se esperaba 3"
+SALIDA=$( ( mkdir() { return 1; }; rm() { :; }; arrancar 2>&1; echo "rc=$?" ) )
+echo "$SALIDA" | grep -q "otra ejecución tiene el cerrojo" && ok "arrancar explica el cerrojo" || fallo "arrancar no explicó el cerrojo"
+echo "$SALIDA" | grep -q "rc=1" && ok "arrancar sale con error" || fallo "arrancar no salió con error"
+
+paso "11. La línea de comando de Vite lleva la carpeta web de esta copia"
+leer_estado
+CMD=$(linea_de_comando "$WEB_PID")
+echo "$CMD" | grep -qF "$(winpath "$RAIZ/web")" && ok "la línea de comando de Vite incluye $(winpath "$RAIZ/web")" || fallo "no incluye la ruta web: $CMD"
+
+paso "Cierre"
+PUERTOS=("$MYSQL_PUERTO" "$BACK_PUERTO" "$WEB_PUERTO")
+bash "$LIB" detener >/dev/null 2>&1
+sleep 2
+for p in "${PUERTOS[@]}"; do
+  if puerto_escucha "$p"; then fallo "el puerto $p sigue escuchando al final"; fi
+done
+
+echo
+if [[ $FALLOS -eq 0 ]]; then echo "RESULTADO: todo bien (0 fallos)"; exit 0; fi
+echo "RESULTADO: $FALLOS fallo(s)"; exit 1
