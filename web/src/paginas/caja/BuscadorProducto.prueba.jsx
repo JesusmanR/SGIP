@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { BusquedaAgotada, productoPorCodigo, productosPorTexto } from '../../servicios/api/caja.js'
-import { PINTURA, SIN_PRECIO, TORNILLO, prepararApi } from './ayuda.js'
+import { PINTURA, PRODUCTOS as PRODUCTOS_DE_PRUEBA, SIN_PRECIO, TORNILLO, prepararApi } from './ayuda.js'
 import BuscadorProducto from './BuscadorProducto.jsx'
 
 vi.mock('../../servicios/api/caja.js')
@@ -161,6 +161,101 @@ describe('buscador de producto', () => {
       await userEvent.type(campo(), '7701234567890{Enter}')
       await waitFor(() => expect(alAgregar).toHaveBeenCalledWith(TORNILLO))
       expect(productosPorTexto).not.toHaveBeenCalled()
+    })
+
+    it('dos códigos desconocidos con la primera búsqueda en vuelo: ninguno se pierde (resultados o advertencia)', async () => {
+      let soltarAlfa
+      productosPorTexto.mockImplementation(async (texto) => {
+        if (texto === 'alfa') return new Promise((resolver) => { soltarAlfa = resolver })
+        return PRODUCTOS_DE_PRUEBA.filter((p) => p.nombre.toLowerCase().includes(texto))
+      })
+      montar()
+      await userEvent.type(campo(), 'alfa{Enter}pintura{Enter}')
+      expect(await screen.findByRole('button', { name: 'Agregar Pintura blanca' })).toBeInTheDocument()
+      // Cuando llega la de «alfa», sin coincidencias, queda como código sin encontrar.
+      await act(async () => { soltarAlfa([]) })
+      expect(await screen.findByText(/no encontramos ese código: alfa/i)).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Agregar Pintura blanca' })).toBeInTheDocument()
+    })
+
+    it('dos nombres con coincidencias se muestran los dos, aunque el primero llegue tarde', async () => {
+      let soltarAlfa
+      productosPorTexto.mockImplementation(async (texto) => {
+        if (texto === 'alfa') return new Promise((resolver) => { soltarAlfa = resolver })
+        return [PINTURA]
+      })
+      montar()
+      await userEvent.type(campo(), 'alfa{Enter}pintura{Enter}')
+      await screen.findByRole('button', { name: 'Agregar Pintura blanca' })
+      await act(async () => { soltarAlfa([TORNILLO]) })
+      expect(await screen.findByRole('button', { name: 'Agregar Tornillo M6' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Agregar Pintura blanca' })).toBeInTheDocument()
+    })
+
+    it('descartar los resultados con una búsqueda del mismo nombre en vuelo: el resultado tardío no reaparece', async () => {
+      montar()
+      await userEvent.type(campo(), 'pintura{Enter}')
+      await screen.findByRole('button', { name: 'Agregar Pintura blanca' })
+      let soltar
+      productosPorTexto.mockImplementationOnce(() => new Promise((resolver) => { soltar = resolver }))
+      await userEvent.type(campo(), 'pintura{Enter}')
+      await userEvent.click(screen.getByRole('button', { name: /descartar los resultados de pintura/i }))
+      await act(async () => { soltar([PINTURA]) })
+      expect(screen.queryByRole('button', { name: 'Agregar Pintura blanca' })).not.toBeInTheDocument()
+    })
+
+    it('un resultado atrasado nunca pisa a uno más nuevo del mismo nombre', async () => {
+      let soltarViejo
+      productosPorTexto.mockImplementationOnce(() => new Promise((resolver) => { soltarViejo = resolver }))
+      productosPorTexto.mockImplementationOnce(async () => [PINTURA])
+      montar()
+      await userEvent.type(campo(), 'pintura{Enter}pintura{Enter}')
+      await screen.findByRole('button', { name: 'Agregar Pintura blanca' })
+      await act(async () => { soltarViejo([TORNILLO]) })
+      expect(screen.queryByRole('button', { name: 'Agregar Tornillo M6' })).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Agregar Pintura blanca' })).toBeInTheDocument()
+    })
+
+    it('mientras la búsqueda por nombre sigue en vuelo cuenta como pendiente: no se cobra con ella a medias', async () => {
+      const alCambiarPendientes = vi.fn()
+      let soltar
+      productosPorTexto.mockImplementationOnce(() => new Promise((resolver) => { soltar = resolver }))
+      render(<BuscadorProducto alAgregar={alAgregar} alCrearProducto={alCrearProducto} alCambiarPendientes={alCambiarPendientes} />)
+      await userEvent.type(campo(), 'pintura{Enter}')
+      await waitFor(() => expect(productoPorCodigo).toHaveBeenCalled())
+      await act(async () => {})
+      expect(alCambiarPendientes).toHaveBeenLastCalledWith(1)
+      await act(async () => { soltar([PINTURA]) })
+      await waitFor(() => expect(alCambiarPendientes).toHaveBeenLastCalledWith(0))
+    })
+
+    it('el aviso de resultados vive en una región de estado que siempre está en la página, vacía si no hay nada', async () => {
+      montar()
+      const region = screen.getByRole('status', { name: /búsqueda por nombre/i })
+      expect(region).toBeEmptyDOMElement()
+      await userEvent.type(campo(), 'pintura{Enter}')
+      await screen.findByRole('button', { name: 'Agregar Pintura blanca' })
+      expect(screen.getByRole('status', { name: /búsqueda por nombre/i })).toHaveTextContent('No es un código; estos productos coinciden con "pintura".')
+    })
+
+    it('que lleguen resultados no le quita el foco al buscador', async () => {
+      montar()
+      await userEvent.type(campo(), 'pintura{Enter}')
+      await screen.findByRole('button', { name: 'Agregar Pintura blanca' })
+      expect(campo()).toHaveFocus()
+    })
+
+    it('el botón «Buscar por nombre» de un código sin encontrar sigue funcionando a mano', async () => {
+      productosPorTexto.mockRejectedValueOnce(new Error('Se cayó'))
+      montar()
+      await userEvent.type(campo(), 'pintura{Enter}')
+      await userEvent.click(await screen.findByRole('button', { name: /buscar por nombre el código pintura/i }))
+      expect(productosPorTexto).toHaveBeenCalledTimes(2)
+      await userEvent.click(await screen.findByRole('button', { name: 'Agregar Pintura blanca' }))
+      expect(alAgregar).toHaveBeenCalledWith(PINTURA)
+      expect(screen.queryByText(/no encontramos ese código/i)).not.toBeInTheDocument()
+      expect(screen.queryByText(/no es un código/i)).not.toBeInTheDocument()
+      expect(campo()).toHaveFocus()
     })
 
     it('un nombre lento no frena los escaneos que vienen detrás', async () => {

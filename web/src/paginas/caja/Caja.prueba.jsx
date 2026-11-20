@@ -1,11 +1,11 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { hoyISO, sumarDias } from '../../servicios/fechas.js'
 import {
-  abrirTurno, CLAVE_EN_USO, mediosDePago, productoPorCodigo, registrarVenta, saldoDeCliente, turnoActual,
+  abrirTurno, CLAVE_EN_USO, mediosDePago, productoPorCodigo, productosPorTexto, registrarVenta, saldoDeCliente, turnoActual,
 } from '../../servicios/api/caja.js'
 import { CLAVE_VENTA_PENDIENTE } from '../../servicios/ventaPendiente.js'
 import { ANA, LLAVE_A, LLAVE_B, MEDIOS, PINTURA, TORNILLO, entrar, errorApi, pesos, prepararApi, ventaDelServidor } from './ayuda.js'
@@ -804,6 +804,22 @@ describe('caja: el medio del saldo a favor sale del saldo del cliente', () => {
     await userEvent.click(cobrar())
     await waitFor(() => expect(registrarVenta).toHaveBeenCalled())
     expect(registrarVenta.mock.calls[0][0].pagos[0]).toEqual({ medioId: 41, monto: 5000 })
+  })
+})
+
+describe('caja: no se cobra con una búsqueda por nombre a medias', () => {
+  it('Cobrar queda apagado mientras la búsqueda por nombre de un código desconocido sigue en vuelo', async () => {
+    await abrir()
+    await agregar()
+    await pagarTodo()
+    expect(cobrar()).toBeEnabled()
+    let soltar
+    vi.mocked(productosPorTexto).mockImplementationOnce(() => new Promise((resolver) => { soltar = resolver }))
+    await userEvent.type(buscador(), 'celular{Enter}')
+    await waitFor(() => expect(productosPorTexto).toHaveBeenCalledWith('celular'))
+    expect(cobrar()).toBeDisabled()
+    await act(async () => { soltar([]) })
+    await waitFor(() => expect(cobrar()).toBeEnabled())
   })
 })
 
