@@ -149,7 +149,8 @@ public class RepositorioTurnos {
     }
 
     /** Un turno de la lista con lo que guarda {@code cierres_caja}: lo esperado, lo contado y la observación. */
-    public record TurnoDeLista(Turno turno, BigDecimal esperado, BigDecimal contado, String observacion) {
+    public record TurnoDeLista(Turno turno, BigDecimal esperado, BigDecimal contado, BigDecimal diferencia,
+                               String observacion) {
     }
 
     /**
@@ -310,6 +311,7 @@ public class RepositorioTurnos {
                 .query((fila, numero) -> new TurnoDeLista(turno(fila, numero),
                         enPesos(fila.getBigDecimal("esperado")),
                         fila.getBigDecimal("contado") == null ? null : enPesos(fila.getBigDecimal("contado")),
+                        null,
                         fila.getString("observacion")))
                 .list();
     }

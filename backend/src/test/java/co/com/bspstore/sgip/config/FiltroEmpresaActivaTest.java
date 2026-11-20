@@ -171,6 +171,69 @@ class FiltroEmpresaActivaTest {
         }
     }
 
+    // ------------------------------------------- cerrar el turno en modo de consulta
+
+    /**
+     * Decisión del usuario (ADR-0015): una empresa en modo de consulta puede cerrar el turno que dejó abierto.
+     * Cerrar no trae dinero nuevo, solo cuadra el cajón, y negarlo dejaría el turno abierto para siempre.
+     */
+    @Test
+    void laEmpresaEnConsultaPuedeCerrarSuTurno() throws Exception {
+        String cierre = "/api/v1/caja/turnos/actual/cierre";
+
+        comoUsuarioDe(4);
+        when(plataforma.estadoDe(4)).thenReturn(Optional.of(EstadoEmpresa.DESACTIVADA));
+        var desactivada = new MockHttpServletResponse();
+        var cadenaDesactivada = org.mockito.Mockito.mock(FilterChain.class);
+        filtro().doFilter(peticion("POST", cierre), desactivada, cadenaDesactivada);
+        verify(cadenaDesactivada).doFilter(any(), any());
+        assertEquals(200, desactivada.getStatus());
+
+        reloj = enBogota("2026-03-01T00:00:00-05:00");
+        when(plataforma.estadoDe(4)).thenReturn(Optional.of(EstadoEmpresa.PRUEBA));
+        when(plataforma.finDePruebaDe(4)).thenReturn(Optional.of(FIN_PRUEBA));
+        var vencida = new MockHttpServletResponse();
+        var cadenaVencida = org.mockito.Mockito.mock(FilterChain.class);
+        filtro().doFilter(peticion("POST", cierre), vencida, cadenaVencida);
+        verify(cadenaVencida).doFilter(any(), any());
+        assertEquals(200, vencida.getStatus());
+    }
+
+    @Test
+    void enModoDeConsultaLoDemasDeLaCajaSigueBloqueado() throws Exception {
+        for (String ruta : List.of("/api/v1/caja/turnos", "/api/v1/caja/ventas", "/api/v1/caja/domicilios/9/cobro",
+                "/api/v1/caja/domicilios/9/entrega", "/api/v1/caja/devoluciones",
+                // la exención es la ruta exacta: ni variantes ni prefijos
+                "/api/v1/caja/turnos/actual/cierre/", "/api/v1/caja/turnos/actual/cierres",
+                "/api/v1/caja/turnos/actual", "/api/v1/caja/turnos/%61ctual/cierre",
+                "/api/v1/caja/turnos/actual/cierre/otro")) {
+            comoUsuarioDe(4);
+            when(plataforma.estadoDe(4)).thenReturn(Optional.of(EstadoEmpresa.DESACTIVADA));
+            var r = new MockHttpServletResponse();
+            var c = org.mockito.Mockito.mock(FilterChain.class);
+
+            filtro().doFilter(peticion("POST", ruta), r, c);
+
+            verify(c, never()).doFilter(any(), any());
+            assertEquals(403, r.getStatus(), ruta);
+        }
+    }
+
+    @Test
+    void soloElPostDelCierreEstaExentoYLosOtrosMetodosNo() throws Exception {
+        for (String metodo : List.of("PUT", "PATCH", "DELETE")) {
+            comoUsuarioDe(4);
+            when(plataforma.estadoDe(4)).thenReturn(Optional.of(EstadoEmpresa.DESACTIVADA));
+            var r = new MockHttpServletResponse();
+            var c = org.mockito.Mockito.mock(FilterChain.class);
+
+            filtro().doFilter(peticion(metodo, "/api/v1/caja/turnos/actual/cierre"), r, c);
+
+            verify(c, never()).doFilter(any(), any());
+            assertEquals(403, r.getStatus(), metodo);
+        }
+    }
+
     // ------------------------------------------------ quién sí puede escribir
 
     @Test

@@ -10,4 +10,9 @@ public class SinTurnoAbiertoException extends RuntimeException {
     public SinTurnoAbiertoException() {
         super("Abre un turno de caja antes de registrar esta operación.");
     }
+
+    /** Para quien tiene un texto propio: cerrar un turno que no existe no pide «abrir un turno». */
+    public SinTurnoAbiertoException(String mensaje) {
+        super(mensaje);
+    }
 }

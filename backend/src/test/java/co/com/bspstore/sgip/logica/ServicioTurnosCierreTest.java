@@ -44,7 +44,6 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
-import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -113,8 +112,11 @@ class ServicioTurnosCierreTest {
                 .thenReturn(Optional.of(new TurnoPorCerrar(TURNO, new BigDecimal("100000"))));
         when(turnos.pagosPorMedio(EMPRESA, TURNO)).thenReturn(pagos("70000", "30000"));
         when(turnos.reembolsosEnEfectivo(EMPRESA, TURNO)).thenReturn(new BigDecimal("5000"));
-        // Solo lo lee el cierre que llega a buen término: los casos que terminan en 400 no llegan aquí.
-        lenient().when(turnos.buscar(EMPRESA, TURNO)).thenReturn(Optional.of(CERRADO));
+    }
+
+    /** Lo que lee el cierre que llega a buen término; los casos que terminan en 400 no llegan a leerlo. */
+    private void elTurnoQuedaCerrado() {
+        when(turnos.buscar(EMPRESA, TURNO)).thenReturn(Optional.of(CERRADO));
     }
 
     private static SolicitudCierre contado(String monto, String observacion) {
@@ -130,6 +132,7 @@ class ServicioTurnosCierreTest {
     @Test
     void elEsperadoEsLaBaseMasElEfectivoMenosLosReembolsosEnEfectivo() {
         turnoConMovimientos();
+        elTurnoQuedaCerrado();
 
         ResumenDeTurno r = servicio.cerrar(contado("165000", null));
 
@@ -146,6 +149,7 @@ class ServicioTurnosCierreTest {
     @Test
     void elCierreGuardaLoEsperadoLoContadoYLaHoraDeBogotaAunqueLaJvmEsteEnUtc() {
         turnoConMovimientos();
+        elTurnoQuedaCerrado();
 
         servicio.cerrar(contado("165000", null));
 
@@ -163,7 +167,7 @@ class ServicioTurnosCierreTest {
                 .thenReturn(Optional.of(new TurnoPorCerrar(TURNO, new BigDecimal("100000"))));
         when(turnos.pagosPorMedio(EMPRESA, TURNO)).thenReturn(new EnumMap<>(TipoMedio.class));
         when(turnos.reembolsosEnEfectivo(EMPRESA, TURNO)).thenReturn(BigDecimal.ZERO);
-        when(turnos.buscar(EMPRESA, TURNO)).thenReturn(Optional.of(CERRADO));
+        elTurnoQuedaCerrado();
 
         ResumenDeTurno r = servicio.cerrar(contado("100000", null));
 
@@ -174,6 +178,7 @@ class ServicioTurnosCierreTest {
     @Test
     void porMedioSoloTraeLoCobradoYNoRestaLosReembolsos() {
         turnoConMovimientos();
+        elTurnoQuedaCerrado();
 
         ResumenDeTurno r = servicio.cerrar(contado("165000", null));
 
@@ -209,6 +214,7 @@ class ServicioTurnosCierreTest {
     @Test
     void conDiferenciaYObservacionCierraYLaGuardaSinEspaciosSobrantes() {
         turnoConMovimientos();
+        elTurnoQuedaCerrado();
 
         ResumenDeTurno r = servicio.cerrar(contado("160000", "  Faltan 5 000, un billete roto  "));
 
@@ -221,6 +227,7 @@ class ServicioTurnosCierreTest {
     @Test
     void conLaDiferenciaEnCeroLaObservacionNoSeExigeYUnaEnBlancoSeGuardaNula() {
         turnoConMovimientos();
+        elTurnoQuedaCerrado();
 
         ResumenDeTurno r = servicio.cerrar(contado("165000", "   "));
 
@@ -232,8 +239,11 @@ class ServicioTurnosCierreTest {
     void sinTurnoAbiertoCerrarEs409() {
         when(turnos.bloquearParaCerrar(EMPRESA, CAJERO)).thenReturn(Optional.empty());
 
-        assertThrows(SinTurnoAbiertoException.class, () -> servicio.cerrar(contado("0", null)));
+        SinTurnoAbiertoException e = assertThrows(SinTurnoAbiertoException.class,
+                () -> servicio.cerrar(contado("0", null)));
 
+        // Cerrar tiene su propio texto: el de las ventas dice «abre un turno», que aquí no ayuda.
+        assertEquals("No tienes un turno abierto para cerrar.", e.getMessage());
         verify(turnos, never()).registrarCierre(anyInt(), anyLong(), any(), any(), any(), any());
     }
 
@@ -257,6 +267,7 @@ class ServicioTurnosCierreTest {
     @Test
     void unContadoConCerosDecimalesSeAcepta() {
         turnoConMovimientos();
+        elTurnoQuedaCerrado();
 
         ResumenDeTurno r = servicio.cerrar(contado("165000.00", null));
 
@@ -275,6 +286,7 @@ class ServicioTurnosCierreTest {
     @Test
     void unaObservacionDeExactamente200CaracteresSeAcepta() {
         turnoConMovimientos();
+        elTurnoQuedaCerrado();
 
         servicio.cerrar(contado("165000", "x".repeat(200)));
 
@@ -314,14 +326,15 @@ class ServicioTurnosCierreTest {
 
     // ---------------------------------------------------------------- listar
 
-    private static TurnoDeLista cerradoConEsperado(long id, int cajero, String esperado, String contado, String observacion) {
+    private static TurnoDeLista cerradoConEsperado(long id, int cajero, String esperado, String contado,
+                                                   String diferencia, String observacion) {
         return new TurnoDeLista(new Turno(id, cajero, "Cajero " + cajero, APERTURA, new BigDecimal("100000"), CIERRE),
-                new BigDecimal(esperado), new BigDecimal(contado), observacion);
+                new BigDecimal(esperado), new BigDecimal(contado), new BigDecimal(diferencia), observacion);
     }
 
     private static TurnoDeLista abierto(long id, int cajero) {
         return new TurnoDeLista(new Turno(id, cajero, "Cajero " + cajero, APERTURA, new BigDecimal("50000"), null),
-                BigDecimal.ZERO, null, null);
+                BigDecimal.ZERO, null, null, null);
     }
 
     @Test
@@ -330,7 +343,7 @@ class ServicioTurnosCierreTest {
         LocalDateTime desde = LocalDateTime.of(2026, 11, 1, 0, 0);
         LocalDateTime hastaExclusivo = LocalDateTime.of(2026, 11, 13, 0, 0);
         when(turnos.turnosDelPeriodo(EMPRESA, desde, hastaExclusivo, null))
-                .thenReturn(List.of(abierto(12L, 8), cerradoConEsperado(11L, 7, "165000", "160000", "Faltan 5 000")));
+                .thenReturn(List.of(abierto(12L, 8), cerradoConEsperado(11L, 7, "165000", "160000", "-5000", "Faltan 5 000")));
         when(turnos.pagosPorMedioDelPeriodo(EMPRESA, desde, hastaExclusivo, null)).thenReturn(Map.of(
                 11L, pagos("70000", "30000"), 12L, pagos("20000", null)));
         when(turnos.reembolsosEnEfectivoDelPeriodo(EMPRESA, desde, hastaExclusivo, null))
@@ -356,12 +369,46 @@ class ServicioTurnosCierreTest {
     }
 
     @Test
+    void laDiferenciaDeUnTurnoCerradoSeLeeDeLaColumnaYNoSeCalculaEnJava() {
+        entrar("ADMINISTRADOR");
+        LocalDateTime desde = LocalDateTime.of(2026, 11, 12, 0, 0);
+        LocalDateTime hastaExclusivo = LocalDateTime.of(2026, 11, 13, 0, 0);
+        // Los valores no cuadran a propósito: contado - esperado sería -5 000 y la columna dice otra cosa.
+        when(turnos.turnosDelPeriodo(EMPRESA, desde, hastaExclusivo, null))
+                .thenReturn(List.of(cerradoConEsperado(11L, 7, "165000", "160000", "-4321", "Explicación")));
+        when(turnos.pagosPorMedioDelPeriodo(EMPRESA, desde, hastaExclusivo, null)).thenReturn(Map.of());
+        when(turnos.reembolsosEnEfectivoDelPeriodo(EMPRESA, desde, hastaExclusivo, null)).thenReturn(Map.of());
+
+        List<ResumenDeTurno> lista = servicio.listar(LocalDate.of(2026, 11, 12), LocalDate.of(2026, 11, 12));
+
+        igual("-4321", lista.get(0).diferencia());
+    }
+
+    @Test
+    void unTurnoCerradoSinContadoNoRevientaLaLista() {
+        entrar("ADMINISTRADOR");
+        LocalDateTime desde = LocalDateTime.of(2026, 11, 12, 0, 0);
+        LocalDateTime hastaExclusivo = LocalDateTime.of(2026, 11, 13, 0, 0);
+        // Un cierre sin contado no debería existir, pero una fila rara no tumba la lista de todos los turnos.
+        TurnoDeLista raro = new TurnoDeLista(new Turno(11L, 7, "Cajero 7", APERTURA, new BigDecimal("100000"), CIERRE),
+                new BigDecimal("100000"), null, null, null);
+        when(turnos.turnosDelPeriodo(EMPRESA, desde, hastaExclusivo, null)).thenReturn(List.of(raro));
+        when(turnos.pagosPorMedioDelPeriodo(EMPRESA, desde, hastaExclusivo, null)).thenReturn(Map.of());
+        when(turnos.reembolsosEnEfectivoDelPeriodo(EMPRESA, desde, hastaExclusivo, null)).thenReturn(Map.of());
+
+        List<ResumenDeTurno> lista = servicio.listar(LocalDate.of(2026, 11, 12), LocalDate.of(2026, 11, 12));
+
+        assertNull(lista.get(0).efectivoContado());
+        assertNull(lista.get(0).diferencia());
+    }
+
+    @Test
     void elVendedorSoloListaLosSuyosAunqueElWebNoMandeCajero() {
         entrar("VENDEDOR");
         LocalDateTime desde = LocalDateTime.of(2026, 11, 12, 0, 0);
         LocalDateTime hastaExclusivo = LocalDateTime.of(2026, 11, 13, 0, 0);
         when(turnos.turnosDelPeriodo(EMPRESA, desde, hastaExclusivo, CAJERO))
-                .thenReturn(List.of(cerradoConEsperado(11L, CAJERO, "100000", "100000", null)));
+                .thenReturn(List.of(cerradoConEsperado(11L, CAJERO, "100000", "100000", "0", null)));
         when(turnos.pagosPorMedioDelPeriodo(EMPRESA, desde, hastaExclusivo, CAJERO)).thenReturn(Map.of());
         when(turnos.reembolsosEnEfectivoDelPeriodo(EMPRESA, desde, hastaExclusivo, CAJERO)).thenReturn(Map.of());
 

@@ -270,6 +270,24 @@ class CierreDeTurnoConBaseTest {
     }
 
     @Test
+    void elCambioEntregadoNoCuentaEnElEsperado() {
+        Long turno = caja.abrirTurno(caja.administradorId, "10000");
+        Integer producto = caja.producto("A", 20, "10000");
+        // Paga 30 000 con un billete de 50 000: el monto guardado es el neto, los 30 000. El cambio de 20 000
+        // que se entrega no cuenta, ni sumando ni restando.
+        vender(List.of(linea(producto, 3)), new PagoSolicitado(caja.efectivoId, new BigDecimal("30000"),
+                new BigDecimal("50000"), null));
+
+        ResumenDeTurno r = turnos.resumenActual();
+        ResumenDeTurno cerrado = turnos.cerrar(contado("40000"));
+
+        igual("40000", r.efectivoEsperado());
+        igual("30000", r.porMedio().get(TipoMedio.EFECTIVO));
+        igual("40000", cerrado.efectivoEsperado());
+        igual("40000", (BigDecimal) fila(turno).get("esperado"));
+    }
+
+    @Test
     void porMedioTotalizaTarjetaYTransferencia() {
         caja.abrirTurno(caja.administradorId, "20000");
         Integer producto = caja.producto("A", 50, "10000");
@@ -366,8 +384,9 @@ class CierreDeTurnoConBaseTest {
         turnos.cerrar(contado("10000"));
         Object cierre = fila(turno).get("cierre");
 
-        assertThrows(SinTurnoAbiertoException.class, () -> turnos.cerrar(contado("99999")));
+        SinTurnoAbiertoException e = assertThrows(SinTurnoAbiertoException.class, () -> turnos.cerrar(contado("99999")));
 
+        assertEquals("No tienes un turno abierto para cerrar.", e.getMessage());
         assertEquals(cierre, fila(turno).get("cierre"), "el segundo cierre no cambió nada");
         igual("10000", (BigDecimal) fila(turno).get("contado"));
     }
@@ -375,7 +394,8 @@ class CierreDeTurnoConBaseTest {
     @Test
     void sinTurnoAbiertoNoHayResumenNiCierre() {
         assertThrows(RecursoNoEncontradoException.class, () -> turnos.resumenActual());
-        assertThrows(SinTurnoAbiertoException.class, () -> turnos.cerrar(contado("0")));
+        assertEquals("No tienes un turno abierto para cerrar.",
+                assertThrows(SinTurnoAbiertoException.class, () -> turnos.cerrar(contado("0"))).getMessage());
     }
 
     @Test

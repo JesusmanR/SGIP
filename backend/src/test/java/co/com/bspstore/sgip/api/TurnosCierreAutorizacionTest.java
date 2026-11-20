@@ -233,16 +233,59 @@ class TurnosCierreAutorizacionTest {
     }
 
     @Test
-    void unaEmpresaEnConsultaVeSuResumenYSusTurnosPeroNoCierra() throws Exception {
+    void unaEmpresaEnConsultaVeSuResumenYSusTurnosYCierraSuTurnoPeroNoAbreOtro() throws Exception {
+        // Decisión del usuario: cerrar no trae dinero nuevo, solo cuadra el cajón (ADR-0015). Abrir sigue bloqueado.
         when(plataforma.estadoDe(4)).thenReturn(Optional.of(EstadoEmpresa.DESACTIVADA));
         when(servicio.resumenActual()).thenReturn(ABIERTO);
         when(servicio.listar(any(), any())).thenReturn(List.of());
+        when(servicio.cerrar(any())).thenReturn(CERRADO);
 
         mvc.perform(resumen().with(como("VENDEDOR"))).andExpect(status().isOk());
         mvc.perform(lista().with(como("ADMINISTRADOR"))).andExpect(status().isOk());
-        mvc.perform(cerrar(CUERPO).with(como("VENDEDOR"))).andExpect(status().isForbidden());
+        mvc.perform(cerrar(CUERPO).with(como("VENDEDOR"))).andExpect(status().isOk());
+        mvc.perform(post(RUTA).contentType(MediaType.APPLICATION_JSON).content("{\"baseEfectivo\":50000}")
+                        .with(como("VENDEDOR")))
+                .andExpect(status().isForbidden());
 
-        verify(servicio, never()).cerrar(any());
+        verify(servicio).cerrar(any());
+        verify(servicio, never()).abrir(any());
+    }
+
+    @Test
+    void unaPruebaVencidaTambienDejaCerrarElTurno() throws Exception {
+        when(plataforma.estadoDe(4)).thenReturn(Optional.of(EstadoEmpresa.PRUEBA));
+        when(plataforma.finDePruebaDe(4)).thenReturn(Optional.of(LocalDate.of(2020, 1, 1)));
+        when(servicio.cerrar(any())).thenReturn(CERRADO);
+
+        mvc.perform(cerrar(CUERPO).with(como("ADMINISTRADOR"))).andExpect(status().isOk());
+    }
+
+    // ------------------------------------------------ la observación con espacios
+
+    @Test
+    void laObservacionConEspaciosAlrededorSeRecortaAntesDeMedirla() throws Exception {
+        when(servicio.cerrar(any())).thenReturn(CERRADO);
+        // 200 caracteres de verdad, con 10 espacios de relleno a cada lado: la columna guarda 200, no 220.
+        String observacion = " ".repeat(10) + "x".repeat(200) + " ".repeat(10);
+
+        mvc.perform(cerrar("{\"efectivoContado\":0,\"observacion\":\"" + observacion + "\"}").with(como("VENDEDOR")))
+                .andExpect(status().isOk());
+
+        var enviada = org.mockito.ArgumentCaptor.forClass(SolicitudCierre.class);
+        verify(servicio).cerrar(enviada.capture());
+        assertEquals("x".repeat(200), enviada.getValue().observacion());
+    }
+
+    @Test
+    void laObservacionSoloDeEspaciosLlegaVaciaYNoNula() throws Exception {
+        when(servicio.cerrar(any())).thenReturn(CERRADO);
+
+        mvc.perform(cerrar("{\"efectivoContado\":0,\"observacion\":\"      \"}").with(como("VENDEDOR")))
+                .andExpect(status().isOk());
+
+        var enviada = org.mockito.ArgumentCaptor.forClass(SolicitudCierre.class);
+        verify(servicio).cerrar(enviada.capture());
+        assertEquals("", enviada.getValue().observacion());
     }
 
     // ------------------------------------------------------ los datos inválidos
