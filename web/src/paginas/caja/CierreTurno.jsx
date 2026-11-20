@@ -120,9 +120,9 @@ export default function CierreTurno() {
             </p>
             <Campo
               etiqueta="Observación" motivo={motivoObservacion ?? undefined}
-              ayuda={diferencia ? 'Obligatoria cuando hay diferencia.' : 'Opcional si el efectivo cuadra.'}
+              ayuda={`${diferencia ? 'Obligatoria cuando hay diferencia.' : 'Opcional si el efectivo cuadra.'} Hasta 200 caracteres.`}
             >
-              <textarea rows={3} maxLength={500} value={observacion} onChange={(e) => setObservacion(e.target.value)} />
+              <textarea rows={3} maxLength={200} value={observacion} onChange={(e) => setObservacion(e.target.value)} />
             </Campo>
             <div className="caja-acciones">
               <button type="submit" className="boton" disabled={enviando}>{enviando ? 'Cerrando…' : 'Cerrar turno'}</button>
