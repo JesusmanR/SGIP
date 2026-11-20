@@ -28,4 +28,13 @@ public record SolicitudCierre(
         @Size(max = 200, message = "La observación admite hasta 200 caracteres")
         String observacion
 ) {
+
+    /**
+     * La observación llega sin los espacios de los extremos. La validación mira el objeto ya construido, de
+     * modo que el {@code @Size} mide lo que de verdad se guarda y no el relleno: 200 caracteres con espacios
+     * alrededor no se rechazan.
+     */
+    public SolicitudCierre {
+        observacion = observacion == null ? null : observacion.strip();
+    }
 }

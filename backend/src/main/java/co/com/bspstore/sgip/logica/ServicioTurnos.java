@@ -98,6 +98,8 @@ public class ServicioTurnos {
     private static final String CONTADO_NO_VALIDO =
             "El efectivo contado debe ser un monto en pesos enteros, de cero en adelante y de hasta 12 dígitos.";
 
+    private static final String SIN_TURNO_PARA_CERRAR = "No tienes un turno abierto para cerrar.";
+
     private static final String OBSERVACION_MUY_LARGA = "La observación admite hasta 200 caracteres.";
 
     private static final String DIFERENCIA_SIN_EXPLICAR =
@@ -204,7 +206,7 @@ public class ServicioTurnos {
         Integer empresa = ContextoEmpresa.empresaActual();
 
         TurnoPorCerrar turno = turnos.bloquearParaCerrar(empresa, cajeroEnSesion())
-                .orElseThrow(SinTurnoAbiertoException::new);
+                .orElseThrow(() -> new SinTurnoAbiertoException(SIN_TURNO_PARA_CERRAR));
         Map<TipoMedio, BigDecimal> porMedio = turnos.pagosPorMedio(empresa, turno.id());
         BigDecimal esperado = esperado(turno.baseEfectivo(), porMedio, turnos.reembolsosEnEfectivo(empresa, turno.id()));
         BigDecimal diferencia = contado.subtract(esperado);
@@ -264,9 +266,10 @@ public class ServicioTurnos {
             Turno turno = fila.turno();
             Map<TipoMedio, BigDecimal> porMedio = pagos.getOrDefault(turno.id(), new EnumMap<>(TipoMedio.class));
             if (turno.cierre() != null) {
+                // La diferencia es la columna generada del motor, no una resta repetida aquí: es la que se guardó.
                 return new ResumenDeTurno(turno.id(), turno.cajero(), turno.apertura(), turno.cierre(),
-                        turno.baseEfectivo(), fila.esperado(), fila.contado(),
-                        fila.contado().subtract(fila.esperado()), porMedio, fila.observacion());
+                        turno.baseEfectivo(), fila.esperado(), fila.contado(), fila.diferencia(), porMedio,
+                        fila.observacion());
             }
             BigDecimal esperado = esperado(turno.baseEfectivo(), porMedio,
                     reembolsos.getOrDefault(turno.id(), BigDecimal.ZERO));

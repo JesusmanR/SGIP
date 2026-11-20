@@ -148,7 +148,7 @@ public class RepositorioTurnos {
     public record TurnoPorCerrar(Long id, BigDecimal baseEfectivo) {
     }
 
-    /** Un turno de la lista con lo que guarda {@code cierres_caja}: lo esperado, lo contado y la observación. */
+    /** Un turno de la lista con lo que guarda {@code cierres_caja}: lo esperado, lo contado, la diferencia (columna generada) y la observación. */
     public record TurnoDeLista(Turno turno, BigDecimal esperado, BigDecimal contado, BigDecimal diferencia,
                                String observacion) {
     }
@@ -185,7 +185,7 @@ public class RepositorioTurnos {
      */
     private static final String TURNOS_DEL_PERIODO = """
             SELECT c.cierre_id, c.usuario_id, u.nombre, c.apertura, c.base_efectivo, c.cierre,
-                   c.esperado, c.contado, c.observacion
+                   c.esperado, c.contado, c.diferencia, c.observacion
               FROM cierres_caja c
               JOIN usuarios u ON u.empresa_id = c.empresa_id AND u.usuario_id = c.usuario_id
              WHERE c.empresa_id = :empresa AND c.apertura >= :desde AND c.apertura < :hasta
@@ -311,7 +311,7 @@ public class RepositorioTurnos {
                 .query((fila, numero) -> new TurnoDeLista(turno(fila, numero),
                         enPesos(fila.getBigDecimal("esperado")),
                         fila.getBigDecimal("contado") == null ? null : enPesos(fila.getBigDecimal("contado")),
-                        null,
+                        fila.getBigDecimal("diferencia") == null ? null : enPesos(fila.getBigDecimal("diferencia")),
                         fila.getString("observacion")))
                 .list();
     }

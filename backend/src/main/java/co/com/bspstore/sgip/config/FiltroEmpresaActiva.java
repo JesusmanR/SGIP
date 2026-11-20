@@ -45,6 +45,10 @@ import java.util.Set;
  * ## A quién no afecta
  *
  * <ul>
+ *   <li><b>El cierre del turno de caja.</b> Es el POST exacto a
+ *       {@code /api/v1/caja/turnos/actual/cierre}. Cerrar no trae dinero nuevo, solo
+ *       cuadra el cajón, y una empresa que pasó a consulta con un turno abierto no
+ *       tendría cómo cerrarlo (ADR-0015).</li>
  *   <li><b>Las peticiones sin autenticar.</b> El ingreso es un POST y
  *       tiene que seguir funcionando: un usuario de empresa desactivada
  *       entra, porque si no pudiera entrar no podría consultar nada, y
@@ -87,6 +91,8 @@ public class FiltroEmpresaActiva extends OncePerRequestFilter {
     private static final String DETALLE_PRUEBA = "La prueba gratuita terminó. Puedes consultar "
             + "toda tu información, pero no registrar cambios.";
 
+    private static final String RUTA_CIERRE_DE_TURNO = "/api/v1/caja/turnos/actual/cierre";
+
     private final RepositorioPlataforma plataforma;
     private final Clock reloj;
 
@@ -115,6 +121,13 @@ public class FiltroEmpresaActiva extends OncePerRequestFilter {
             // Cambiar la propia contraseña y salir son del usuario, no del
             // negocio. Bloquearlos atraparía a quien tiene la clave inicial
             // en una empresa desactivada: el otro filtro le exige cambiarla.
+            cadena.doFilter(peticion, respuesta);
+            return;
+        }
+
+        if (esCierreDeTurno(peticion)) {
+            // Cerrar el turno no trae dinero nuevo: solo cuadra el cajón con lo contado. Negarlo dejaría el turno
+            // que la empresa dejó abierto sin poder cerrarse mientras dure el modo de consulta (ADR-0015).
             cadena.doFilter(peticion, respuesta);
             return;
         }
@@ -148,6 +161,26 @@ public class FiltroEmpresaActiva extends OncePerRequestFilter {
         }
 
         rechazar(respuesta, estado == EstadoEmpresa.PRUEBA ? DETALLE_PRUEBA : DETALLE_DESACTIVADA);
+    }
+
+    /**
+     * Si la petición es exactamente el POST que cierra el turno del cajero. Una ruta, no un prefijo: abrir otro
+     * turno, vender, cobrar y devolver mueven dinero y siguen bloqueados. Se compara la ruta tal como llegó, sin
+     * decodificar, como en {@link FiltroCambioClave#esClaveOSalida}.
+     */
+    private static boolean esCierreDeTurno(HttpServletRequest peticion) {
+        if (!HttpMethod.POST.name().equals(peticion.getMethod())) {
+            return false;
+        }
+        String uri = peticion.getRequestURI();
+        String contexto = peticion.getContextPath();
+        if (uri == null) {
+            return false;
+        }
+        String ruta = (contexto != null && !contexto.isEmpty() && uri.startsWith(contexto))
+                ? uri.substring(contexto.length())
+                : uri;
+        return RUTA_CIERRE_DE_TURNO.equals(ruta);
     }
 
     /**
