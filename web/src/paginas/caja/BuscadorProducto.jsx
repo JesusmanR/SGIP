@@ -97,6 +97,9 @@ export default function BuscadorProducto({ alAgregar, alCrearProducto, entradaRe
   const [sinConsultar, setSinConsultar] = useState([])
   const [resultados, setResultados] = useState(null)
   const [resultadosDe, setResultadosDe] = useState(null)
+  // Los resultados que salieron solos, de lo escrito que no era un código, llevan una línea que lo explica.
+  const [deLoEscrito, setDeLoEscrito] = useState(false)
+  const busquedaActual = useRef(0)
   const [aviso, setAviso] = useState(null)
   const [fallo, setFallo] = useState(null)
   const [camara, setCamara] = useState(false)
@@ -122,9 +125,38 @@ export default function BuscadorProducto({ alAgregar, alCrearProducto, entradaRe
   function agregarDeResultados(producto) {
     alAgregar(producto)
     olvidar(resultadosDe)
+    descartarResultados()
+    campo.current?.focus()
+  }
+
+  function descartarResultados() {
+    busquedaActual.current += 1
     setResultados(null)
     setResultadosDe(null)
-    campo.current?.focus()
+    setDeLoEscrito(false)
+  }
+
+  /**
+   * Lo escrito no era un código: se busca por nombre y, si hay coincidencias, se muestran ya, sin otro clic.
+   * Solo si tampoco hay (o la búsqueda falla) queda la advertencia del código, que se atiende a mano.
+   * Va aparte de la cola de escaneos: una búsqueda lenta por nombre no debe frenar al lector.
+   */
+  async function buscarSinCodigo(codigo) {
+    const mia = ++busquedaActual.current
+    let coincidencias = null
+    try {
+      coincidencias = await productosPorTexto(codigo)
+    } catch {
+      // Se queda como código desconocido, con su botón para volver a intentarlo.
+    }
+    if (mia !== busquedaActual.current) return
+    if (coincidencias?.length > 0) {
+      setResultados(coincidencias)
+      setResultadosDe(codigo)
+      setDeLoEscrito(true)
+    } else {
+      setDesconocidos((lista) => (lista.includes(codigo) ? lista : [...lista, codigo]))
+    }
   }
 
   async function procesar(codigo) {
@@ -133,7 +165,7 @@ export default function BuscadorProducto({ alAgregar, alCrearProducto, entradaRe
     try {
       const producto = await productoPorCodigo(codigo)
       if (!producto) {
-        setDesconocidos((lista) => (lista.includes(codigo) ? lista : [...lista, codigo]))
+        buscarSinCodigo(codigo)
       } else if (!producto.vendible) {
         setAviso(producto.motivoNoVendible || 'Este producto no se puede vender.')
         campo.current?.focus()
@@ -165,6 +197,7 @@ export default function BuscadorProducto({ alAgregar, alCrearProducto, entradaRe
     try {
       setResultados(await productosPorTexto(codigo))
       setResultadosDe(codigo)
+      setDeLoEscrito(false)
     } catch (error) {
       setFallo(error.message || 'No se pudo buscar. Inténtalo otra vez.')
     }
@@ -246,6 +279,18 @@ export default function BuscadorProducto({ alAgregar, alCrearProducto, entradaRe
         resultados.length === 0
           ? <p className="nota">No hay productos con ese nombre.</p>
           : (
+            <>
+              {deLoEscrito && (
+                <p className="nota caja-nota-resultados">
+                  No es un código; estos productos coinciden con "{resultadosDe}".
+                  <button
+                    type="button" className="enlace" aria-label={`Descartar los resultados de ${resultadosDe}`}
+                    onClick={descartarResultados}
+                  >
+                    Descartar
+                  </button>
+                </p>
+              )}
             <ul className="caja-resultados" aria-label="Resultados de la búsqueda">
               {resultados.map((p) => (
                 <li key={p.id}>
@@ -263,6 +308,7 @@ export default function BuscadorProducto({ alAgregar, alCrearProducto, entradaRe
                 </li>
               ))}
             </ul>
+            </>
           )
       )}
 
