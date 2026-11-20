@@ -98,6 +98,33 @@ describe('cierre del turno', () => {
     expect(cerrar()).toBeEnabled()
   })
 
+  it('la observación admite hasta 200 caracteres, lo que cabe en el servidor, y lo dice', async () => {
+    await abrir()
+    expect(screen.getByLabelText(/observación/i)).toHaveAttribute('maxlength', '200')
+    expect(screen.getByText(/hasta 200 caracteres/i)).toBeInTheDocument()
+  })
+
+  it('sin turno abierto al cerrar (409), muestra el mensaje del servidor y no cierra nada', async () => {
+    cerrarTurno.mockRejectedValueOnce(errorApi(409, 'No tienes un turno abierto para cerrar.'))
+    await abrir()
+    await userEvent.type(contado(), '150000')
+    await userEvent.click(cerrar())
+    expect(await screen.findByRole('alert')).toHaveTextContent('No tienes un turno abierto para cerrar.')
+    expect(screen.queryByRole('heading', { name: /turno cerrado/i })).not.toBeInTheDocument()
+  })
+
+  it('si el servidor ve una diferencia que la pantalla no vio (400), muestra su mensaje y deja explicarla', async () => {
+    cerrarTurno.mockRejectedValueOnce(
+      errorApi(400, 'El efectivo contado no coincide con el esperado: explica la diferencia en la observación.'),
+    )
+    await abrir()
+    await userEvent.type(contado(), '150000')
+    await userEvent.click(cerrar())
+    expect(await screen.findByRole('alert')).toHaveTextContent(/explica la diferencia en la observación/i)
+    expect(screen.getByLabelText(/observación/i)).toBeEnabled()
+    expect(cerrar()).toBeEnabled()
+  })
+
   it('un resumen nulo (204, sin turno) se trata como «no hay turno abierto» y no revienta', async () => {
     resumenDelTurno.mockResolvedValue(null)
     render(<MemoryRouter><CierreTurno /></MemoryRouter>)
