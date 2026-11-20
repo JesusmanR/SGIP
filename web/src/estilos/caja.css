@@ -261,5 +261,7 @@
 .caja-reparto { display: grid; gap: var(--espacio-1); }
 .caja-reparto p { margin: 0; }
 .caja-cliente-actual strong { margin-right: var(--espacio-2); }
-.caja-nota-resultados { margin-top: var(--espacio-3); }
-.caja-nota-resultados .enlace { margin-left: var(--espacio-2); }
+.caja-estado-busqueda:not(:empty) { margin-top: var(--espacio-3); }
+.caja-estado-busqueda .nota { margin-bottom: var(--espacio-1); }
+.caja-grupo { display: flex; flex-direction: column; align-items: flex-start; gap: var(--espacio-1); }
+.caja-grupo .caja-resultados { align-self: stretch; }

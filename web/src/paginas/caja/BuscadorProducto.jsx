@@ -95,11 +95,14 @@ export default function BuscadorProducto({ alAgregar, alCrearProducto, entradaRe
   const [desconocidos, setDesconocidos] = useState([])
   // Los que no se pudieron consultar (tiempo agotado): se ven igual y se pueden reintentar.
   const [sinConsultar, setSinConsultar] = useState([])
-  const [resultados, setResultados] = useState(null)
-  const [resultadosDe, setResultadosDe] = useState(null)
-  // Los resultados que salieron solos, de lo escrito que no era un código, llevan una línea que lo explica.
-  const [deLoEscrito, setDeLoEscrito] = useState(false)
-  const busquedaActual = useRef(0)
+  // Los resultados de buscar por nombre, uno por cada texto buscado: [{ codigo, productos, deLoEscrito }].
+  // `deLoEscrito` quiere decir que salieron solos, porque lo escrito no era un código, y llevan su línea.
+  const [grupos, setGrupos] = useState([])
+  // Cada búsqueda por nombre lleva su número. Solo sirve para no mostrar un resultado atrasado o ya
+  // descartado: un código sin encontrar siempre acaba en `desconocidos` o en pantalla, nunca se pierde.
+  const orden = useRef(0)
+  const mostrada = useRef({}) // por texto: la búsqueda más nueva cuyo resultado ya se mostró
+  const anulada = useRef({}) // por texto: hasta qué búsqueda se descartó
   const [aviso, setAviso] = useState(null)
   const [fallo, setFallo] = useState(null)
   const [camara, setCamara] = useState(false)
@@ -121,41 +124,47 @@ export default function BuscadorProducto({ alAgregar, alCrearProducto, entradaRe
 
   const olvidar = (codigo) => setDesconocidos((lista) => lista.filter((c) => c !== codigo))
 
-  /** Desde la lista de resultados: agrega y da por atendido el código que se buscó por nombre. */
-  function agregarDeResultados(producto) {
-    alAgregar(producto)
-    olvidar(resultadosDe)
-    descartarResultados()
-    campo.current?.focus()
+  /** Quita los resultados de un texto y hace que una búsqueda suya aún en vuelo no los traiga de vuelta. */
+  function cerrarGrupo(codigo) {
+    anulada.current[codigo] = orden.current
+    setGrupos((lista) => lista.filter((g) => g.codigo !== codigo))
   }
 
-  function descartarResultados() {
-    busquedaActual.current += 1
-    setResultados(null)
-    setResultadosDe(null)
-    setDeLoEscrito(false)
+  /** Muestra los resultados de la búsqueda `numero` si ni se descartaron ni hay una más nueva ya a la vista. */
+  function mostrar(codigo, productos, deLoEscrito, numero) {
+    if (numero <= (anulada.current[codigo] ?? 0) || numero <= (mostrada.current[codigo] ?? 0)) return
+    mostrada.current[codigo] = numero
+    setGrupos((lista) => [...lista.filter((g) => g.codigo !== codigo), { codigo, productos, deLoEscrito }])
+  }
+
+  /** Desde la lista de resultados: agrega y da por atendido el código que se buscó por nombre. */
+  function agregarDeResultados(producto, codigo) {
+    alAgregar(producto)
+    olvidar(codigo)
+    cerrarGrupo(codigo)
+    campo.current?.focus()
   }
 
   /**
    * Lo escrito no era un código: se busca por nombre y, si hay coincidencias, se muestran ya, sin otro clic.
    * Solo si tampoco hay (o la búsqueda falla) queda la advertencia del código, que se atiende a mano.
-   * Va aparte de la cola de escaneos: una búsqueda lenta por nombre no debe frenar al lector.
+   * Va aparte de la cola de escaneos, para que una respuesta lenta no frene al lector, pero cuenta como
+   * pendiente: no se cobra mientras siga en vuelo.
    */
   async function buscarSinCodigo(codigo) {
-    const mia = ++busquedaActual.current
-    let coincidencias = null
+    const numero = ++orden.current
+    setPendientes((n) => n + 1)
     try {
-      coincidencias = await productosPorTexto(codigo)
-    } catch {
-      // Se queda como código desconocido, con su botón para volver a intentarlo.
-    }
-    if (mia !== busquedaActual.current) return
-    if (coincidencias?.length > 0) {
-      setResultados(coincidencias)
-      setResultadosDe(codigo)
-      setDeLoEscrito(true)
-    } else {
-      setDesconocidos((lista) => (lista.includes(codigo) ? lista : [...lista, codigo]))
+      let coincidencias = null
+      try {
+        coincidencias = await productosPorTexto(codigo)
+      } catch {
+        // Se queda como código desconocido, con su botón para volver a intentarlo.
+      }
+      if (coincidencias?.length > 0) mostrar(codigo, coincidencias, true, numero)
+      else setDesconocidos((lista) => (lista.includes(codigo) ? lista : [...lista, codigo]))
+    } finally {
+      setPendientes((n) => n - 1)
     }
   }
 
@@ -194,10 +203,9 @@ export default function BuscadorProducto({ alAgregar, alCrearProducto, entradaRe
 
   async function buscarPorNombre(codigo) {
     setFallo(null)
+    const numero = ++orden.current
     try {
-      setResultados(await productosPorTexto(codigo))
-      setResultadosDe(codigo)
-      setDeLoEscrito(false)
+      mostrar(codigo, await productosPorTexto(codigo), false, numero)
     } catch (error) {
       setFallo(error.message || 'No se pudo buscar. Inténtalo otra vez.')
     }
@@ -275,42 +283,44 @@ export default function BuscadorProducto({ alAgregar, alCrearProducto, entradaRe
         </div>
       ))}
 
-      {resultados && (
-        resultados.length === 0
-          ? <p className="nota">No hay productos con ese nombre.</p>
-          : (
-            <>
-              {deLoEscrito && (
-                <p className="nota caja-nota-resultados">
-                  No es un código; estos productos coinciden con "{resultadosDe}".
-                  <button
-                    type="button" className="enlace" aria-label={`Descartar los resultados de ${resultadosDe}`}
-                    onClick={descartarResultados}
-                  >
-                    Descartar
-                  </button>
-                </p>
-              )}
-            <ul className="caja-resultados" aria-label="Resultados de la búsqueda">
-              {resultados.map((p) => (
-                <li key={p.id}>
-                  <span>
-                    <strong>{p.nombre}</strong>
-                    <span className="sub-linea">{p.codigo}{p.presentacion ? ` · ${p.presentacion}` : ''} · {p.existencia} en existencia</span>
-                    {!p.vendible && <span className="sub-linea">{p.motivoNoVendible}</span>}
-                  </span>
-                  <button
-                    type="button" className="boton secundario" disabled={!p.vendible}
-                    aria-label={`Agregar ${p.nombre}`} onClick={() => agregarDeResultados(p)}
-                  >
-                    Agregar
-                  </button>
-                </li>
-              ))}
-            </ul>
-            </>
-          )
-      )}
+      {/* Siempre en la página, vacía si no hay nada que decir: así el lector de pantalla anuncia lo que aparece. */}
+      <div role="status" aria-label="Búsqueda por nombre" className="caja-estado-busqueda">
+        {grupos.filter((g) => g.deLoEscrito).map((g) => (
+          <p key={g.codigo} className="nota">No es un código; estos productos coinciden con "{g.codigo}".</p>
+        ))}
+      </div>
+
+      {grupos.map((g) => (
+        <div className="caja-grupo" key={g.codigo}>
+          {g.productos.length === 0
+            ? <p className="nota">No hay productos con ese nombre.</p>
+            : (
+              <ul className="caja-resultados" aria-label="Resultados de la búsqueda">
+                {g.productos.map((p) => (
+                  <li key={p.id}>
+                    <span>
+                      <strong>{p.nombre}</strong>
+                      <span className="sub-linea">{p.codigo}{p.presentacion ? ` · ${p.presentacion}` : ''} · {p.existencia} en existencia</span>
+                      {!p.vendible && <span className="sub-linea">{p.motivoNoVendible}</span>}
+                    </span>
+                    <button
+                      type="button" className="boton secundario" disabled={!p.vendible}
+                      aria-label={`Agregar ${p.nombre}`} onClick={() => agregarDeResultados(p, g.codigo)}
+                    >
+                      Agregar
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          <button
+            type="button" className="enlace" aria-label={`Descartar los resultados de ${g.codigo}`}
+            onClick={() => cerrarGrupo(g.codigo)}
+          >
+            Descartar
+          </button>
+        </div>
+      ))}
 
       {camara && (
         <DialogoCamara
