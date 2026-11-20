@@ -62,3 +62,16 @@ SET @orden = IF(@tiene_pin > 0,
 PREPARE poner_pin FROM @orden;
 EXECUTE poner_pin;
 DEALLOCATE PREPARE poner_pin;
+
+-- Un bloqueo del PIN en plena demostración no debe sobrevivir al reinicio:
+-- se limpian los contadores y las marcas de bloqueo, si la caja los trae.
+SET @tiene_bloqueo = (SELECT COUNT(*) FROM information_schema.columns
+                       WHERE table_schema = DATABASE() AND table_name = 'usuarios'
+                         AND column_name IN ('pin_intentos', 'pin_bloqueado_en',
+                                             'pin_errados_emitidos', 'pin_emision_bloqueada_en'));
+SET @orden = IF(@tiene_bloqueo = 4,
+                'UPDATE usuarios SET pin_intentos = 0, pin_bloqueado_en = NULL, pin_errados_emitidos = 0, pin_emision_bloqueada_en = NULL WHERE correo = @correo_admin',
+                'DO 0');
+PREPARE limpiar_bloqueo FROM @orden;
+EXECUTE limpiar_bloqueo;
+DEALLOCATE PREPARE limpiar_bloqueo;

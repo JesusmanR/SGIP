@@ -105,7 +105,7 @@ es_nuestro() { # es_nuestro PID imagen.exe [puerto]
   local c d
   c=$(linea_de_comando "$1"); d="$(winpath "$DATOS")"
   case "$2" in
-    node.exe) [[ "$c" == *vite.js* && "$c" == *"--port ${3:-x} --strictPort"* ]] ;;
+    node.exe) [[ "$c" == *vite.js* && "$c" == *"$(winpath "$RAIZ/web")"*                  && "$c" == *"--port ${3:-x} --strictPort"* ]] ;;
     *)        [[ "$c" == *"$d"* ]] ;;
   esac
 }
@@ -156,7 +156,8 @@ liberar_cerrojo() {
   fi
 }
 
-# 0 = lo tenemos; 2 = otra ejecución viva ya está arrancando.
+# 0 = lo tenemos; 2 = otra ejecución viva ya está arrancando;
+# 3 = no se pudo conseguir ni limpiando un cerrojo viejo.
 adquirir_cerrojo() {
   local lock="$DATOS/.lock" yo dueno intento
   yo=$(cat /proc/$$/winpid 2>/dev/null || echo $$)
@@ -178,7 +179,7 @@ adquirir_cerrojo() {
     # Cerrojo viejo: su dueño ya no existe o no es una ejecución de la muestra.
     [[ "$lock" == */.muestra-datos/.lock ]] && rm -rf "$lock"
   done
-  return 2
+  return 3
 }
 
 # ---- Herramientas -------------------------------------------------------
@@ -388,7 +389,13 @@ arrancar() {
   _FALLO=0
   comprobar_herramientas || return 1
   mkdir -p "$DATOS/registros"
-  adquirir_cerrojo || return 0
+  adquirir_cerrojo
+  case $? in
+    0) ;;
+    2) return 0 ;;
+    *) echo "No se pudo iniciar: otra ejecución tiene el cerrojo; intenta de nuevo en un minuto." >&2
+       return 1 ;;
+  esac
   leer_estado
   if en_marcha; then
     decir "La muestra ya está en marcha."
