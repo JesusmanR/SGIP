@@ -44,6 +44,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -112,7 +113,8 @@ class ServicioTurnosCierreTest {
                 .thenReturn(Optional.of(new TurnoPorCerrar(TURNO, new BigDecimal("100000"))));
         when(turnos.pagosPorMedio(EMPRESA, TURNO)).thenReturn(pagos("70000", "30000"));
         when(turnos.reembolsosEnEfectivo(EMPRESA, TURNO)).thenReturn(new BigDecimal("5000"));
-        when(turnos.buscar(EMPRESA, TURNO)).thenReturn(Optional.of(CERRADO));
+        // Solo lo lee el cierre que llega a buen término: los casos que terminan en 400 no llegan aquí.
+        lenient().when(turnos.buscar(EMPRESA, TURNO)).thenReturn(Optional.of(CERRADO));
     }
 
     private static SolicitudCierre contado(String monto, String observacion) {

@@ -12,8 +12,11 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Types;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
+import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -77,7 +80,7 @@ public class RepositorioTurnos {
      * tuviera una entrada así y esperara la fila, el cierre esperaría a la operación para
      * tocarla y la operación al cierre para leer la fila: un interbloqueo, y el motor mata a
      * una de las dos. Con las dos puntas en {@code PRIMARY} piden lo mismo en el mismo orden y
-     * no hay ciclo. <b>Por eso el cierre (tarea 10) debe tomar el turno solo por
+     * no hay ciclo. <b>Por eso el cierre ({@link #bloquearParaCerrar}) toma el turno solo por
      * {@code PRIMARY}, con {@code FORCE INDEX (PRIMARY)}</b>, ni por {@code uq_cierres_abierto}
      * ni por {@code uq_cierres_empresa}. Tampoco queda un bloqueo de hueco sobre una clave única
      * que no existe cuando el cajero no tiene turno.
@@ -149,43 +152,212 @@ public class RepositorioTurnos {
     public record TurnoDeLista(Turno turno, BigDecimal esperado, BigDecimal contado, String observacion) {
     }
 
+    /**
+     * Los pagos del turno agrupados por tipo de medio. Cuenta por {@code pagos_venta.cierre_id}, el turno
+     * en que el dinero entró al cajón, y no por el de la venta: un cobro contra entrega es del turno de
+     * quien cobra. El pago con saldo a favor no lleva turno y no aparece. {@code ix_pagos_cierre} cubre la
+     * búsqueda.
+     */
+    private static final String PAGOS_DEL_TURNO = """
+            SELECT m.tipo, SUM(p.monto) AS total
+              FROM pagos_venta p
+              JOIN medios_pago m ON m.empresa_id = p.empresa_id AND m.medio_id = p.medio_id
+             WHERE p.empresa_id = :empresa AND p.cierre_id = :turno
+             GROUP BY m.tipo
+            """;
+
+    /**
+     * Lo reembolsado en efectivo por las devoluciones del turno ({@code devoluciones.cierre_id}): el dinero que
+     * salió del cajón. Los reembolsos a otro medio no lo tocan, y los que van a saldo a favor tampoco.
+     */
+    private static final String REEMBOLSOS_EN_EFECTIVO_DEL_TURNO = """
+            SELECT COALESCE(SUM(r.monto), 0)
+              FROM devoluciones d
+              JOIN reembolsos r ON r.empresa_id = d.empresa_id AND r.devolucion_id = d.devolucion_id
+              JOIN medios_pago m ON m.empresa_id = r.empresa_id AND m.medio_id = r.medio_id
+             WHERE d.empresa_id = :empresa AND d.cierre_id = :turno AND m.tipo = 'EFECTIVO'
+            """;
+
+    /**
+     * Los turnos que se abrieron en la ventana {@code [desde, hasta)}, con lo que guardó el cierre. Si el cajero
+     * es nulo salen los de toda la empresa. Una sola consulta sea cual sea el número de turnos.
+     */
+    private static final String TURNOS_DEL_PERIODO = """
+            SELECT c.cierre_id, c.usuario_id, u.nombre, c.apertura, c.base_efectivo, c.cierre,
+                   c.esperado, c.contado, c.observacion
+              FROM cierres_caja c
+              JOIN usuarios u ON u.empresa_id = c.empresa_id AND u.usuario_id = c.usuario_id
+             WHERE c.empresa_id = :empresa AND c.apertura >= :desde AND c.apertura < :hasta
+               AND (:cajero IS NULL OR c.usuario_id = :cajero)
+             ORDER BY c.apertura DESC, c.cierre_id DESC
+            """;
+
+    private static final String PAGOS_DEL_PERIODO = """
+            SELECT p.cierre_id, m.tipo, SUM(p.monto) AS total
+              FROM cierres_caja c
+              JOIN pagos_venta p ON p.empresa_id = c.empresa_id AND p.cierre_id = c.cierre_id
+              JOIN medios_pago m ON m.empresa_id = p.empresa_id AND m.medio_id = p.medio_id
+             WHERE c.empresa_id = :empresa AND c.apertura >= :desde AND c.apertura < :hasta
+               AND (:cajero IS NULL OR c.usuario_id = :cajero)
+             GROUP BY p.cierre_id, m.tipo
+            """;
+
+    private static final String REEMBOLSOS_EN_EFECTIVO_DEL_PERIODO = """
+            SELECT d.cierre_id, SUM(r.monto) AS total
+              FROM cierres_caja c
+              JOIN devoluciones d ON d.empresa_id = c.empresa_id AND d.cierre_id = c.cierre_id
+              JOIN reembolsos r ON r.empresa_id = d.empresa_id AND r.devolucion_id = d.devolucion_id
+              JOIN medios_pago m ON m.empresa_id = r.empresa_id AND m.medio_id = r.medio_id
+             WHERE c.empresa_id = :empresa AND c.apertura >= :desde AND c.apertura < :hasta
+               AND (:cajero IS NULL OR c.usuario_id = :cajero) AND m.tipo = 'EFECTIVO'
+             GROUP BY d.cierre_id
+            """;
+
+    /**
+     * Toma el turno abierto del cajero para cerrarlo: la fila queda bloqueada con {@code FOR UPDATE}, por su
+     * clave primaria y solo por ella. Espera a las ventas, los cobros y las devoluciones en curso, que
+     * la tienen con {@code FOR SHARE}, y las que lleguen después encuentran el turno cerrado. Vacío si el cajero
+     * no tiene turno abierto, o si se cerró mientras esperaba.
+     *
+     * Son dos pasos, como en {@link #bloquearAbiertoDe}: primero se averigua cuál es el turno sin bloquear
+     * nada, por {@code abierto_de}; después se toma solo la fila, por la clave primaria y repitiendo
+     * {@code cierre IS NULL}. El cierre escribe {@code cierre} y con ello cambia {@code abierto_de}, de modo que
+     * tocará {@code uq_cierres_abierto}; y toda operación que inserta algo del turno comprueba una clave
+     * foránea hacia {@code uq_cierres_empresa}. Bloquear por alguno de esos dos índices, en vez de por
+     * {@code PRIMARY}, abriría un interbloqueo contra una venta en curso. <b>La transacción que llama debe ir
+     * en {@code READ_COMMITTED}</b>: el primer paso es una lectura sin bloqueo y, con la lectura repetible, abriría la
+     * instantánea antes de esperar; las sumas que vienen después no verían la venta que acaba de confirmarse.
+     */
     public Optional<TurnoPorCerrar> bloquearParaCerrar(Integer empresa, Integer cajero) {
-        throw new UnsupportedOperationException("Tarea 10");
+        Optional<Long> turno = jdbc.sql("""
+                        SELECT cierre_id FROM cierres_caja
+                         WHERE empresa_id = :empresa AND abierto_de = :cajero
+                        """)
+                .param("empresa", empresa)
+                .param("cajero", cajero)
+                .query(Long.class)
+                .optional();
+        if (turno.isEmpty()) {
+            return Optional.empty();
+        }
+        return jdbc.sql("""
+                        SELECT cierre_id, base_efectivo FROM cierres_caja FORCE INDEX (PRIMARY)
+                         WHERE cierre_id = :turno AND empresa_id = :empresa AND cierre IS NULL
+                           FOR UPDATE
+                        """)
+                .param("turno", turno.get())
+                .param("empresa", empresa)
+                .query((fila, numero) -> new TurnoPorCerrar(fila.getLong("cierre_id"),
+                        enPesos(fila.getBigDecimal("base_efectivo"))))
+                .optional();
     }
 
+    /** Lo cobrado en el turno por tipo de medio, solo los tipos con pagos, en pesos enteros. */
     public Map<TipoMedio, BigDecimal> pagosPorMedio(Integer empresa, Long turno) {
-        throw new UnsupportedOperationException("Tarea 10");
+        Map<TipoMedio, BigDecimal> porMedio = new EnumMap<>(TipoMedio.class);
+        jdbc.sql(PAGOS_DEL_TURNO)
+                .param("empresa", empresa)
+                .param("turno", turno)
+                .query((fila, numero) -> Map.entry(TipoMedio.valueOf(fila.getString("tipo")),
+                        enPesos(fila.getBigDecimal("total"))))
+                .list()
+                .forEach(par -> porMedio.put(par.getKey(), par.getValue()));
+        return porMedio;
     }
 
+    /** Lo reembolsado en efectivo por las devoluciones del turno, en pesos enteros (cero si no hubo). */
     public BigDecimal reembolsosEnEfectivo(Integer empresa, Long turno) {
-        throw new UnsupportedOperationException("Tarea 10");
+        return enPesos(jdbc.sql(REEMBOLSOS_EN_EFECTIVO_DEL_TURNO)
+                .param("empresa", empresa)
+                .param("turno", turno)
+                .query(BigDecimal.class)
+                .single());
     }
 
+    /**
+     * Cierra el turno: escribe la hora, lo esperado, lo contado y la observación. {@code diferencia} es la
+     * columna generada y no se escribe. Se llama con el turno ya bloqueado, y {@code cierre IS NULL} es la
+     * última guarda: si no actualiza una fila, algo rompió el bloqueo y es un error, no un caso de negocio.
+     */
     public void registrarCierre(Integer empresa, Long turno, LocalDateTime cierre, BigDecimal esperado,
                                 BigDecimal contado, String observacion) {
-        throw new UnsupportedOperationException("Tarea 10");
+        int filas = jdbc.sql("""
+                        UPDATE cierres_caja
+                           SET cierre = :cierre, esperado = :esperado, contado = :contado,
+                               observacion = :observacion
+                         WHERE cierre_id = :turno AND empresa_id = :empresa AND cierre IS NULL
+                        """)
+                .param("cierre", cierre)
+                .param("esperado", esperado)
+                .param("contado", contado)
+                .param("observacion", observacion, Types.VARCHAR)
+                .param("turno", turno)
+                .param("empresa", empresa)
+                .update();
+        if (filas != 1) {
+            throw new IllegalStateException("El cierre del turno " + turno + " no actualizó una fila: " + filas + ".");
+        }
     }
 
+    /** Los turnos abiertos en la ventana {@code [desde, hasta)}, los de un cajero o (nulo) los de toda la empresa. */
     public List<TurnoDeLista> turnosDelPeriodo(Integer empresa, LocalDateTime desde, LocalDateTime hasta,
                                                Integer cajeroONulo) {
-        throw new UnsupportedOperationException("Tarea 10");
+        return jdbc.sql(TURNOS_DEL_PERIODO)
+                .param("empresa", empresa)
+                .param("desde", desde)
+                .param("hasta", hasta)
+                .param("cajero", cajeroONulo, Types.INTEGER)
+                .query((fila, numero) -> new TurnoDeLista(turno(fila, numero),
+                        enPesos(fila.getBigDecimal("esperado")),
+                        fila.getBigDecimal("contado") == null ? null : enPesos(fila.getBigDecimal("contado")),
+                        fila.getString("observacion")))
+                .list();
     }
 
+    /** Lo cobrado por tipo de medio en cada turno de la ventana, en una sola consulta. */
     public Map<Long, Map<TipoMedio, BigDecimal>> pagosPorMedioDelPeriodo(Integer empresa, LocalDateTime desde,
                                                                          LocalDateTime hasta, Integer cajeroONulo) {
-        throw new UnsupportedOperationException("Tarea 10");
+        Map<Long, Map<TipoMedio, BigDecimal>> porTurno = new HashMap<>();
+        jdbc.sql(PAGOS_DEL_PERIODO)
+                .param("empresa", empresa)
+                .param("desde", desde)
+                .param("hasta", hasta)
+                .param("cajero", cajeroONulo, Types.INTEGER)
+                .query((fila, numero) -> {
+                    porTurno.computeIfAbsent(fila.getLong("cierre_id"), t -> new EnumMap<>(TipoMedio.class))
+                            .put(TipoMedio.valueOf(fila.getString("tipo")), enPesos(fila.getBigDecimal("total")));
+                    return null;
+                })
+                .list();
+        return porTurno;
     }
 
+    /** Lo reembolsado en efectivo en cada turno de la ventana, en una sola consulta; los turnos sin reembolsos no salen. */
     public Map<Long, BigDecimal> reembolsosEnEfectivoDelPeriodo(Integer empresa, LocalDateTime desde,
                                                                LocalDateTime hasta, Integer cajeroONulo) {
-        throw new UnsupportedOperationException("Tarea 10");
+        Map<Long, BigDecimal> porTurno = new HashMap<>();
+        jdbc.sql(REEMBOLSOS_EN_EFECTIVO_DEL_PERIODO)
+                .param("empresa", empresa)
+                .param("desde", desde)
+                .param("hasta", hasta)
+                .param("cajero", cajeroONulo, Types.INTEGER)
+                .query((fila, numero) -> {
+                    porTurno.put(fila.getLong("cierre_id"), enPesos(fila.getBigDecimal("total")));
+                    return null;
+                })
+                .list();
+        return porTurno;
+    }
+
+    private static BigDecimal enPesos(BigDecimal monto) {
+        return monto.setScale(0, RoundingMode.HALF_UP);
     }
 
     private static Turno turno(ResultSet fila, int numero) throws SQLException {
         return new Turno(fila.getLong("cierre_id"), fila.getInt("usuario_id"), fila.getString("nombre"),
                 conDesplazamiento(fila.getObject("apertura", LocalDateTime.class)),
                 // En pesos enteros: la columna guarda dos decimales que siempre son cero.
-                fila.getBigDecimal("base_efectivo").setScale(0, RoundingMode.HALF_UP),
+                enPesos(fila.getBigDecimal("base_efectivo")),
                 conDesplazamiento(fila.getObject("cierre", LocalDateTime.class)));
     }
 
