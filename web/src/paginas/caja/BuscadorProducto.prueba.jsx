@@ -100,14 +100,75 @@ describe('buscador de producto', () => {
     expect(alCrearProducto).toHaveBeenCalledWith('000')
   })
 
-  it('buscar por nombre lista los resultados y cada uno se agrega', async () => {
-    montar()
-    await userEvent.type(campo(), 'pintura{Enter}')
-    await userEvent.click(await screen.findByRole('button', { name: /buscar por nombre/i }))
-    expect(productosPorTexto).toHaveBeenCalledWith('pintura')
-    await userEvent.click(await screen.findByRole('button', { name: 'Agregar Pintura blanca' }))
-    expect(alAgregar).toHaveBeenCalledWith(PINTURA)
-    expect(campo()).toHaveFocus()
+  describe('lo que no es un código se busca por nombre sin otro clic', () => {
+    it('un nombre muestra los productos que coinciden, con una línea neutra y sin la advertencia', async () => {
+      montar()
+      await userEvent.type(campo(), 'pintura{Enter}')
+      expect(await screen.findByRole('button', { name: 'Agregar Pintura blanca' })).toBeInTheDocument()
+      expect(productoPorCodigo).toHaveBeenCalledWith('pintura')
+      expect(productosPorTexto).toHaveBeenCalledWith('pintura')
+      expect(screen.getByText('No es un código; estos productos coinciden con "pintura".')).toBeInTheDocument()
+      expect(screen.queryByText(/no encontramos ese código/i)).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /crear producto/i })).not.toBeInTheDocument()
+    })
+
+    it('el botón «Buscar» hace lo mismo que Enter', async () => {
+      montar()
+      await userEvent.type(campo(), 'pintura')
+      await userEvent.click(screen.getByRole('button', { name: /^buscar$/i }))
+      expect(await screen.findByRole('button', { name: 'Agregar Pintura blanca' })).toBeInTheDocument()
+    })
+
+    it('cada resultado se agrega, quita la línea neutra y devuelve el foco al buscador', async () => {
+      montar()
+      await userEvent.type(campo(), 'pintura{Enter}')
+      await userEvent.click(await screen.findByRole('button', { name: 'Agregar Pintura blanca' }))
+      expect(alAgregar).toHaveBeenCalledWith(PINTURA)
+      expect(screen.queryByText(/no es un código/i)).not.toBeInTheDocument()
+      expect(campo()).toHaveFocus()
+    })
+
+    it('los resultados se pueden descartar', async () => {
+      montar()
+      await userEvent.type(campo(), 'pintura{Enter}')
+      await screen.findByRole('button', { name: 'Agregar Pintura blanca' })
+      await userEvent.click(screen.getByRole('button', { name: /descartar los resultados de pintura/i }))
+      expect(screen.queryByText(/no es un código/i)).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Agregar Pintura blanca' })).not.toBeInTheDocument()
+    })
+
+    it('si tampoco hay productos con ese nombre, avisa «No encontramos ese código» y sigue ofreciendo buscar y crear', async () => {
+      montar()
+      await userEvent.type(campo(), '000{Enter}')
+      expect(await screen.findByText(/no encontramos ese código: 000/i)).toBeInTheDocument()
+      expect(productosPorTexto).toHaveBeenCalledWith('000')
+      expect(screen.queryByText(/no es un código/i)).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /crear producto \(requiere administrador\)/i })).toBeInTheDocument()
+      await userEvent.click(screen.getByRole('button', { name: /descartar el código 000/i }))
+      expect(screen.queryByText(/no encontramos ese código/i)).not.toBeInTheDocument()
+    })
+
+    it('si la búsqueda por nombre falla, queda la advertencia del código para atenderla a mano', async () => {
+      productosPorTexto.mockRejectedValueOnce(new Error('Se cayó'))
+      montar()
+      await userEvent.type(campo(), 'pintura{Enter}')
+      expect(await screen.findByText(/no encontramos ese código: pintura/i)).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /buscar por nombre el código pintura/i })).toBeInTheDocument()
+    })
+
+    it('un código que existe se agrega al instante y no pide ninguna búsqueda por nombre', async () => {
+      montar()
+      await userEvent.type(campo(), '7701234567890{Enter}')
+      await waitFor(() => expect(alAgregar).toHaveBeenCalledWith(TORNILLO))
+      expect(productosPorTexto).not.toHaveBeenCalled()
+    })
+
+    it('un nombre lento no frena los escaneos que vienen detrás', async () => {
+      productosPorTexto.mockImplementationOnce(() => new Promise(() => {}))
+      montar()
+      await userEvent.type(campo(), 'pintura{Enter}7701234567890{Enter}')
+      await waitFor(() => expect(alAgregar).toHaveBeenCalledWith(TORNILLO))
+    })
   })
 
   it('un producto no vendible muestra el mensaje del servidor y no se agrega', async () => {
