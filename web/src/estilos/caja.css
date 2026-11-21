@@ -188,6 +188,7 @@
 .recibo-lineas li + li { margin-top: var(--espacio-2); }
 .recibo-linea-nombre, .recibo-fila { display: flex; justify-content: space-between; gap: var(--espacio-3); }
 .recibo-linea-nombre { font-weight: 600; }
+.recibo-linea-nombre > :last-child, .recibo-fila > :last-child { flex-shrink: 0; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .recibo-linea-detalle { color: var(--tinta-2); font-size: var(--t-etiqueta); }
 .recibo-marca { font-weight: 700; }
 .recibo-total { font-weight: 700; font-size: var(--t-titulo-tarjeta); border-top: 1px solid var(--tinta); padding-top: var(--espacio-1); }
@@ -203,6 +204,7 @@
   .caja-seccion, .caja-resumen { padding: var(--espacio-4); }
   .caja-cabecera h1 { font-size: 24px; line-height: 30px; }
   .caja-buscador-fila .boton { flex: 1 1 100%; }
+  .caja-descuento-total { flex-direction: column; align-items: flex-start; }
   .caja-velo { padding: 0; place-items: stretch; }
   .caja-dialogo { max-width: none; max-height: 100%; border-radius: 0; }
 }
@@ -215,10 +217,6 @@
 .recibo-impresion .recibo {
   width: 100%; max-width: none; box-sizing: border-box; border: 0; border-radius: 0;
   padding: 3mm; font-size: 12px; line-height: 1.35;
-}
-.recibo-impresion .recibo-linea-nombre, .recibo-impresion .recibo-fila { gap: var(--espacio-2); }
-.recibo-impresion .recibo-linea-nombre > :last-child, .recibo-impresion .recibo-fila > :last-child {
-  white-space: nowrap; font-variant-numeric: tabular-nums;
 }
 @media print {
   body > *:not(.recibo-impresion) { display: none !important; }
