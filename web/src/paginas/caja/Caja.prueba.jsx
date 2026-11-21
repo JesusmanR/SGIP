@@ -278,6 +278,8 @@ describe('caja: cobro', () => {
     expect(await screen.findByText('Black Steel Parts')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: /^imprimir$/i }))
     expect(window.print).toHaveBeenCalledTimes(1)
+    expect(document.head.querySelector('style[data-impresion-recibo]')?.textContent).toMatch(/@page\s*\{\s*size:\s*80mm\s+\d/)
+    window.dispatchEvent(new Event('afterprint'))
     await userEvent.click(screen.getByRole('button', { name: /descargar pdf/i }))
     expect(window.print).toHaveBeenCalledTimes(2)
     // Nueva venta: carrito vacío y el foco en el buscador.

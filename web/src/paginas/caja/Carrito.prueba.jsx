@@ -86,4 +86,13 @@ describe('carrito', () => {
     await userEvent.type(screen.getByLabelText('Descuento de toda la compra'), '1')
     expect(alCambiarDescuentoTotal).toHaveBeenCalledWith({ tipo: 'PORCENTAJE', valor: '1' })
   })
+
+  it('el tipo y el valor del descuento de una línea van en la misma fila, igual que el de la compra', () => {
+    montar([lineaDeProducto(TORNILLO)])
+    for (const [tipo, valor] of [['Tipo de descuento de Tornillo M6', 'Descuento de Tornillo M6'], ['Tipo de descuento de toda la compra', 'Descuento de toda la compra']]) {
+      const fila = screen.getByLabelText(tipo).closest('.caja-descuento')
+      expect(fila).not.toBeNull()
+      expect(within(fila).getByLabelText(valor)).toBeInTheDocument()
+    }
+  })
 })

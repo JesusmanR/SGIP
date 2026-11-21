@@ -67,8 +67,9 @@ describe('hoja de estilos de la caja', () => {
   const css = readFileSync('src/estilos/caja.css', 'utf8')
 
   it('imprime en tirilla de 80 mm y solo el recibo', () => {
-    expect(css).toMatch(/@page\s*\{\s*size:\s*80mm auto/)
+    expect(css).not.toMatch(/size:\s*80mm\s+auto/)
     expect(css).toMatch(/@media print/)
+    expect(css).toMatch(/display:\s*none/)
   })
 
   it('el mensaje de por qué no se puede cobrar conserva su color de aviso y su peso', () => {
