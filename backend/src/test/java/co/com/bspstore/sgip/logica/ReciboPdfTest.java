@@ -16,6 +16,10 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -185,5 +189,47 @@ class ReciboPdfTest {
         }
         // el importe de la línea va a la derecha del primer trozo: se cuentan las letras, no la cadena entera
         assertEquals(largo.length(), texto(bytes).chars().filter(c -> c == 'X').count());
+    }
+
+    // ------------------------------------------------------- varios recibos a la vez
+
+    /**
+     * Las fuentes de PDFBox guardan mapas que se llenan al usarlas: compartirlas entre hilos las corrompe. Cada
+     * hilo pide recibos con su propio consecutivo y cada PDF tiene que traer el suyo. La carrera no es
+     * determinista: la prueba protege, no demuestra.
+     */
+    @Test
+    void variosRecibosALaVezNoSeMezclanNiFallan() throws Exception {
+        int hilos = 8;
+        int porHilo = 25;
+        ExecutorService pool = Executors.newFixedThreadPool(hilos);
+        try {
+            List<Future<Integer>> futuros = new ArrayList<>();
+            for (int h = 0; h < hilos; h++) {
+                int hilo = h;
+                futuros.add(pool.submit(() -> {
+                    int bien = 0;
+                    for (int i = 0; i < porHilo; i++) {
+                        String consecutivo = "V-H" + hilo + "N" + i;
+                        Recibo base = recibo(List.of(linea("Celular económico " + consecutivo)), d("3610.00"),
+                                List.of("Domicilio"));
+                        Recibo suyo = new Recibo(base.empresa(), base.nitEmpresa(), consecutivo, base.fecha(),
+                                base.cajero(), base.cliente(), base.identificacionCliente(), base.lineas(),
+                                base.subtotal(), base.descuento(), base.iva(), base.total(), base.pagos(),
+                                base.cambio(), base.marcas());
+                        String t = texto(pdf.generar(suyo));
+                        if (t.contains("Venta " + consecutivo) && t.contains("Celular económico " + consecutivo)) {
+                            bien++;
+                        }
+                    }
+                    return bien;
+                }));
+            }
+            for (Future<Integer> futuro : futuros) {
+                assertEquals(porHilo, futuro.get(60, TimeUnit.SECONDS));
+            }
+        } finally {
+            pool.shutdownNow();
+        }
     }
 }

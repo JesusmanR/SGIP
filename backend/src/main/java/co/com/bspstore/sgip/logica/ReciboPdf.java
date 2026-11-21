@@ -52,18 +52,28 @@ public class ReciboPdf {
     private static final float INTERLINEADO = 1.25f;
     private static final float SEPARACION = 4f;
 
-    private static final PDFont NORMAL = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
-    private static final PDFont NEGRITA = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
+    /**
+     * Las fuentes NO son estáticas: un {@code PDType1Font} guarda mapas que se llenan al usarlo
+     * ({@code codeToBytesMap}, {@code codeToWidthMap}) y PDFBox no es seguro entre hilos, así que cada recibo crea
+     * las suyas. Crear la primera hace que PDFBox recorra las fuentes instaladas del sistema (unos segundos la
+     * primera vez en una máquina); este bloque lo paga al cargar la clase, que es al arrancar la aplicación, y no
+     * en el primer recibo que alguien pida.
+     */
+    static {
+        new PDType1Font(Standard14Fonts.FontName.HELVETICA);
+    }
 
     private static final DateTimeFormatter FECHA_Y_HORA = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
 
     public byte[] generar(Recibo recibo) {
+        PDFont normal = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
+        PDFont negrita = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
         Hoja hoja = new Hoja();
-        componer(hoja, recibo);
+        componer(hoja, recibo, normal, negrita);
         try (PDDocument documento = new PDDocument()) {
             PDPage pagina = new PDPage(new PDRectangle(ANCHO, hoja.alto()));
             documento.addPage(pagina);
-            documento.getDocumentInformation().setTitle(limpiar("Recibo " + recibo.consecutivo(), NORMAL));
+            documento.getDocumentInformation().setTitle(limpiar("Recibo " + recibo.consecutivo(), normal));
             try (PDPageContentStream contenido = new PDPageContentStream(documento, pagina)) {
                 hoja.dibujar(contenido, pagina.getMediaBox().getHeight());
             }
@@ -77,22 +87,22 @@ public class ReciboPdf {
 
     // ------------------------------------------------------------ la plantilla
 
-    private static void componer(Hoja h, Recibo r) {
-        h.centrado(r.empresa(), NEGRITA, TAMANO_TITULO);
+    private static void componer(Hoja h, Recibo r, PDFont normal, PDFont negrita) {
+        h.centrado(r.empresa(), negrita, TAMANO_TITULO);
         if (r.nitEmpresa() != null) {
-            h.centrado("NIT " + r.nitEmpresa(), NORMAL, TAMANO);
+            h.centrado("NIT " + r.nitEmpresa(), normal, TAMANO);
         }
         h.espacio();
 
-        h.izquierda("Venta " + r.consecutivo(), NORMAL, TAMANO);
-        h.izquierda("Fecha: " + r.fecha().format(FECHA_Y_HORA), NORMAL, TAMANO);
-        h.izquierda("Cajero: " + r.cajero(), NORMAL, TAMANO);
+        h.izquierda("Venta " + r.consecutivo(), normal, TAMANO);
+        h.izquierda("Fecha: " + r.fecha().format(FECHA_Y_HORA), normal, TAMANO);
+        h.izquierda("Cajero: " + r.cajero(), normal, TAMANO);
         h.izquierda("Cliente: " + r.cliente() + (r.identificacionCliente() == null ? "" : " (" + r.identificacionCliente() + ")"),
-                NORMAL, TAMANO);
+                normal, TAMANO);
         h.raya();
 
         for (LineaDeRecibo l : r.lineas()) {
-            h.fila(l.nombre(), pesos(l.total()), NORMAL, TAMANO);
+            h.fila(l.nombre(), pesos(l.total()), normal, TAMANO);
             StringBuilder detalle = new StringBuilder(l.cantidad() + " × " + pesos(l.precioUnitario()));
             if (l.descuento() != null && l.descuento().signum() > 0) {
                 detalle.append(" · descuento ").append(pesos(l.descuento()));
@@ -100,45 +110,45 @@ public class ReciboPdf {
             if (l.iva() != null && l.iva().signum() > 0) {
                 detalle.append(" · IVA ").append(pesos(l.iva()));
             }
-            h.izquierda(detalle.toString(), NORMAL, TAMANO_PEQUENO);
+            h.izquierda(detalle.toString(), normal, TAMANO_PEQUENO);
             h.hueco(SEPARACION / 2);
         }
         h.raya();
 
-        h.fila("Subtotal", pesos(r.subtotal()), NORMAL, TAMANO);
+        h.fila("Subtotal", pesos(r.subtotal()), normal, TAMANO);
         if (r.descuento() != null && r.descuento().signum() > 0) {
-            h.fila("Descuento", pesos(r.descuento()), NORMAL, TAMANO);
+            h.fila("Descuento", pesos(r.descuento()), normal, TAMANO);
         }
         if (r.iva() != null) {
-            h.fila("IVA", pesos(r.iva()), NORMAL, TAMANO);
+            h.fila("IVA", pesos(r.iva()), normal, TAMANO);
         }
-        h.fila("Total", pesos(r.total()), NEGRITA, TAMANO_TITULO);
+        h.fila("Total", pesos(r.total()), negrita, TAMANO_TITULO);
         h.raya();
 
         for (PagoDeRecibo p : r.pagos()) {
             String medio = p.tipo() == TipoMedio.SALDO_A_FAVOR ? "Saldo a favor" : p.medio();
-            h.fila(medio, pesos(p.monto()), NORMAL, TAMANO);
+            h.fila(medio, pesos(p.monto()), normal, TAMANO);
             if (p.recibido() != null && p.recibido().compareTo(p.monto()) != 0) {
-                h.fila("Recibido", pesos(p.recibido()), NORMAL, TAMANO_PEQUENO);
+                h.fila("Recibido", pesos(p.recibido()), normal, TAMANO_PEQUENO);
             }
             if (p.referencia() != null && !p.referencia().isBlank()) {
-                h.izquierda("Ref. " + p.referencia(), NORMAL, TAMANO_PEQUENO);
+                h.izquierda("Ref. " + p.referencia(), normal, TAMANO_PEQUENO);
             }
         }
         if (r.cambio() != null && r.cambio().signum() > 0) {
-            h.fila("Cambio", pesos(r.cambio()), NEGRITA, TAMANO);
+            h.fila("Cambio", pesos(r.cambio()), negrita, TAMANO);
         }
         if (!r.pagos().isEmpty() || (r.cambio() != null && r.cambio().signum() > 0)) {
             h.raya();
         }
 
         for (String marca : r.marcas()) {
-            h.izquierda(marca, NEGRITA, TAMANO);
+            h.izquierda(marca, negrita, TAMANO);
         }
         if (!r.marcas().isEmpty()) {
             h.espacio();
         }
-        h.centrado(Recibo.PIE, NORMAL, TAMANO_PEQUENO);
+        h.centrado(Recibo.PIE, normal, TAMANO_PEQUENO);
     }
 
     // ------------------------------------------------------------ los importes
