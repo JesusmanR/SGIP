@@ -66,6 +66,18 @@
 		</dependency>
 
 		<!--
+			El PDF del recibo (RF-70, ADR-0035). POI no genera PDF; PDFBox es la
+			librería de Apache (licencia Apache-2.0) y no arrastra dependencias
+			nativas ni de AWT. Queda acotada detrás de `ReciboPdf`: es la única
+			clase que la importa en producción.
+		-->
+		<dependency>
+			<groupId>org.apache.pdfbox</groupId>
+			<artifactId>pdfbox</artifactId>
+			<version>3.0.8</version>
+		</dependency>
+
+		<!--
 			Migraciones V32 en adelante (ADR-0023). Las V1 a V31 siguen
 			en database/migrations y las aplica database/aplicar.sh.
 			Flyway necesita el módulo de MySQL aparte desde la versión 10.
