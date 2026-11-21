@@ -451,6 +451,10 @@ jobs:
       - name: Analizar el SQL escrito a mano del backend
         run: python3 database/verificar_sql_del_backend.py -h 127.0.0.1 -u root
 
+  # OJO: el JAR que se construye en este trabajo lleva dentro un application.yml
+  # copiado del ejemplo (ver «Preparar la configuración»). Es solo para las
+  # pruebas de este trabajo: no se debe publicar, subir como artefacto ni
+  # desplegar nunca. Un JAR para publicar se construye sin ese archivo.
   backend:
     name: Compilación y pruebas del backend
     runs-on: ubuntu-latest
@@ -577,10 +581,21 @@ jobs:
       # Recorre un turno completo por la API y comprueba el PDF del recibo
       # desde dentro del JAR ejecutable. Crea sus propios usuarios y
       # productos, de modo que no depende de lo que dejaron las pruebas.
+      # La contraseña va en MYSQL_PWD y no en la línea de órdenes. La base de este
+      # trabajo es desechable (un servicio que muere con el trabajo): se declara
+      # con SGIP_CAJA_BD_DESECHABLE, sin lo cual el guion se niega a correr.
+      - name: Comprobar que el verificador de la caja se niega donde no debe
+        env:
+          MYSQL_PWD: sgip_ci
+        run: bash database/verificar_caja_guardas.sh -h 127.0.0.1 -P 3306 -u root
+
       - name: Verificar la caja de punta a punta, desde el JAR
+        env:
+          MYSQL_PWD: sgip_ci
+          SGIP_CAJA_BD_DESECHABLE: 'si'
         run: |
           jar=$(ls "$PWD"/backend/target/backend-*.jar | grep -v '\.original$' | head -1)
-          SGIP_CAJA_JAR="$jar" bash database/verificar_caja.sh -h 127.0.0.1 -P 3306 -u root -psgip_ci
+          SGIP_CAJA_JAR="$jar" bash database/verificar_caja.sh -h 127.0.0.1 -P 3306 -u root
 
   web:
     name: Compilación del front web
