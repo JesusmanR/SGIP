@@ -4,7 +4,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
-  registrarDevolucion, saldoDeCliente, ventaPorConsecutivo,
+  CLAVE_EN_USO, registrarDevolucion, saldoDeCliente, ventaPorConsecutivo,
 } from '../../servicios/api/caja.js'
 import { entrar, errorApi, pesos, prepararApi } from './ayuda.js'
 import Devolucion from './Devolucion.jsx'
@@ -12,6 +12,7 @@ import Devolucion from './Devolucion.jsx'
 vi.mock('../../servicios/api/caja.js')
 
 // Tornillo: 3 unidades a 11.900 (35.700). Pintura: 1 unidad a 23.800.
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const VENTA = {
   id: 100, consecutivo: 'V-0042', estado: 'ACTIVA', estadoPago: 'PAGADA', total: 59500,
   cliente: { id: 7, nombre: 'Ana Pérez', consumidorFinal: false },
@@ -117,6 +118,7 @@ describe('devolución', () => {
     await userEvent.click(within(dialogo).getByRole('button', { name: /autorizar y devolver/i }))
     await waitFor(() => expect(registrarDevolucion).toHaveBeenCalled())
     expect(registrarDevolucion).toHaveBeenCalledWith({
+      clave: expect.stringMatching(UUID),
       ventaId: 100,
       unidades: [{ productoId: 30, cantidad: 1 }],
       motivo: 'El cliente se equivocó de medida',
@@ -138,6 +140,7 @@ describe('devolución', () => {
     await waitFor(() => expect(registrarDevolucion).toHaveBeenCalled())
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(registrarDevolucion.mock.calls[0][0]).toEqual({
+      clave: expect.stringMatching(UUID),
       ventaId: 100, unidades: [{ productoId: 30, cantidad: 1 }], motivo: 'El cliente se equivocó de medida',
       reembolsos: [{ medioId: 1, monto: 11900 }],
     })
@@ -396,6 +399,104 @@ describe('devolución', () => {
         await userEvent.click(screen.getByRole('button', { name: /anular toda la venta/i }))
         expect(screen.getByLabelText(/^saldo a favor/i)).toHaveValue('19500')
       })
+    })
+  })
+
+  describe('clave de idempotencia', () => {
+    const claveDe = (n) => registrarDevolucion.mock.calls[n][0].clave
+
+    async function prepararAdmin() {
+      entrar('ADMINISTRADOR')
+      montar()
+      await buscar()
+      await cantidad('Tornillo M6', 1)
+      await dinero(/^efectivo$/i, 11900)
+      await motivo()
+    }
+
+    it('manda una clave (UUID) y la venta de la devolución, sin el PIN en el cuerpo del reintento guardado', async () => {
+      await prepararAdmin()
+      await confirmar()
+      await waitFor(() => expect(registrarDevolucion).toHaveBeenCalled())
+      expect(claveDe(0)).toMatch(UUID)
+      expect(registrarDevolucion.mock.calls[0][0].autorizacion).toBeUndefined()
+    })
+
+    it('un reintento del mismo cuerpo tras un error de red usa la misma clave', async () => {
+      registrarDevolucion.mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      await prepararAdmin()
+      await confirmar()
+      expect(await screen.findByRole('alert')).toHaveTextContent(/no sabemos si se registró/i)
+      await confirmar()
+      await waitFor(() => expect(registrarDevolucion).toHaveBeenCalledTimes(2))
+      expect(claveDe(1)).toBe(claveDe(0))
+      expect(registrarDevolucion.mock.calls[1][0]).toEqual(registrarDevolucion.mock.calls[0][0])
+      expect(await screen.findByRole('heading', { name: /devolución registrada/i })).toBeInTheDocument()
+    })
+
+    it('tras un PIN rechazado, volver a escribir el PIN reenvía con la misma clave', async () => {
+      registrarDevolucion.mockRejectedValueOnce(errorApi(403, 'El PIN no es correcto.'))
+      montar()
+      await buscar()
+      await cantidad('Tornillo M6', 1)
+      await dinero(/^efectivo$/i, 11900)
+      await motivo()
+      await confirmar()
+      const dialogo = await screen.findByRole('dialog')
+      await userEvent.selectOptions(within(dialogo).getByLabelText(/administrador/i), '3')
+      await userEvent.type(within(dialogo).getByLabelText(/^pin$/i), '0000')
+      await userEvent.click(within(dialogo).getByRole('button', { name: /autorizar y devolver/i }))
+      await within(dialogo).findByRole('alert')
+      await userEvent.type(within(dialogo).getByLabelText(/^pin$/i), '4821')
+      await userEvent.click(within(dialogo).getByRole('button', { name: /autorizar y devolver/i }))
+      await waitFor(() => expect(registrarDevolucion).toHaveBeenCalledTimes(2))
+      expect(claveDe(1)).toBe(claveDe(0))
+      expect(registrarDevolucion.mock.calls[1][0].autorizacion).toEqual({ administradorId: 3, pin: '4821' })
+    })
+
+    it('si el cajero cambia algo, la clave es otra', async () => {
+      registrarDevolucion.mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      await prepararAdmin()
+      await confirmar()
+      await screen.findByRole('alert')
+      await userEvent.type(screen.getByLabelText(/motivo de la devolución/i), ' y no sirvió')
+      await confirmar()
+      await waitFor(() => expect(registrarDevolucion).toHaveBeenCalledTimes(2))
+      expect(claveDe(1)).not.toBe(claveDe(0))
+    })
+
+    it('después de registrar, la siguiente devolución usa otra clave', async () => {
+      await prepararAdmin()
+      await confirmar()
+      await userEvent.click(await screen.findByRole('button', { name: /otra devolución/i }))
+      await buscar()
+      await cantidad('Tornillo M6', 1)
+      await dinero(/^efectivo$/i, 11900)
+      await motivo()
+      await confirmar()
+      await waitFor(() => expect(registrarDevolucion).toHaveBeenCalledTimes(2))
+      expect(claveDe(1)).not.toBe(claveDe(0))
+    })
+
+    it('el 409 de clave en uso dice que ya se registró con otros datos y suelta la clave', async () => {
+      registrarDevolucion.mockRejectedValueOnce(errorApi(409, 'La clave ya se usó.', CLAVE_EN_USO))
+      await prepararAdmin()
+      await confirmar()
+      expect(await screen.findByRole('alert')).toHaveTextContent(/esta devolución ya se registró con otros datos/i)
+      expect(screen.getByRole('alert')).not.toHaveTextContent(/clave|idempotencia/i)
+      await confirmar()
+      await waitFor(() => expect(registrarDevolucion).toHaveBeenCalledTimes(2))
+      expect(claveDe(1)).not.toBe(claveDe(0))
+    })
+
+    it('la respuesta repetida del servidor (200 con lo ya guardado) se muestra como éxito', async () => {
+      registrarDevolucion.mockResolvedValue({
+        id: 1, consecutivo: 'D-00000007', valorDevuelto: 11900, reembolsado: 11900, saldoPorCobrar: 0, estadoVenta: 'DEVUELTA_PARCIAL', reembolsos: [],
+      })
+      await prepararAdmin()
+      await confirmar()
+      expect(await screen.findByRole('heading', { name: /devolución registrada/i })).toBeInTheDocument()
+      expect(screen.getByText(/D-00000007/)).toBeInTheDocument()
     })
   })
 })
