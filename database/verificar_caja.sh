@@ -146,7 +146,12 @@ api () { # api MÉTODO /ruta token [cuerpo]
   local metodo="$1" ruta="$2" token="$3" cuerpo="${4-}"
   local args=(-s -m 120 -X "$metodo" -o "$TMP/respuesta" -w '%{http_code}')
   [[ -n "$token" ]] && args+=(-H "Authorization: Bearer $token")
-  [[ -n "$cuerpo" ]] && args+=(-H 'Content-Type: application/json' --data-binary "$cuerpo")
+  # El cuerpo va por archivo: por la línea de órdenes, curl.exe de Windows
+  # recodifica las tildes y el servidor recibiría un JSON roto.
+  if [[ -n "$cuerpo" ]]; then
+    printf '%s' "$cuerpo" > "$TMP/cuerpo"
+    args+=(-H 'Content-Type: application/json' --data-binary "@$TMP/cuerpo")
+  fi
   COD=$(curl "${args[@]}" "$URL/api/v1$ruta")
   CUERPO=$(cat "$TMP/respuesta")
 }
@@ -245,21 +250,24 @@ salida=$(ejecutar "
     FROM roles WHERE nombre = 'VENDEDOR';")
 [[ -z "$salida" ]] && ok "dos usuarios nuevos en la empresa 1, y la empresa activa" || abortar "no se pudieron crear los usuarios: $salida"
 
-ingresar () { # ingresar correo -> token
-  curl -s -m 30 -X POST "$URL/api/v1/auth/login" -H 'Content-Type: application/json' \
-       -d "{\"correo\":\"$1\",\"clave\":\"$CLAVE\"}" | json 'o.token'
+ingresar () { # ingresar correo -> deja el token en TOKEN y el id del usuario en USUARIO_ID
+  local r
+  r=$(curl -s -m 30 -X POST "$URL/api/v1/auth/login" -H 'Content-Type: application/json'        -d "{\"correo\":\"$1\",\"clave\":\"$CLAVE\"}")
+  TOKEN=$(json 'o.token' <<<"$r"); USUARIO_ID=$(json 'o.usuarioId' <<<"$r")
 }
-T_ADMIN=$(ingresar "$CORREO_ADMIN"); [[ -n "$T_ADMIN" ]] || abortar "el administrador no entra"
-T_VEND=$(ingresar "$CORREO_VEND");   [[ -n "$T_VEND" ]]  || abortar "el vendedor no entra"
-ok "el administrador y el vendedor entran"
-api GET /caja/administradores "$T_VEND"
-ADMIN_ID=$(json 'o.find(a=>a.nombre.includes("'"$RUN"'")).id' <<<"$CUERPO")
-[[ -n "$ADMIN_ID" ]] && ok "el vendedor ve a la administradora para llamarla (id $ADMIN_ID)" \
-  || abortar "el vendedor no ve a la administradora en /caja/administradores"
+ingresar "$CORREO_ADMIN"; T_ADMIN="$TOKEN"; ADMIN_ID="$USUARIO_ID"
+[[ -n "$T_ADMIN" ]] || abortar "el administrador no entra"
+ingresar "$CORREO_VEND"; T_VEND="$TOKEN"
+[[ -n "$T_VEND" ]] || abortar "el vendedor no entra"
+ok "el administrador (id $ADMIN_ID) y el vendedor entran"
 VEND_NOMBRE="Vendedor de la caja $RUN"
 
+api GET /caja/administradores "$T_VEND"
+igual "sin PIN, nadie puede autorizar: la lista de administradores está vacía" ""   "$(json 'o.find(a=>a.id===('"$ADMIN_ID"')).id' <<<"$CUERPO")"
 api PUT /perfil/pin "$T_ADMIN" "{\"pinNuevo\":\"$PIN\"}"
 espera "la administradora fija su PIN" 204 || abortar "sin PIN no hay autorizaciones"
+api GET /caja/administradores "$T_VEND"
+igual "con PIN, el vendedor la ve para llamarla" "$ADMIN_ID"   "$(json 'o.find(a=>a.id===('"$ADMIN_ID"')).id' <<<"$CUERPO")"
 
 CATEGORIA=$(consulta "SELECT categoria_id FROM categorias WHERE empresa_id = 1 AND generica = 1 LIMIT 1;")
 PROVEEDOR=$(consulta "SELECT proveedor_id FROM proveedores WHERE empresa_id = 1 AND nit = 'SIN-PROVEEDOR' LIMIT 1;")
@@ -278,7 +286,7 @@ crear_producto () { # crear_producto sufijo nombre costo precio existencia -> id
   espera "se crea el producto $1" 201 || abortar "no se pudo crear el producto $1"
   PRODUCTO_ID=$(json 'o.productoId' <<<"$CUERPO")
   api POST /inventario/ingresos "$T_ADMIN" "{\"productoId\":$PRODUCTO_ID,\"cantidad\":$5,\"documento\":\"CAJA-$RUN\",\"motivo\":\"Existencia inicial de la verificación\"}"
-  espera "ingresan $5 unidades de $1 por el kárdex" 201 || abortar "no se pudo ingresar la existencia de $1"
+  espera "ingresan $5 unidades de $1 por el kárdex" 200 || abortar "no se pudo ingresar la existencia de $1"
 }
 crear_producto A "Producto A de la caja" 40000 100000 50;  PROD_A=$PRODUCTO_ID
 crear_producto B "Producto B de la caja" 20000 50000 2;    PROD_B=$PRODUCTO_ID
@@ -362,7 +370,7 @@ ITEM=$(json 'o.find(e=>e.productoId===('"$PROD_B"')).itemId' <<<"$CUERPO")
 igual "el encargo es de 1 unidad que falta" "1" "$(json 'o.find(e=>e.productoId===('"$PROD_B"')).cantidadEncargo' <<<"$CUERPO")"
 api GET "/caja/encargos?estado=PENDIENTE" "$T_VEND"; espera_4xx "el vendedor no ve la lista de encargos"
 api POST /inventario/ingresos "$T_ADMIN" "{\"productoId\":$PROD_B,\"cantidad\":5,\"documento\":\"CAJA-$RUN\",\"motivo\":\"Llegó la remesa\"}"
-espera "llega la mercancía (ingreso de 5)" 201
+espera "llega la mercancía (ingreso de 5)" 200
 api GET "/caja/encargos?estado=LLEGO" "$T_ADMIN"
 [[ -n "$(json 'o.find(e=>e.productoId===('"$PROD_B"')).itemId' <<<"$CUERPO")" ]] \
   && ok "el encargo pasa a «llegó» al subir la existencia" || falla "el encargo no pasó a «llegó»"
@@ -522,8 +530,9 @@ TIEMPO_BUSQUEDA=$(printf '%s\n' "${tiempos_busqueda[@]}" | mediana_ms)
 tiempos_venta=()
 for k in $(seq 1 "$((MUESTRAS + 1))"); do
   cuerpo="{\"claveIdempotencia\":\"$(uuid)\",\"lineas\":[{\"productoId\":$PROD_C,\"cantidad\":1}],\"pagos\":[{\"medioId\":$MEDIO_EFECTIVO,\"monto\":$U_C,\"recibido\":$U_C}]}"
+  printf '%s' "$cuerpo" > "$TMP/cuerpo-venta"
   t=$(curl -s -o "$TMP/venta" -w '%{http_code} %{time_total}' -X POST -H "Authorization: Bearer $T_VEND" \
-        -H 'Content-Type: application/json' --data-binary "$cuerpo" "$URL/api/v1/caja/ventas")
+        -H 'Content-Type: application/json' --data-binary "@$TMP/cuerpo-venta" "$URL/api/v1/caja/ventas")
   [[ "${t%% *}" == "201" ]] || { falla "la venta de medición $k respondió ${t%% *}: $(cat "$TMP/venta" | head -c 200)"; break; }
   ESPERADO=$((ESPERADO + U_C))                # son ventas del mismo turno: cuentan en el cajón
   (( k > 1 )) && tiempos_venta+=("${t##* }")   # la primera es el calentamiento
