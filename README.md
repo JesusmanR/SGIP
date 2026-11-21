@@ -104,7 +104,10 @@ Dos comprobaciones cuidan el módulo de punta a punta:
   turno completo por la API contra una base desechable: venta mixta,
   encargo, producto nuevo, domicilio, cobro, devolución con saldo a favor,
   cierre con diferencia y kárdex. También mide «buscar por código» y
-  «registrar una venta» con 20.000 referencias.
+  «registrar una venta» con 20.000 referencias. Se niega a correr si no se
+  declara la base desechable (`SGIP_CAJA_BD_DESECHABLE=si`), si el servidor
+  no es de esta máquina o si la base tiene usuarios ajenos a la
+  demostración; ver `database/README.md`.
 
 ## Puesta en marcha de la base de datos
 

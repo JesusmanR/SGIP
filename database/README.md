@@ -369,8 +369,29 @@ API, de modo que necesita Java, Node y una base **desechable** (la V1 a la
 V31 aplicada, con la demostración): crea ventas, turnos y movimientos del
 kárdex que el esquema no deja deshacer.
 
+Por eso **se niega a correr**, con un mensaje claro y sin tocar nada, si:
+
+1. no está `SGIP_CAJA_BD_DESECHABLE=si` en el entorno (quien lo ejecuta
+   declara que la base se puede estropear);
+2. el servidor no es de esta máquina (solo vale `127.0.0.1`, `localhost` o
+   `::1`);
+3. la base tiene usuarios que no son los de la demostración. La V8 deja un
+   solo usuario, `admin@bspstore.com.co`; los únicos otros que admite son los
+   que el propio guion crea (`caja-<id>-admin|vendedor@verificar.local`),
+   para poder repetirlo sobre la misma base.
+
+`verificar_caja_guardas.sh` comprueba esas negativas (y las de las opciones
+mal dadas) sin arrancar nada.
+
+La contraseña va en `MYSQL_PWD`; el guion no la pone en la línea de órdenes
+de ningún proceso que lance (el backend la recibe por
+`SPRING_DATASOURCE_PASSWORD` y la sesión de la API va en un archivo
+temporal que se borra al salir). Un `-p` suelto se rechaza; `-p<clave>`
+pegada sigue valiendo, pero queda a la vista en la lista de procesos.
+
 ```bash
-bash verificar_caja.sh -h 127.0.0.1 -P 3306 -u root -psecreto
+MYSQL_PWD=secreto SGIP_CAJA_BD_DESECHABLE=si \
+  bash verificar_caja.sh -h 127.0.0.1 -P 3306 -u root
 ```
 
 El segundo cubre lo que introduce la V12 y los cuatro defectos que
