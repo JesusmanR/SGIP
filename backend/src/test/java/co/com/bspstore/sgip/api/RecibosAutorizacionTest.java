@@ -40,6 +40,7 @@ import java.util.Optional;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -179,7 +180,7 @@ class RecibosAutorizacionTest {
                 .andExpect(status().isNotFound());
         mvc.perform(get("/api/v1/caja/ventas/55/recibo.pdf").accept(MediaType.APPLICATION_PDF).with(como("VENDEDOR")))
                 .andExpect(status().isNotFound());
-        verify(recibos).pdf(55L);
+        verify(recibos, times(2)).pdf(55L);
     }
 
     @Test

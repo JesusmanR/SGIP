@@ -125,6 +125,20 @@ class ReciboPdfTest {
     }
 
     @Test
+    void elImporteVaEnLaMismaLineaQueSuRotulo() throws IOException {
+        byte[] bytes = pdf.generar(recibo(lineas(1), d("3610.00"), List.of()));
+
+        try (PDDocument documento = abrir(bytes)) {
+            PDFTextStripper porPosicion = new PDFTextStripper();
+            porPosicion.setSortByPosition(true);
+            String t = porPosicion.getText(documento);
+            assertTrue(t.lines().anyMatch(l -> l.matches("Subtotal\\s+\\$20\\.000")), t);
+            assertTrue(t.lines().anyMatch(l -> l.matches("Total\\s+\\$22\\.610")), t);
+            assertTrue(t.lines().anyMatch(l -> l.matches("Cambio\\s+\\$5\\.000")), t);
+        }
+    }
+
+    @Test
     void sinIvaElPdfNoTraeLaFilaDeIva() throws IOException {
         String con = texto(pdf.generar(recibo(lineas(1), d("3610.00"), List.of())));
         String sin = texto(pdf.generar(recibo(List.of(new LineaDeRecibo("Libro", 1, d("100.00"), d("0.00"), null,
@@ -169,6 +183,7 @@ class ReciboPdfTest {
         try (PDDocument documento = abrir(bytes)) {
             assertEquals(OCHENTA_MM, documento.getPage(0).getMediaBox().getWidth(), 0.01f);
         }
-        assertTrue(texto(bytes).replace("\n", "").replace(" ", "").contains(largo));
+        // el importe de la línea va a la derecha del primer trozo: se cuentan las letras, no la cadena entera
+        assertEquals(largo.length(), texto(bytes).chars().filter(c -> c == 'X').count());
     }
 }
