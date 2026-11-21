@@ -62,6 +62,7 @@ import java.util.TreeSet;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -264,6 +265,21 @@ class CajaRolesTest {
             }
         }
         return rutas;
+    }
+
+    @Test
+    void elPrefijoDeLaCajaCuentaConOSinBarraFinal() {
+        assertTrue(esDeLaCaja("/api/v1/caja"));
+        assertTrue(esDeLaCaja("/api/v1/caja/"));
+        assertTrue(esDeLaCaja("/api/v1/caja/turnos"));
+        assertTrue(esDeLaCaja("/api/v1/medios-pago"));
+        assertTrue(esDeLaCaja("/api/v1/medios-pago/{medioId}"));
+        assertTrue(esDeLaCaja("/api/v1/perfil/pin"));
+        // Un nombre que solo empieza igual no es de la caja.
+        assertFalse(esDeLaCaja("/api/v1/cajas"));
+        assertFalse(esDeLaCaja("/api/v1/medios-pagos"));
+        assertFalse(esDeLaCaja("/api/v1/perfil/pines"));
+        assertFalse(esDeLaCaja("/api/v1/productos"));
     }
 
     @Test
