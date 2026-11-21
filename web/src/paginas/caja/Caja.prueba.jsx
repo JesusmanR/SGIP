@@ -282,6 +282,7 @@ describe('caja: cobro', () => {
     window.dispatchEvent(new Event('afterprint'))
     await userEvent.click(screen.getByRole('button', { name: /descargar pdf/i }))
     expect(window.print).toHaveBeenCalledTimes(2)
+    window.dispatchEvent(new Event('afterprint'))
     // Nueva venta: carrito vacío y el foco en el buscador.
     await userEvent.click(screen.getByRole('button', { name: /nueva venta/i }))
     expect(screen.queryByLabelText('Cantidad de Tornillo M6')).not.toBeInTheDocument()

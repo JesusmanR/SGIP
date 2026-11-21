@@ -5,17 +5,17 @@ import { PESOS } from '../../servicios/formato.js'
 import '../../estilos/caja.css'
 import { esEncargo, faltante, nombreDe, precioDe, tieneEncargo } from './venta.js'
 
-const TIPOS = [['PORCENTAJE', 'Porcentaje (%)'], ['PESOS', 'Pesos ($)']]
+const TIPOS = [['PORCENTAJE', '%'], ['PESOS', '$']]
 
-function SelectorDeDescuento({ etiqueta, etiquetaTipo, tipo, valor, alCambiarTipo, alCambiarValor }) {
+function SelectorDeDescuento({ id, etiqueta, etiquetaTipo, tipo, valor, alCambiarTipo, alCambiarValor }) {
   return (
     <span className="caja-descuento">
-      <select aria-label={etiquetaTipo} value={tipo} onChange={(e) => alCambiarTipo(e.target.value)} className="caja-entrada">
+      <select aria-label={etiquetaTipo} value={tipo} onChange={(e) => alCambiarTipo(e.target.value)} className="caja-entrada caja-descuento-tipo">
         {TIPOS.map(([v, texto]) => <option key={v} value={v}>{texto}</option>)}
       </select>
       <input
-        type="text" inputMode="decimal" autoComplete="off" aria-label={etiqueta} value={valor}
-        onChange={(e) => alCambiarValor(e.target.value)} className="caja-entrada"
+        type="text" inputMode="decimal" autoComplete="off" aria-label={etiqueta} id={id} value={valor}
+        onChange={(e) => alCambiarValor(e.target.value)} className="caja-entrada caja-descuento-valor"
       />
     </span>
   )
@@ -128,21 +128,14 @@ export default function Carrito({
             />
           </Campo>
         )}
-        <div className="campo">
-          <label htmlFor="caja-descuento-total"><span>Descuento de toda la compra</span></label>
-          <span className="caja-descuento">
-            <select
-              aria-label="Tipo de descuento de toda la compra" value={descuentoTotal.tipo} className="caja-entrada"
-              onChange={(e) => alCambiarDescuentoTotal({ ...descuentoTotal, tipo: e.target.value })}
-            >
-              {TIPOS.map(([v, texto]) => <option key={v} value={v}>{texto}</option>)}
-            </select>
-            <input
-              id="caja-descuento-total" type="text" inputMode="decimal" autoComplete="off" value={descuentoTotal.valor}
-              className="caja-entrada"
-              onChange={(e) => alCambiarDescuentoTotal({ ...descuentoTotal, valor: e.target.value })}
-            />
-          </span>
+        <div className="caja-descuento-total">
+          <label htmlFor="caja-descuento-total">Descuento de toda la compra</label>
+          <SelectorDeDescuento
+            id="caja-descuento-total" etiqueta="Descuento de toda la compra" etiquetaTipo="Tipo de descuento de toda la compra"
+            tipo={descuentoTotal.tipo} valor={descuentoTotal.valor}
+            alCambiarTipo={(tipo) => alCambiarDescuentoTotal({ ...descuentoTotal, tipo })}
+            alCambiarValor={(valor) => alCambiarDescuentoTotal({ ...descuentoTotal, valor })}
+          />
         </div>
       </div>
     </div>

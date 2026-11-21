@@ -24,6 +24,7 @@ import ProductoNuevo from './ProductoNuevo.jsx'
 import ReciboImprimible from './ReciboImprimible.jsx'
 import SeccionCaja from './SeccionCaja.jsx'
 import useEnLinea from './useEnLinea.js'
+import { imprimirRecibo } from './imprimir.js'
 import useVentaEnCurso, { MENSAJE_AMBIGUO } from './useVentaEnCurso.js'
 import {
   agregarProducto, armarRecibo, armarSolicitud, bloqueoDeVenta, descuentoDe, lineaDeProductoNuevo,
@@ -287,8 +288,8 @@ function Venta({ turno }) {
         <div className="caja-recibo-acciones">
           <h2 ref={tituloRecibo} tabIndex={-1}>Venta registrada</h2>
           <div className="caja-acciones">
-            <button type="button" className="boton" onClick={() => window.print()}>Imprimir</button>
-            <button type="button" className="boton secundario" onClick={() => { setImpreso(true); window.print() }}>
+            <button type="button" className="boton" onClick={imprimirRecibo}>Imprimir</button>
+            <button type="button" className="boton secundario" onClick={() => { setImpreso(true); imprimirRecibo() }}>
               Descargar PDF
             </button>
             <button type="button" className="boton secundario" onClick={() => { setRecibo(null); setImpreso(false) }}>

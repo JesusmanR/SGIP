@@ -103,9 +103,12 @@
 .caja-producto { display: flex; flex-direction: column; align-items: flex-start; gap: var(--espacio-1); text-align: left; }
 .caja-falta { color: var(--aviso); font-weight: 600; font-size: var(--t-cuerpo); }
 .caja-fecha { display: grid; gap: var(--espacio-1); font-size: var(--t-etiqueta); color: var(--tinta-2); }
-.caja-descuento { display: flex; flex-wrap: wrap; gap: var(--espacio-2); }
-.caja-descuento select { flex: 1 1 8rem; }
-.caja-descuento input { flex: 1 1 5rem; min-width: 5rem; }
+/* Descuento: tipo (% / $) y valor en una sola fila compacta; mismo control en las líneas y en el total. */
+.caja-descuento { display: inline-flex; flex-wrap: nowrap; align-items: center; gap: var(--espacio-2); }
+.caja-descuento .caja-descuento-tipo { flex: 0 0 auto; width: 4.5rem; min-height: var(--toque-minimo); }
+.caja-descuento .caja-descuento-valor { flex: 0 0 auto; width: 7rem; min-width: 0; min-height: var(--toque-minimo); text-align: right; }
+.caja-descuento-total { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--espacio-2) var(--espacio-4); }
+.caja-descuento-total label { font-size: var(--t-cuerpo); font-weight: 600; }
 /* Las líneas van dentro de su tarjeta, sin un segundo marco pesado. */
 .caja-carrito .tabla-tarjetas-caja { border-radius: 9px; }
 .caja-carrito .tabla-tarjetas thead th { background: var(--lienzo); }
@@ -204,15 +207,22 @@
   .caja-dialogo { max-width: none; max-height: 100%; border-radius: 0; }
 }
 
-/* ── Imprimir: solo el recibo, en tirilla de 80 mm ─────────────────── */
-@page { size: 80mm auto; margin: 4mm; }
+/* ── Imprimir: solo el recibo, en una tirilla continua de 80 mm ───────
+   El alto de la página lo fija `imprimirRecibo()` (imprimir.js) con un @page
+   temporal: mezclar una medida con `auto` en `size` no es CSS válido y Chrome caería a Carta.
+   En pantalla la copia del recibo vive fuera de vista, a 80 mm, para poder medirla. */
+.recibo-impresion { position: absolute; left: -9999px; top: 0; width: 80mm; visibility: hidden; }
+.recibo-impresion .recibo {
+  width: 100%; max-width: none; box-sizing: border-box; border: 0; border-radius: 0;
+  padding: 3mm; font-size: 12px; line-height: 1.35;
+}
+.recibo-impresion .recibo-linea-nombre, .recibo-impresion .recibo-fila { gap: var(--espacio-2); }
+.recibo-impresion .recibo-linea-nombre > :last-child, .recibo-impresion .recibo-fila > :last-child {
+  white-space: nowrap; font-variant-numeric: tabular-nums;
+}
 @media print {
-  body * { visibility: hidden; }
-  .recibo, .recibo * { visibility: visible; }
-  .recibo {
-    position: absolute; left: 0; top: 0; width: 100%; max-width: none;
-    border: 0; border-radius: 0; padding: 0;
-  }
+  body > *:not(.recibo-impresion) { display: none !important; }
+  .recibo-impresion { position: static; visibility: visible; }
 }
 
 /* ── Venta congelada (resultado ambiguo): un fieldset deshabilitado apaga todo lo de dentro ── */

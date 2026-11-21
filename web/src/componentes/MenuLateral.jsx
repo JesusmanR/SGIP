@@ -21,9 +21,9 @@ export default function MenuLateral({ id, rol, abierto, nombre, alSalir }) {
   return (
     <nav id={id} className={`menu-lateral${abierto ? ' abierto' : ''}`} aria-label="Principal">
       {agrupar(seccionesDe(rol)).map((g) => (
-        <div className="menu-grupo" key={g.nombre}>
+        <div className="menu-grupo" role="group" aria-labelledby={`menu-grupo-${g.nombre}`} key={g.nombre}>
           <p className="menu-grupo-titulo" id={`menu-grupo-${g.nombre}`}>{g.nombre}</p>
-          <ul aria-labelledby={`menu-grupo-${g.nombre}`}>
+          <ul>
             {g.items.map((s) => (
               <li key={s.ruta}>
                 <NavLink to={s.ruta}>{s.etiqueta}</NavLink>
