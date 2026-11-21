@@ -1,5 +1,6 @@
 package co.com.bspstore.sgip.api;
 
+import co.com.bspstore.sgip.BackendApplication;
 import co.com.bspstore.sgip.config.ConfiguracionSeguridad;
 import co.com.bspstore.sgip.config.FiltroCambioClave;
 import co.com.bspstore.sgip.config.FiltroEmpresaActiva;
@@ -80,7 +81,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
  *
  * <h2>De dónde sale la lista</h2>
  *
- * Los controladores. {@link #rutasDeLaCaja()} recorre cada {@code @RestController} del paquete {@code api}
+ * Los controladores. {@link #rutasDeLaCaja()} recorre cada {@code @RestController} de la aplicación (desde el paquete de {@code BackendApplication})
  * y le pregunta a Spring qué rutas declara, con el mismo lector que usa al arrancar. Las que son de la caja
  * ({@code /api/v1/caja/**}), los medios de pago ({@code /api/v1/medios-pago}) y el PIN
  * ({@code /api/v1/perfil/pin}) tienen que tener una fila en {@link #FILAS}. Una ruta nueva sin fila hace
@@ -127,10 +128,18 @@ class CajaRolesTest {
     private static final String CLIENTE_VALIDO = "{\"nombre\":\"Ana Ruiz\",\"tipoDocumento\":\"CC\","
             + "\"identificacion\":\"123456\",\"correo\":\"ana@correo.co\",\"autorizacionDatos\":true}";
 
-    /** El prefijo de lo que esta prueba vigila; el resto de las rutas de la API tiene sus propias pruebas. */
+    /**
+     * Lo que esta prueba vigila: la caja ({@code /api/v1/caja}, con o sin barra final y con lo que cuelgue de
+     * ella), los medios de pago y el PIN. Un nombre que solo empieza igual ({@code /api/v1/cajas}) no cuenta.
+     * El resto de la API tiene sus propias pruebas.
+     */
     private static boolean esDeLaCaja(String patron) {
-        return patron.startsWith("/api/v1/caja/") || patron.startsWith("/api/v1/medios-pago")
+        return bajo(patron, "/api/v1/caja") || bajo(patron, "/api/v1/medios-pago")
                 || patron.equals("/api/v1/perfil/pin");
+    }
+
+    private static boolean bajo(String patron, String raiz) {
+        return patron.equals(raiz) || patron.startsWith(raiz + "/");
     }
 
     /**
@@ -244,7 +253,9 @@ class CajaRolesTest {
         buscador.addIncludeFilter(new AnnotationTypeFilter(RestController.class));
 
         Map<String, Class<?>> rutas = new LinkedHashMap<>();
-        for (var definicion : buscador.findCandidateComponents("co.com.bspstore.sgip.api")) {
+        // Todo controlador de la aplicación, esté en el paquete que esté: se parte del paquete de la clase
+        // principal y no del de la API, para que una ruta de la caja en otro paquete también cuente.
+        for (var definicion : buscador.findCandidateComponents(BackendApplication.class.getPackageName())) {
             Class<?> clase;
             try {
                 clase = Class.forName(definicion.getBeanClassName());
