@@ -29,17 +29,35 @@
 # demostración (V8): las migraciones posteriores las aplica Flyway cuando
 # arranca el JAR. Se conecta con las opciones de siempre:
 #
-#   bash verificar_caja.sh -h 127.0.0.1 -P 3306 -u root -psecreto
+#   MYSQL_PWD=secreto SGIP_CAJA_BD_DESECHABLE=si \
+#     bash verificar_caja.sh -h 127.0.0.1 -P 3306 -u root
 #
-# Las credenciales van en la línea de órdenes, no se leen de ningún archivo
-# de configuración: el JAR recibe las mismas por variables de entorno.
+# La contraseña va en MYSQL_PWD (también vale -p<clave> pegada, como en los
+# demás guiones, pero así queda a la vista en la lista de procesos). El
+# guion no la pone en ninguna línea de órdenes que él mismo lance: al cliente
+# `mysql` le llega por MYSQL_PWD, al backend por SPRING_DATASOURCE_PASSWORD
+# y la sesión de la API va en un archivo temporal legible solo por su dueño,
+# que se borra al salir. No se lee ningún archivo de configuración.
 #
 # NO deja la base como la encontró y no borra nada: las ventas, los turnos
 # y el kárdex son historia que el esquema no deja deshacer. Cada ejecución
 # crea sus propios usuarios, productos y cliente (llevan el identificador de
-# la ejecución), de modo que se puede repetir sobre la misma base. Sirve
-# solo para una base desechable. Sí deja la empresa 1 en estado ACTIVA con
-# la suscripción al día, y 20.000 productos CAJ-VOL-* para medir.
+# la ejecución), de modo que se puede repetir sobre la misma base. Sí deja
+# la empresa 1 en estado ACTIVA con la suscripción al día, y 20.000
+# productos CAJ-VOL-* para medir.
+#
+# Por eso SE NIEGA a ejecutarse, con un mensaje claro y sin tocar nada, si:
+#   (a) no está SGIP_CAJA_BD_DESECHABLE=si: quien lo ejecuta declara que la
+#       base se puede estropear;
+#   (b) el servidor no es de esta máquina: solo vale el loopback (127.0.0.1,
+#       localhost o ::1);
+#   (c) la base tiene usuarios que no son los de la demostración. La
+#       demostración (V8) deja UN usuario, admin@bspstore.com.co. Los únicos
+#       otros que se admiten son los que este mismo guion crea en una
+#       ejecución anterior (caja-<id>-admin|vendedor@verificar.local), para
+#       poder repetirlo sobre la misma base. Una empresa de verdad ya tiene
+#       sus usuarios.
+# `verificar_caja_guardas.sh` comprueba estas negativas.
 #
 # Variables opcionales:
 #   SGIP_CAJA_JAR     un JAR ya construido (la CI usa el de `mvn verify`);
@@ -51,26 +69,50 @@ AQUI="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RAIZ="$(cd "$AQUI/.." && pwd)"
 
 # ── La conexión, tal como la dan los demás verificar_*.sh ──────────────
-BD_HOST="127.0.0.1"; BD_PUERTO="3306"; BD_USUARIO="root"; BD_CLAVE=""
+rechazar () { echo "$1" >&2; exit 2; }
+
+BD_HOST="127.0.0.1"; BD_PUERTO="3306"; BD_USUARIO="root"; BD_CLAVE="${MYSQL_PWD:-}"
 argumentos=("$@")
 i=0
+valor_de () { # valor_de opción -> el argumento que sigue; sin él, es un error
+  local siguiente="${argumentos[i+1]-}"
+  [[ -n "$siguiente" ]] || { echo "La opción $1 necesita un valor." >&2; return 1; }
+  printf '%s' "$siguiente"
+}
 while ((i < ${#argumentos[@]})); do
   a="${argumentos[i]}"
   case "$a" in
-    -h)         BD_HOST="${argumentos[i+1]:-}"; i=$((i + 2)) ;;
+    -h)         BD_HOST=$(valor_de -h) || exit 2; i=$((i + 2)) ;;
     --host=*)   BD_HOST="${a#--host=}"; i=$((i + 1)) ;;
     -h?*)       BD_HOST="${a#-h}"; i=$((i + 1)) ;;
-    -P)         BD_PUERTO="${argumentos[i+1]:-}"; i=$((i + 2)) ;;
+    -P)         BD_PUERTO=$(valor_de -P) || exit 2; i=$((i + 2)) ;;
     --port=*)   BD_PUERTO="${a#--port=}"; i=$((i + 1)) ;;
     -P?*)       BD_PUERTO="${a#-P}"; i=$((i + 1)) ;;
-    -u)         BD_USUARIO="${argumentos[i+1]:-}"; i=$((i + 2)) ;;
+    -u)         BD_USUARIO=$(valor_de -u) || exit 2; i=$((i + 2)) ;;
     --user=*)   BD_USUARIO="${a#--user=}"; i=$((i + 1)) ;;
     -u?*)       BD_USUARIO="${a#-u}"; i=$((i + 1)) ;;
     --password=*) BD_CLAVE="${a#--password=}"; i=$((i + 1)) ;;
+    -p)         rechazar "La opción -p sola pediría la contraseña por el teclado y este guion no es interactivo: pásala en la variable MYSQL_PWD o pegada, -p<clave>." ;;
     -p?*)       BD_CLAVE="${a#-p}"; i=$((i + 1)) ;;
     *)          i=$((i + 1)) ;;
   esac
 done
+[[ "$BD_PUERTO" =~ ^[0-9]+$ ]] || rechazar "La opción -P necesita un número de puerto, no '$BD_PUERTO'."
+[[ -n "$BD_HOST" ]] || rechazar "La opción -h necesita un valor."
+
+# ── Las negativas: este guion no se ejecuta contra una base de verdad ───
+if [[ "${SGIP_CAJA_BD_DESECHABLE:-}" != "si" ]]; then
+  rechazar "Este guion crea ventas, turnos y movimientos de kárdex que no se pueden deshacer, y deja la empresa 1 activa.
+Solo se ejecuta contra una base desechable, y hay que declararlo: SGIP_CAJA_BD_DESECHABLE=si bash $0 ...
+No se hizo nada."
+fi
+case "$BD_HOST" in
+  127.0.0.1|localhost|::1|"[::1]") ;;
+  *) rechazar "El servidor '$BD_HOST' no es de esta máquina: este guion solo se ejecuta contra el loopback (127.0.0.1, localhost o ::1), nunca contra un servidor remoto.
+No se hizo nada." ;;
+esac
+# La contraseña viaja al cliente `mysql` por el entorno, no por su línea de órdenes.
+if [[ -n "$BD_CLAVE" ]]; then export MYSQL_PWD="$BD_CLAVE"; else unset MYSQL_PWD; fi
 
 # El instalador de MySQL para Windows no pone su carpeta en el PATH.
 if ! command -v mysql >/dev/null 2>&1; then
@@ -82,17 +124,35 @@ for herramienta in mysql java node curl; do
   command -v "$herramienta" >/dev/null 2>&1 || { echo "Falta '$herramienta' en el PATH."; exit 1; }
 done
 
-MYSQL=(mysql --no-defaults --default-character-set=utf8mb4 -h "$BD_HOST" -P "$BD_PUERTO" -u "$BD_USUARIO")
-[[ -n "$BD_CLAVE" ]] && MYSQL+=("-p$BD_CLAVE")
+MYSQL=(mysql --no-defaults --protocol=tcp --default-character-set=utf8mb4 -h "$BD_HOST" -P "$BD_PUERTO" -u "$BD_USUARIO")
 
 sin_aviso () { grep -v "Using a password on the command line interface" || true; }
 ejecutar () { "${MYSQL[@]}" sgip -e "$1" 2>&1 | sin_aviso; }
 consulta () { "${MYSQL[@]}" -N -B sgip -e "$1" 2>/dev/null | tr -d '\r'; }
 
+# La tercera: una base con usuarios ajenos a la demostración es una base de verdad.
+USUARIOS_AJENOS=$(consulta "SELECT COUNT(*) FROM usuarios WHERE correo <> 'admin@bspstore.com.co' AND correo NOT LIKE 'caja-%@verificar.local';")
+if [[ ! "$USUARIOS_AJENOS" =~ ^[0-9]+$ ]]; then
+  rechazar "No se pudo leer la tabla de usuarios de la base 'sgip' en $BD_HOST:$BD_PUERTO (¿está levantada, con la cadena V1 a V31 y la contraseña bien dada?).
+No se hizo nada."
+elif [[ "$USUARIOS_AJENOS" != "0" ]]; then
+  rechazar "La base tiene $USUARIOS_AJENOS usuario(s) que no son de la demostración (V8: admin@bspstore.com.co) ni de una ejecución anterior de este guion: parece una base de verdad.
+No se hizo nada."
+fi
+
 # ── Resultados ──────────────────────────────────────────────────────────
 fallos=0
-ok ()    { echo "  ok    · $1"; }
-falla () { echo "  FALLA · $1"; fallos=$((fallos + 1)); }
+# Un `json` que no pudo leer su documento deja una línea en este archivo; la
+# siguiente comprobación la cuenta como fallo, para que un cuerpo roto no se
+# confunda con «el campo no está».
+revisar_json () {
+  local f="${TMP:-}/errores-json" linea
+  [[ -n "${TMP:-}" && -s "$f" ]] || return 0
+  while IFS= read -r linea; do echo "  FALLA · $linea"; fallos=$((fallos + 1)); done < "$f"
+  : > "$f"
+}
+ok ()    { revisar_json; echo "  ok    · $1"; }
+falla () { revisar_json; echo "  FALLA · $1"; fallos=$((fallos + 1)); }
 igual () { # igual descripción esperado obtenido
   if [[ "$2" == "$3" ]]; then ok "$1"; else falla "$1 — esperaba '$2' y obtuve '${3:-(nada)}'"; fi
 }
@@ -104,8 +164,26 @@ TMP="$(mktemp -d)"
 BACK_PID=""
 BACK_LOG="$TMP/backend.log"
 
+# Lee el campo de un documento de la API. No se traga los errores: si la última
+# respuesta no fue un 2xx o su cuerpo no es un JSON, deja constancia (ver
+# revisar_json) y devuelve vacío, de modo que «vacío» solo significa «el campo
+# no está» cuando la respuesta era buena. Con JSON_SUAVE=1 no hace constar nada
+# (para citar el error de una respuesta que ya se sabe mala).
 json () { # json 'expresión sobre o' < documento
-  node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{try{const o=JSON.parse(d);const v=eval(process.argv[1]);process.stdout.write(v===undefined||v===null?"":String(v))}catch(e){}})' "$1"
+  JSON_ERRORES="${TMP:-/tmp}/errores-json" JSON_COD="${COD:-}" JSON_SUAVE="${JSON_SUAVE:-}" node -e '
+    const fs = require("fs");
+    let d = "";
+    process.stdin.on("data", c => d += c).on("end", () => {
+      const queja = m => { if (!process.env.JSON_SUAVE) fs.appendFileSync(process.env.JSON_ERRORES, m + "\n"); };
+      const cod = process.env.JSON_COD;
+      if (cod && !/^2\d\d$/.test(cod)) queja("json: la respuesta fue un " + cod + ", no un 2xx, y se le pidió «" + process.argv[1].slice(0, 70) + "»");
+      let o;
+      try { o = JSON.parse(d); } catch (e) { queja("json: el cuerpo no es un JSON (" + e.message + ") al pedir «" + process.argv[1].slice(0, 70) + "»"); return; }
+      try {
+        const v = eval(process.argv[1]);
+        process.stdout.write(v === undefined || v === null ? "" : String(v));
+      } catch (e) { queja("json: «" + process.argv[1].slice(0, 70) + "» falló sobre el cuerpo: " + e.message); }
+    });' "$1"
 }
 calc () { node -p "$1"; }
 uuid () { node -e 'console.log(require("crypto").randomUUID())'; }
@@ -115,8 +193,8 @@ puerto_libre () {
 puerto_ocupado () {
   node -e 'const s=require("net").createServer();s.on("error",()=>process.exit(0));s.listen(+process.argv[1],"127.0.0.1",()=>process.exit(1))' "$1"
 }
-hash_de () { # PBKDF2 con el mismo formato que util/Seguridad.derivar del backend
-  node -e 'const c=require("crypto");const s=c.randomBytes(16);const h=c.pbkdf2Sync(process.argv[1],s,120000,32,"sha256");const b=x=>x.toString("base64").replace(/=+$/,"");console.log("pbkdf2$120000$"+b(s)+"$"+b(h))' "$1"
+hash_de () { # PBKDF2 con el mismo formato que util/Seguridad.derivar del backend; la clave entra por el entorno
+  CLAVE_A_DERIVAR="$1" node -e 'const c=require("crypto");const s=c.randomBytes(16);const h=c.pbkdf2Sync(process.env.CLAVE_A_DERIVAR,s,120000,32,"sha256");const b=x=>x.toString("base64").replace(/=+$/,"");console.log("pbkdf2$120000$"+b(s)+"$"+b(h))'
 }
 
 detener_backend () {
@@ -145,7 +223,8 @@ URL=""
 api () { # api MÉTODO /ruta token [cuerpo]
   local metodo="$1" ruta="$2" token="$3" cuerpo="${4-}"
   local args=(-s -m 120 -X "$metodo" -o "$TMP/respuesta" -w '%{http_code}')
-  [[ -n "$token" ]] && args+=(-H "Authorization: Bearer $token")
+  # El token va en un archivo de cabeceras (-H @archivo), no en la línea de órdenes.
+  [[ -n "$token" ]] && args+=(-H "@$token")
   # El cuerpo va por archivo: por la línea de órdenes, curl.exe de Windows
   # recodifica las tildes y el servidor recibiría un JSON roto.
   if [[ -n "$cuerpo" ]]; then
@@ -156,7 +235,7 @@ api () { # api MÉTODO /ruta token [cuerpo]
   CUERPO=$(cat "$TMP/respuesta")
 }
 # La respuesta de un fallo, en una línea, para el mensaje.
-resumen_error () { json 'o.detail||o.title||""' <<<"$CUERPO"; }
+resumen_error () { JSON_SUAVE=1 json 'o.detail||o.title||""' <<<"$CUERPO"; }
 # Espera un código HTTP; si no, falla con lo que dijo el servidor.
 espera () { # espera descripción código
   if [[ "$COD" == "$2" ]]; then ok "$1 ($2)"; else falla "$1 — esperaba $2 y respondió $COD: $(resumen_error) ${CUERPO:0:200}"; return 1; fi
@@ -201,11 +280,14 @@ fi
 PUERTO=$(puerto_libre)
 URL="http://127.0.0.1:$PUERTO"
 mkdir -p "$TMP/archivos"
+# La conexión (con su contraseña) entra por variables de entorno del proceso:
+# en la línea de órdenes la vería cualquiera con `ps`.
+JDBC_HOST="$BD_HOST"; [[ "$JDBC_HOST" == "::1" ]] && JDBC_HOST="[::1]"
+SPRING_DATASOURCE_URL="jdbc:mysql://$JDBC_HOST:$BD_PUERTO/sgip?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=America/Bogota" \
+SPRING_DATASOURCE_USERNAME="$BD_USUARIO" SPRING_DATASOURCE_PASSWORD="$BD_CLAVE" \
 SGIP_ARCHIVOS_RAIZ="$TMP/archivos" \
 java -jar "$SGIP_CAJA_JAR" \
   --server.port="$PUERTO" --server.address=127.0.0.1 \
-  "--spring.datasource.url=jdbc:mysql://$BD_HOST:$BD_PUERTO/sgip?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=America/Bogota" \
-  "--spring.datasource.username=$BD_USUARIO" "--spring.datasource.password=$BD_CLAVE" \
   --spring.jpa.open-in-view=false \
   >"$BACK_LOG" 2>&1 &
 BACK_PID=$!
@@ -250,32 +332,35 @@ salida=$(ejecutar "
     FROM roles WHERE nombre = 'VENDEDOR';")
 [[ -z "$salida" ]] && ok "dos usuarios nuevos en la empresa 1, y la empresa activa" || abortar "no se pudieron crear los usuarios: $salida"
 
-ingresar () { # ingresar correo -> deja el token en TOKEN y el id del usuario en USUARIO_ID
-  local r
-  r=$(curl -s -m 30 -X POST "$URL/api/v1/auth/login" -H 'Content-Type: application/json'        -d "{\"correo\":\"$1\",\"clave\":\"$CLAVE\"}")
-  TOKEN=$(json 'o.token' <<<"$r"); USUARIO_ID=$(json 'o.usuarioId' <<<"$r")
+ingresar () { # ingresar correo archivo -> deja la sesión en ese archivo y el id del usuario en USUARIO_ID
+  api POST /auth/login "" "{\"correo\":\"$1\",\"clave\":\"$CLAVE\"}"
+  [[ "$COD" == "200" ]] || return 1
+  ( umask 077; printf 'Authorization: Bearer %s\n' "$(json 'o.token' <<<"$CUERPO")" > "$2" )
+  USUARIO_ID=$(json 'o.usuarioId' <<<"$CUERPO")
 }
-ingresar "$CORREO_ADMIN"; T_ADMIN="$TOKEN"; ADMIN_ID="$USUARIO_ID"
-[[ -n "$T_ADMIN" ]] || abortar "el administrador no entra"
-ingresar "$CORREO_VEND"; T_VEND="$TOKEN"
-[[ -n "$T_VEND" ]] || abortar "el vendedor no entra"
+T_ADMIN="$TMP/sesion-admin"; T_VEND="$TMP/sesion-vendedor"
+ingresar "$CORREO_ADMIN" "$T_ADMIN" || abortar "el administrador no entra ($COD)"
+ADMIN_ID="$USUARIO_ID"
+ingresar "$CORREO_VEND" "$T_VEND" || abortar "el vendedor no entra ($COD)"
 ok "el administrador (id $ADMIN_ID) y el vendedor entran"
 VEND_NOMBRE="Vendedor de la caja $RUN"
 
 api GET /caja/administradores "$T_VEND"
-igual "sin PIN, nadie puede autorizar: la lista de administradores está vacía" ""   "$(json 'o.find(a=>a.id===('"$ADMIN_ID"')).id' <<<"$CUERPO")"
+espera "el vendedor lee la lista de administradores (sin PIN todavía)" 200 || abortar "no se pudo leer /caja/administradores"
+igual "sin PIN, nadie puede autorizar: la lista no trae a la administradora" "" "$(json 'o.find(a=>a.id===('"$ADMIN_ID"'))?.id' <<<"$CUERPO")"
 api PUT /perfil/pin "$T_ADMIN" "{\"pinNuevo\":\"$PIN\"}"
 espera "la administradora fija su PIN" 204 || abortar "sin PIN no hay autorizaciones"
 api GET /caja/administradores "$T_VEND"
-igual "con PIN, el vendedor la ve para llamarla" "$ADMIN_ID"   "$(json 'o.find(a=>a.id===('"$ADMIN_ID"')).id' <<<"$CUERPO")"
+espera "el vendedor lee la lista de administradores (ya con PIN)" 200 || abortar "no se pudo leer /caja/administradores"
+igual "con PIN, el vendedor la ve para llamarla" "$ADMIN_ID" "$(json 'o.find(a=>a.id===('"$ADMIN_ID"'))?.id' <<<"$CUERPO")"
 
 CATEGORIA=$(consulta "SELECT categoria_id FROM categorias WHERE empresa_id = 1 AND generica = 1 LIMIT 1;")
 PROVEEDOR=$(consulta "SELECT proveedor_id FROM proveedores WHERE empresa_id = 1 AND nit = 'SIN-PROVEEDOR' LIMIT 1;")
 [[ -n "$CATEGORIA" && -n "$PROVEEDOR" ]] || abortar "la empresa 1 no tiene su categoría y proveedor genéricos (V45)"
 
 api GET /caja/medios-pago "$T_VEND"
-MEDIO_EFECTIVO=$(json 'o.find(m=>m.tipo==="EFECTIVO"&&m.activo).id' <<<"$CUERPO")
-MEDIO_TRANSF=$(json 'o.find(m=>m.tipo==="TRANSFERENCIA"&&m.activo).id' <<<"$CUERPO")
+MEDIO_EFECTIVO=$(json 'o.find(m=>m.tipo==="EFECTIVO"&&m.activo)?.id' <<<"$CUERPO")
+MEDIO_TRANSF=$(json 'o.find(m=>m.tipo==="TRANSFERENCIA"&&m.activo)?.id' <<<"$CUERPO")
 [[ -n "$MEDIO_EFECTIVO" && -n "$MEDIO_TRANSF" ]] && ok "hay medios en efectivo ($MEDIO_EFECTIVO) y por transferencia ($MEDIO_TRANSF)" \
   || abortar "faltan los medios de pago de la empresa 1"
 
@@ -365,21 +450,21 @@ ESPERADO=$((ESPERADO + T3))
 igual "B quedó debiendo una unidad (2 - 3)" "-1" "$(existencia_de "CAJ-$RUN-B")"
 
 api GET "/caja/encargos?estado=PENDIENTE" "$T_ADMIN"
-ITEM=$(json 'o.find(e=>e.productoId===('"$PROD_B"')).itemId' <<<"$CUERPO")
+ITEM=$(json 'o.find(e=>e.productoId===('"$PROD_B"'))?.itemId' <<<"$CUERPO")
 [[ -n "$ITEM" ]] && ok "la administradora ve el encargo pendiente (ítem $ITEM)" || falla "el encargo no aparece como pendiente"
-igual "el encargo es de 1 unidad que falta" "1" "$(json 'o.find(e=>e.productoId===('"$PROD_B"')).cantidadEncargo' <<<"$CUERPO")"
+igual "el encargo es de 1 unidad que falta" "1" "$(json 'o.find(e=>e.productoId===('"$PROD_B"'))?.cantidadEncargo' <<<"$CUERPO")"
 api GET "/caja/encargos?estado=PENDIENTE" "$T_VEND"; espera_4xx "el vendedor no ve la lista de encargos"
 api POST /inventario/ingresos "$T_ADMIN" "{\"productoId\":$PROD_B,\"cantidad\":5,\"documento\":\"CAJA-$RUN\",\"motivo\":\"Llegó la remesa\"}"
 espera "llega la mercancía (ingreso de 5)" 200
 api GET "/caja/encargos?estado=LLEGO" "$T_ADMIN"
-[[ -n "$(json 'o.find(e=>e.productoId===('"$PROD_B"')).itemId' <<<"$CUERPO")" ]] \
+[[ -n "$(json 'o.find(e=>e.productoId===('"$PROD_B"'))?.itemId' <<<"$CUERPO")" ]] \
   && ok "el encargo pasa a «llegó» al subir la existencia" || falla "el encargo no pasó a «llegó»"
 if [[ -n "$ITEM" ]]; then
   api POST "/caja/encargos/$ITEM/entrega" "$T_ADMIN"; espera "la administradora marca la entrega" 200
   api POST "/caja/encargos/$ITEM/entrega" "$T_ADMIN"; espera "la segunda entrega es un conflicto" 409
 fi
 api GET "/caja/encargos?estado=LLEGO" "$T_ADMIN"
-igual "ya no queda por entregar" "" "$(json 'o.find(e=>e.productoId===('"$PROD_B"')).itemId' <<<"$CUERPO")"
+igual "ya no queda por entregar" "" "$(json 'o.find(e=>e.productoId===('"$PROD_B"'))?.itemId' <<<"$CUERPO")"
 
 # ── 5. Producto nuevo con un solo PIN ───────────────────────────────────
 paso "5. un producto nuevo vendido con un solo PIN"
@@ -402,9 +487,9 @@ DOM_ID=$(json 'o.id' <<<"$CUERPO"); DOM_CONSEC=$(json 'o.consecutivo' <<<"$CUERP
 igual "su total es el de una unidad de A" "$U_A" "$(json 'Number(o.total)' <<<"$CUERPO")"
 igual "A bajó otra unidad" "47" "$(existencia_de "CAJ-$RUN-A")"
 api GET "/caja/domicilios?estado=POR_COBRAR" "$T_VEND"
-igual "el domicilio está por cobrar, por todo su valor" "$U_A" "$(json 'Number(o.find(d=>d.ventaId===('"$DOM_ID"')).valorPorCobrar)' <<<"$CUERPO")"
+igual "el domicilio está por cobrar, por todo su valor" "$U_A" "$(json 'Number(o.find(d=>d.ventaId===('"$DOM_ID"'))?.valorPorCobrar)' <<<"$CUERPO")"
 api GET "/caja/domicilios?estado=POR_DESPACHAR" "$T_VEND"
-[[ -n "$(json 'o.find(d=>d.ventaId===('"$DOM_ID"')).consecutivo' <<<"$CUERPO")" ]] \
+[[ -n "$(json 'o.find(d=>d.ventaId===('"$DOM_ID"'))?.consecutivo' <<<"$CUERPO")" ]] \
   && ok "y por despachar" || falla "el domicilio no está por despachar"
 
 # Antes del cobro, el cajón no tiene nada de este domicilio.
@@ -423,7 +508,7 @@ ESPERADO=$((ESPERADO + U_A))
 api POST "/caja/domicilios/$DOM_ID/cobro" "$T_VEND" "[{\"medioId\":$MEDIO_EFECTIVO,\"monto\":$U_A,\"recibido\":$U_A}]"
 espera "cobrarlo dos veces es un conflicto" 409
 api GET "/caja/domicilios?estado=POR_COBRAR" "$T_VEND"
-igual "ya no está por cobrar" "" "$(json 'o.find(d=>d.ventaId===('"$DOM_ID"')).consecutivo' <<<"$CUERPO")"
+igual "ya no está por cobrar" "" "$(json 'o.find(d=>d.ventaId===('"$DOM_ID"'))?.consecutivo' <<<"$CUERPO")"
 api POST "/caja/domicilios/$DOM_ID/entrega" "$T_VEND"; espera "se marca la entrega del domicilio" 200
 api POST "/caja/domicilios/$DOM_ID/entrega" "$T_VEND"; espera "la segunda entrega es un conflicto" 409
 
@@ -463,7 +548,7 @@ igual "el reintento no repuso otra unidad" "48" "$(existencia_de "CAJ-$RUN-A")"
 
 # ── 9. El recibo en PDF, desde el JAR ───────────────────────────────────
 paso "9. el recibo en PDF sale del JAR"
-curl -s -m 60 -D "$TMP/cabeceras" -o "$TMP/recibo.pdf" -H "Authorization: Bearer $T_VEND" \
+curl -s -m 60 -D "$TMP/cabeceras" -o "$TMP/recibo.pdf" -H "@$T_VEND" \
   "$URL/api/v1/caja/ventas/$VENTA_1_ID/recibo.pdf"
 ESTADO_PDF=$(head -1 "$TMP/cabeceras" | tr -d '\r' | awk '{print $2}')
 TIPO_PDF=$(grep -i '^content-type:' "$TMP/cabeceras" | tr -d '\r' | head -1 | sed 's/^[^:]*: *//')
@@ -515,11 +600,11 @@ mediana_ms () { # lee segundos, uno por línea; imprime «mediana · p95 · máx
 }
 
 # Una llamada de calentamiento: la primera paga la compilación de la JVM y el pool de conexiones.
-curl -s -o /dev/null -H "Authorization: Bearer $T_VEND" "$URL/api/v1/caja/productos?codigo=CAJ-VOL-00001"
+curl -s -o /dev/null -H "@$T_VEND" "$URL/api/v1/caja/productos?codigo=CAJ-VOL-00001"
 tiempos_busqueda=()
 for k in $(seq 1 "$MUESTRAS"); do
   n=$(printf '%05d' $(( (k * 997) % 20000 + 1 )))
-  t=$(curl -s -o "$TMP/busqueda" -w '%{http_code} %{time_total}' -H "Authorization: Bearer $T_VEND" \
+  t=$(curl -s -o "$TMP/busqueda" -w '%{http_code} %{time_total}' -H "@$T_VEND" \
         "$URL/api/v1/caja/productos?codigo=CAJ-VOL-$n")
   [[ "${t%% *}" == "200" ]] || { falla "buscar CAJ-VOL-$n respondió ${t%% *}"; break; }
   tiempos_busqueda+=("${t##* }")
@@ -531,7 +616,7 @@ tiempos_venta=()
 for k in $(seq 1 "$((MUESTRAS + 1))"); do
   cuerpo="{\"claveIdempotencia\":\"$(uuid)\",\"lineas\":[{\"productoId\":$PROD_C,\"cantidad\":1}],\"pagos\":[{\"medioId\":$MEDIO_EFECTIVO,\"monto\":$U_C,\"recibido\":$U_C}]}"
   printf '%s' "$cuerpo" > "$TMP/cuerpo-venta"
-  t=$(curl -s -o "$TMP/venta" -w '%{http_code} %{time_total}' -X POST -H "Authorization: Bearer $T_VEND" \
+  t=$(curl -s -o "$TMP/venta" -w '%{http_code} %{time_total}' -X POST -H "@$T_VEND" \
         -H 'Content-Type: application/json' --data-binary "@$TMP/cuerpo-venta" "$URL/api/v1/caja/ventas")
   [[ "${t%% *}" == "201" ]] || { falla "la venta de medición $k respondió ${t%% *}: $(cat "$TMP/venta" | head -c 200)"; break; }
   ESPERADO=$((ESPERADO + U_C))                # son ventas del mismo turno: cuentan en el cajón
