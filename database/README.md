@@ -363,6 +363,16 @@ bash verificar_aislamiento.sh -u root -p
 bash verificar_tributacion.sh -u root -p
 ```
 
+`verificar_caja.sh` es distinto de los demás: no mira el esquema sino que
+arranca el backend desde su JAR y recorre un turno de caja completo por la
+API, de modo que necesita Java, Node y una base **desechable** (la V1 a la
+V31 aplicada, con la demostración): crea ventas, turnos y movimientos del
+kárdex que el esquema no deja deshacer.
+
+```bash
+bash verificar_caja.sh -h 127.0.0.1 -P 3306 -u root -psecreto
+```
+
 El segundo cubre lo que introduce la V12 y los cuatro defectos que
 corrige: dieciocho comprobaciones, entre ellas que la regla de IVA de
 una empresa no alcance a otra, que el margen de una no fije el precio de
