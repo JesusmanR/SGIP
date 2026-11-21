@@ -6,6 +6,7 @@ import co.com.bspstore.sgip.api.dto.PagoSolicitado;
 import co.com.bspstore.sgip.api.dto.Recibo;
 import co.com.bspstore.sgip.api.dto.SolicitudVenta;
 import co.com.bspstore.sgip.api.dto.VentaRegistrada;
+import co.com.bspstore.sgip.logica.ReciboPdf;
 import co.com.bspstore.sgip.logica.RecursoNoEncontradoException;
 import co.com.bspstore.sgip.logica.ServicioRecibos;
 import co.com.bspstore.sgip.logica.ServicioVentas;
@@ -218,7 +219,7 @@ class RecibosConBaseTest {
         Integer a = caja.producto("A", 10, "10000");
         VentaRegistrada v = vender(List.of(linea(a, 1)), List.of(efectivo("10000", null)));
 
-        byte[] pdf = recibos.pdf(v.id());
+        byte[] pdf = new ReciboPdf().generar(recibos.recibo(v.id()));
 
         try (PDDocument documento = Loader.loadPDF(pdf)) {
             assertEquals(1, documento.getNumberOfPages());
@@ -236,7 +237,6 @@ class RecibosConBaseTest {
         ajena.entrarComoAdministrador();
 
         assertThrows(RecursoNoEncontradoException.class, () -> recibos.recibo(v.id()));
-        assertThrows(RecursoNoEncontradoException.class, () -> recibos.pdf(v.id()));
         assertThrows(RecursoNoEncontradoException.class, () -> recibos.recibo(2_000_000_000L));
     }
 }

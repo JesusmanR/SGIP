@@ -9,6 +9,7 @@ import co.com.bspstore.sgip.config.FiltroEmpresaActiva;
 import co.com.bspstore.sgip.config.FiltroSesion;
 import co.com.bspstore.sgip.config.UsuarioAutenticado;
 import co.com.bspstore.sgip.datos.RepositorioPlataforma;
+import co.com.bspstore.sgip.logica.ReciboPdf;
 import co.com.bspstore.sgip.logica.RecursoNoEncontradoException;
 import co.com.bspstore.sgip.logica.ServicioConsultaDeVentas;
 import co.com.bspstore.sgip.logica.ServicioRecibos;
@@ -78,6 +79,7 @@ class RecibosAutorizacionTest {
     @Autowired MockMvc mvc;
 
     @MockitoBean ServicioRecibos recibos;
+    @MockitoBean ReciboPdf pdf;
     @MockitoBean ServicioVentas ventas;
     @MockitoBean ServicioConsultaDeVentas consulta;
     @MockitoBean ServicioSesion sesiones;
@@ -119,7 +121,8 @@ class RecibosAutorizacionTest {
     @ValueSource(strings = {"ADMINISTRADOR", "VENDEDOR"})
     void elAdministradorYElVendedorRecibenElReciboEnPdf(String rol) throws Exception {
         byte[] contenido = "%PDF-1.7 de prueba".getBytes(StandardCharsets.US_ASCII);
-        when(recibos.pdf(9L)).thenReturn(contenido);
+        when(recibos.recibo(9L)).thenReturn(RECIBO);
+        when(pdf.generar(RECIBO)).thenReturn(contenido);
 
         byte[] respuesta = mvc.perform(get(PDF).with(como(rol)))
                 .andExpect(status().isOk())
@@ -131,7 +134,8 @@ class RecibosAutorizacionTest {
 
     @Test
     void elPdfNoSeGuardaEnLaCache() throws Exception {
-        when(recibos.pdf(9L)).thenReturn(new byte[]{'%', 'P', 'D', 'F'});
+        when(recibos.recibo(9L)).thenReturn(RECIBO);
+        when(pdf.generar(RECIBO)).thenReturn(new byte[]{'%', 'P', 'D', 'F'});
 
         mvc.perform(get(PDF).with(como("VENDEDOR")))
                 .andExpect(header().string("Cache-Control", containsString("no-store")));
@@ -171,7 +175,6 @@ class RecibosAutorizacionTest {
     @Test
     void laVentaQueNoEsDeLaEmpresaEsUn404EnLasDosRutas() throws Exception {
         when(recibos.recibo(55L)).thenThrow(new RecursoNoEncontradoException("La venta no existe."));
-        when(recibos.pdf(55L)).thenThrow(new RecursoNoEncontradoException("La venta no existe."));
 
         mvc.perform(get("/api/v1/caja/ventas/55/recibo").with(como("VENDEDOR")))
                 .andExpect(status().isNotFound())
@@ -180,7 +183,8 @@ class RecibosAutorizacionTest {
                 .andExpect(status().isNotFound());
         mvc.perform(get("/api/v1/caja/ventas/55/recibo.pdf").accept(MediaType.APPLICATION_PDF).with(como("VENDEDOR")))
                 .andExpect(status().isNotFound());
-        verify(recibos, times(2)).pdf(55L);
+        verify(recibos, times(3)).recibo(55L);
+        verifyNoInteractions(pdf);
     }
 
     @Test

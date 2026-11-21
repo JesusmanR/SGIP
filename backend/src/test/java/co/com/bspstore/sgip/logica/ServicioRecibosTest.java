@@ -19,7 +19,6 @@ import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.lang.reflect.RecordComponent;
 import java.math.BigDecimal;
-import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
@@ -71,9 +70,14 @@ class ServicioRecibosTest {
 
     private static CabeceraDeRecibo cabecera(boolean responsableIva, boolean domicilio, boolean contraEntrega,
                                              String estadoPago) {
+        return cabecera(responsableIva, domicilio, contraEntrega, estadoPago, "3610.00");
+    }
+
+    private static CabeceraDeRecibo cabecera(boolean responsableIva, boolean domicilio, boolean contraEntrega,
+                                             String estadoPago, String iva) {
         return new CabeceraDeRecibo("Black Steel Parts S.A.S.", "900123456-7", responsableIva, "V-00000012",
                 LocalDateTime.of(2026, 11, 21, 15, 30, 5), "Ana Gómez", "Carlos Ruiz", "CC", "79123456",
-                d("20000.00"), d("1000.00"), d("3610.00"), d("22610.00"), estadoPago, contraEntrega, domicilio,
+                d("20000.00"), d("1000.00"), d(iva), d("22610.00"), estadoPago, contraEntrega, domicilio,
                 domicilio ? "Calle 1 # 2-3" : null, domicilio ? "Cali" : null, domicilio ? "3001112233" : null,
                 domicilio ? "Ana Pérez" : null);
     }
@@ -162,7 +166,7 @@ class ServicioRecibosTest {
 
     @Test
     void empresaNoResponsableNoMuestraIva() {
-        venta(cabecera(false, false, false, "PAGADA"),
+        venta(cabecera(false, false, false, "PAGADA", "0.00"),
                 List.of(linea("Celular económico", 2, "10000.00", "1000.00", "0.00", "19000.00", 0, null)),
                 List.of(efectivo("19000.00", null)));
 
@@ -170,6 +174,18 @@ class ServicioRecibosTest {
 
         assertNull(r.iva(), "una empresa que no es responsable de IVA no discrimina el impuesto");
         assertNull(r.lineas().get(0).iva());
+    }
+
+    @Test
+    void unaVentaConIvaGuardadoLoSigueMostrandoAunqueLaEmpresaYaNoSeaResponsable() {
+        // se vendió cuando la empresa era responsable y después dejó de serlo: el total ya lleva ese IVA
+        venta(cabecera(false, false, false, "PAGADA", "3610.00"), List.of(lineaSimple()),
+                List.of(efectivo("22610.00", null)));
+
+        Recibo r = servicio.recibo(VENTA);
+
+        assertEquals(d("3610.00"), r.iva());
+        assertEquals(d("3610.00"), r.lineas().get(0).iva());
     }
 
     @Test
@@ -239,13 +255,6 @@ class ServicioRecibosTest {
         verify(repositorio).cabecera(EMPRESA, 55L);
     }
 
-    @Test
-    void elPdfDeUnaVentaDeOtraEmpresaTambienEs404() {
-        when(repositorio.cabecera(EMPRESA, 55L)).thenReturn(Optional.empty());
-
-        assertThrows(RecursoNoEncontradoException.class, () -> servicio.pdf(55L));
-    }
-
     // ------------------------------------------------------- el costo nunca sale
 
     @Test
@@ -264,14 +273,5 @@ class ServicioRecibosTest {
         }
 
         assertTrue(encontrados.isEmpty(), "el recibo trae campos de costo: " + encontrados);
-    }
-
-    @Test
-    void elPdfEsUnPdf() {
-        venta(cabecera(true, false, false, "PAGADA"), List.of(lineaSimple()), List.of(efectivo("22610.00", null)));
-
-        byte[] pdf = servicio.pdf(VENTA);
-
-        assertEquals("%PDF", new String(pdf, 0, 4, StandardCharsets.US_ASCII));
     }
 }

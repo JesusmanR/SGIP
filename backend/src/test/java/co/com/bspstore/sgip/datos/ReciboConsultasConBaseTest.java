@@ -4,6 +4,7 @@ import co.com.bspstore.sgip.api.dto.LineaSolicitada;
 import co.com.bspstore.sgip.api.dto.PagoSolicitado;
 import co.com.bspstore.sgip.api.dto.SolicitudVenta;
 import co.com.bspstore.sgip.api.dto.VentaRegistrada;
+import co.com.bspstore.sgip.logica.ReciboPdf;
 import co.com.bspstore.sgip.logica.ServicioRecibos;
 import co.com.bspstore.sgip.logica.ServicioVentas;
 import org.junit.jupiter.api.AfterEach;
@@ -94,7 +95,7 @@ class ReciboConsultasConBaseTest {
     private long sentenciasDelPdf(int lineas) {
         VentaRegistrada v = vender(lineas);
         Mockito.clearInvocations(jdbc);
-        recibos.pdf(v.id());
+        new ReciboPdf().generar(recibos.recibo(v.id()));
         return sentencias();
     }
 

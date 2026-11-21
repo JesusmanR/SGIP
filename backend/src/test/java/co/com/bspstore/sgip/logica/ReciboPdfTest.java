@@ -5,11 +5,18 @@ import co.com.bspstore.sgip.api.dto.Recibo.LineaDeRecibo;
 import co.com.bspstore.sgip.api.dto.Recibo.PagoDeRecibo;
 import co.com.bspstore.sgip.modelo.TipoMedio;
 import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.font.FontMappers;
+import org.apache.pdfbox.pdmodel.font.PDFont;
+import org.apache.pdfbox.pdmodel.font.PDType0Font;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
+import java.lang.reflect.Field;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.OffsetDateTime;
@@ -99,15 +106,71 @@ class ReciboPdfTest {
     }
 
     @Test
-    void elPdfSeGeneraEnMenosDeTresSegundosCon20Lineas() {
+    void elPdfSeGeneraEnMenosDeTresSegundosCon20Lineas() throws Exception {
         Recibo recibo = recibo(lineas(20), d("3610.00"), List.of("Domicilio"));
+        olvidarElMapeadorDeFuentes();
 
+        // en frío: una instancia nueva dentro del cronómetro, sin calentamiento previo en esta prueba
         long inicio = System.nanoTime();
-        byte[] bytes = pdf.generar(recibo);
+        byte[] bytes = new ReciboPdf().generar(recibo);
         Duration tardo = Duration.ofNanos(System.nanoTime() - inicio);
 
         assertTrue(bytes.length > 0);
         assertTrue(tardo.compareTo(Duration.ofSeconds(3)) < 0, "el PDF tardó " + tardo.toMillis() + " ms");
+    }
+
+    // ------------------------------------------------------- la fuente
+
+    /** Deja a PDFBox sin mapeador de fuentes, como en una JVM recién arrancada. */
+    private static void olvidarElMapeadorDeFuentes() throws Exception {
+        Field instancia = FontMappers.class.getDeclaredField("instance");
+        instancia.setAccessible(true);
+        instancia.set(null, null);
+    }
+
+    private static Object mapeadorDeFuentes() throws Exception {
+        Field instancia = FontMappers.class.getDeclaredField("instance");
+        instancia.setAccessible(true);
+        return instancia.get(null);
+    }
+
+    @Test
+    void elPdfIncrustaUnaFuenteTrueTypeYNoUsaLasEstandar() throws IOException {
+        byte[] bytes = pdf.generar(recibo(lineas(2), d("3610.00"), List.of("Domicilio")));
+
+        try (PDDocument documento = abrir(bytes)) {
+            List<COSName> nombres = new ArrayList<>();
+            documento.getPage(0).getResources().getFontNames().forEach(nombres::add);
+            assertFalse(nombres.isEmpty());
+            for (COSName nombre : nombres) {
+                PDFont fuente = documento.getPage(0).getResources().getFont(nombre);
+                assertTrue(fuente instanceof PDType0Font, "la fuente " + nombre.getName() + " es " + fuente.getClass());
+                assertTrue(fuente.isEmbedded(), "la fuente no va incrustada");
+                assertFalse(fuente.isStandard14(), "la fuente es de las estándar");
+            }
+        }
+    }
+
+    @Test
+    void generarNoUsaElMapeadorDeFuentesNiEscribeLaCacheDeFuentes() throws Exception {
+        Path cache = Files.createTempDirectory("recibo-cache").resolve("no-debe-existir");
+        String anterior = System.getProperty("pdfbox.fontcache");
+        System.setProperty("pdfbox.fontcache", cache.toString());
+        try {
+            olvidarElMapeadorDeFuentes();
+
+            byte[] bytes = new ReciboPdf().generar(recibo(lineas(3), d("3610.00"), List.of("Domicilio")));
+
+            assertTrue(bytes.length > 0);
+            assertEquals(null, mapeadorDeFuentes(), "el recibo pidió el mapeador de fuentes de PDFBox, que recorre el sistema");
+            assertFalse(Files.exists(cache), "PDFBox escribió su caché de fuentes");
+        } finally {
+            if (anterior == null) {
+                System.clearProperty("pdfbox.fontcache");
+            } else {
+                System.setProperty("pdfbox.fontcache", anterior);
+            }
+        }
     }
 
     // ------------------------------------------------------- el contenido
@@ -172,11 +235,33 @@ class ReciboPdfTest {
     }
 
     @Test
-    void unNombreConEmojiOCaracteresFueraDelAlfabetoLatinoNoRompeElPdf() {
-        List<LineaDeRecibo> raras = List.of(linea("Funda 📱 con 日本語 y ‑guion duro"),
-                linea("Cable USB con espacios raros\t y tabulación"), linea(""));
+    void unNombreConEmojiOCaracteresFueraDelAlfabetoLatinoSaleConInterrogacionYElRestoIntacto() throws IOException {
+        List<LineaDeRecibo> raras = List.of(linea("Funda 📱 económico ñandú ¿qué? ¡sí! 日本語"),
+                linea("Cable USB con espacios raros	 y tabulación"), linea(""));
 
-        assertDoesNotThrow(() -> pdf.generar(recibo(raras, d("3610.00"), List.of("Entrega: Calle 1 😀"))));
+        byte[] bytes = assertDoesNotThrow(() -> pdf.generar(recibo(raras, d("3610.00"), List.of("Entrega: Calle 1 😀"))));
+
+        String t = texto(bytes);
+        assertTrue(t.contains("Funda ? económico ñandú ¿qué? ¡sí! ???"), t);
+        assertTrue(t.contains("Cable USB con espacios raros y tabulación"), t);
+        assertTrue(t.contains("Entrega: Calle 1 ?"), t);
+    }
+
+    @Test
+    void unaVentaMuyLargaSigueEnPaginasDe80MilimetrosSinPasarElMaximoDeUnaPagina() throws IOException {
+        byte[] bytes = pdf.generar(recibo(lineas(1000), d("3610.00"), List.of("Domicilio")));
+
+        try (PDDocument documento = abrir(bytes)) {
+            assertTrue(documento.getNumberOfPages() > 1, "mil líneas caben en una página de más de 14 400 pt");
+            for (int i = 0; i < documento.getNumberOfPages(); i++) {
+                assertEquals(OCHENTA_MM, documento.getPage(i).getMediaBox().getWidth(), 0.01f);
+                assertTrue(documento.getPage(i).getMediaBox().getHeight() <= 14400f,
+                        "la página " + (i + 1) + " mide " + documento.getPage(i).getMediaBox().getHeight());
+            }
+            String t = new PDFTextStripper().getText(documento);
+            assertTrue(t.contains("Producto de prueba número 1000"), "falta la última línea");
+            assertTrue(t.stripTrailing().endsWith("Este recibo no es una factura electrónica."), "falta el pie");
+        }
     }
 
     @Test
