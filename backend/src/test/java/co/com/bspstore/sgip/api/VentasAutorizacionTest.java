@@ -16,6 +16,7 @@ import co.com.bspstore.sgip.logica.RecursoNoEncontradoException;
 import co.com.bspstore.sgip.logica.ResultadoDeVenta;
 import co.com.bspstore.sgip.logica.ServicioSesion;
 import co.com.bspstore.sgip.logica.ServicioConsultaDeVentas;
+import co.com.bspstore.sgip.logica.ReciboPdf;
 import co.com.bspstore.sgip.logica.ServicioRecibos;
 import co.com.bspstore.sgip.logica.ServicioVentas;
 import co.com.bspstore.sgip.logica.SinTurnoAbiertoException;
@@ -97,6 +98,7 @@ class VentasAutorizacionTest {
     @MockitoBean ServicioVentas servicio;
     @MockitoBean ServicioConsultaDeVentas consulta;
     @MockitoBean ServicioRecibos recibos;
+    @MockitoBean ReciboPdf reciboPdf;
     @MockitoBean ServicioSesion sesiones;
     @MockitoBean RepositorioPlataforma plataforma;
 

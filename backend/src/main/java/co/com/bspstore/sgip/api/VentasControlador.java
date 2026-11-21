@@ -4,6 +4,7 @@ import co.com.bspstore.sgip.api.dto.Recibo;
 import co.com.bspstore.sgip.api.dto.SolicitudVenta;
 import co.com.bspstore.sgip.api.dto.VentaConsultada;
 import co.com.bspstore.sgip.api.dto.VentaRegistrada;
+import co.com.bspstore.sgip.logica.ReciboPdf;
 import co.com.bspstore.sgip.logica.ResultadoDeVenta;
 import co.com.bspstore.sgip.logica.ServicioConsultaDeVentas;
 import co.com.bspstore.sgip.logica.ServicioRecibos;
@@ -46,11 +47,14 @@ public class VentasControlador {
     private final ServicioVentas servicio;
     private final ServicioConsultaDeVentas consulta;
     private final ServicioRecibos recibos;
+    private final ReciboPdf reciboPdf;
 
-    public VentasControlador(ServicioVentas servicio, ServicioConsultaDeVentas consulta, ServicioRecibos recibos) {
+    public VentasControlador(ServicioVentas servicio, ServicioConsultaDeVentas consulta, ServicioRecibos recibos,
+                             ReciboPdf reciboPdf) {
         this.servicio = servicio;
         this.consulta = consulta;
         this.recibos = recibos;
+        this.reciboPdf = reciboPdf;
     }
 
     @PostMapping
@@ -73,15 +77,16 @@ public class VentasControlador {
     /**
      * El PDF no lleva {@code produces}: si lo llevara, un {@code Accept} que no lo admita convertiría en 406 los
      * errores, que son JSON ({@code ManejadorErrores}). El tipo se pone en la respuesta, y nada se guarda en caché:
-     * es un documento de una venta de la empresa.
+     * es un documento de una venta de la empresa. El recibo se lee en su transacción de solo lectura, que termina
+     * al volver {@code recibo}; el PDF se arma después, sin tener una conexión de la base ocupada.
      */
     @GetMapping("/{id}/recibo.pdf")
-    public ResponseEntity<byte[]> reciboPdf(@PathVariable Long id) {
+    public ResponseEntity<byte[]> reciboEnPdf(@PathVariable Long id) {
         return ResponseEntity.ok()
                 .contentType(MediaType.APPLICATION_PDF)
                 .header(HttpHeaders.CONTENT_DISPOSITION,
                         ContentDisposition.inline().filename("recibo-" + id + ".pdf").build().toString())
                 .cacheControl(CacheControl.noStore())
-                .body(recibos.pdf(id));
+                .body(reciboPdf.generar(recibos.recibo(id)));
     }
 }

@@ -9,11 +9,13 @@ import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.font.PDFont;
-import org.apache.pdfbox.pdmodel.font.PDType1Font;
-import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
+import org.apache.pdfbox.pdmodel.font.PDType0Font;
+import org.apache.pdfbox.pdmodel.graphics.state.RenderingMode;
+import org.springframework.stereotype.Component;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.math.BigDecimal;
 import java.text.DecimalFormat;
@@ -25,25 +27,46 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * El recibo en PDF (RF-70, ADR-0035): una sola página de 80 mm de ancho, como la tirilla de la impresora, cuyo
- * alto sale del contenido. Es la única clase que conoce PDFBox.
+ * El recibo en PDF (RF-70, ADR-0035): páginas de 80 mm de ancho, como la tirilla de la impresora, con el alto que
+ * pide el contenido. Casi siempre es una sola página; una venta tan larga que pasaría el máximo de una página PDF
+ * ({@value #ALTO_MAXIMO} pt) sigue en otra del mismo ancho. Es la única clase que conoce PDFBox.
  *
  * La plantilla es sobria y está toda aquí, en {@link #componer}: el usuario diseñará el recibo después y basta
  * con cambiar ese método (el orden, los rótulos) o las constantes de tamaño. El resto, el ajuste de líneas, el
  * alto y el dibujo, no depende de qué se escribe.
  *
  * Se compone en dos pasadas: primero se colocan los textos en una {@link Hoja}, que va sumando el alto, y luego
- * se crea la página con ese alto y se dibuja. Las fuentes son las estándar del PDF (Helvetica, WinAnsi): cubren
- * las tildes, la eñe y los signos del español, y no hay que incrustar nada.
+ * se crean las páginas con ese alto y se dibuja.
+ *
+ * <h2>La fuente</h2>
+ *
+ * Liberation Sans Regular, que el propio jar de PDFBox trae ({@value #FUENTE}), incrustada en cada documento y
+ * subconjunta: no se descarga nada, no se instala nada y no se usa el mapeador de fuentes de PDFBox, que recorre las
+ * fuentes del sistema y escribe una caché en la carpeta personal. Por eso esta clase no toca ninguna fuente al
+ * construirse ni al cargarse. Cada recibo carga la suya (un {@code PDType0Font} guarda mapas que se llenan al usarlo
+ * y PDFBox no es seguro entre hilos).
+ *
+ * La negrita es falsa: la misma fuente con trazo (modo {@code FILL_STROKE}) de {@value #TRAZO_DE_NEGRITA} veces el
+ * tamaño. Se prefirió a usar la fuente normal un poco más grande porque el trazo conserva el ancho de las letras,
+ * que es lo que mantiene los importes alineados a la derecha y evita que un título ocupe otro renglón.
  *
  * <b>Todo texto pasa por {@link #limpiar}.</b> PDFBox lanza una excepción con cualquier carácter que la fuente
- * no pueda escribir, y los nombres de producto los teclea el usuario: un emoji o un espacio de ancho especial no
- * puede tumbar el recibo, así que lo que la fuente no escribe sale como «?».
+ * no tenga, y los nombres de producto los teclea el usuario: un emoji, un alfabeto no latino o un espacio de ancho
+ * especial no puede tumbar el recibo, así que lo que la fuente no tiene sale como «?».
  */
+@Component
 public class ReciboPdf {
 
     /** 80 mm en puntos tipográficos (72 por pulgada). */
     static final float ANCHO = 80f / 25.4f * 72f;
+
+    /** El alto máximo de una página PDF que los visores aceptan. */
+    static final float ALTO_MAXIMO = 14400f;
+
+    /** La fuente que trae el jar de pdfbox 3.0.x. */
+    static final String FUENTE = "/org/apache/pdfbox/resources/ttf/LiberationSans-Regular.ttf";
+
+    static final float TRAZO_DE_NEGRITA = 0.035f;
 
     private static final float MARGEN = 10f;
     private static final float TAMANO = 8.5f;
@@ -52,31 +75,17 @@ public class ReciboPdf {
     private static final float INTERLINEADO = 1.25f;
     private static final float SEPARACION = 4f;
 
-    /**
-     * Las fuentes NO son estáticas: un {@code PDType1Font} guarda mapas que se llenan al usarlo
-     * ({@code codeToBytesMap}, {@code codeToWidthMap}) y PDFBox no es seguro entre hilos, así que cada recibo crea
-     * las suyas. Crear la primera hace que PDFBox recorra las fuentes instaladas del sistema (unos segundos la
-     * primera vez en una máquina); este bloque lo paga al cargar la clase, que es al arrancar la aplicación, y no
-     * en el primer recibo que alguien pida.
-     */
-    static {
-        new PDType1Font(Standard14Fonts.FontName.HELVETICA);
-    }
-
     private static final DateTimeFormatter FECHA_Y_HORA = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
 
+    private enum Estilo { NORMAL, NEGRITA }
+
     public byte[] generar(Recibo recibo) {
-        PDFont normal = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
-        PDFont negrita = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
-        Hoja hoja = new Hoja();
-        componer(hoja, recibo, normal, negrita);
         try (PDDocument documento = new PDDocument()) {
-            PDPage pagina = new PDPage(new PDRectangle(ANCHO, hoja.alto()));
-            documento.addPage(pagina);
-            documento.getDocumentInformation().setTitle(limpiar("Recibo " + recibo.consecutivo(), normal));
-            try (PDPageContentStream contenido = new PDPageContentStream(documento, pagina)) {
-                hoja.dibujar(contenido, pagina.getMediaBox().getHeight());
-            }
+            PDFont fuente = cargarFuente(documento);
+            Hoja hoja = new Hoja(fuente);
+            componer(hoja, recibo);
+            documento.getDocumentInformation().setTitle(limpiar("Recibo " + recibo.consecutivo(), fuente));
+            hoja.dibujar(documento);
             ByteArrayOutputStream salida = new ByteArrayOutputStream();
             documento.save(salida);
             return salida.toByteArray();
@@ -85,24 +94,33 @@ public class ReciboPdf {
         }
     }
 
+    private static PDFont cargarFuente(PDDocument documento) throws IOException {
+        try (InputStream flujo = PDDocument.class.getResourceAsStream(FUENTE)) {
+            if (flujo == null) {
+                throw new IllegalStateException("El jar de PDFBox no trae la fuente " + FUENTE);
+            }
+            return PDType0Font.load(documento, flujo, true);
+        }
+    }
+
     // ------------------------------------------------------------ la plantilla
 
-    private static void componer(Hoja h, Recibo r, PDFont normal, PDFont negrita) {
-        h.centrado(r.empresa(), negrita, TAMANO_TITULO);
+    private static void componer(Hoja h, Recibo r) {
+        h.centrado(r.empresa(), Estilo.NEGRITA, TAMANO_TITULO);
         if (r.nitEmpresa() != null) {
-            h.centrado("NIT " + r.nitEmpresa(), normal, TAMANO);
+            h.centrado("NIT " + r.nitEmpresa(), Estilo.NORMAL, TAMANO);
         }
         h.espacio();
 
-        h.izquierda("Venta " + r.consecutivo(), normal, TAMANO);
-        h.izquierda("Fecha: " + r.fecha().format(FECHA_Y_HORA), normal, TAMANO);
-        h.izquierda("Cajero: " + r.cajero(), normal, TAMANO);
+        h.izquierda("Venta " + r.consecutivo(), Estilo.NORMAL, TAMANO);
+        h.izquierda("Fecha: " + r.fecha().format(FECHA_Y_HORA), Estilo.NORMAL, TAMANO);
+        h.izquierda("Cajero: " + r.cajero(), Estilo.NORMAL, TAMANO);
         h.izquierda("Cliente: " + r.cliente() + (r.identificacionCliente() == null ? "" : " (" + r.identificacionCliente() + ")"),
-                normal, TAMANO);
+                Estilo.NORMAL, TAMANO);
         h.raya();
 
         for (LineaDeRecibo l : r.lineas()) {
-            h.fila(l.nombre(), pesos(l.total()), normal, TAMANO);
+            h.fila(l.nombre(), pesos(l.total()), Estilo.NORMAL, TAMANO);
             StringBuilder detalle = new StringBuilder(l.cantidad() + " × " + pesos(l.precioUnitario()));
             if (l.descuento() != null && l.descuento().signum() > 0) {
                 detalle.append(" · descuento ").append(pesos(l.descuento()));
@@ -110,45 +128,45 @@ public class ReciboPdf {
             if (l.iva() != null && l.iva().signum() > 0) {
                 detalle.append(" · IVA ").append(pesos(l.iva()));
             }
-            h.izquierda(detalle.toString(), normal, TAMANO_PEQUENO);
+            h.izquierda(detalle.toString(), Estilo.NORMAL, TAMANO_PEQUENO);
             h.hueco(SEPARACION / 2);
         }
         h.raya();
 
-        h.fila("Subtotal", pesos(r.subtotal()), normal, TAMANO);
+        h.fila("Subtotal", pesos(r.subtotal()), Estilo.NORMAL, TAMANO);
         if (r.descuento() != null && r.descuento().signum() > 0) {
-            h.fila("Descuento", pesos(r.descuento()), normal, TAMANO);
+            h.fila("Descuento", pesos(r.descuento()), Estilo.NORMAL, TAMANO);
         }
         if (r.iva() != null) {
-            h.fila("IVA", pesos(r.iva()), normal, TAMANO);
+            h.fila("IVA", pesos(r.iva()), Estilo.NORMAL, TAMANO);
         }
-        h.fila("Total", pesos(r.total()), negrita, TAMANO_TITULO);
+        h.fila("Total", pesos(r.total()), Estilo.NEGRITA, TAMANO_TITULO);
         h.raya();
 
         for (PagoDeRecibo p : r.pagos()) {
             String medio = p.tipo() == TipoMedio.SALDO_A_FAVOR ? "Saldo a favor" : p.medio();
-            h.fila(medio, pesos(p.monto()), normal, TAMANO);
+            h.fila(medio, pesos(p.monto()), Estilo.NORMAL, TAMANO);
             if (p.recibido() != null && p.recibido().compareTo(p.monto()) != 0) {
-                h.fila("Recibido", pesos(p.recibido()), normal, TAMANO_PEQUENO);
+                h.fila("Recibido", pesos(p.recibido()), Estilo.NORMAL, TAMANO_PEQUENO);
             }
             if (p.referencia() != null && !p.referencia().isBlank()) {
-                h.izquierda("Ref. " + p.referencia(), normal, TAMANO_PEQUENO);
+                h.izquierda("Ref. " + p.referencia(), Estilo.NORMAL, TAMANO_PEQUENO);
             }
         }
         if (r.cambio() != null && r.cambio().signum() > 0) {
-            h.fila("Cambio", pesos(r.cambio()), negrita, TAMANO);
+            h.fila("Cambio", pesos(r.cambio()), Estilo.NEGRITA, TAMANO);
         }
         if (!r.pagos().isEmpty() || (r.cambio() != null && r.cambio().signum() > 0)) {
             h.raya();
         }
 
         for (String marca : r.marcas()) {
-            h.izquierda(marca, negrita, TAMANO);
+            h.izquierda(marca, Estilo.NEGRITA, TAMANO);
         }
         if (!r.marcas().isEmpty()) {
             h.espacio();
         }
-        h.centrado(Recibo.PIE, normal, TAMANO_PEQUENO);
+        h.centrado(Recibo.PIE, Estilo.NORMAL, TAMANO_PEQUENO);
     }
 
     // ------------------------------------------------------------ los importes
@@ -169,7 +187,8 @@ public class ReciboPdf {
 
     /**
      * El texto tal como la fuente puede escribirlo: los espacios raros y los controles (tabulación, salto de
-     * línea) pasan a un espacio, y lo que la fuente no codifica pasa a «?». Nunca lanza por el contenido.
+     * línea) pasan a un espacio, y cada carácter que la fuente no tiene (un emoji, un alfabeto no latino) pasa a
+     * «?». Nunca lanza por el contenido.
      */
     static String limpiar(String texto, PDFont fuente) {
         if (texto == null) {
@@ -238,20 +257,45 @@ public class ReciboPdf {
 
     // ------------------------------------------------------------ la hoja
 
-    /** Lo ya colocado y el alto que lleva; se dibuja cuando se conoce el alto total. */
+    /** Lo ya colocado y el alto de cada página; se dibuja cuando se conoce el alto total. */
     private static final class Hoja {
 
-        private record Texto(String texto, PDFont fuente, float tamano, float x, float arriba) {}
+        private record Texto(String texto, boolean negrita, float tamano, float x, float arriba, int pagina) {}
 
-        private record Raya(float arriba) {}
+        private record Raya(float arriba, int pagina) {}
 
         private static final float UTIL = ANCHO - 2 * MARGEN;
+        private static final float HOLGURA = 3 * SEPARACION;
 
+        private final PDFont fuente;
         private final List<Object> piezas = new ArrayList<>();
+        private final List<Float> altosCerrados = new ArrayList<>();
         private float y = MARGEN;
 
-        float alto() {
-            return y + MARGEN;
+        Hoja(PDFont fuente) {
+            this.fuente = fuente;
+        }
+
+        private int pagina() {
+            return altosCerrados.size();
+        }
+
+        /** Las páginas que quedan: las que se cerraron por llenarse y la actual con el alto que lleva. */
+        private List<Float> altos() {
+            List<Float> altos = new ArrayList<>(altosCerrados);
+            altos.add(y + MARGEN);
+            return altos;
+        }
+
+        /**
+         * Si lo que sigue no cabe en la página actual, la cierra y sigue en otra. Deja de holgura lo que pueden
+         * sumar los huecos entre renglones, que no se comprueban uno a uno.
+         */
+        private void asegurar(float altura) {
+            if (y + altura + MARGEN + HOLGURA > ALTO_MAXIMO && y > MARGEN) {
+                altosCerrados.add(y + MARGEN);
+                y = MARGEN;
+            }
         }
 
         void espacio() {
@@ -263,57 +307,82 @@ public class ReciboPdf {
         }
 
         void raya() {
+            asegurar(SEPARACION * 2);
             y += SEPARACION / 2;
-            piezas.add(new Raya(y));
+            piezas.add(new Raya(y, pagina()));
             y += SEPARACION;
         }
 
-        void izquierda(String texto, PDFont fuente, float tamano) {
+        void izquierda(String texto, Estilo estilo, float tamano) {
             for (String renglon : renglones(limpiar(texto, fuente), fuente, tamano, UTIL)) {
-                colocar(renglon, fuente, tamano, MARGEN);
+                colocar(renglon, estilo, tamano, MARGEN);
             }
         }
 
-        void centrado(String texto, PDFont fuente, float tamano) {
+        void centrado(String texto, Estilo estilo, float tamano) {
             for (String renglon : renglones(limpiar(texto, fuente), fuente, tamano, UTIL)) {
-                colocar(renglon, fuente, tamano, MARGEN + (UTIL - ancho(renglon, fuente, tamano)) / 2);
+                colocar(renglon, estilo, tamano, MARGEN + (UTIL - ancho(renglon, fuente, tamano)) / 2);
             }
         }
 
         /** Un rótulo a la izquierda y su importe pegado a la derecha, en el primer renglón del rótulo. */
-        void fila(String rotulo, String importe, PDFont fuente, float tamano) {
+        void fila(String rotulo, String importe, Estilo estilo, float tamano) {
             String valor = limpiar(importe, fuente);
             float anchoDelValor = ancho(valor, fuente, tamano);
             List<String> partes = renglones(limpiar(rotulo, fuente), fuente, tamano,
                     UTIL - anchoDelValor - SEPARACION * 1.5f);
             for (int i = 0; i < partes.size(); i++) {
+                asegurar(tamano * INTERLINEADO);
                 if (i == 0) {
-                    piezas.add(new Texto(valor, fuente, tamano, ANCHO - MARGEN - anchoDelValor, y));
+                    piezas.add(new Texto(valor, estilo == Estilo.NEGRITA, tamano, ANCHO - MARGEN - anchoDelValor, y,
+                            pagina()));
                 }
-                colocar(partes.get(i), fuente, tamano, MARGEN);
+                colocar(partes.get(i), estilo, tamano, MARGEN);
             }
         }
 
-        private void colocar(String renglon, PDFont fuente, float tamano, float x) {
-            piezas.add(new Texto(renglon, fuente, tamano, x, y));
+        private void colocar(String renglon, Estilo estilo, float tamano, float x) {
+            asegurar(tamano * INTERLINEADO);
+            piezas.add(new Texto(renglon, estilo == Estilo.NEGRITA, tamano, x, y, pagina()));
             y += tamano * INTERLINEADO;
         }
 
-        void dibujar(PDPageContentStream contenido, float altoDePagina) throws IOException {
-            for (Object pieza : piezas) {
-                if (pieza instanceof Texto t) {
-                    contenido.beginText();
-                    contenido.setFont(t.fuente(), t.tamano());
-                    contenido.newLineAtOffset(t.x(), altoDePagina - t.arriba() - t.tamano());
-                    contenido.showText(t.texto());
-                    contenido.endText();
-                } else if (pieza instanceof Raya r) {
-                    contenido.setLineWidth(0.5f);
-                    contenido.setLineDashPattern(new float[]{2f, 2f}, 0);
-                    contenido.moveTo(MARGEN, altoDePagina - r.arriba());
-                    contenido.lineTo(ANCHO - MARGEN, altoDePagina - r.arriba());
-                    contenido.stroke();
+        /** Crea las páginas con su alto y dibuja en cada una lo que le tocó. */
+        void dibujar(PDDocument documento) throws IOException {
+            List<Float> altos = altos();
+            for (int numero = 0; numero < altos.size(); numero++) {
+                float alto = altos.get(numero);
+                PDPage pagina = new PDPage(new PDRectangle(ANCHO, alto));
+                documento.addPage(pagina);
+                try (PDPageContentStream contenido = new PDPageContentStream(documento, pagina)) {
+                    for (Object pieza : piezas) {
+                        if (pieza instanceof Texto t && t.pagina() == numero) {
+                            dibujarTexto(contenido, t, alto);
+                        } else if (pieza instanceof Raya r && r.pagina() == numero) {
+                            contenido.setLineWidth(0.5f);
+                            contenido.setLineDashPattern(new float[]{2f, 2f}, 0);
+                            contenido.moveTo(MARGEN, alto - r.arriba());
+                            contenido.lineTo(ANCHO - MARGEN, alto - r.arriba());
+                            contenido.stroke();
+                            contenido.setLineDashPattern(new float[0], 0);
+                        }
+                    }
                 }
+            }
+        }
+
+        private void dibujarTexto(PDPageContentStream contenido, Texto t, float alto) throws IOException {
+            if (t.negrita()) {
+                contenido.setRenderingMode(RenderingMode.FILL_STROKE);
+                contenido.setLineWidth(t.tamano() * TRAZO_DE_NEGRITA);
+            }
+            contenido.beginText();
+            contenido.setFont(fuente, t.tamano());
+            contenido.newLineAtOffset(t.x(), alto - t.arriba() - t.tamano());
+            contenido.showText(t.texto());
+            contenido.endText();
+            if (t.negrita()) {
+                contenido.setRenderingMode(RenderingMode.FILL);
             }
         }
     }

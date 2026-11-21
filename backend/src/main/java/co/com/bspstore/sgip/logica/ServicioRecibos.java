@@ -20,12 +20,14 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * El recibo de una venta de la empresa de la sesión (RF-70), en JSON para reimprimirlo en el mostrador y en PDF
- * para enviarlo. Solo lee: tres consultas, las mismas con una línea que con doscientas.
+ * El recibo de una venta de la empresa de la sesión (RF-70), en JSON para reimprimirlo en el mostrador y, con
+ * {@code ReciboPdf}, en PDF para enviarlo. Solo lee: tres consultas, las mismas con una línea que con doscientas.
+ * El PDF no se genera aquí a propósito: se arma después de esta lectura, con la transacción ya cerrada.
  *
  * <ul>
- *   <li>El IVA se discrimina solo si la empresa es responsable de IVA (RF-34); si no, {@code iva} es nulo, en el
- *       total y en cada línea.</li>
+ *   <li>El IVA se discrimina si la empresa es responsable de IVA (RF-34) o si la venta ya guardó IVA (una venta
+ *       hecha cuando lo era, reimpresa después de que dejó de serlo, lo sigue mostrando porque el total lo lleva);
+ *       si no, {@code iva} es nulo, en el total y en cada línea.</li>
  *   <li>La venta de otra empresa es, para quien pregunta, una venta que no existe (404): el consecutivo se repite
  *       entre empresas y la consulta siempre lleva la empresa de la sesión.</li>
  *   <li>Nunca lleva el costo ni la utilidad, tampoco para el administrador.</li>
@@ -41,7 +43,6 @@ public class ServicioRecibos {
     private static final DateTimeFormatter FECHA = DateTimeFormatter.ofPattern("dd/MM/yyyy");
 
     private final RepositorioRecibos repositorio;
-    private final ReciboPdf pdf = new ReciboPdf();
 
     public ServicioRecibos(RepositorioRecibos repositorio) {
         this.repositorio = repositorio;
@@ -55,10 +56,12 @@ public class ServicioRecibos {
         List<LineaDeVenta> vendidas = repositorio.lineas(empresa, ventaId);
         List<PagoDeVenta> pagados = repositorio.pagos(empresa, ventaId);
 
+        // el IVA ya cobrado se muestra aunque la empresa haya dejado de ser responsable: el total lo lleva
+        boolean conIva = v.responsableIva() || v.iva().signum() > 0;
         List<LineaDeRecibo> lineas = new ArrayList<>(vendidas.size());
         for (LineaDeVenta l : vendidas) {
             lineas.add(new LineaDeRecibo(l.nombre(), l.cantidad(), l.precioUnitario(), l.descuento(),
-                    v.responsableIva() ? l.iva() : null, l.total()));
+                    conIva ? l.iva() : null, l.total()));
         }
         List<PagoDeRecibo> pagos = new ArrayList<>(pagados.size());
         for (PagoDeVenta p : pagados) {
@@ -66,14 +69,8 @@ public class ServicioRecibos {
         }
         return new Recibo(v.empresa(), v.nit(), v.consecutivo(), v.fecha().atZone(Hoy.ZONA).toOffsetDateTime(),
                 v.cajero(), v.cliente(), v.tipoDocumento() + " " + v.identificacion(), List.copyOf(lineas),
-                v.subtotal(), v.descuento(), v.responsableIva() ? v.iva() : null, v.total(), List.copyOf(pagos),
+                v.subtotal(), v.descuento(), conIva ? v.iva() : null, v.total(), List.copyOf(pagos),
                 cambio(pagados), marcas(v, vendidas));
-    }
-
-    /** El recibo en PDF de tirilla de 80 mm. */
-    @Transactional(readOnly = true)
-    public byte[] pdf(Long ventaId) {
-        return pdf.generar(recibo(ventaId));
     }
 
     /** Lo recibido en efectivo menos lo cobrado en efectivo; el saldo a favor y las tarjetas no dan cambio. */
