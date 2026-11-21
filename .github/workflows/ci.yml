@@ -571,6 +571,17 @@ jobs:
           test "$n" -eq 1 || {
             echo "::error::flyway_schema_history no tiene la línea base en la V31"; exit 1; }
 
+      # La caja de punta a punta, contra el JAR que acaba de empaquetar
+      # `mvn verify` y sobre la base de este trabajo, que ya tiene todas
+      # las migraciones (las pruebas con base las aplicaron por Flyway).
+      # Recorre un turno completo por la API y comprueba el PDF del recibo
+      # desde dentro del JAR ejecutable. Crea sus propios usuarios y
+      # productos, de modo que no depende de lo que dejaron las pruebas.
+      - name: Verificar la caja de punta a punta, desde el JAR
+        run: |
+          jar=$(ls "$PWD"/backend/target/backend-*.jar | grep -v '\.original$' | head -1)
+          SGIP_CAJA_JAR="$jar" bash database/verificar_caja.sh -h 127.0.0.1 -P 3306 -u root -psgip_ci
+
   web:
     name: Compilación del front web
     runs-on: ubuntu-latest
