@@ -360,6 +360,52 @@ class ServicioImportacionTest {
         verify(importacion, org.mockito.Mockito.never()).marcarRechazada(anyInt(), anyLong());
     }
 
+    /**
+     * Rechazar toma el mismo bloqueo de la cabecera que aplicar y comprueba el estado ya
+     * con ella bloqueada: sin eso, un rechazo que lee «validada» mientras otro aplica
+     * pisaría después la carga aplicada con «rechazada».
+     */
+    @Test
+    void rechazarBloqueaLaCargaAntesDeEscribirSuEstado() {
+        cargaEn("VALIDADA", 5);
+        when(importacion.marcarRechazada(EMPRESA, CARGA)).thenReturn(1);
+
+        servicio.rechazar(CARGA);
+
+        var orden = org.mockito.Mockito.inOrder(importacion);
+        orden.verify(importacion).bloquearCarga(EMPRESA, CARGA);
+        orden.verify(importacion).marcarRechazada(EMPRESA, CARGA);
+    }
+
+    @Test
+    void siLaCargaDejoDeEstarValidadaRechazarNoLaPisa() {
+        cargaEn("VALIDADA", 5);
+        // Ninguna fila cambió: el UPDATE solo toca cargas validadas.
+        when(importacion.marcarRechazada(EMPRESA, CARGA)).thenReturn(0);
+
+        var e = assertThrows(EstadoDeCargaInvalidoException.class, () -> servicio.rechazar(CARGA));
+
+        assertEquals("La carga ya no está validada y no se pudo rechazar.", e.getMessage());
+    }
+
+    @Test
+    void rechazarUnaCargaYaRechazadaNoEscribeNada() {
+        cargaEn("RECHAZADA", 5);
+
+        assertTrue(servicio.rechazar(CARGA).isPresent());
+
+        verify(importacion, org.mockito.Mockito.never()).marcarRechazada(anyInt(), anyLong());
+    }
+
+    @Test
+    void rechazarUnaCargaDeOtraEmpresaNoEncuentraNada() {
+        when(importacion.bloquearCarga(EMPRESA, 999L)).thenReturn(Optional.empty());
+
+        assertTrue(servicio.rechazar(999L).isEmpty());
+
+        verify(importacion, org.mockito.Mockito.never()).marcarRechazada(anyInt(), anyLong());
+    }
+
     @Test
     void yNoSeCalculaSobreUnaCargaYaAplicada() {
         cargaEn("APLICADA", 5);

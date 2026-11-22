@@ -1,6 +1,6 @@
 # ADR-0009 · Sistema de diseño de la interfaz
 
-Estado: aceptada · 2026
+Estado: aceptada · 2026 · la tipografía (Inter) y el menú oscuro los reemplaza la ADR-0034
 
 ## Contexto
 

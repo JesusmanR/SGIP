@@ -260,6 +260,50 @@ public class RepositorioCompras {
                 .list();
     }
 
+    /** Cuántos identificadores se bloquean por sentencia: un tope razonable para el IN. */
+    private static final int PRODUCTOS_POR_BLOQUEO = 1_000;
+
+    /**
+     * Bloquea de una vez, en orden ascendente de {@code producto_id}, las filas de los
+     * productos que una recepción va a mover.
+     *
+     * El saldo de cada producto se bloquea después, uno por uno, al registrar el ingreso;
+     * si lo primero que se bloqueara fuera cada saldo en el orden en que llegan las líneas,
+     * una recepción [5, 2] contra otra operación que bloquee [2, 5] (otra recepción, una
+     * venta) se interbloquearía. Con todos los productos tomados primero y en el orden de
+     * la clave primaria, el que llega segundo espera antes de tomar nada. El orden de
+     * bloqueos de la importación es el mismo (ADR-0030).
+     *
+     * {@code FORCE INDEX (PRIMARY)} por la razón que explica
+     * {@link RepositorioImportacion}: sin forzarlo el optimizador puede recorrer otro
+     * índice y las filas se bloquearían en otro orden. Se ordenan aquí los identificadores
+     * y, si son más de {@value #PRODUCTOS_POR_BLOQUEO}, se bloquean en tandas consecutivas
+     * de ese orden. Acotada por empresa; un identificador ajeno no cumple el filtro y no se
+     * bloquea. No hace consulta si no hay nada que bloquear.
+     */
+    public List<Integer> bloquearProductos(Integer empresaId, java.util.Collection<Integer> productoIds) {
+        List<Integer> ordenados = productoIds.stream().distinct().sorted().toList();
+        List<Integer> bloqueados = new ArrayList<>(ordenados.size());
+        for (int desde = 0; desde < ordenados.size(); desde += PRODUCTOS_POR_BLOQUEO) {
+            List<Integer> tanda = ordenados.subList(desde,
+                    Math.min(desde + PRODUCTOS_POR_BLOQUEO, ordenados.size()));
+            bloqueados.addAll(jdbc.sql(SQL_BLOQUEAR_PRODUCTOS)
+                    .param("empresa", empresaId)
+                    .param("ids", tanda)
+                    .query(Integer.class)
+                    .list());
+        }
+        return bloqueados;
+    }
+
+    static final String SQL_BLOQUEAR_PRODUCTOS = """
+            SELECT producto_id
+              FROM productos FORCE INDEX (PRIMARY)
+             WHERE producto_id IN (:ids) AND empresa_id = :empresa
+             ORDER BY producto_id
+               FOR UPDATE
+            """;
+
     public void sumarRecibido(Integer empresaId, Long itemId, int cantidad) {
         jdbc.sql("""
                         UPDATE orden_compra_items
