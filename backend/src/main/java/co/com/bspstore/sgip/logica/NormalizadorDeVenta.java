@@ -3,7 +3,6 @@ package co.com.bspstore.sgip.logica;
 import co.com.bspstore.sgip.api.dto.Domicilio;
 import co.com.bspstore.sgip.api.dto.LineaSolicitada;
 import co.com.bspstore.sgip.api.dto.PagoSolicitado;
-import co.com.bspstore.sgip.api.dto.ProductoNuevo;
 import co.com.bspstore.sgip.api.dto.SolicitudVenta;
 import co.com.bspstore.sgip.logica.venta.Descuento;
 import co.com.bspstore.sgip.logica.venta.LimitesDeVenta;
@@ -35,6 +34,9 @@ import java.util.TreeMap;
  * que los pagos sumen el total) lo decide {@code RegistradorDeVenta}.
  */
 final class NormalizadorDeVenta {
+
+    /** Lo que recibe quien aún envía un {@code productoNuevo}: crear productos es del catálogo. */
+    static final String PRODUCTOS_EN_EL_CATALOGO = "Los productos se crean en el catálogo.";
 
     static final String CLIENTE_PARA_DOMICILIO =
             "Un domicilio necesita un cliente identificado: el Consumidor final no sirve.";
@@ -97,11 +99,6 @@ final class NormalizadorDeVenta {
         }
         validar(s.descuentoTotal());
         List<LineaSolicitada> lineas = fusionar(s.lineas());
-        // El producto nuevo nace con existencia cero: toda su venta es un encargo y el encargo lleva
-        // su motivo (la fecha de entrega, por línea, se exigió al fusionarlas).
-        if (motivo == null && lineas.stream().anyMatch(l -> l.productoNuevo() != null)) {
-            throw invalida("Un producto nuevo se vende como encargo y necesita el motivo.");
-        }
         // Un domicilio contra entrega se cobra al entregarlo: no lleva pagos. Todo lo demás los lleva.
         List<PagoSolicitado> pagos = domicilio != null && domicilio.contraEntrega()
                 ? sinPagos(s.pagos())
@@ -120,34 +117,23 @@ final class NormalizadorDeVenta {
             throw invalida("La venta admite como máximo " + LimitesDeVenta.LINEAS + " líneas.");
         }
         Map<Integer, LineaSolicitada> porProducto = new TreeMap<>();
-        List<LineaSolicitada> nuevas = new ArrayList<>();
         for (LineaSolicitada l : pedidas) {
             if (l == null) {
                 throw invalida("Una línea de la venta está vacía.");
             }
-            if ((l.productoId() == null) == (l.productoNuevo() == null)) {
-                throw invalida("Cada línea lleva un producto o un producto nuevo, y no los dos ni ninguno.");
+            if (l.productoNuevo() != null) {
+                throw invalida(PRODUCTOS_EN_EL_CATALOGO);
             }
-            if (l.productoId() != null && l.productoId() <= 0) {
+            if (l.productoId() == null) {
+                throw invalida("Cada línea lleva un producto.");
+            }
+            if (l.productoId() <= 0) {
                 throw invalida("El producto no es válido.");
             }
             if (l.cantidad() < 1 || l.cantidad() > LimitesDeVenta.CANTIDAD) {
                 throw invalida("La cantidad de una línea va de 1 a " + LimitesDeVenta.CANTIDAD + " unidades.");
             }
             validar(l.descuento());
-            if (l.productoNuevo() != null) {
-                // Cada línea de producto nuevo crea el suyo: nunca se fusionan dos.
-                if (l.entregaEstimada() == null) {
-                    throw invalida("Un producto nuevo se vende como encargo y necesita la fecha estimada de entrega.");
-                }
-                if (nuevas.size() >= LimitesDeVenta.PRODUCTOS_NUEVOS) {
-                    throw invalida("Una venta admite como máximo " + LimitesDeVenta.PRODUCTOS_NUEVOS
-                            + " productos nuevos.");
-                }
-                nuevas.add(new LineaSolicitada(null, productoNuevo(l.productoNuevo()), l.cantidad(), l.descuento(),
-                        l.entregaEstimada()));
-                continue;
-            }
             LineaSolicitada previa = porProducto.get(l.productoId());
             if (previa == null) {
                 porProducto.put(l.productoId(), l);
@@ -166,9 +152,7 @@ final class NormalizadorDeVenta {
             porProducto.put(l.productoId(), new LineaSolicitada(l.productoId(), null, (int) suma,
                     previa.descuento(), previa.entregaEstimada()));
         }
-        List<LineaSolicitada> lineas = new ArrayList<>(porProducto.values());
-        lineas.addAll(nuevas);
-        return List.copyOf(lineas);
+        return List.copyOf(porProducto.values());
     }
 
     // ------------------------------------------------------------ el domicilio
@@ -222,38 +206,6 @@ final class NormalizadorDeVenta {
             throw invalida("Un domicilio contra entrega no lleva pagos: el dinero se cobra al entregarlo.");
         }
         return List.of();
-    }
-
-    // ------------------------------------------------------------ el producto nuevo
-
-    /**
-     * El producto nuevo con sus textos limpios: nombre obligatorio y del tamaño de su columna, código
-     * de barras opcional (en blanco es nulo) y precio de venta SIN IVA, un entero positivo de hasta 12
-     * cifras. El precio se mira con {@code scale()} y {@code precision()}, que no operan: un
-     * {@code 1E+99999999} no cuelga el hilo. Lo usan la forma de la solicitud y el servicio que crea el
-     * producto, de modo que la regla es una sola y los textos no repiten lo enviado.
-     */
-    static ProductoNuevo productoNuevo(ProductoNuevo p) {
-        if (p == null) {
-            throw invalida("El producto nuevo está vacío.");
-        }
-        String nombre = texto(p.nombre());
-        if (nombre == null) {
-            throw invalida("El producto nuevo necesita un nombre.");
-        }
-        if (nombre.length() > LimitesDeVenta.NOMBRE_DEL_PRODUCTO) {
-            throw invalida("El nombre del producto admite hasta " + LimitesDeVenta.NOMBRE_DEL_PRODUCTO + " caracteres.");
-        }
-        String barras = texto(p.codigoBarras());
-        if (barras != null && barras.length() > LimitesDeVenta.CODIGO_DE_BARRAS) {
-            throw invalida("El código de barras admite hasta " + LimitesDeVenta.CODIGO_DE_BARRAS + " caracteres.");
-        }
-        BigDecimal precio = p.precioVenta();
-        if (precio == null || !cabe(precio) || precio.signum() <= 0 || !enteroEnPesos(precio)) {
-            throw invalida("El precio de venta del producto nuevo va sin IVA, en pesos enteros, mayor que cero y de hasta "
-                    + MAX_CIFRAS_ENTERAS + " dígitos.");
-        }
-        return new ProductoNuevo(nombre, precio.setScale(0, java.math.RoundingMode.UNNECESSARY), barras);
     }
 
     private static boolean mismoDescuento(Descuento a, Descuento b) {
@@ -371,21 +323,11 @@ final class NormalizadorDeVenta {
         canon.append("cliente=").append(n.clienteId() == null ? "-" : n.clienteId().toString()).append('|');
         canon.append("descuento=").append(descuento(n.descuentoTotal())).append('|');
         canon.append("motivo=").append(n.motivoEncargo() == null ? "-" : n.motivoEncargo()).append('|');
-        List<String> nuevas = new ArrayList<>();
         for (LineaSolicitada l : n.lineas()) {
-            String cola = l.cantidad() + ":" + descuento(l.descuento()) + ":"
-                    + (l.entregaEstimada() == null ? "-" : l.entregaEstimada().toString()) + "|";
-            if (l.productoNuevo() != null) {
-                ProductoNuevo p = l.productoNuevo();
-                nuevas.add("LN:" + campo(p.nombre()) + ":" + plano(p.precioVenta()) + ":" + campo(p.codigoBarras()) + ":" + cola);
-            } else {
-                canon.append("L:").append(l.productoId()).append(':').append(cola);
-            }
+            canon.append("L:").append(l.productoId()).append(':').append(l.cantidad()).append(':')
+                    .append(descuento(l.descuento())).append(':')
+                    .append(l.entregaEstimada() == null ? "-" : l.entregaEstimada().toString()).append('|');
         }
-        // Los productos nuevos entran después de las líneas del catálogo, y solo si los hay: la
-        // huella de una venta sin ellos es la misma de siempre. Van ordenados por su propio texto
-        // (como las líneas del catálogo van por producto), de modo que su orden no importa.
-        nuevas.stream().sorted().forEach(canon::append);
         for (PagoSolicitado p : n.pagos()) {
             canon.append("P:").append(p.medioId()).append(':').append(plano(p.monto())).append(':')
                     .append(p.recibido() == null ? "-" : plano(p.recibido())).append(':')

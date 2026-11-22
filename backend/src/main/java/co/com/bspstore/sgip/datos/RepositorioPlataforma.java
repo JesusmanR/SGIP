@@ -44,8 +44,9 @@ import java.util.Optional;
 public class RepositorioPlataforma {
 
     /**
-     * El proveedor y la categoría de los productos que se crean dentro de la venta (V45). Los
-     * nombres los comparten la siembra de aquí y la búsqueda de {@code ServicioProductoNuevo}.
+     * El proveedor y la categoría genéricos que la V45 siembra en cada empresa. La caja ya no crea
+     * productos (los crea el administrador en el catálogo), pero la siembra se conserva: el alta de
+     * la empresa y las pruebas del esquema la esperan.
      */
     public static final String NOMBRE_SIN_PROVEEDOR = "Sin proveedor";
     public static final String NIT_SIN_PROVEEDOR = "SIN-PROVEEDOR";

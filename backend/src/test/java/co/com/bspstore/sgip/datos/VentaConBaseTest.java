@@ -14,7 +14,6 @@ import co.com.bspstore.sgip.logica.RegistradorDeVenta;
 import co.com.bspstore.sgip.logica.ResultadoDeVenta;
 import co.com.bspstore.sgip.logica.ServicioClientes;
 import co.com.bspstore.sgip.logica.ServicioInventario;
-import co.com.bspstore.sgip.logica.ServicioProductoNuevo;
 import co.com.bspstore.sgip.logica.ServicioTurnos;
 import co.com.bspstore.sgip.logica.ServicioVentas;
 import co.com.bspstore.sgip.logica.SinTurnoAbiertoException;
@@ -82,7 +81,6 @@ class VentaConBaseTest {
     @Autowired RepositorioClientes clientes;
     @Autowired RepositorioVentas repositorioVentas;
     @Autowired RepositorioConsecutivos consecutivos;
-    @Autowired ServicioProductoNuevo productosNuevos;
     @Autowired ServicioClientes servicioClientes;
     @Autowired co.com.bspstore.sgip.logica.ServicioSaldoAFavor saldos;
     @Autowired co.com.bspstore.sgip.logica.ValidadorDePagos validadorDePagos;
@@ -904,7 +902,7 @@ class VentaConBaseTest {
         Integer producto = caja.producto("A", 5, "10000");
         Clock utc = Clock.fixed(Instant.parse("2026-11-12T13:30:45.678Z"), ZoneOffset.UTC);
         RegistradorDeVenta conRelojFijo = new RegistradorDeVenta(turnos, repositorioVentas, consecutivos, kardex,
-                clientes, servicioClientes, productosNuevos, validadorDePagos, saldos, utc);
+                clientes, servicioClientes, validadorDePagos, saldos, utc);
         SolicitudVenta solicitud = venta(linea(producto, 1), efectivo("10000"));
 
         ResultadoDeVenta r = new TransactionTemplate(transacciones).execute(estado ->

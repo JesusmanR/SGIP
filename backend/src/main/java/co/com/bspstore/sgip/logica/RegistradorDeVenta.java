@@ -12,7 +12,6 @@ import co.com.bspstore.sgip.datos.RepositorioClientes;
 import co.com.bspstore.sgip.datos.RepositorioConsecutivos;
 import co.com.bspstore.sgip.datos.RepositorioInventario;
 import co.com.bspstore.sgip.datos.RepositorioInventario.Egreso;
-import co.com.bspstore.sgip.datos.RepositorioProductoNuevo.SinProveedorYSinCategoria;
 import co.com.bspstore.sgip.datos.RepositorioVentas;
 import co.com.bspstore.sgip.datos.RepositorioVentas.NuevaLinea;
 import co.com.bspstore.sgip.datos.RepositorioVentas.NuevaVenta;
@@ -23,7 +22,6 @@ import co.com.bspstore.sgip.logica.venta.CalculoDeVenta;
 import co.com.bspstore.sgip.logica.venta.Descuento;
 import co.com.bspstore.sgip.logica.venta.LineaCalculada;
 import co.com.bspstore.sgip.logica.venta.LineaPedida;
-import co.com.bspstore.sgip.logica.ServicioProductoNuevo.Creado;
 import co.com.bspstore.sgip.logica.ValidadorDePagos.Validados;
 import co.com.bspstore.sgip.logica.venta.VentaCalculada;
 import co.com.bspstore.sgip.modelo.TipoConsecutivo;
@@ -40,11 +38,9 @@ import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -63,26 +59,13 @@ import java.util.Optional;
  *   <li>los <b>productos</b>, por {@code producto_id} ascendente con {@code FORCE INDEX (PRIMARY)};</li>
  *   <li>el <b>saldo del cliente</b> ({@code saldos_cliente}, {@code FOR UPDATE}): solo si la venta paga con
  *       saldo a favor (RF-68). Se toma al principio, con el cliente resuelto y antes de crear nada, porque
- *       una venta con productos nuevos toma enseguida el consecutivo de {@code PRODUCTO_RAPIDO} y el
- *       saldo va antes que cualquier consecutivo;</li>
- *   <li>el <b>consecutivo</b>, {@code FOR UPDATE}, el último antes de insertar: primero el de
- *       {@code PRODUCTO_RAPIDO}, si la venta crea productos nuevos, y después el de {@code VENTA};</li>
+ *       el saldo va antes que cualquier consecutivo;</li>
+ *   <li>el <b>consecutivo</b> de {@code VENTA}, {@code FOR UPDATE}, el último antes de insertar;</li>
  *   <li>el <b>kárdex</b>.</li>
  * </ol>
  *
- * <h2>Con productos nuevos (RF-42)</h2>
- *
- * El producto nuevo se crea después de bloquear los productos que ya existían y el saldo del cliente,
- * y antes del consecutivo de {@code VENTA}: bloquea el de {@code PRODUCTO_RAPIDO} (que ya va antes en
- * el orden global), crea el producto y su precio con {@link ServicioProductoNuevo} y lo suma a los
- * productos de la venta con existencia cero. Su fila nace dentro de esta transacción: nadie más la
- * puede haber bloqueado, así que no añade ninguna espera al orden de los productos (por id). El
- * consecutivo de los códigos rápidos lo toman solo las ventas con productos nuevos, siempre antes que
- * el de {@code VENTA} y después que cualquier producto, de modo que dos ventas con productos nuevos se
- * esperan en el mismo orden y no hay ciclo. Lo toma sin gastar números antes de repetir la
- * comprobación de la clave de idempotencia: dos envíos de la misma venta que solo traen productos
- * nuevos no comparten ningún producto bloqueado, y es ese consecutivo el que los pone en fila; el que
- * llega segundo ve la venta del primero y la devuelve sin crear un segundo producto.
+ * La caja no crea productos: una línea siempre referencia uno que ya existe (los crea el administrador en
+ * el catálogo). {@code TipoConsecutivo.PRODUCTO_RAPIDO} y las columnas de la V45 quedan sin uso.
  *
  * Todo lo que se puede decidir sin tomar el consecutivo (el precio, la existencia, el cálculo, los
  * pagos) se decide antes: así el consecutivo se tiene el menor tiempo posible y la venta que va a
@@ -142,14 +125,13 @@ public class RegistradorDeVenta {
     private final RepositorioInventario inventario;
     private final RepositorioClientes clientes;
     private final ServicioClientes servicioClientes;
-    private final ServicioProductoNuevo productosNuevos;
     private final ValidadorDePagos validador;
     private final ServicioSaldoAFavor saldos;
     private final Clock reloj;
 
     public RegistradorDeVenta(ServicioTurnos turnos, RepositorioVentas ventas, RepositorioConsecutivos consecutivos,
                               RepositorioInventario inventario, RepositorioClientes clientes,
-                              ServicioClientes servicioClientes, ServicioProductoNuevo productosNuevos,
+                              ServicioClientes servicioClientes,
                               ValidadorDePagos validador, ServicioSaldoAFavor saldos, Clock reloj) {
         this.turnos = turnos;
         this.ventas = ventas;
@@ -157,7 +139,6 @@ public class RegistradorDeVenta {
         this.inventario = inventario;
         this.clientes = clientes;
         this.servicioClientes = servicioClientes;
-        this.productosNuevos = productosNuevos;
         this.validador = validador;
         this.saldos = saldos;
         this.reloj = reloj;
@@ -176,17 +157,14 @@ public class RegistradorDeVenta {
         // 2. El turno (FOR SHARE).
         Long turno = turnos.exigirTurnoAbierto();
 
-        // 3. Los productos que ya existen, en orden ascendente de id (puede no haber ninguno: una
-        //    venta solo de productos nuevos).
-        List<Integer> idsDelCatalogo = s.lineas().stream().map(LineaSolicitada::productoId).filter(Objects::nonNull).toList();
+        // 3. Los productos, en orden ascendente de id.
+        List<Integer> ids = s.lineas().stream().map(LineaSolicitada::productoId).toList();
         Map<Integer, ProductoBloqueado> productos = new HashMap<>();
-        if (!idsDelCatalogo.isEmpty()) {
-            for (ProductoBloqueado p : ventas.bloquearProductos(empresa, idsDelCatalogo)) {
-                productos.put(p.id(), p);
-            }
-            if (productos.size() != idsDelCatalogo.size()) {
-                throw new RecursoNoEncontradoException("El producto no existe.");
-            }
+        for (ProductoBloqueado p : ventas.bloquearProductos(empresa, ids)) {
+            productos.put(p.id(), p);
+        }
+        if (productos.size() != ids.size()) {
+            throw new RecursoNoEncontradoException("El producto no existe.");
         }
 
         // 4. La clave de idempotencia, con los bloqueos ya tomados.
@@ -196,7 +174,7 @@ public class RegistradorDeVenta {
         }
 
         // 5. El cliente y, si algún pago es con saldo a favor, la fila de su saldo (FOR UPDATE): va antes
-        //    de cualquier consecutivo, y el del producto nuevo se toma en el paso siguiente. Los medios se
+        //    de cualquier consecutivo. Los medios se
         //    leen aquí una vez y el validador los reutiliza; una venta sin saldo no gana ninguna consulta.
         Cliente cliente = cliente(empresa, s.clienteId());
         // Un domicilio exige un cliente identificado con sus datos: se mira antes de crear nada.
@@ -214,28 +192,12 @@ public class RegistradorDeVenta {
             saldoDisponible = saldos.bloquear(empresa, cliente.id());
         }
 
-        // 6. Los productos nuevos: cada línea de producto nuevo se vuelve una línea del producto que
-        //    acaba de nacer. Desde aquí la venta se lee de `r`, con todas sus líneas ya resueltas.
-        SolicitudVenta r = s;
-        if (s.lineas().stream().anyMatch(l -> l.productoNuevo() != null)) {
-            autorizacion.exigir(ExcepcionAutorizable.PRODUCTO_NUEVO);
-            // El consecutivo de los códigos rápidos, sin gastar números, para esperar a la hermana de la
-            // misma clave: con ella ya confirmada, la clave se vuelve a mirar y se devuelve su venta.
-            consecutivos.bloquear(empresa, TipoConsecutivo.PRODUCTO_RAPIDO);
-            Optional<VentaPorClave> hermana = ventas.buscarPorClave(empresa, clave);
-            if (hermana.isPresent()) {
-                return repetida(empresa, hermana.get(), huella);
-            }
-            r = conProductosNuevos(empresa, s, productos);
-        }
-
-        // 7. El precio, con una sola consulta a la vista.
-        List<Integer> ids = r.lineas().stream().map(LineaSolicitada::productoId).toList();
-        List<LineaPedida> pedidas = lineasConPrecio(empresa, r, ids);
+        // 6. El precio, con una sola consulta a la vista.
+        List<LineaPedida> pedidas = lineasConPrecio(empresa, s, ids);
         topar(pedidas);
 
         // La existencia y el encargo.
-        List<Existencia> existencias = repartirExistencias(r, productos, autorizacion);
+        List<Existencia> existencias = repartirExistencias(s, productos, autorizacion);
         boolean hayEncargo = existencias.stream().anyMatch(e -> e.encargo() > 0);
 
         // El cálculo.
@@ -246,7 +208,7 @@ public class RegistradorDeVenta {
         if (hayEncargo) {
             autorizacion.exigir(ExcepcionAutorizable.ENCARGO);
         }
-        List<NuevaLinea> lineas = lineasAGuardar(calculada, productos, existencias, r);
+        List<NuevaLinea> lineas = lineasAGuardar(calculada, productos, existencias, s);
 
         // Los pagos, contra los medios de la empresa. El contra entrega no trae ninguno: queda por cobrar.
         Validados pagos = contraEntrega
@@ -256,10 +218,10 @@ public class RegistradorDeVenta {
         // de tomar el consecutivo, que es lo último que se bloquea.
         saldos.exigirSuficiente(pagos.saldoUsado(), saldoDisponible);
 
-        // 8. El consecutivo (FOR UPDATE), el último bloqueo antes de insertar.
+        // 7. El consecutivo (FOR UPDATE), el último bloqueo antes de insertar.
         String consecutivo = "V-%08d".formatted(consecutivos.tomarSiguiente(empresa, TipoConsecutivo.VENTA));
 
-        // 9. La venta, las líneas y los pagos, y después el kárdex.
+        // 8. La venta, las líneas y los pagos, y después el kárdex.
         boolean usoAutorizacion = calculada.tieneDescuento() || hayEncargo;
         Integer autorizadaPor = usoAutorizacion ? autorizacion.administradorId() : null;
         Long ventaId;
@@ -331,32 +293,6 @@ public class RegistradorDeVenta {
         VentaRegistrada venta = ventas.leer(empresa, existente.ventaId()).orElseThrow(() -> new IllegalStateException(
                 "La venta " + existente.ventaId() + " desapareció dentro de su propia transacción."));
         return new ResultadoDeVenta(venta, true);
-    }
-
-    // ------------------------------------------------------------ productos nuevos
-
-    /**
-     * La solicitud con cada línea de producto nuevo convertida en una línea del producto que se acaba
-     * de crear (en el orden de la solicitud, para que los códigos sigan ese orden), y todas las líneas
-     * por producto, como las que ya venían. El producto nuevo entra a los de la venta con existencia
-     * cero y su costo provisional.
-     */
-    private SolicitudVenta conProductosNuevos(Integer empresa, SolicitudVenta s, Map<Integer, ProductoBloqueado> productos) {
-        List<LineaSolicitada> resueltas = new ArrayList<>(s.lineas().size());
-        // El proveedor y la categoría genéricos se buscan una vez por venta, no una por producto nuevo.
-        SinProveedorYSinCategoria genericos = productosNuevos.genericos(empresa);
-        for (LineaSolicitada l : s.lineas()) {
-            if (l.productoNuevo() == null) {
-                resueltas.add(l);
-                continue;
-            }
-            Creado creado = productosNuevos.crear(empresa, l.productoNuevo(), genericos);
-            productos.put(creado.id(), new ProductoBloqueado(creado.id(), creado.nombre(), 0, creado.costo()));
-            resueltas.add(new LineaSolicitada(creado.id(), null, l.cantidad(), l.descuento(), l.entregaEstimada()));
-        }
-        resueltas.sort(Comparator.comparing(LineaSolicitada::productoId));
-        return new SolicitudVenta(s.claveIdempotencia(), s.clienteId(), List.copyOf(resueltas), s.descuentoTotal(),
-                s.pagos(), s.motivoEncargo(), s.autorizacion(), s.domicilio());
     }
 
     // ------------------------------------------------------------ cliente

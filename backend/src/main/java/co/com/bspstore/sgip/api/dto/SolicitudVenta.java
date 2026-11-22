@@ -21,9 +21,9 @@ import java.util.UUID;
  * {@code claveIdempotencia} la inventa el cliente una vez por venta y la repite si reintenta
  * (doble clic, red lenta): una sola venta queda registrada.
  *
- * {@code descuentoTotal}, las fechas de entrega de las líneas, {@code motivoEncargo} y el
- * producto nuevo son cosas que un vendedor no hace solo: piden la {@code autorizacion} de un
- * administrador (ADR-0032). {@code domicilio} es nulo en el mostrador. Un domicilio con
+ * {@code descuentoTotal}, las fechas de entrega de las líneas y {@code motivoEncargo} son cosas que
+ * un vendedor no hace solo: piden la {@code autorizacion} de un administrador (ADR-0032). La venta no
+ * crea productos: cada línea lleva el de uno que ya existe. {@code domicilio} es nulo en el mostrador. Un domicilio con
  * {@code contraEntrega} se cobra al entregarlo: no lleva pagos (mandarlos es un error); toda otra venta
  * los lleva por el total.
  *

@@ -3,7 +3,6 @@ package co.com.bspstore.sgip.logica;
 import co.com.bspstore.sgip.api.dto.Domicilio;
 import co.com.bspstore.sgip.api.dto.LineaSolicitada;
 import co.com.bspstore.sgip.api.dto.PagoSolicitado;
-import co.com.bspstore.sgip.api.dto.ProductoNuevo;
 import co.com.bspstore.sgip.api.dto.SolicitudAutorizacion;
 import co.com.bspstore.sgip.api.dto.SolicitudVenta;
 import co.com.bspstore.sgip.api.dto.VentaRegistrada;
@@ -289,32 +288,6 @@ class ServicioVentasTest {
 
     // ------------------------------------------------------- la forma de la solicitud (400)
 
-    @Test
-    void unaLineaConProductoNuevoPideAutorizarElProductoNuevoYElEncargoConUnSoloPin() {
-        when(autorizacion.autorizar(any(), anySet())).thenReturn(new Autorizacion(1,
-                Set.of(ExcepcionAutorizable.PRODUCTO_NUEVO, ExcepcionAutorizable.ENCARGO)));
-        when(registrador.registrar(any(), any())).thenReturn(new ResultadoDeVenta(REGISTRADA, false));
-        var nuevo = new LineaSolicitada(null, new ProductoNuevo("Tornillo", new BigDecimal("500"), null), 1, null,
-                HOY.plusDays(5));
-
-        servicio.procesar(conAutorizacion(conMotivo(venta(nuevo), "Llega el viernes"), new SolicitudAutorizacion(1, "483920")));
-
-        assertEquals(Set.of(ExcepcionAutorizable.PRODUCTO_NUEVO, ExcepcionAutorizable.ENCARGO), excepcionesPedidas());
-        assertNotNull(lasQueRecibeElRegistrador().lineas().get(0).productoNuevo());
-    }
-
-    @Test
-    void unProductoNuevoSinFechaOSinMotivoEs400SinPedirElPinNiTocarNada() {
-        var sinFecha = new LineaSolicitada(null, new ProductoNuevo("Tornillo", new BigDecimal("500"), null), 1, null, null);
-        var conFecha = new LineaSolicitada(null, new ProductoNuevo("Tornillo", new BigDecimal("500"), null), 1, null,
-                HOY.plusDays(5));
-
-        assertThrows(VentaInvalidaException.class, () -> servicio.procesar(conMotivo(venta(sinFecha), "Llega el viernes")));
-        assertThrows(VentaInvalidaException.class, () -> servicio.procesar(venta(conFecha)));
-
-        sinTocarNada();
-    }
-
     /**
      * Los productos se crean solo en el catálogo, por el administrador. Quien aún envíe un
      * {@code productoNuevo} (un cliente viejo) recibe un 400 claro: ignorarlo dejaría una línea sin
@@ -375,12 +348,12 @@ class ServicioVentasTest {
     }
 
     @Test
-    void exactamenteUnoDeProductoIdYProductoNuevo() {
+    void unaLineaSinProductoEs400() {
         var ninguno = new LineaSolicitada(null, null, 1, null, null);
-        var losDos = new LineaSolicitada(7, new ProductoNuevo("X", new BigDecimal("1"), null), 1, null, null);
 
-        assertThrows(VentaInvalidaException.class, () -> servicio.procesar(venta(ninguno)));
-        assertThrows(VentaInvalidaException.class, () -> servicio.procesar(venta(losDos)));
+        VentaInvalidaException e = assertThrows(VentaInvalidaException.class, () -> servicio.procesar(venta(ninguno)));
+
+        assertEquals("Cada línea lleva un producto.", e.getMessage());
         sinTocarNada();
     }
 

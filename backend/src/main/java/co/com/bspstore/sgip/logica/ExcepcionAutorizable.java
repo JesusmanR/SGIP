@@ -8,6 +8,5 @@ package co.com.bspstore.sgip.logica;
 public enum ExcepcionAutorizable {
     DESCUENTO,
     ENCARGO,
-    PRODUCTO_NUEVO,
     DEVOLUCION
 }

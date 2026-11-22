@@ -1,6 +1,5 @@
 package co.com.bspstore.sgip.logica;
 
-import co.com.bspstore.sgip.api.dto.LineaSolicitada;
 import co.com.bspstore.sgip.api.dto.SolicitudVenta;
 import co.com.bspstore.sgip.api.dto.VentaRegistrada;
 import co.com.bspstore.sgip.util.Hoy;
@@ -9,7 +8,6 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 import java.time.Clock;
 import java.util.EnumSet;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
@@ -79,7 +77,7 @@ public class ServicioVentas {
 
     /**
      * Lo que la carga pide autorizar: un descuento (de línea o sobre toda la compra), un encargo
-     * (cualquier fecha de entrega o el motivo) y un producto nuevo, que además es un encargo.
+     * (cualquier fecha de entrega o el motivo).
      */
     private static Set<ExcepcionAutorizable> excepcionesNecesarias(SolicitudVenta s) {
         Set<ExcepcionAutorizable> necesarias = EnumSet.noneOf(ExcepcionAutorizable.class);
@@ -87,10 +85,6 @@ public class ServicioVentas {
             necesarias.add(ExcepcionAutorizable.DESCUENTO);
         }
         if (s.motivoEncargo() != null || s.lineas().stream().anyMatch(l -> l.entregaEstimada() != null)) {
-            necesarias.add(ExcepcionAutorizable.ENCARGO);
-        }
-        if (s.lineas().stream().map(LineaSolicitada::productoNuevo).anyMatch(Objects::nonNull)) {
-            necesarias.add(ExcepcionAutorizable.PRODUCTO_NUEVO);
             necesarias.add(ExcepcionAutorizable.ENCARGO);
         }
         return necesarias;
