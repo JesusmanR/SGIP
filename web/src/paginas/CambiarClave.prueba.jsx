@@ -20,6 +20,7 @@ vi.mock('./Catalogo.jsx', () => ({ default: () => <p>Pantalla del catálogo</p> 
 vi.mock('./Panel.jsx', () => ({ default: () => <p>Pantalla del panel</p> }))
 vi.mock('./Empresa.jsx', () => ({ default: () => <p>Pantalla de la empresa</p> }))
 vi.mock('./Importacion.jsx', () => ({ default: () => <p>Pantalla de importación</p> }))
+vi.mock('./caja/Rutas.jsx', () => ({ default: () => <p>Pantalla de la caja</p> }))
 
 vi.mock('../servicios/api.js', async (original) => {
   // ErrorApi es la clase real: la pantalla decide con `instanceof`.
@@ -27,7 +28,7 @@ vi.mock('../servicios/api.js', async (original) => {
   return { api: { cambiarClave: vi.fn(), salir: vi.fn() }, ErrorApi: real.ErrorApi }
 })
 
-const PENDIENTE = { token: 'abc', nombre: 'Ana', rol: 'VENDEDOR', debeCambiarClave: true }
+const PENDIENTE = { token: 'abc', nombre: 'Ana', rol: 'CLIENTE', debeCambiarClave: true }
 
 // El 400 de clave actual incorrecta se reconoce por el type del problema, no por el texto.
 const TIPO_ACTUAL_INCORRECTA = 'urn:sgip:clave-actual-incorrecta'
@@ -120,6 +121,15 @@ describe('cambio de contraseña obligatorio', () => {
       expect(leerSesion().debeCambiarClave).toBe(false)
       // El token es el mismo: el servidor conserva esta sesión.
       expect(leerSesion().token).toBe('abc')
+    })
+
+    it('el vendedor, al terminar, va a la caja', async () => {
+      guardarSesion({ ...PENDIENTE, rol: 'VENDEDOR' })
+      api.cambiarClave.mockResolvedValue(null)
+      montar()
+      await rellenar()
+
+      await waitFor(() => expect(screen.getByText('Pantalla de la caja')).toBeInTheDocument())
     })
 
     it('el administrador, al terminar, va al panel', async () => {

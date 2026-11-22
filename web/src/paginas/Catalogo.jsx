@@ -201,6 +201,11 @@ export default function Catalogo() {
           {esAdmin && p.tributacionSinConfigurar === 1 && (
             <span><span className="insignia critico">Impuestos sin configurar</span></span>
           )}
+          {/* Un producto creado al vender nace con un costo provisional de 1 peso: hasta que el
+              administrador registre el real, su ganancia no significa nada. Quien vende no ve costos. */}
+          {esAdmin && (p.costoProvisional === true || p.costoProvisional === 1) && (
+            <span><span className="insignia critico">Costo pendiente de registrar</span></span>
+          )}
           {/* El código va bajo el nombre. El SKU solo aparece cuando difiere:
               por omisión se copia del código y repetirlo sería ruido. */}
           <span className="sub-linea">
@@ -525,6 +530,13 @@ export default function Catalogo() {
                     fija. «Cerca del umbral» avisa de que el impuesto podría cambiar.
                   </>
                 )}
+              </p>
+            )}
+
+            {!cargando && esAdmin && productos.some((p) => p.costoProvisional === true || p.costoProvisional === 1) && (
+              <p className="leyenda">
+                «Costo pendiente de registrar» marca un producto creado al vender, con un costo provisional de 1 peso.
+                Edítalo y escribe su costo real para que su ganancia sea correcta.
               </p>
             )}
 

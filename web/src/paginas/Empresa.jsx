@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import Campo from '../componentes/comun/Campo.jsx'
 import EncabezadoPagina from '../componentes/comun/EncabezadoPagina.jsx'
 import EstadoCarga from '../componentes/comun/EstadoCarga.jsx'
 import EstadoError from '../componentes/comun/EstadoError.jsx'
@@ -10,6 +11,85 @@ import { api } from '../servicios/api.js'
 import { prepararImagen } from '../servicios/imagenes.js'
 import { esAdministrador } from '../servicios/sesion.js'
 import '../estilos/empresa.css'
+
+const PIN = /^\d{4,6}$/
+
+/**
+ * El PIN con el que el administrador autoriza descuentos, devoluciones y ventas sin existencia en la caja.
+ * Nunca se muestra: solo se sabe si ya hay uno. Para cambiarlo hay que escribir el actual; la primera vez no.
+ */
+function MiPin() {
+  const estado = useDatos(() => api.estadoPin())
+  const [actual, setActual] = useState('')
+  const [nuevo, setNuevo] = useState('')
+  const [repetido, setRepetido] = useState('')
+  const [motivos, setMotivos] = useState({})
+  const [fallo, setFallo] = useState(null)
+  const [guardado, setGuardado] = useState(false)
+  const [enviando, setEnviando] = useState(false)
+  const [configurado, setConfigurado] = useState(null)
+  const hay = configurado ?? estado.datos?.configurado
+  const soloNumeros = (setter) => (e) => setter(e.target.value.replace(/\D/g, ''))
+
+  async function guardar(evento) {
+    evento.preventDefault()
+    setFallo(null)
+    setGuardado(false)
+    const nuevosMotivos = {}
+    if (hay && actual === '') nuevosMotivos.actual = 'Escribe tu PIN actual.'
+    if (!PIN.test(nuevo)) nuevosMotivos.nuevo = 'El PIN tiene de 4 a 6 números.'
+    else if (repetido !== nuevo) nuevosMotivos.repetido = 'Los dos PIN no coinciden.'
+    setMotivos(nuevosMotivos)
+    if (Object.keys(nuevosMotivos).length > 0) return
+    setEnviando(true)
+    try {
+      await api.fijarPin(hay ? actual : null, nuevo)
+      setConfigurado(true)
+      setGuardado(true)
+    } catch (error) {
+      setFallo(error.message || 'No se pudo guardar el PIN.')
+    } finally {
+      // El PIN no se queda en la pantalla, salga bien o mal.
+      setActual('')
+      setNuevo('')
+      setRepetido('')
+      setEnviando(false)
+    }
+  }
+
+  return (
+    <section className="tarjeta empresa-pin" aria-labelledby="t-pin">
+      <h2 id="t-pin">Mi PIN de autorización</h2>
+      {estado.cargando && <p>Consultando tu PIN…</p>}
+      {estado.error && <div className="aviso error" role="alert">No se pudo consultar el estado de tu PIN.</div>}
+      {!estado.cargando && !estado.error && (
+        <>
+          <p>
+            {hay
+              ? 'Ya tienes un PIN. Para cambiarlo, escribe el actual y el nuevo.'
+              : 'Todavía no tienes un PIN. Créalo para poder autorizar descuentos y devoluciones en la caja.'}
+          </p>
+          {fallo && <div className="aviso error" role="alert">{fallo}</div>}
+          {guardado && <div className="aviso exito" role="status">PIN guardado.</div>}
+          <form onSubmit={guardar} noValidate className="empresa-pin-formulario">
+            {hay && (
+              <Campo rol="alert" etiqueta="PIN actual" motivo={motivos.actual}>
+                <input type="password" inputMode="numeric" autoComplete="off" maxLength={6} value={actual} onChange={soloNumeros(setActual)} />
+              </Campo>
+            )}
+            <Campo rol="alert" etiqueta="PIN nuevo" ayuda="De 4 a 6 números." motivo={motivos.nuevo}>
+              <input type="password" inputMode="numeric" autoComplete="off" maxLength={6} value={nuevo} onChange={soloNumeros(setNuevo)} />
+            </Campo>
+            <Campo rol="alert" etiqueta="Repite el PIN nuevo" motivo={motivos.repetido}>
+              <input type="password" inputMode="numeric" autoComplete="off" maxLength={6} value={repetido} onChange={soloNumeros(setRepetido)} />
+            </Campo>
+            <button type="submit" className="boton" disabled={enviando}>Guardar PIN</button>
+          </form>
+        </>
+      )}
+    </section>
+  )
+}
 
 /**
  * Mi empresa.
@@ -100,6 +180,8 @@ export default function Empresa() {
               <Link to="/impuestos">Configurar impuestos</Link>
             </section>
           )}
+
+          {esAdmin && <MiPin />}
         </>
       )}
     </div>
