@@ -23,6 +23,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -311,6 +312,43 @@ class ServicioVentasTest {
         assertThrows(VentaInvalidaException.class, () -> servicio.procesar(conMotivo(venta(sinFecha), "Llega el viernes")));
         assertThrows(VentaInvalidaException.class, () -> servicio.procesar(venta(conFecha)));
 
+        sinTocarNada();
+    }
+
+    /**
+     * Los productos se crean solo en el catálogo, por el administrador. Quien aún envíe un
+     * {@code productoNuevo} (un cliente viejo) recibe un 400 claro: ignorarlo dejaría una línea sin
+     * producto y la venta seguiría de largo.
+     */
+    @Test
+    void unProductoNuevoEnElCuerpoEs400ConElMensajeDelCatalogoSinPedirElPinNiTocarNada() throws Exception {
+        SolicitudVenta enviada = JsonMapper.builder().build().readValue("""
+                {"claveIdempotencia":"11111111-2222-3333-4444-555555555555",
+                 "lineas":[{"productoNuevo":{"nombre":"Tornillo","precioVenta":500},"cantidad":1,
+                            "entregaEstimada":"2026-11-17"}],
+                 "motivoEncargo":"Llega el viernes",
+                 "pagos":[{"medioId":1,"monto":10000}],
+                 "autorizacion":{"administradorId":1,"pin":"483920"}}
+                """, SolicitudVenta.class);
+
+        VentaInvalidaException e = assertThrows(VentaInvalidaException.class, () -> servicio.procesar(enviada));
+
+        assertEquals("Los productos se crean en el catálogo.", e.getMessage());
+        sinTocarNada();
+    }
+
+    @Test
+    void unProductoNuevoJuntoAUnProductoDelCatalogoTambienEsRechazado() throws Exception {
+        SolicitudVenta enviada = JsonMapper.builder().build().readValue("""
+                {"claveIdempotencia":"11111111-2222-3333-4444-555555555555",
+                 "lineas":[{"productoId":7,"cantidad":1},
+                           {"productoId":8,"productoNuevo":{"nombre":"X","precioVenta":1},"cantidad":1}],
+                 "pagos":[{"medioId":1,"monto":10000}]}
+                """, SolicitudVenta.class);
+
+        VentaInvalidaException e = assertThrows(VentaInvalidaException.class, () -> servicio.procesar(enviada));
+
+        assertEquals("Los productos se crean en el catálogo.", e.getMessage());
         sinTocarNada();
     }
 
