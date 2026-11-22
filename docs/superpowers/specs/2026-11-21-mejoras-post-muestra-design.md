@@ -37,6 +37,9 @@ Además decidió que el administrador debe poder devolver sin abrir caja.
 | Lista con productos de otro proveedor | Se rechazan solo esas filas; el resto se aplica. |
 | Recibo reimpreso | Muestra los datos de la empresa del día de la venta. |
 | Documento del cliente | Se puede cambiar siempre, aunque el cliente tenga compras. Los recibos viejos mostrarán el documento nuevo; el usuario lo aceptó. |
+| Identidad de la empresa | NIT o CC más el número. Nunca se pide ni se valida el dígito de verificación. |
+| Productos con el proveedor reservado | El administrador les asigna un proveedor a mano desde el catálogo. |
+| Creación de productos | Solo el ADMINISTRADOR, solo desde el catálogo. La caja no crea productos. Esto se resuelve en la ronda final de la caja, no en este documento. |
 
 ## M1. Pantalla de clientes
 
@@ -76,14 +79,19 @@ Además decidió que el administrador debe poder devolver sin abrir caja.
 - El logo sigue con el `POST /api/v1/empresa/logo` que ya existe.
 - `EmpresaResumen` se amplía con los campos nuevos.
 
-**Endpoint de plataforma:** `PUT /api/v1/plataforma/empresas/{id}/identidad`, para SUPER_ADMIN, con `{nit, razonSocial, motivo}`. El motivo es obligatorio y tiene entre 10 y 300 caracteres.
-- **NIT:** solo dígitos, de 6 a 15, más un dígito de verificación calculado con el módulo 11 de la DIAN (pesos 3, 7, 13, 17, 19, 23, 29, 37, 41, 43, 47, 53, 59, 67, 71). Se guarda en el formato que ya usa la tabla.
-  - Un NIT con mal formato o mal dígito de verificación da 400 `urn:sgip:empresa:nit-invalido`.
+**Endpoint de plataforma:** `PUT /api/v1/plataforma/empresas/{id}/identidad`, para SUPER_ADMIN, con `{tipoDocumento, numero, razonSocial, motivo}`. El motivo es obligatorio y tiene entre 10 y 200 caracteres, porque `auditoria_plataforma.motivo` es VARCHAR(200).
+- **Identidad (decisión del usuario):** la empresa se identifica con **NIT o CC** más el número. **Nunca se pide ni se valida el dígito de verificación.**
+  - El número se normaliza quitando los puntos, los espacios y los guiones, y debe quedar con solo dígitos, de 5 a 15.
+  - Se guarda en `empresas.nit`, que es VARCHAR(20) UNIQUE, con el número normalizado. Una columna nueva `tipo_documento ENUM('NIT','CC') NOT NULL DEFAULT 'NIT'` guarda el tipo.
+  - Las semillas con guion (`900000000-0`) se quedan como están: solo se normaliza el valor que entra en un cambio.
+  - Un número con mal formato da 400 `urn:sgip:empresa:documento-invalido`.
+- El alta de empresas (`darDeAlta`) adopta la misma regla de tipo y número sin dígito de verificación. Va como subtarea de M2, para que las dos rutas sean coherentes.
   - Un NIT que ya tiene otra empresa da 409.
 - **Auditoría:** en `auditoria_plataforma`, una fila por cada campo que cambie, con el valor anterior, el nuevo, el motivo, quién y cuándo, en la misma transacción. Hace falta una migración que amplíe el ENUM y los CHECK de esa tabla, y un valor nuevo en `AccionPlataforma`.
 
 **Copia en la venta** (la decisión «datos del día de la venta»):
-- Se añaden a `ventas` las columnas `empresa_nombre`, `empresa_nit`, `empresa_direccion`, `empresa_ciudad` y `empresa_telefono`.
+- Se añaden a `ventas` las columnas `empresa_nombre`, `empresa_tipo_documento`, `empresa_nit`, `empresa_direccion` y `empresa_telefono`. `empresa_ciudad` se quitó en la revisión del plan, porque el recibo no la imprime.
+- La copia está ausente si y solo si `empresa_nit IS NULL`.
 - `empresa_nombre` es el nombre comercial, o la razón social si no hay nombre comercial.
 - Se llenan al registrar la venta, en la misma transacción. Leer la empresa no altera el orden de bloqueos del ADR-0030: es una lectura sin bloqueo.
 - El recibo (`ServicioRecibos`) lee esa copia. Las ventas anteriores a la migración, con la copia nula, usan los datos actuales: queda escrito como límite aceptado.
@@ -96,7 +104,7 @@ Además decidió que el administrador debe poder devolver sin abrir caja.
 - Cruce de roles en los dos endpoints.
 - Un ADMINISTRADOR que manda `nit` recibe 400.
 - Una empresa no puede editar otra.
-- El dígito de verificación: casos válidos e inválidos.
+- Documento: un NIT o una CC con puntos y espacios se normaliza; las letras o un largo fuera de rango dan 400; nunca se exige el dígito de verificación.
 - NIT repetido: 409.
 - La auditoría guarda una fila por campo.
 - El recibo de una venta vieja sigue mostrando los datos viejos después de un cambio.
@@ -104,7 +112,11 @@ Además decidió que el administrador debe poder devolver sin abrir caja.
 
 ## M3. Plantilla de precios y rechazo de productos de otro proveedor
 
-**Producto del proveedor:** es un producto cuyo `productos.proveedor_id` es el proveedor elegido. Antes de planificar, se confirma que esa columna es la fuente; si existe una relación varios a varios, la usa en su lugar.
+**Producto del proveedor:** es un producto cuyo `productos.proveedor_id` es el proveedor elegido. Esa columna es NOT NULL y FK. La tabla `producto_proveedor` existe, pero ningún código la usa, así que no se usa.
+
+**Productos con el proveedor reservado (`SIN-PROVEEDOR`):** por decisión del usuario, el administrador les asigna un proveedor a mano desde el catálogo, con la edición de producto que ya acepta `proveedorId`. Desde ahí entran en la plantilla y en la importación de ese proveedor. El catálogo marca esos productos como «Sin proveedor» y permite filtrarlos. El proveedor reservado no tiene plantilla ni importación.
+
+**Nota:** el usuario decidió el 2026-11-21 que la caja ya no crea productos. Los productos se crean solo desde el catálogo, por el ADMINISTRADOR. Los productos con el proveedor reservado son, por tanto, los que se crearon en el mostrador antes de esa decisión.
 
 **Rechazo nuevo en la importación:**
 - Una fila cuya referencia existe en la empresa, pero cuyo producto es de otro proveedor, se rechaza con la causa `PRODUCTO_DE_OTRO_PROVEEDOR`.

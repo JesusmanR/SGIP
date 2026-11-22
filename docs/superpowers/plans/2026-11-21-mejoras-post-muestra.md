@@ -1,345 +1,366 @@
-# Mejoras posteriores a la muestra — plan de implementación
+# Mejoras posteriores a la muestra: plan de implementación (v2)
 
 > **Para agentes:** SUB-SKILL REQUERIDA: superpowers:subagent-driven-development. Los pasos usan casillas (`- [ ]`).
 
-**Objetivo:** cuatro mejoras pedidas tras la muestra:
-- M4: devolución del administrador sin turno, sin efectivo;
-- M1: pantalla de clientes;
-- M2: editar «Mi empresa», con copia de los datos de la empresa en la venta;
-- M3: plantilla de precios con los productos del proveedor, y rechazo de las filas de otro proveedor.
+**Objetivo:**
+- **M4:** devolución del administrador sin turno y sin efectivo.
+- **M1:** pantalla de clientes.
+- **M2:** editar «Mi empresa», con la identidad NIT/CC por plataforma y una copia de los datos de la empresa en cada venta.
+- **M3:** plantilla de precios con los productos del proveedor, rechazo de filas de otro proveedor, y asignación de proveedor a los productos sin proveedor.
 
-**Arquitectura:** se sigue el patrón del backend (controlador → servicio en `logica/` → repositorio JDBC en `datos/`, con migraciones Flyway) y del web (página en `paginas/`, servicio en `servicios/api/`, sección en `secciones.js`). Cada mejora es una rama `feat/*` desde `develop`, con merge `--no-ff` tras `code-reviewer`.
+**Arquitectura:** cada mejora sigue los patrones existentes:
+- backend: controlador → servicio en `logica/` → repositorio JDBC en `datos/`, con Flyway;
+- web: página en `paginas/`, cliente HTTP en `servicios/api/`, menú en `secciones.js`.
 
-**Stack:** Java 25, Spring Boot 4, MySQL 9.7, Flyway, Apache POI (ya presente); React 18.3.1, Vite y Vitest.
+Cada mejora va en su propia rama `feat/*`, que nace de `develop`.
 
-**Spec:** `docs/superpowers/specs/2026-11-21-mejoras-post-muestra-design.md` (v2). El ejecutor lee la spec y este plan.
+**Stack:** Java 25, Spring Boot 4.1, MySQL 9.7, Flyway y Apache POI, todos ya presentes; React 18.3.1, Vite y Vitest.
+
+**Spec:** `docs/superpowers/specs/2026-11-21-mejoras-post-muestra-design.md`. Esta v2 del plan incorpora la revisión EGM `.superpowers/sdd/mejoras-post-muestra/egm-review-plan.md` y las decisiones del usuario del 2026-11-21: NIT o CC sin dígito de verificación, asignación a mano del proveedor, y productos creados solo desde el catálogo.
 
 ## Restricciones globales
 
-- **Requisito previo:** la entrega 1 de la caja (`feature/caja` y `feature/caja-pantallas`) ya está unida a `develop`. Ninguna tarea empieza antes.
-- **Roles:** con los nombres del código: `ADMINISTRADOR`, `VENDEDOR`, `CLIENTE` y `SUPER_ADMIN`. Toda ruta nueva bajo `/api/v1/caja` lleva su fila en `CajaRolesTest`.
-- **Tenencia:** la empresa sale siempre del contexto de seguridad. Toda consulta filtra por `empresa_id`.
-- **TDD:** el commit `test:` en rojo va primero. Cada tarea termina con:
-  - `./mvnw -B test -DexcludedGroups=conBase` en verde;
-  - `./mvnw -B test` completa en verde, contra un mysqld aislado propio en un puerto 34xxx libre, configurado solo con variables de entorno (nunca leer ni crear `application.yml` ni `.env`);
-  - en el web, `npx vitest run`, `npm run lint` y `npm run build`.
-- **Migraciones:** cada rama toma el siguiente número libre de `backend/src/main/resources/db/migration` al nacer. La que se une segunda renumera la suya antes del merge. Nunca se edita una migración ya unida.
-- **Interfaz:** se usa la skill `impeccable` en modo Operate, los colores solo de `web/src/estilos/tokens.css`, y textos en español con tildes. El diseño de referencia es el Figma nuevo.
-- **Rendimiento:** el número de consultas es constante en listados, probado con un conteo como en las tareas de la caja.
+- **Paso 0 (puerta).** Ninguna tarea empieza hasta que, en `develop`:
+  - existan `backend/src/main/resources/db/migration/V46__devoluciones_y_saldo_a_favor.sql`, `RegistradorDeDevolucion`, `ClientesControlador`, `ServicioRecibos` y `CajaRolesTest`;
+  - no existan `ServicioProductoNuevo` ni `ProductoNuevo.jsx`, que retira la ronda final de la caja;
+  - la suite completa esté en verde.
+
+  Toda referencia de este plan es por **símbolo** (clase, método o record), nunca por número de línea. Antes de empezar, se re-verifica cada afirmación contra ese `develop`.
+- **Migraciones asignadas:**
+  - M4: ninguna;
+  - M1: `V47`, solo si el `EXPLAIN` exige un índice (si no, no hay migración y el número queda libre);
+  - M2: `V48`;
+  - M3: `V49`.
+
+  Antes de cada merge se comprueba que no haya dos `V<n>` iguales. Nunca se edita una migración ya unida.
+- **Roles:** `ADMINISTRADOR`, `VENDEDOR`, `CLIENTE` y `SUPER_ADMIN`.
+  - Toda ruta nueva bajo `/api/v1/caja` lleva su fila `Fila(...)` en `CajaRolesTest`. Esa prueba afirma «ni 401 ni 403» para los roles permitidos; el 200 real se prueba en las pruebas con base.
+  - El rol del usuario en sesión se lee con el helper `ContextoEmpresa.esAdministrador()`, que se extrae de `ServicioTurnos` en la tarea 1 y se reutiliza.
+- **Tenencia:** la empresa sale del contexto de seguridad, y toda consulta filtra por `empresa_id`.
+- **Ciclo de cada tarea:** primero el commit `test:` en rojo, ejecutado para ver que falla por la razón correcta. Después `feat:` o `fix:`, y `refactor:` si hace falta. La tarea termina cuando pasan:
+  - `./mvnw -B test -DexcludedGroups=conBase`;
+  - `./mvnw -B test` completa, contra un mysqld aislado propio en un puerto 34xxx libre, solo con variables de entorno (la suite NO levanta su propio mysqld; nunca leer ni crear `application.yml` ni `.env`);
+  - en el web: `npx vitest run`, `npm run lint`, `npm run build` y capturas a 1440 y a 390 de cada pantalla tocada.
+- **Interfaz:** la skill `impeccable` en modo Operate, colores solo de `tokens.css`, español con tildes y el Figma nuevo.
+- **Rendimiento:** el número de consultas es constante en listados, medido con el mismo mecanismo de conteo que las pruebas de la caja.
 - **Commits:** Conventional Commits en español, con el trailer `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
+- **Hecho:** la mejora está unida a `develop` con `--no-ff`, después de que `code-reviewer` revise `develop...feat/*`, la suite esté en verde y la CI también.
 
 ## Puntos de revisión
 
-1. **Admin sin turno, con PIN.** Un VENDEDOR sin turno no debe poder devolver por mandar el PIN de un admin: 409 (tarea 1).
-2. **Efectivo de cero.** Un reembolso EFECTIVO de 0 junto a uno con tarjeta no cuenta como efectivo: se ignora o se rechaza con 400, nunca exige turno (tarea 1, prueba `efectivoEnCeroNoExigeTurno`).
-3. **Búsqueda de clientes con comodines.** `buscar` con `%` o `_` se trata como texto literal (tarea 3, `buscarConComodinesEsLiteral`).
-4. **Plantilla con referencia repetida o vacía en el catálogo.** Una plantilla de ida y vuelta no genera rechazos. Si dos productos del proveedor comparten código, la plantilla los escribe por código y la prueba de ida y vuelta lo cubre (tarea 8).
-5. **Cambio de NIT a uno con espacios o puntos.** `900.123.456-7` y ` 9001234567 ` se normalizan antes de validar el dígito de verificación (tarea 5, `nitConPuntosYEspaciosSeNormaliza`).
+- **Admin y vendedor con PIN:** un vendedor sin turno no puede devolver mandando el PIN de un admin (tarea 1).
+- **Comodines en la búsqueda:** `%` y `_` se buscan como texto literal (tarea 3).
+- **Ida y vuelta de la plantilla:** con costos positivos, sin rechazos (tarea 8).
+- **Formato del documento:** con puntos, espacios o guiones se normaliza; con letras da 400 (tarea 5).
+- **Recibo nuevo frente a reimpresión:** las dos rutas muestran los mismos datos de la empresa (tarea 7).
 
 ---
 
 ## Rama `feat/devolucion-sin-turno` (M4)
 
-### Tarea 1: el backend permite la devolución del admin sin turno, sin efectivo
+### Tarea 1: backend: devolución del admin sin turno y sin efectivo
 
 **Archivos:**
-- Modificar: `backend/src/main/java/co/com/bspstore/sgip/logica/RegistradorDeDevolucion.java`. Hoy está en las líneas 223-224 (`if (reembolsado.signum() > 0 && turno.isEmpty()) throw new SinTurnoAbiertoException()`) y en el javadoc de las líneas 53-90.
-- Crear: `logica/TurnoRequeridoParaEfectivoException.java`.
-- Modificar: `api/ManejadorErrores.java`, que la mapea a 409 con el type `urn:sgip:caja:turno-requerido-para-efectivo`.
-- Modificar: `docs/decisiones/ADR-0032-*.md` y `ADR-0033-*.md`, con una nota de enmienda que remite a la spec.
-- Pruebas: `logica/RegistradorDeDevolucionSinTurnoTest.java` (unitaria) y `datos/DevolucionSinTurnoConBaseTest.java` (con base, `@Tag("conBase")`).
+- Modificar `logica/RegistradorDeDevolucion`:
+  - la condición `reembolsado.signum() > 0 && turno.isEmpty()` → `SinTurnoAbiertoException`;
+  - el insert que hoy hace `turno.get()` cuando hubo reembolso, que pasa a `turno.orElse(null)`;
+  - el javadoc de la clase.
+- Tomar el indicador de efectivo del record `Reembolsos` que ya devuelve `validarReembolsos`, que carga el `TipoMedio`. No se hace una segunda carga.
+- Crear `logica/TurnoRequeridoParaEfectivoException`. `ManejadorErrores` la responde con 409 `urn:sgip:caja:turno-requerido-para-efectivo` y el mensaje «Abre un turno de caja para devolver efectivo.».
+- Extraer `ContextoEmpresa.esAdministrador(): boolean` de `ServicioTurnos.esAdministrador()`, que es privado, y usarlo en los dos sitios.
+- `docs/decisiones/ADR-0033-saldo-a-favor.md` lleva la enmienda de la regla del turno y del cierre que cuenta `devoluciones.cierre_id`. `ADR-0032` lleva una línea de referencia cruzada.
+- Pruebas: `logica/RegistradorDeDevolucionSinTurnoTest` y `datos/DevolucionSinTurnoConBaseTest` (`@Tag("conBase")`).
 
-**Interfaces:**
-- Usa: `ServicioTurnos.intentarTurnoAbierto(): Optional<Long>`; el rol del usuario en sesión, por el mismo mecanismo con que los servicios ya preguntan si es administrador; y el medio de cada reembolso, con su `TipoMedio`.
-- Produce: la regla nueva:
-  - sin turno y `rolEnSesion == ADMINISTRADOR` y ningún reembolso con `TipoMedio.EFECTIVO` y `monto > 0` → se registra con `cierre_id = null`;
-  - sin turno y con efectivo → `TurnoRequeridoParaEfectivoException` («Abre un turno de caja para devolver efectivo.»);
-  - sin turno y VENDEDOR → `SinTurnoAbiertoException`, como hoy.
+**Regla:**
+- Sin turno, siendo ADMINISTRADOR y sin ningún reembolso EFECTIVO: se registra con `cierre_id = null`.
+- Sin turno y con efectivo: `TurnoRequeridoParaEfectivoException`.
+- Sin turno y siendo VENDEDOR: `SinTurnoAbiertoException`, aunque traiga el PIN de un admin.
+- Un admin CON turno que devuelve solo con tarjeta sigue asociando la devolución al turno, como hoy.
+- Un reembolso de 0 sigue siendo 400 (`@Positive` y el CHECK de la base); esa regla no cambia.
 
-- [ ] **Paso 1: las pruebas en rojo.** Unitarias:
-  - `adminSinTurnoConTarjetaRegistra`
-  - `adminSinTurnoConSaldoRegistra`
-  - `adminSinTurnoTarjetaYSaldoRegistra`
-  - `adminSinTurnoConEfectivoEs409TurnoRequerido`
-  - `efectivoEnCeroNoExigeTurno`
-  - `vendedorSinTurnoConPinDeAdminYTarjetaEs409SinTurno`
-  - `ventaDeOtraEmpresaEs404AntesQueElTurno`
+- [ ] **Paso 1: pruebas en rojo.**
+  - Unitarias:
+    - `adminSinTurnoConTarjetaRegistra`
+    - `adminSinTurnoConSaldoRegistra`
+    - `adminSinTurnoTarjetaYSaldoRegistra`
+    - `adminSinTurnoConEfectivoEs409TurnoRequerido`
+    - `vendedorSinTurnoConPinDeAdminYTarjetaEs409SinTurno`
+    - `ventaDeOtraEmpresaEs404AntesQueElTurno`
+    - `adminConTurnoYTarjetaSigueAsociandoElTurno`
+  - Con base:
+    - `devolucionSinTurnoQuedaConCierreNulo`
+    - `tarjetaMasEfectivoSinTurnoNoDejaNadaAMedias`: no queda fila en `devoluciones`, ni abono, ni movimiento de kárdex.
+    - `ventaContraEntregaPendienteRespetaLasReglasActuales`
+    - `reintentoConLaMismaClaveSinTurnoDevuelve200`
+    - `cierreDeUnTurnoNoCuentaLaDevolucionSinTurno`
+    - `aperturaDeTurnoConcurrenteNoAsociaLaDevolucion`: con un orden forzado entre dos hilos, como en las pruebas de concurrencia de devoluciones de la caja. Se nombra la clase que se toma de modelo.
+- [ ] **Paso 2:** implementar sin cambiar el orden de bloqueos (ADR-0030). Actualizar el javadoc y los ADR.
 
-  Con base:
-  - `devolucionSinTurnoQuedaConCierreNulo`
-  - `cierreDeUnTurnoNoCuentaLaDevolucionSinTurno`
-  - `reintentoConLaMismaClaveSinTurnoDevuelve200`
-  - `aperturaDeTurnoConcurrenteNoAsociaLaDevolucion`: dos hilos, la apertura y la devolución, con un orden forzado como en las pruebas de la tarea 9.
-- [ ] **Paso 2:** ejecútalas. Deben fallar por el 409 actual.
-- [ ] **Paso 3:** implementa la regla en `RegistradorDeDevolucion`, sin cambiar el orden de bloqueos del ADR-0030. Actualiza el javadoc y los ADR.
-- [ ] **Paso 4:** la suite completa en verde.
-- [ ] **Paso 5:** los commits `test:` y `feat:`.
+### Tarea 2: web: el efectivo deshabilitado cuando el admin no tiene turno
 
-### Tarea 2: la pantalla de devolución deshabilita el efectivo si el admin no tiene turno
+**Archivos:** `web/src/paginas/caja/Devolucion.jsx` y `Devolucion.prueba.jsx`.
 
-**Archivos:**
-- Modificar: `web/src/paginas/caja/Devolucion.jsx` y `Devolucion.prueba.jsx`.
-- Modificar: `web/src/paginas/caja/devolucion.js`, si el reparto vive ahí.
+**Contexto:**
+- `turnoActual()` de `servicios/api/caja.js` devuelve `null` cuando no hay turno (el backend responde 204).
+- El rol sale de `esAdministrador(leerSesion())`, de `servicios/sesion.js`.
+- Hoy la pantalla no consulta el turno. Desde esta tarea lo consulta al montar.
+- El campo «Efectivo» ya se deshabilita cuando no hay medio de efectivo. La condición nueva se combina así: deshabilitado si no hay medio de efectivo **o** si (es admin **y** no tiene turno).
+- Cuando la causa es el turno, la ayuda dice «Para devolver efectivo, abre un turno de caja». Esa ayuda tiene prioridad sobre «Sale del cajón.».
 
-**Interfaces:**
-- Usa: la consulta del turno actual que ya usa la caja (`servicios/api/caja.js`; un 404 significa «sin turno»).
-- Usa: el 409 `urn:sgip:caja:turno-requerido-para-efectivo` de la tarea 1.
-
-- [ ] **Paso 1: las pruebas en rojo.**
-  - `adminSinTurnoVeEfectivoDeshabilitadoConAyuda`: el campo «Efectivo» está deshabilitado y su ayuda dice «Para devolver efectivo, abre un turno de caja».
-  - `adminSinTurnoPuedeConfirmarConTarjeta`
-  - `elVendedorSinTurnoSigueViendoElAvisoActual`
+- [ ] **Paso 1: pruebas en rojo.**
+  - `adminSinTurnoVeEfectivoDeshabilitadoConAyuda`
+  - `adminSinTurnoConfirmaConTarjeta`
+  - `vendedorSinTurnoNoVeElBloqueoPorTurnoYRecibeEl409DelServidor`
   - `el409TurnoRequeridoMuestraSuMensaje`
-- [ ] **Paso 2:** ejecútalas y comprueba que fallan.
-- [ ] **Paso 3:** implementa.
-- [ ] **Paso 4:** vitest, lint y build en verde.
-- [ ] **Paso 5:** los commits.
+  - `falloAlConsultarElTurnoNoBloqueaLaPantalla`: si falla la consulta, se deja el campo habilitado y el servidor decide.
+- [ ] **Paso 2:** implementar.
 
 ---
 
 ## Rama `feat/pantalla-clientes` (M1)
 
-### Tarea 3: el listado paginado de clientes con su saldo
+### Tarea 3: backend: listado paginado de clientes con su saldo
 
 **Archivos:**
-- Modificar: `api/ClientesControlador.java`, que añade `GET /api/v1/caja/clientes/lista`. El GET por documento no se toca.
-- Modificar: `logica/ServicioClientes.java` y `datos/RepositorioClientes.java`.
-- Crear: `api/dto/PaginaDeClientes.java` y `api/dto/ClienteEnLista.java`.
-- Migración: el índice que haga falta, justificado con `EXPLAIN` en el informe.
-- Pruebas: `ClientesListaConBaseTest`, una fila nueva en `CajaRolesTest` y `ServicioClientesListaTest`.
+- `api/ClientesControlador`: añade `GET /api/v1/caja/clientes/lista`. El GET por documento no se toca.
+- `logica/ServicioClientes` y `datos/RepositorioClientes`.
+- Crear `api/dto/ClienteEnLista` y `api/dto/PaginaDeClientes`.
+- Fila `LOS_DOS` en `CajaRolesTest`.
+- `V47`, solo si el `EXPLAIN` lo pide. El `EXPLAIN` va en el informe.
+- Pruebas: `ServicioClientesListaTest` y `ClientesListaConBaseTest`.
 
 **Interfaces:**
-- Produce:
-  - `record ClienteEnLista(Integer id, TipoDocumento tipo, String identificacion, String nombre, String telefono, String correo, BigDecimal saldoAFavor, boolean editable)`. `editable` es falso solo para el consumidor final.
-  - `record PaginaDeClientes(List<ClienteEnLista> elementos, int pagina, int tamano, long total)`.
-  - `PaginaDeClientes listar(String buscar, int pagina, int tamano)`.
-  - Valores: `tamano` 20 por defecto, máximo 100, y 400 si es menor que 1. `pagina` empieza en 0.
-- La búsqueda es por prefijo en `identificacion` o por contenido en `nombre`, sin distinguir mayúsculas. El saldo es el mismo cálculo de `/caja/clientes/{id}/saldo`, agregado en la misma consulta.
+- `record ClienteEnLista(Integer id, TipoDocumento tipoDocumento, String identificacion, String nombre, String telefono, String correo, String direccion, String ciudad, BigDecimal saldoAFavor, boolean editable)`.
+  - `editable` es `false` solo para el consumidor final, que se identifica con las constantes `ServicioClientes.TIPO_CONSUMIDOR_FINAL` e `IDENTIFICACION_CONSUMIDOR_FINAL`.
+  - `saldoAFavor` sale de `LEFT JOIN saldos_cliente`, con 0 si no hay fila. Es el mismo valor que devuelve `/caja/clientes/{id}/saldo`.
+- `record PaginaDeClientes(List<ClienteEnLista> elementos, int pagina, int tamano, long total)`.
+- `PaginaDeClientes listar(String buscar, int pagina, int tamano)`:
+  - `pagina` empieza en 0; un valor menor que 0 da 400;
+  - `tamano` vale 20 por defecto, el máximo es 100 (lo que pase se recorta) y un valor menor que 1 da 400;
+  - el orden es `nombre, id`;
+  - `buscar` se recorta, y `%`, `_` y `\` se escapan;
+  - la búsqueda es por prefijo sobre `nit` (la identificación) o por contenido sobre `nombre`, sin distinguir mayúsculas.
 
-- [ ] **Paso 1: las pruebas en rojo.**
+- [ ] **Paso 1: pruebas en rojo.**
   - `listaSoloLosDeLaEmpresa`
   - `buscaPorNombreYPorDocumento`
   - `buscarConComodinesEsLiteral`
   - `paginaYTotalCorrectos`
-  - `saldoIgualAlDelEndpointDeSaldo`
-  - `consultasConstantesCon1Y50Clientes`
+  - `paginaNegativaEs400`
   - `tamanoMayorQue100SeLimita`
+  - `saldoIgualAlDelEndpointDeSaldo`
+  - `clienteSinFilaDeSaldoTraeCero`
+  - `consultasConstantesCon1Y50Clientes`
   - `consumidorFinalNoEsEditable`
-  - Las filas de roles: CLIENTE y SUPER_ADMIN reciben 403; ADMINISTRADOR y VENDEDOR, 200.
-- [ ] **Paso 2:** ejecútalas y comprueba que fallan.
-- [ ] **Paso 3:** implementa.
-- [ ] **Paso 4:** la suite completa en verde.
-- [ ] **Paso 5:** los commits.
+  - `traeDireccionYCiudad`
+- [ ] **Paso 2:** implementar.
 
-### Tarea 4: la pantalla «Clientes»
+### Tarea 4: web: la pantalla «Clientes»
 
 **Archivos:**
-- Crear: `web/src/paginas/clientes/Clientes.jsx`, `FormularioCliente.jsx` y sus `*.prueba.jsx`.
-- Modificar:
-  - `web/src/servicios/api/caja.js`, con `listarClientes({buscar, pagina})`, `crearCliente` y `actualizarCliente`, que ya existen para la caja (reutilizarlos);
-  - `web/src/secciones.js`, con la sección `{ ruta: '/clientes', etiqueta: 'Clientes', grupo: 'Operación' }` para ADMINISTRADOR y VENDEDOR;
-  - `web/src/App.jsx`;
-  - `web/src/muestra.js`, solo si la rama de la muestra se vuelve a integrar; aquí no.
+- Crear `web/src/paginas/clientes/Clientes.jsx` y `Clientes.prueba.jsx`.
+- Extraer `FormularioCliente` de `paginas/caja/DatosCliente.jsx` (hoy es local y no está exportado) a `web/src/componentes/clientes/FormularioCliente.jsx`:
+  - sin buscador y sin la parte de domicilio;
+  - con los campos de tipo y número de documento editables;
+  - `DatosCliente.jsx` pasa a usarlo, y sus pruebas siguen en verde.
+- `servicios/api/caja.js`: **crear** `listarClientes({buscar, pagina})` y reutilizar `crearCliente` y `actualizarCliente`.
+- `secciones.js`: `{ ruta: '/clientes', etiqueta: 'Clientes', roles: VENDEN, grupo: 'Operación' }`.
+- `App.jsx`: la ruta.
 
-**Interfaces:**
-- Usa: la tarea 3, y `DatosCliente.jsx` de la caja, que tiene las validaciones y la casilla de la Ley 1581. Se reutiliza o se extrae un componente común; no se copia.
+**Reglas:**
+- Al crear, la casilla «El cliente autoriza el tratamiento de sus datos» es obligatoria.
+- Al editar, primero se verifica en `ServicioClientes` qué exige el PUT:
+  - si exige `autorizacionDatos`, el formulario de edición la muestra marcada según el valor guardado y no permite guardar sin ella;
+  - si no la exige, no la muestra.
+- El documento se puede editar siempre, por decisión del usuario.
 
-- [ ] **Paso 1: las pruebas en rojo.**
+- [ ] **Paso 1: pruebas en rojo.**
   - `listaYBusca`
   - `paginaSiguiente`
   - `creaClienteConAutorizacionObligatoria`
-  - `editaElDocumento`: permitido siempre, por decisión del usuario.
+  - `editaElDocumento`
+  - `editarNoBorraDireccionNiCiudad`
   - `consumidorFinalSinBotonEditar`
   - `muestraElSaldoSinEditarlo`
   - `estadoVacioYError`
   - `elVendedorVeLaSeccion`
-- [ ] **Paso 2:** ejecútalas y comprueba que fallan.
-- [ ] **Paso 3:** implementa.
-- [ ] **Paso 4:** vitest, lint y build en verde, con capturas a 1440 y a 390.
-- [ ] **Paso 5:** los commits.
+  - `datosClienteDeLaCajaSigueFuncionando`
+- [ ] **Paso 2:** implementar.
 
 ---
 
 ## Rama `feat/editar-empresa` (M2)
 
-### Tarea 5: el esquema, la edición por el admin y la identidad por plataforma
+### Tarea 5: backend: datos de la empresa por el admin, e identidad NIT/CC por plataforma
 
 **Archivos:**
-- Migración `V<n>__datos_de_empresa_y_copia_en_venta.sql`:
-  - `empresas` gana `nombre_comercial VARCHAR(150) NULL` y `direccion VARCHAR(200) NULL`;
-  - `ventas` gana `empresa_nombre VARCHAR(200) NULL`, `empresa_nit VARCHAR(20) NULL`, `empresa_direccion VARCHAR(200) NULL`, `empresa_ciudad VARCHAR(100) NULL` y `empresa_telefono VARCHAR(30) NULL`;
-  - `auditoria_plataforma` amplía su ENUM y sus CHECK con la acción `CAMBIO_IDENTIDAD_EMPRESA`.
-  - Antes de escribir la migración, se leen las definiciones reales de las columnas y los CHECK.
-- Crear:
-  - `api/EmpresaControlador.java`: `GET /api/v1/empresa` se mueve aquí si hoy vive en otro lado, más `PUT /api/v1/empresa`;
-  - `api/dto/SolicitudDatosEmpresa.java`;
-  - `logica/ServicioEmpresa.java`;
-  - `logica/ValidadorNit.java`.
-- Modificar:
-  - `api/PlataformaControlador.java`, con `PUT /api/v1/plataforma/empresas/{id}/identidad`;
-  - `logica/ServicioPlataforma.java`;
-  - `modelo/AccionPlataforma.java`, con `CAMBIO_IDENTIDAD_EMPRESA`;
-  - `datos/EmpresaRepositorio.java`;
-  - `api/dto/EmpresaResumen.java`.
-- Pruebas: `ValidadorNitTest`, `EmpresaEdicionAutorizacionTest`, `EmpresaEdicionConBaseTest` e `IdentidadEmpresaConBaseTest`.
+- **`V48__datos_de_empresa_y_copia_en_venta.sql`:**
+  - `empresas` suma `nombre_comercial VARCHAR(150) NULL`, `direccion VARCHAR(200) NULL` y `tipo_documento ENUM('NIT','CC') NOT NULL DEFAULT 'NIT'`.
+  - `ventas` suma `empresa_nombre VARCHAR(160) NULL`, `empresa_tipo_documento ENUM('NIT','CC') NULL`, `empresa_nit VARCHAR(20) NULL`, `empresa_direccion VARCHAR(200) NULL` y `empresa_telefono VARCHAR(20) NULL`.
+  - `auditoria_plataforma.accion`: se vuelve a listar el ENUM con los 8 valores existentes más `CAMBIO_IDENTIDAD_EMPRESA`, siguiendo el patrón de quitar, modificar y volver a añadir de V37. La acción nueva entra también en `ck_auditoria_plataforma_cambio` y en `ck_auditoria_plataforma_ambito`.
+- **`modelo/Empresa`:** mapea los campos nuevos más `telefono`, `ciudad` y `correoContacto`.
+- **`api/dto/EmpresaResumen`:** amplía con esos campos.
+- **`api/EmpresaControlador`:** nuevo, con **solo** `PUT /api/v1/empresa` para ADMINISTRADOR. `GET /api/v1/empresa` y el logo se quedan en `ImagenControlador`.
+- **`logica/ServicioEmpresa`:** nuevo.
+- **`logica/DocumentoEmpresa`:** nuevo, con `normalizar(String): String`, que quita puntos, espacios y guiones y exige de 5 a 15 dígitos. Lanza `DocumentoEmpresaInvalidoException`, que da 400 `urn:sgip:empresa:documento-invalido`. **No hay dígito de verificación.**
+- **`api/PlataformaControlador`** y **`logica/ServicioPlataforma`:** `PUT /api/v1/plataforma/empresas/{id}/identidad` para SUPER_ADMIN. `darDeAlta` y `SolicitudAltaEmpresa` adoptan `tipoDocumento` más el número normalizado.
+- **`modelo/AccionPlataforma`:** suma `CAMBIO_IDENTIDAD_EMPRESA`, clasificada en los dos switches (`esDeEmpresa` → true, `esCambio` → true). `RepositorioPlataformaTest` se actualiza.
+- **`datos/RepositorioPlataforma.existeNit`:** compara el número normalizado y excluye la empresa que se edita.
+- **Errores:** el 409 reutiliza `NitRepetidoException` y `urn:sgip:nit-repetido`.
 
 **Interfaces:**
-- Produce:
-  - `record SolicitudDatosEmpresa(@Size(max=150) String nombreComercial, @Size(max=200) String direccion, @Size(max=100) String ciudad, @Size(max=30) String telefono, @Email @Size(max=150) String correoContacto)`, anotado con `@JsonIgnoreProperties(ignoreUnknown = false)`. Un campo desconocido, como `nit`, da 400. Los textos se recortan; los vacíos se guardan como null.
-  - `record SolicitudIdentidad(@NotBlank String nit, @NotBlank @Size(max=200) String razonSocial, @NotBlank @Size(min=10, max=300) String motivo)`.
-  - `ValidadorNit.normalizar(String): String` y `ValidadorNit.esValido(String): boolean`, con el dígito de verificación por módulo 11 de la DIAN:
-    - pesos, de derecha a izquierda sobre los dígitos sin el DV: 3, 7, 13, 17, 19, 23, 29, 37, 41, 43, 47, 53, 59, 67, 71;
-    - `r = suma % 11`; `DV = r ≥ 2 ? 11 − r : r`;
-    - el formato guardado es el que ya usa la columna `empresas.nit` (se verifica en los datos semilla).
-  - Errores:
-    - 400 `urn:sgip:empresa:nit-invalido`;
-    - 409 `urn:sgip:empresa:nit-repetido`.
-  - Auditoría: una fila por campo cambiado, con el valor anterior, el nuevo, el motivo, el usuario y la fecha, en la misma transacción.
+- `record SolicitudDatosEmpresa(@Size(max=150) String nombreComercial, @Size(max=200) String direccion, @Size(max=80) String ciudad, @Size(max=20) String telefono, @Email @Size(max=120) String correoContacto)`.
+  - Lleva un `@JsonAnySetter` que guarda las claves desconocidas. Si hay alguna (por ejemplo `nit`), da 400 y nombra el campo. Esto es necesario porque Boot no falla ante campos desconocidos, y `application.yml` no se toca.
+  - Los textos se recortan, y los vacíos quedan en null.
+- `record SolicitudIdentidad(@NotNull TipoDocumentoEmpresa tipoDocumento, @NotBlank String numero, @NotBlank @Size(max=160) String razonSocial, @NotBlank @Size(min=10, max=200) String motivo)`.
+- **Auditoría:** una fila por cada campo que cambia (`tipo_documento`, `nit` y `razon_social`). Cada fila lleva `entidad='empresas'`, `referencia` igual al NIT anterior, el valor anterior, el valor nuevo, el motivo, el usuario y la fecha, en la misma transacción. Sin cambios, no se escribe ninguna fila y la respuesta es 200.
 
-- [ ] **Paso 1: las pruebas en rojo.**
-  - `ValidadorNitTest`:
-    - `nitValidoConDv`, con al menos 3 NIT reales de ejemplo calculados a mano en la prueba;
-    - `dvIncorrectoEsInvalido`;
-    - `nitConPuntosYEspaciosSeNormaliza`;
-    - `letrasSonInvalidas`.
-  - Del admin:
-    - `adminEditaDatosYSeVenEnElResumen`;
-    - `adminQueMandaNitRecibe400`;
-    - `adminQueMandaRazonSocialRecibe400`;
-    - `vendedorClienteYSuperAdminReciben403EnPutEmpresa`;
-    - `correoInvalidoEs400`;
-    - `vaciosSeGuardanComoNull`.
-  - De plataforma:
-    - `superAdminCambiaIdentidadYAudita`, que comprueba 2 filas de auditoría cuando cambian los dos campos;
-    - `sinMotivoEs400`;
-    - `nitRepetidoEs409`;
-    - `adminRecibe403EnIdentidad`;
-    - `empresaInexistenteEs404`.
-- [ ] **Paso 2:** ejecútalas y comprueba que fallan.
-- [ ] **Paso 3:** implementa.
-- [ ] **Paso 4:** la suite completa en verde.
-- [ ] **Paso 5:** los commits.
+- [ ] **Paso 1: pruebas en rojo.**
+  - `DocumentoEmpresaTest`:
+    - `nitConPuntosYEspaciosSeNormaliza` (`900.123.456` → `900123456`)
+    - `ccSeNormaliza`
+    - `letrasSonInvalidas`
+    - `cortoOLargoEsInvalido`
+    - `nuncaExigeDigitoDeVerificacion`
+  - Edición por el admin:
+    - `adminEditaDatosYSeVenEnElResumen`
+    - `adminQueMandaNitRecibe400NombrandoElCampo`
+    - `adminQueMandaRazonSocialRecibe400`
+    - `vendedorClienteYSuperAdminReciben403EnPutEmpresa`
+    - `elIdDeOtraEmpresaEnElCuerpoNoCambiaNada`
+    - `correoInvalidoEs400`
+    - `telefonoDe21CaracteresEs400`
+    - `vaciosQuedanNull`
+  - Identidad por plataforma:
+    - `superAdminCambiaIdentidadYAuditaUnaFilaPorCampo`
+    - `soloRazonSocialNoDaFalso409`
+    - `sinCambiosNoAudita`
+    - `sinMotivoEs400`
+    - `motivoDe201Es400`
+    - `numeroRepetidoEs409`
+    - `adminRecibe403EnIdentidad`
+    - `empresaInexistenteEs404`
+  - Alta: `altaConCcSinDigitoDeVerificacion`.
+- [ ] **Paso 2:** implementar.
 
-### Tarea 6: la copia de la empresa en la venta, que alimenta el recibo
+### Tarea 6: backend: copia de la empresa en la venta y recibo
 
 **Archivos:**
-- Modificar: `logica/RegistradorDeVenta.java` y `datos/RepositorioVentas.java`, para guardar la copia al insertar la venta.
-- Modificar: `logica/ServicioRecibos.java`, que lee la copia y, si es nula, usa los datos actuales.
-- Modificar: `api/dto/Recibo.java`, con `direccionEmpresa` y `telefonoEmpresa` añadidos al final.
-- Modificar: `logica/ReciboPdf.java`, que imprime la dirección y el teléfono bajo el NIT.
-- Pruebas: `CopiaDeEmpresaEnVentaConBaseTest` y `ServicioRecibosTest`, ampliada.
+- `datos/RepositorioVentas`: el record `NuevaVenta` y su INSERT llevan las 5 columnas `empresa_*`.
+- `logica/RegistradorDeVenta`: lee la empresa sin bloqueo (sin `FOR UPDATE` ni `FOR SHARE`) y llena la copia. `empresa_nombre` es `COALESCE(nombre_comercial, razon_social)`.
+- `logica/ResultadoDeVenta`: devuelve la copia, para que el web arme el recibo inmediato con ella.
+- `datos/RepositorioRecibos` y el record `CabeceraDeRecibo`: leen la copia, o los datos vivos si `empresa_nit IS NULL`.
+- `api/dto/Recibo`: suma `tipoDocumentoEmpresa`, `direccionEmpresa` y `telefonoEmpresa` al final.
+- `logica/ReciboPdf`: imprime la dirección y el teléfono bajo el documento, si existen.
+- Pruebas: `CopiaDeEmpresaEnVentaConBaseTest` y `ServicioRecibosTest`.
 
-**Interfaces:**
-- Usa: las columnas de la tarea 5. `empresa_nombre = COALESCE(nombre_comercial, razon_social)`.
-- Lee la empresa sin bloqueo, sin `FOR UPDATE` ni `FOR SHARE`. No altera el orden del ADR-0030.
-
-- [ ] **Paso 1: las pruebas en rojo.**
+- [ ] **Paso 1: pruebas en rojo.**
   - `laVentaGuardaLosDatosDeLaEmpresaDeEseDia`
   - `cambiarLaEmpresaDespuesNoCambiaElReciboViejo`
-  - `ventaSinCopiaUsaLosDatosActuales`
+  - `ventaSinCopiaUsaLosDatosActuales`, con `empresa_nit` nulo.
   - `elReciboMuestraDireccionYTelefono`
+  - `elResultadoDeLaVentaTraeLaCopia`
   - `consultasDelReciboSiguenConstantes`
-  - `registrarVentaSigueConElMismoNumeroDeConsultasMasUna`: se fija el conteo nuevo.
-- [ ] **Paso 2:** ejecútalas y comprueba que fallan.
-- [ ] **Paso 3:** implementa.
-- [ ] **Paso 4:** la suite completa en verde.
-- [ ] **Paso 5:** los commits.
+  - `registrarVentaUsaElConteoAnteriorMasUna`: se fija el número exacto en la prueba.
+- [ ] **Paso 2:** implementar y volver a correr las pruebas concurrentes de la venta.
 
-### Tarea 7: «Mi empresa» editable y la identidad en plataforma
+### Tarea 7: web: «Mi empresa» editable, identidad en plataforma, y el mismo recibo en las dos rutas
 
 **Archivos:**
-- Modificar: `web/src/paginas/Empresa.jsx` y `Empresa.prueba.jsx`.
-- Modificar: `web/src/paginas/plataforma-empresas/FichaEmpresa.jsx` y su prueba.
-- Modificar: `web/src/paginas/caja/ReciboImprimible.jsx`, que muestra la dirección y el teléfono de la empresa si existen.
+- `web/src/paginas/Empresa.jsx` y su prueba.
+- `web/src/paginas/plataforma-empresas/FichaEmpresa.jsx` y su prueba: una sección «Identidad» con su formulario (tipo, número, razón social y motivo) y los errores 400 y 409 en línea, siguiendo el patrón de la ficha.
+- `web/src/paginas/caja/ReciboImprimible.jsx`: recibe `empresa = {nombre, tipoDocumento, nit, direccion, telefono}`.
+  - El recibo inmediato toma esos datos de la respuesta de la venta (tarea 6).
+  - La reimpresión los toma del `Recibo`.
+  - `Caja.jsx` deja de usar `empresa.razonSocial` del GET vivo para el recibo.
 
-**Interfaces:**
-- Usa: `PUT /api/v1/empresa` y `PUT /api/v1/plataforma/empresas/{id}/identidad` de la tarea 5.
-
-- [ ] **Paso 1: las pruebas en rojo.**
+- [ ] **Paso 1: pruebas en rojo.**
   - `adminEditaYGuarda`
   - `nitYRazonSocialSonSoloLecturaConNotaDeSoporte`: la nota dice «Para cambiarlos, contacta a soporte».
   - `vendedorVeSoloLectura`
   - `superAdminCambiaIdentidadConMotivoObligatorio`
-  - `nitInvalidoMuestraElError`
+  - `documentoInvalidoMuestraElError`
+  - `numeroRepetidoMuestraElError`
+  - `reciboInmediatoYReimpresionMuestranLoMismo`
   - `reciboMuestraDireccionYTelefono`
-- [ ] **Paso 2:** ejecútalas y comprueba que fallan.
-- [ ] **Paso 3:** implementa.
-- [ ] **Paso 4:** vitest, lint y build en verde, con capturas.
-- [ ] **Paso 5:** los commits.
+- [ ] **Paso 2:** implementar.
 
 ---
 
 ## Rama `feat/plantilla-precios` (M3)
 
-### Tarea 8: el rechazo de filas de otro proveedor y la plantilla en xlsx
+### Tarea 8: backend: rechazo de filas de otro proveedor y plantilla en xlsx
 
 **Archivos:**
-- Modificar: `logica/ServicioImportacion.java` y `datos/RepositorioImportacion.java`.
-  - El catálogo indexado (líneas 61-80) trae también `proveedor_id`.
-  - Una fila cuyo producto tiene otro `proveedor_id` se rechaza con `PRODUCTO_DE_OTRO_PROVEEDOR`.
-- Migración: amplía el ENUM o CHECK de causas de rechazo con `PRODUCTO_DE_OTRO_PROVEEDOR`. Antes se verifica dónde guarda la V30 las causas.
-- Crear: `logica/GeneradorPlantillaPrecios.java`, que importa POI y vive junto a `LectorHojaDeCalculo`.
-- Modificar: `api/ImportacionControlador.java`, con `GET /api/v1/importaciones/plantilla?proveedorId=` solo para ADMINISTRADOR.
-- Modificar: `docs/decisiones/ADR-0007-*.md`, con la enmienda «POI solo en las clases de lectura y escritura de hojas de cálculo».
-- Pruebas: `GeneradorPlantillaPreciosTest`, `PlantillaConBaseTest` e `ImportacionOtroProveedorConBaseTest`. El ArchUnit que acota POI se actualiza si existe.
+- `datos/RepositorioImportacion.catalogoPorReferencia`: el SELECT suma `proveedor_id`.
+- `logica/ProductoDelCatalogo`: el record suma `proveedorId`; se actualizan sus usos.
+- `logica/ServicioImportacion`:
+  - `juzgar` recibe `proveedorId`;
+  - la causa nueva `PRODUCTO_DE_OTRO_PROVEEDOR` se comprueba **después** de `REFERENCIA_INEXISTENTE` y **antes** de `COSTO_NO_NUMERICO`;
+  - el motivo no pasa de 200 caracteres;
+  - se actualiza el javadoc que describe el orden de las comprobaciones.
+- `V49__causa_producto_de_otro_proveedor.sql`: `ALTER TABLE detalle_carga_precios MODIFY COLUMN motivo_codigo ENUM(<los 5 valores actuales>,'PRODUCTO_DE_OTRO_PROVEEDOR') NULL`. Los valores actuales se leen del ENUM definido en `database/migrations/V30`.
+- Crear `logica/GeneradorPlantillaPrecios`, que importa POI. El javadoc de `LectorHojaDeCalculo` y el ADR-0007 se enmiendan: «POI solo en las clases de lectura y escritura de hojas de cálculo». No hay ArchUnit.
+- `datos/RepositorioImportacion`: un método nuevo que recorre los productos activos del proveedor con un cursor (`RowCallbackHandler` o un stream de `JdbcClient`) y **no** devuelve una `List`.
+- `api/ImportacionControlador`: `GET /api/v1/importaciones/plantilla?proveedorId=` para ADMINISTRADOR. Un `proveedorId` ausente o no numérico da 400.
+  - En `logica`, un proveedor de otra empresa, o el reservado (`RepositorioPlataforma.NIT_SIN_PROVEEDOR`), da 404.
 
 **Interfaces:**
-- Produce: `void escribir(Integer empresaId, Integer proveedorId, OutputStream salida)`, en streaming con `SXSSFWorkbook`, con una ventana de 100 filas, y `dispose()` en un `finally`.
-  - Hoja 0 «Precios»: los encabezados `Referencia`, `Descripción` y `Costo`. Trae los productos activos del proveedor con su `codigo`, su nombre y su `costo`. Un costo nulo o cero va en una celda vacía.
-  - Hoja 1 «Instrucciones».
-  - Los textos van como celdas de texto. Si un valor empieza por `=`, `+`, `-` o `@`, se le antepone `'`.
-- Respuesta HTTP:
-  - `Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`;
-  - `Content-Disposition: attachment; filename="plantilla-precios-<nombre del proveedor en ASCII, minúsculas y con guiones>.xlsx"`.
-  - Un proveedor ajeno o el reservado (`SIN-PROVEEDOR`) da 404. Un `proveedorId` ausente da 400.
+- `void escribir(Integer empresaId, Integer proveedorId, OutputStream salida)`:
+  - usa `SXSSFWorkbook(100)`, con `dispose()` en un `finally`;
+  - **hoja 0 «Precios»:** `Referencia | Descripción | Costo`. Cada producto activo del proveedor va con su código, su nombre y su costo. Un costo nulo o de 0 queda en celda vacía;
+  - **hoja 1 «Instrucciones»;**
+  - los textos van como celdas STRING con estilo `quotePrefixed`, sin anteponer un `'` literal;
+  - `Content-Disposition: attachment; filename="plantilla-precios-<nombre del proveedor en ASCII, en minúsculas y con guiones>.xlsx"`.
 
-- [ ] **Paso 1: las pruebas en rojo.**
+- [ ] **Paso 1: pruebas en rojo.**
   - `filaDeOtroProveedorSeRechazaYElRestoSeAplica`
+  - `ordenDeCausas`: si la referencia no existe, sale `REFERENCIA_INEXISTENTE` aunque el costo sea inválido.
   - `plantillaTraeLosProductosDelProveedorConSuCosto`
   - `hojaCeroEsPrecios`
-  - `costoNuloVaVacio`
+  - `costoNuloVaVacioYAlSubirloSinLlenarSeRechaza`
   - `proveedorSinProductosDaSoloEncabezados`
-  - `valorQueEmpiezaConIgualNoEsFormula`
-  - `idaYVueltaSinCambiosNoRechazaNiCambiaCostos`
+  - `referenciaQueEmpiezaConIgualSeReimportaIgual`
+  - `idaYVueltaSinCambiosNoRechazaNiCambiaCostos`: todos los costos del fixture son positivos.
   - `consultasConstantesCon1Y1000Productos`
-  - `memoriaAcotadaCon20000Productos`: el crecimiento del montón medido es menor de 64 MB.
+  - `elRepositorioRecorreSinCargarTodo`
+  - `memoriaAcotadaCon20000Productos`: el montón crece menos de 64 MB. Si resulta inestable en la CI, baja a 5 000 filas con el mismo margen, y el cambio se anota en el informe.
   - `proveedorAjenoEs404`
   - `proveedorReservadoEs404`
+  - `proveedorIdAusenteEs400`
+  - `rutaPlantillaNoChocaConCargaId`
   - `vendedorRecibe403`
-  - `contentDispositionConNombreSeguro`
-- [ ] **Paso 2:** ejecútalas y comprueba que fallan.
-- [ ] **Paso 3:** implementa.
-- [ ] **Paso 4:** la suite completa en verde.
-- [ ] **Paso 5:** los commits.
+  - `nombreDeArchivoConTildesYEspacios`
+- [ ] **Paso 2:** implementar.
 
-### Tarea 9: el botón de plantilla y la causa nueva en la pantalla
+### Tarea 9: web: descarga de la plantilla, causa nueva y «Sin proveedor» en el catálogo
 
 **Archivos:**
-- Modificar: `web/src/paginas/Importacion.jsx` y `Importacion.prueba.jsx`.
-  - `PASTILLAS` y `QUE_HACER` reciben la causa `PRODUCTO_DE_OTRO_PROVEEDOR`, con el texto «De otro proveedor» y la indicación «Esta referencia pertenece a otro proveedor; súbela en la lista de ese proveedor».
-- Modificar: `web/src/servicios/api.js`, si hace falta descargar un binario.
+- `web/src/servicios/api.js`: una función de descarga de binario basada en `imagenAutenticada`. Toma el nombre de `Content-Disposition` y dispara el guardado.
+- `web/src/paginas/Importacion.jsx` y su prueba:
+  - al elegir el proveedor aparece «Descargar plantilla con mis productos»;
+  - `PASTILLAS` y `QUE_HACER` suman `PRODUCTO_DE_OTRO_PROVEEDOR`, con el texto «De otro proveedor» y la indicación «Esta referencia pertenece a otro proveedor; súbela en la lista de ese proveedor».
+- `web/src/paginas/Catalogo.jsx` y su prueba:
+  - los productos del proveedor reservado muestran la pastilla «Sin proveedor», y hay un filtro «Sin proveedor»;
+  - la edición del producto permite elegir el proveedor. Si ya lo permite, se verifica y se deja así; si no, se añade usando `SolicitudEdicionProducto.proveedorId`, que ya existe.
 
-**Interfaces:**
-- Usa: la tarea 8.
-
-- [ ] **Paso 1: las pruebas en rojo.**
-  - `alElegirProveedorApareceDescargarPlantilla`: el botón dice «Descargar plantilla con mis productos».
-  - `laDescargaPideLaRutaConElProveedor`
+- [ ] **Paso 1: pruebas en rojo.**
+  - `alElegirProveedorApareceDescargarPlantilla`
+  - `laDescargaPideLaRutaConElProveedorYUsaElNombreDelServidor`
   - `errorDeDescargaSeMuestra`
   - `causaDeOtroProveedorSeMuestraConSuIndicacion`
-- [ ] **Paso 2:** ejecútalas y comprueba que fallan.
-- [ ] **Paso 3:** implementa.
-- [ ] **Paso 4:** vitest, lint y build en verde.
-- [ ] **Paso 5:** los commits.
+  - `catalogoMarcaYFiltraSinProveedor`
+  - `editarProductoPermiteAsignarProveedor`
+- [ ] **Paso 2:** implementar.
 
 ---
 
 ## Orden de ejecución
 
-1. Unir la caja a `develop`. Lo hace el orquestador.
-2. Tarea 1 → 2, en `feat/devolucion-sin-turno`.
-3. Tarea 3 → 4, en `feat/pantalla-clientes`.
-4. Tarea 5 → 6 → 7, en `feat/editar-empresa`.
-5. Tarea 8 → 9, en `feat/plantilla-precios`.
+0. La puerta: la caja unida a `develop`, incluida su ronda final.
+1. Tareas 1 → 2.
+2. Tareas 3 → 4.
+3. Tareas 5 → 6 → 7.
+4. Tareas 8 → 9.
 
-M1 y M3 pueden ir en paralelo con las demás, cada una en su worktree y con un solo escritor por rama. Cada rama termina con su revisión `code-reviewer` sobre `develop...feat/*`, la suite completa, la CI en verde y el merge `--no-ff`.
+M1 y M3 pueden ir en paralelo con M4 o con M2, cada una en su propio worktree y con un solo escritor por rama.
