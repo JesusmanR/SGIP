@@ -5,7 +5,7 @@ import Campo from '../../componentes/comun/Campo.jsx'
 import { useDatos } from '../../hooks/useDatos.js'
 import { ErrorApi } from '../../servicios/api.js'
 import {
-  CLAVE_EN_USO, mediosDePago, registrarDevolucion, saldoDeCliente, ventaPorConsecutivo,
+  CLAVE_EN_USO, mediosDePago, registrarDevolucion, saldoDeCliente, turnoActual, ventaPorConsecutivo,
 } from '../../servicios/api/caja.js'
 import { PESOS } from '../../servicios/formato.js'
 import { esAdministrador } from '../../servicios/sesion.js'
@@ -49,6 +49,7 @@ export default function Devolucion() {
   const admin = esAdministrador()
   const enLinea = useEnLinea()
   const medios = useDatos(() => mediosDePago())
+  const turno = useDatos(() => turnoActual())
 
   const [consecutivo, setConsecutivo] = useState('')
   const [buscando, setBuscando] = useState(false)
@@ -96,6 +97,11 @@ export default function Devolucion() {
 
   const mismos = venta && !pendiente ? mediosDeLaVenta(venta) : []
   const efectivo = (medios.datos ?? []).find((m) => m.tipo === 'EFECTIVO' && m.activo !== false)
+  // El administrador sin turno abierto no puede devolver efectivo (el cajón no existe). Si la consulta del
+  // turno falla, no se bloquea nada: el servidor decide.
+  const sinTurno = admin && !turno.cargando && !turno.error && !turno.datos
+  const efectivoBloqueado = !efectivo || sinTurno
+  const ayudaEfectivo = sinTurno ? 'Para devolver efectivo, abre un turno de caja.' : efectivo ? 'Sale del cajón.' : undefined
   const claves = ['efectivo', 'saldo', ...mismos.map((m) => `medio-${m.medioId}`)]
   const montos = claves.map((c) => pesosDe(dinero[c]))
   const montoInvalido = montos.some(Number.isNaN)
@@ -360,9 +366,9 @@ export default function Devolucion() {
                           Se pagaron {PESOS.format(pagadoConSaldo)} con saldo a favor: esa parte solo puede volver como saldo a favor.
                         </p>
                       )}
-                      <Campo etiqueta="Efectivo" motivo={errores.efectivo} ayuda={efectivo ? 'Sale del cajón.' : undefined}>
+                      <Campo etiqueta="Efectivo" motivo={errores.efectivo} ayuda={ayudaEfectivo}>
                         <input
-                          type="text" inputMode="numeric" autoComplete="off" disabled={!efectivo}
+                          type="text" inputMode="numeric" autoComplete="off" disabled={efectivoBloqueado}
                           value={dinero.efectivo ?? ''} onChange={(e) => setDinero({ ...dinero, efectivo: e.target.value })}
                         />
                       </Campo>
