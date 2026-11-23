@@ -1,12 +1,12 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
-  CLAVE_EN_USO, registrarDevolucion, saldoDeCliente, ventaPorConsecutivo,
+  CLAVE_EN_USO, mediosDePago, registrarDevolucion, saldoDeCliente, turnoActual, ventaPorConsecutivo,
 } from '../../servicios/api/caja.js'
-import { entrar, errorApi, pesos, prepararApi } from './ayuda.js'
+import { MEDIOS, entrar, errorApi, pesos, prepararApi } from './ayuda.js'
 import Devolucion from './Devolucion.jsx'
 
 vi.mock('../../servicios/api/caja.js')
@@ -291,6 +291,122 @@ describe('devolución', () => {
     await motivo()
     await confirmar()
     expect(await screen.findByRole('alert')).toHaveTextContent('El reembolso no cuadra con lo pagado.')
+  })
+
+  describe('el efectivo sin turno de caja abierto', () => {
+    const TURNO_REQUERIDO = 'urn:sgip:caja:turno-requerido-para-efectivo'
+    const AYUDA = 'Para devolver efectivo, abre un turno de caja.'
+
+    it('adminSinTurnoVeEfectivoDeshabilitadoConAyuda', async () => {
+      entrar('ADMINISTRADOR')
+      turnoActual.mockResolvedValue(null)
+      montar()
+      await buscar()
+      const campo = screen.getByLabelText(/^efectivo$/i)
+      await waitFor(() => expect(campo).toBeDisabled())
+      expect(campo).toHaveAccessibleDescription(AYUDA)
+      expect(screen.queryByText('Sale del cajón.')).not.toBeInTheDocument()
+    })
+
+    it('adminSinTurnoConfirmaConTarjeta', async () => {
+      entrar('ADMINISTRADOR')
+      turnoActual.mockResolvedValue(null)
+      montar()
+      await buscar()
+      await waitFor(() => expect(screen.getByLabelText(/^efectivo$/i)).toBeDisabled())
+      await cantidad('Tornillo M6', 1)
+      await dinero(/^por tarjeta/i, 11900)
+      await userEvent.type(screen.getByLabelText(/n\.º de aprobación/i), 'A-1')
+      await motivo()
+      await confirmar()
+      await waitFor(() => expect(registrarDevolucion).toHaveBeenCalled())
+      expect(registrarDevolucion.mock.calls[0][0].reembolsos).toEqual([{ medioId: 2, monto: 11900, referencia: 'A-1' }])
+    })
+
+    it('adminConTurnoPuedeDevolverEfectivo', async () => {
+      entrar('ADMINISTRADOR')
+      montar()
+      await buscar()
+      expect(screen.getByLabelText(/^efectivo$/i)).toBeEnabled()
+      expect(screen.getByText('Sale del cajón.')).toBeInTheDocument()
+    })
+
+    it('vendedorSinTurnoNoVeElBloqueoPorTurnoYRecibeEl409DelServidor', async () => {
+      turnoActual.mockResolvedValue(null)
+      registrarDevolucion.mockRejectedValueOnce(errorApi(409, 'Abre un turno de caja para vender.'))
+      montar()
+      await buscar()
+      const campo = screen.getByLabelText(/^efectivo$/i)
+      expect(campo).toBeEnabled()
+      expect(screen.queryByText(AYUDA)).not.toBeInTheDocument()
+      await cantidad('Tornillo M6', 1)
+      await dinero(/^efectivo$/i, 11900)
+      await motivo()
+      await confirmar()
+      const dialogo = await screen.findByRole('dialog', { name: /autorización del administrador/i })
+      await userEvent.selectOptions(within(dialogo).getByLabelText(/administrador/i), '3')
+      await userEvent.type(within(dialogo).getByLabelText(/^pin$/i), '4821')
+      await userEvent.click(within(dialogo).getByRole('button', { name: /autorizar y devolver/i }))
+      expect(await within(dialogo).findByText('Abre un turno de caja para vender.')).toBeInTheDocument()
+    })
+
+    it('el409TurnoRequeridoMuestraSuMensaje', async () => {
+      entrar('ADMINISTRADOR')
+      registrarDevolucion.mockRejectedValueOnce(
+        errorApi(409, 'Abre un turno de caja para devolver efectivo.', TURNO_REQUERIDO),
+      )
+      montar()
+      await buscar()
+      await cantidad('Tornillo M6', 1)
+      await dinero(/^efectivo$/i, 11900)
+      await motivo()
+      await confirmar()
+      expect(await screen.findByRole('alert')).toHaveTextContent('Abre un turno de caja para devolver efectivo.')
+    })
+
+    it('sinTurnoLimpiaElEfectivoEscritoMientrasCargabaElTurno', async () => {
+      entrar('ADMINISTRADOR')
+      let resolver
+      turnoActual.mockReturnValue(new Promise((r) => { resolver = r }))
+      montar()
+      await buscar()
+      await dinero(/^efectivo$/i, 11900)
+      expect(screen.getByLabelText(/^efectivo$/i)).toHaveValue('11900')
+      await act(async () => { resolver(null) })
+      const campo = screen.getByLabelText(/^efectivo$/i)
+      await waitFor(() => expect(campo).toBeDisabled())
+      expect(campo).toHaveValue('')
+      await cantidad('Tornillo M6', 1)
+      await dinero(/^por tarjeta/i, 11900)
+      await userEvent.type(screen.getByLabelText(/n\.º de aprobación/i), 'A-1')
+      await motivo()
+      await confirmar()
+      await waitFor(() => expect(registrarDevolucion).toHaveBeenCalled())
+      expect(registrarDevolucion.mock.calls[0][0].reembolsos).toEqual([{ medioId: 2, monto: 11900, referencia: 'A-1' }])
+    })
+
+    it('sinMedioDeEfectivoNoPideAbrirTurno', async () => {
+      entrar('ADMINISTRADOR')
+      turnoActual.mockResolvedValue(null)
+      mediosDePago.mockResolvedValue(MEDIOS.filter((m) => m.tipo !== 'EFECTIVO'))
+      montar()
+      await buscar()
+      await waitFor(() => expect(turnoActual).toHaveBeenCalled())
+      await act(async () => {})
+      expect(screen.getByLabelText(/^efectivo$/i)).toBeDisabled()
+      expect(screen.queryByText(AYUDA)).not.toBeInTheDocument()
+    })
+
+    it('falloAlConsultarElTurnoNoBloqueaLaPantalla', async () => {
+      entrar('ADMINISTRADOR')
+      turnoActual.mockRejectedValue(errorApi(500, 'Falla'))
+      montar()
+      await buscar()
+      await waitFor(() => expect(turnoActual).toHaveBeenCalled())
+      await act(async () => {})
+      expect(screen.getByLabelText(/^efectivo$/i)).toBeEnabled()
+      expect(screen.queryByText(AYUDA)).not.toBeInTheDocument()
+    })
   })
 
   describe('lo pagado con saldo a favor vuelve solo como saldo a favor', () => {

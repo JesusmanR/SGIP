@@ -19,6 +19,7 @@ import co.com.bspstore.sgip.logica.ServicioDomicilios;
 import co.com.bspstore.sgip.logica.ServicioTurnos;
 import co.com.bspstore.sgip.logica.ServicioVentas;
 import co.com.bspstore.sgip.logica.SinTurnoAbiertoException;
+import co.com.bspstore.sgip.logica.TurnoRequeridoParaEfectivoException;
 import co.com.bspstore.sgip.modelo.TipoMedio;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -370,8 +371,12 @@ class CierreDeTurnoConBaseTest {
         turnos.cerrar(contado("20000"));
 
         assertThrows(SinTurnoAbiertoException.class, () -> domicilios.cobrar(porCobrar.id(), List.of(efectivo("10000"))));
-        assertThrows(SinTurnoAbiertoException.class,
+        // El administrador sin turno no devuelve efectivo; el vendedor sin turno no devuelve nada, ni con el PIN.
+        assertThrows(TurnoRequeridoParaEfectivoException.class,
                 () -> devolver(pagada.id(), List.of(new UnidadDevuelta(producto, 1)), reembolsoEnEfectivo("10000")));
+        caja.entrarComoVendedor();
+        assertThrows(SinTurnoAbiertoException.class, () -> devolverComoVendedor(pagada.id(),
+                List.of(new UnidadDevuelta(producto, 1)), reembolsoEnEfectivo("10000")));
 
         assertEquals(1, caja.cuantas("pagos_venta"), "ningún pago nuevo después del cierre");
         assertEquals(0, caja.cuantas("devoluciones"));

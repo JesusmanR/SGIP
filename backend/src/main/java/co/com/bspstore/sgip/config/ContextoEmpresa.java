@@ -17,6 +17,8 @@ import java.util.Optional;
  */
 public final class ContextoEmpresa {
 
+    private static final String ADMINISTRADOR = "ADMINISTRADOR";
+
     private ContextoEmpresa() {
         // Clase de utilidad: no se instancia
     }
@@ -27,6 +29,14 @@ public final class ContextoEmpresa {
             return Optional.empty();
         }
         return Optional.of(u);
+    }
+
+    /**
+     * Si quien hizo la petición es un administrador de empresa. Es el rol de la sesión: no el de quien
+     * autoriza con PIN. Sin usuario autenticado, o con otro rol (el de plataforma incluido), es falso.
+     */
+    public static boolean esAdministrador() {
+        return actual().map(u -> ADMINISTRADOR.equals(u.rol())).orElse(false);
     }
 
     /**

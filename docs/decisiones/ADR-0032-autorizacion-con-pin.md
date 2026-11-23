@@ -135,3 +135,6 @@ convivan.
   su transacción, y consumir el `Autorizacion` con `exigir`. La prueba de que los intentos
   sobreviven a la reversión se repite por `POST /caja/ventas` en la venta.
 - La bitácora de accesos mezcla ingresos y PIN; se distinguen por el motivo.
+- Enmienda 2026-11-23: la devolución ya no exige turno al administrador cuando ningún
+  reembolso es en efectivo; el PIN de un administrador no le da ese permiso al vendedor.
+  Ver la enmienda de ADR-0033.
