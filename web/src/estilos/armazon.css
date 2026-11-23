@@ -48,7 +48,9 @@ html { scroll-padding-top: var(--alto-barra-real, var(--alto-barra)); }
 .menu-cerrar { display: none; }
 
 .menu-lateral nav { flex: 1; overflow-y: auto; min-height: 0; }
-.menu-grupo { margin-bottom: 26px; }
+.menu-grupo { margin-bottom: 18px; }
+/* Un hilo entre grupos (no sobre el primero) y más aire antes del título que después. */
+.menu-grupo:not(:first-child) { border-top: 1px solid var(--borde-suave); padding-top: 20px; }
 .menu-grupo-titulo {
   margin: 0 12px 9px; font-size: var(--t-etiqueta); font-weight: 700; letter-spacing: .1em;
   text-transform: uppercase; color: var(--menu-rotulo);

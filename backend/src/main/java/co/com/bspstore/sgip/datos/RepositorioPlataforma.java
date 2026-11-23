@@ -1,8 +1,10 @@
 package co.com.bspstore.sgip.datos;
 
 import co.com.bspstore.sgip.api.dto.EmpresaEnPlataforma;
+import co.com.bspstore.sgip.api.dto.MedioDePago;
 import co.com.bspstore.sgip.modelo.AccionPlataforma;
 import co.com.bspstore.sgip.modelo.EstadoEmpresa;
+import co.com.bspstore.sgip.modelo.TipoDocumento;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
@@ -40,6 +42,15 @@ import java.util.Optional;
  */
 @Repository
 public class RepositorioPlataforma {
+
+    /**
+     * El proveedor y la categoría genéricos que la V45 siembra en cada empresa. La caja ya no crea
+     * productos (los crea el administrador en el catálogo), pero la siembra se conserva: el alta de
+     * la empresa y las pruebas del esquema la esperan.
+     */
+    public static final String NOMBRE_SIN_PROVEEDOR = "Sin proveedor";
+    public static final String NIT_SIN_PROVEEDOR = "SIN-PROVEEDOR";
+    public static final String NOMBRE_SIN_CATEGORIA = "Sin categoría";
 
     /**
      * El valor por omisión si el parámetro no está cargado.
@@ -243,7 +254,7 @@ public class RepositorioPlataforma {
     }
 
     /**
-     * Los cuatro medios de pago con los que nace toda empresa.
+     * Siembra los medios de pago con los que nace toda empresa (RF-43, M17).
      *
      * Es lo único que se siembra al dar de alta, aparte de la fila de
      * configuración. Una venta exige un medio de pago, de modo que sin
@@ -251,20 +262,91 @@ public class RepositorioPlataforma {
      * márgenes y los impuestos, en cambio, los decide el comercio y no
      * se siembran (ADR-0024).
      *
-     * Los nombres y los tipos son los que la V10 sembró para la empresa
-     * 1. No hay {@code INSERT IGNORE} a propósito: la clave única
+     * Qué medios son lo decide {@code ServicioMediosPago.MEDIOS_DEL_ALTA}
+     * y llega como argumento: este repositorio solo escribe. No hay
+     * {@code INSERT IGNORE} a propósito: la clave única
      * {@code (empresa_id, nombre)} existe para que una siembra repetida
      * falle a la vista y deshaga el alta, no para que se calle.
      */
-    public void sembrarMediosDePago(Integer empresaId) {
+    public void sembrarMediosDePago(Integer empresaId, List<MedioDePago> medios) {
+        for (MedioDePago medio : medios) {
+            jdbc.sql("""
+                            INSERT INTO medios_pago (empresa_id, nombre, tipo, activo)
+                            VALUES (:empresa, :nombre, :tipo, :activo)
+                            """)
+                    .param("empresa", empresaId)
+                    .param("nombre", medio.nombre())
+                    .param("tipo", medio.tipo().name())
+                    .param("activo", medio.activo())
+                    .update();
+        }
+    }
+
+    /**
+     * Siembra el «Consumidor final» de una empresa recién creada (RF-66).
+     *
+     * Es el cliente genérico con que se vende sin pedir datos al comprador. Sin él
+     * la primera venta del mostrador no tendría cliente al cual atribuirse. Los
+     * datos (nombre y documento de la DIAN) llegan como argumento, igual que los
+     * medios de pago: este repositorio solo escribe. La ciudad es la de la empresa,
+     * o ninguna si el alta no la trajo. No hay {@code INSERT IGNORE}: una siembra
+     * repetida debe fallar a la vista y deshacer el alta.
+     */
+    public void sembrarConsumidorFinal(Integer empresaId, String nombre, TipoDocumento tipo,
+                                       String identificacion, String ciudad) {
         jdbc.sql("""
-                        INSERT INTO medios_pago (empresa_id, nombre, tipo) VALUES
-                               (:empresa, 'Efectivo',      'EFECTIVO'),
-                               (:empresa, 'Transferencia', 'TRANSFERENCIA'),
-                               (:empresa, 'Tarjeta',       'TARJETA'),
-                               (:empresa, 'Crédito',       'CREDITO')
+                        INSERT INTO clientes (empresa_id, razon_social, tipo_documento, nit, ciudad,
+                                              activo, consumidor_final)
+                        VALUES (:empresa, :nombre, :tipo, :identificacion, :ciudad, 1, 1)
                         """)
                 .param("empresa", empresaId)
+                .param("nombre", nombre)
+                .param("tipo", tipo.name())
+                .param("identificacion", identificacion)
+                .param("ciudad", ciudad)
+                .update();
+    }
+
+    /**
+     * Siembra el proveedor «Sin proveedor» y la categoría «Sin categoría» de una empresa.
+     *
+     * Hacen falta porque el producto que se crea dentro de la venta no tiene proveedor ni categoría
+     * y las dos columnas son obligatorias (y la vista de precios hace JOIN interno con ambas). La
+     * venta solo los busca, y no por su nombre, que el administrador puede cambiar: el proveedor, por
+     * su NIT reservado {@code SIN-PROVEEDOR}, y la categoría, por su marca {@code generica}. Es
+     * idempotente y la misma de la V45: la empresa que ya tiene un proveedor con ese NIT conserva el
+     * suyo, la que ya tenía una categoría con ese nombre (la comparación es la de la columna, sin
+     * distinguir mayúsculas ni tildes) la ve marcada, y solo la que no tiene ninguna categoría genérica
+     * recibe una nueva.
+     */
+    public void sembrarSinProveedorYSinCategoria(Integer empresaId) {
+        jdbc.sql("""
+                        INSERT INTO proveedores (empresa_id, razon_social, nit)
+                        SELECT :empresa, :nombre, :nit
+                          FROM DUAL
+                         WHERE NOT EXISTS (SELECT 1 FROM proveedores p
+                                            WHERE p.empresa_id = :empresa AND p.nit = :nit)
+                        """)
+                .param("empresa", empresaId)
+                .param("nombre", NOMBRE_SIN_PROVEEDOR)
+                .param("nit", NIT_SIN_PROVEEDOR)
+                .update();
+        jdbc.sql("""
+                        UPDATE categorias SET generica = TRUE
+                         WHERE empresa_id = :empresa AND nombre = :nombre
+                        """)
+                .param("empresa", empresaId)
+                .param("nombre", NOMBRE_SIN_CATEGORIA)
+                .update();
+        jdbc.sql("""
+                        INSERT INTO categorias (empresa_id, nombre, generica)
+                        SELECT :empresa, :nombre, TRUE
+                          FROM DUAL
+                         WHERE NOT EXISTS (SELECT 1 FROM categorias c
+                                            WHERE c.empresa_id = :empresa AND c.generica = TRUE)
+                        """)
+                .param("empresa", empresaId)
+                .param("nombre", NOMBRE_SIN_CATEGORIA)
                 .update();
     }
 

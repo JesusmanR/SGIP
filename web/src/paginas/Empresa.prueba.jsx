@@ -4,7 +4,7 @@
  * no sea administrador ve costos ni márgenes, y los impuestos son
  * opcionales —no cobrar IVA no es un error ni una alerta.
  */
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -14,7 +14,7 @@ import { api } from '../servicios/api.js'
 import { guardarSesion } from '../servicios/sesion.js'
 
 vi.mock('../servicios/api.js', () => ({
-  api: { empresa: vi.fn(), subirLogo: vi.fn() },
+  api: { empresa: vi.fn(), subirLogo: vi.fn(), estadoPin: vi.fn(), fijarPin: vi.fn() },
   imagenAutenticada: vi.fn().mockResolvedValue('blob:logo'),
   ErrorApi: class extends Error {},
 }))
@@ -38,6 +38,8 @@ beforeEach(() => {
   sessionStorage.clear()
   guardarSesion({ token: 't', nombre: 'Ana', rol: 'ADMINISTRADOR' })
   api.empresa.mockResolvedValue(EMPRESA)
+  api.estadoPin.mockResolvedValue({ configurado: false })
+  api.fijarPin.mockResolvedValue(null)
 })
 afterEach(() => vi.clearAllMocks())
 
@@ -150,5 +152,94 @@ describe('los impuestos son opcionales', () => {
     montar()
     await screen.findByText('Comercial Andina S.A.S.')
     expect(screen.queryByRole('link', { name: /impuestos/i })).not.toBeInTheDocument()
+  })
+})
+
+
+describe('Mi PIN de autorización', () => {
+  const seccion = () => screen.getByRole('region', { name: /mi pin de autorización/i })
+
+  it('solo el administrador lo ve, y los demás ni lo piden', async () => {
+    guardarSesion({ token: 't', nombre: 'Luis', rol: 'VENDEDOR' })
+    montar()
+    await screen.findByText('Comercial Andina S.A.S.')
+    expect(screen.queryByRole('region', { name: /mi pin de autorización/i })).not.toBeInTheDocument()
+    expect(api.estadoPin).not.toHaveBeenCalled()
+  })
+
+  it('elPinPideElActualSoloSiYaEstaConfigurado', async () => {
+    api.estadoPin.mockResolvedValue({ configurado: false })
+    const primera = montar()
+    await screen.findByLabelText(/^pin nuevo$/i)
+    expect(screen.queryByLabelText(/pin actual/i)).not.toBeInTheDocument()
+    expect(within(seccion()).getByText(/todavía no tienes un pin/i)).toBeInTheDocument()
+    primera.unmount()
+
+    api.estadoPin.mockResolvedValue({ configurado: true })
+    montar()
+    expect(await screen.findByLabelText(/pin actual/i)).toBeInTheDocument()
+    expect(within(seccion()).getByText(/ya tienes un pin/i)).toBeInTheDocument()
+  })
+
+  it('la primera vez guarda el PIN nuevo sin PIN actual', async () => {
+    montar()
+    await userEvent.type(await screen.findByLabelText(/^pin nuevo$/i), '4821')
+    await userEvent.type(screen.getByLabelText(/repite el pin nuevo/i), '4821')
+    await userEvent.click(screen.getByRole('button', { name: /guardar pin/i }))
+    await waitFor(() => expect(api.fijarPin).toHaveBeenCalledWith(null, '4821'))
+    expect(await screen.findByText(/pin guardado/i)).toBeInTheDocument()
+  })
+
+  it('para cambiarlo manda el actual y el nuevo', async () => {
+    api.estadoPin.mockResolvedValue({ configurado: true })
+    montar()
+    await userEvent.type(await screen.findByLabelText(/pin actual/i), '1111')
+    await userEvent.type(screen.getByLabelText(/^pin nuevo$/i), '4821')
+    await userEvent.type(screen.getByLabelText(/repite el pin nuevo/i), '4821')
+    await userEvent.click(screen.getByRole('button', { name: /guardar pin/i }))
+    await waitFor(() => expect(api.fijarPin).toHaveBeenCalledWith('1111', '4821'))
+  })
+
+  it('pinNuncaSeMuestra: los campos son de contraseña, se vacían al guardar y el PIN no queda en pantalla', async () => {
+    api.estadoPin.mockResolvedValue({ configurado: true })
+    montar()
+    const campos = [await screen.findByLabelText(/pin actual/i), screen.getByLabelText(/^pin nuevo$/i), screen.getByLabelText(/repite el pin nuevo/i)]
+    for (const c of campos) expect(c).toHaveAttribute('type', 'password')
+    await userEvent.type(campos[0], '1111')
+    await userEvent.type(campos[1], '4821')
+    await userEvent.type(campos[2], '4821')
+    await userEvent.click(screen.getByRole('button', { name: /guardar pin/i }))
+    await screen.findByText(/pin guardado/i)
+    for (const c of campos) expect(c).toHaveValue('')
+    expect(document.body.textContent).not.toContain('4821')
+    expect(document.body.textContent).not.toContain('1111')
+    expect(sessionStorage.getItem('sgip.sesion')).not.toContain('4821')
+  })
+
+  it('el PIN nuevo son de 4 a 6 números y la confirmación debe coincidir', async () => {
+    montar()
+    await userEvent.type(await screen.findByLabelText(/^pin nuevo$/i), '12')
+    await userEvent.type(screen.getByLabelText(/repite el pin nuevo/i), '12')
+    await userEvent.click(screen.getByRole('button', { name: /guardar pin/i }))
+    expect(screen.getByText(/de 4 a 6 números/i, { selector: '.campo-mensaje' })).toBeInTheDocument()
+    await userEvent.clear(screen.getByLabelText(/^pin nuevo$/i))
+    await userEvent.type(screen.getByLabelText(/^pin nuevo$/i), '4821')
+    await userEvent.clear(screen.getByLabelText(/repite el pin nuevo/i))
+    await userEvent.type(screen.getByLabelText(/repite el pin nuevo/i), '4822')
+    await userEvent.click(screen.getByRole('button', { name: /guardar pin/i }))
+    expect(screen.getByText(/los dos pin no coinciden/i)).toBeInTheDocument()
+    expect(api.fijarPin).not.toHaveBeenCalled()
+  })
+
+  it('un PIN actual equivocado se anuncia y no confirma nada', async () => {
+    api.estadoPin.mockResolvedValue({ configurado: true })
+    api.fijarPin.mockRejectedValue(new Error('El PIN actual no es correcto.'))
+    montar()
+    await userEvent.type(await screen.findByLabelText(/pin actual/i), '0000')
+    await userEvent.type(screen.getByLabelText(/^pin nuevo$/i), '4821')
+    await userEvent.type(screen.getByLabelText(/repite el pin nuevo/i), '4821')
+    await userEvent.click(screen.getByRole('button', { name: /guardar pin/i }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('El PIN actual no es correcto.')
+    expect(screen.queryByText(/pin guardado/i)).not.toBeInTheDocument()
   })
 })

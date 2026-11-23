@@ -143,6 +143,19 @@ propias del producto.
   orden ascendente de `producto_id`.
 - Como red de seguridad, `ManejadorErrores` traduce un interbloqueo (1213) o una espera
   agotada (1205) a 409 con un texto fijo, sin eco de datos.
+- **La caja y la fila de la empresa (nota de la entrega 1 de la caja).** La caja (venta, cobro, devolución) no pide la fila de `empresas` con `FOR UPDATE`, y su orden (turno → venta → productos →
+  saldo del cliente → consecutivo → kárdex) no la incluye. Pero casi toda sentencia suya que inserta
+  (`ventas`, `productos`, `reglas_margen`...) comprueba una clave foránea hacia `empresas` y toma sobre esa fila
+  un bloqueo **compartido**: una venta espera a quien tenga la empresa bloqueada en exclusivo (crear, corregir
+  o reemplazar una regla de ámbito). No hay ciclo con el orden de arriba: quien tiene la empresa y después
+  escribe una regla de un producto que la venta ya bloqueó no espera a la venta, porque la clave foránea de la
+  regla toma su bloqueo compartido sobre la entrada del índice único `uq_productos_empresa` y no sobre la fila
+  del producto que la venta tiene. Lo fija `VentaConcurrenteConBaseTest`
+  (`quienTomaLaFilaDeLaEmpresa...`; antes lo fijaba la del producto nuevo, retirada con ese camino, ADR-0014).
+  Quien cambie el orden de la caja, o añada una clave foránea que apunte a la
+  fila del producto en lugar de a ese índice, tiene que volver a pasar esa prueba.
+  La entrega de un domicilio o de un encargo no tiene turno: toma la venta (`FOR UPDATE`) antes de marcar,
+  para esperar a una anulación en curso (`DomiciliosConcurrentesConBaseTest`).
 
 ## Bloqueos de reglas de ganancia (M14)
 
@@ -153,3 +166,18 @@ aceptable: son raras y manuales); y `escribirPrecios` bloquea el producto y no l
 de modo que las reglas propias y las de ámbito no se esperan entre sí (no comparten filas).
 `bloquearEmpresa` existe también en `RepositorioConfiguracionTributaria` con el mismo SQL;
 no se unificó porque obligaría a tocar el constructor de dos servicios por una línea.
+
+## La caja: las horas se escriben en hora de Bogotá (Sprint 9)
+
+Las horas que escribe la caja en una columna DATETIME (la apertura y el cierre del turno y,
+más adelante, la fecha de las ventas, las devoluciones y los cobros) se calculan con
+`Hoy.ahora(Clock)`: la hora de pared de Bogotá, truncada al segundo. Se leen con
+`.atZone(Hoy.ZONA)`. Es la misma hora que ve la sesión de la base y su día es `Hoy.de(Clock)`.
+Con `LocalDateTime.now(reloj)` una JVM en UTC guardaría una hora 5 horas adelantada sin
+que nada falle.
+
+`ServicioAutorizacion` (tarea 3, PIN) y las demás marcas anteriores siguen con
+`LocalDateTime.now(reloj)`, es decir, en la zona de la JVM. No se cambian aquí: lo que
+escriben (bloqueos del PIN, sesiones) se compara siempre con ese mismo reloj, y hoy ninguna
+consulta cruza esas marcas con las de la caja. Si alguna vez una consulta las compara, hay
+que unificarlas antes.

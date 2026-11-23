@@ -47,7 +47,10 @@ nueva. La decisión original se deja tal como se escribió.
 | 0029 | El precio se calcula solo para la empresa que pregunta | vigente |
 | 0030 | «Hoy» lo pone la aplicación, en la hora de Bogotá, y se pasa a cada consulta | vigente |
 | 0031 | La prueba son 30 días | vigente |
+| 0032 | El administrador autoriza en la caja con un PIN | vigente |
+| 0033 | El saldo a favor es del cliente identificado y no vence | vigente |
 | 0034 | El marco de la app pasa al diseño nuevo | vigente |
+| 0035 | El PDF del recibo se genera con Apache PDFBox | vigente |
 
 ## Las cuatro que conviene leer antes de escribir código
 

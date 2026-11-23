@@ -1,6 +1,10 @@
 package co.com.bspstore.sgip.api;
 
 import co.com.bspstore.sgip.config.SinEmpresaException;
+import co.com.bspstore.sgip.logica.AutorizacionRequeridaException;
+import co.com.bspstore.sgip.logica.PinBloqueadoException;
+import co.com.bspstore.sgip.logica.PinInvalidoException;
+import co.com.bspstore.sgip.logica.PinNuevoInvalidoException;
 import co.com.bspstore.sgip.logica.CategoriaEnUsoException;
 import co.com.bspstore.sgip.logica.ClaveActualIncorrectaException;
 import co.com.bspstore.sgip.logica.ClaveNuevaInvalidaException;
@@ -15,6 +19,19 @@ import co.com.bspstore.sgip.logica.FiltroInvalidoException;
 import co.com.bspstore.sgip.logica.ImpuestoNoDisponibleException;
 import co.com.bspstore.sgip.logica.AlmacenArchivos;
 import co.com.bspstore.sgip.logica.ArchivoInvalidoException;
+import co.com.bspstore.sgip.logica.ClienteNoEditableException;
+import co.com.bspstore.sgip.logica.DatoDeClienteInvalidoException;
+import co.com.bspstore.sgip.logica.DatoDeTurnoInvalidoException;
+import co.com.bspstore.sgip.logica.DescuentoInvalidoException;
+import co.com.bspstore.sgip.logica.EfectivoRecibidoInvalidoException;
+import co.com.bspstore.sgip.logica.SinTurnoAbiertoException;
+import co.com.bspstore.sgip.logica.ClaveDeIdempotenciaEnUsoException;
+import co.com.bspstore.sgip.logica.EstadoNoAdmiteLaOperacionException;
+import co.com.bspstore.sgip.logica.ExistenciaInsuficienteException;
+import co.com.bspstore.sgip.logica.VentaInvalidaException;
+import co.com.bspstore.sgip.logica.TurnoYaAbiertoException;
+import co.com.bspstore.sgip.logica.DatosDeDomicilioIncompletosException;
+import co.com.bspstore.sgip.logica.MedioDePagoInvalidoException;
 import co.com.bspstore.sgip.logica.MovimientoInvalidoException;
 import co.com.bspstore.sgip.logica.NombreRepetidoException;
 import co.com.bspstore.sgip.logica.RegistroRepetidoException;
@@ -23,6 +40,7 @@ import co.com.bspstore.sgip.logica.RecepcionInvalidaException;
 import co.com.bspstore.sgip.logica.ReferenciaAjenaException;
 import co.com.bspstore.sgip.logica.RolNoAsignableException;
 import co.com.bspstore.sgip.logica.UltimoAdministradorException;
+import co.com.bspstore.sgip.logica.UltimoMedioActivoException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.Ordered;
@@ -75,6 +93,16 @@ public class ManejadorErrores {
     public static final URI TIPO_CORREO_REPETIDO = URI.create("urn:sgip:correo-repetido");
     public static final URI TIPO_CLAVE_ACTUAL_INCORRECTA = URI.create("urn:sgip:clave-actual-incorrecta");
 
+    /**
+     * Los errores de la caja que la pantalla reconoce por el tipo. Los tres del PIN son 403 como cualquier
+     * otro permiso denegado (una empresa sin escritura, un rol que no llega): la pantalla de la caja pide
+     * el PIN de nuevo solo con estos, y los reconoce porque el tipo contiene «pin» o «autorizacion».
+     */
+    public static final URI TIPO_PIN_INVALIDO = URI.create("urn:sgip:caja:pin-invalido");
+    public static final URI TIPO_PIN_BLOQUEADO = URI.create("urn:sgip:caja:pin-bloqueado");
+    public static final URI TIPO_AUTORIZACION_REQUERIDA = URI.create("urn:sgip:caja:autorizacion-requerida");
+    public static final URI TIPO_CLAVE_EN_USO = URI.create("urn:sgip:caja:clave-en-uso");
+
     // Códigos de error de MySQL (no los SQLState, que son los mismos
     // 23000 para casi todo y no distinguen un duplicado de una referencia).
     private static final int MYSQL_ENTRADA_DUPLICADA = 1062;
@@ -82,6 +110,9 @@ public class ManejadorErrores {
     private static final int MYSQL_FILA_REFERENCIADA = 1451;
     private static final int MYSQL_COLUMNA_NULA = 1048;
     private static final int MYSQL_DATO_DEMASIADO_LARGO = 1406;
+    private static final int MYSQL_CHECK_VIOLADO = 3819;
+    private static final java.util.regex.Pattern CHECK_VIOLADO =
+            java.util.regex.Pattern.compile("Check constraint '([^']+)'");
 
     @ExceptionHandler(CredencialesInvalidasException.class)
     public ProblemDetail credencialesInvalidas(CredencialesInvalidasException e) {
@@ -127,6 +158,57 @@ public class ManejadorErrores {
     public ProblemDetail claveNuevaInvalida(ClaveNuevaInvalidaException e) {
         ProblemDetail p = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
         p.setTitle("Contraseña nueva no válida");
+        p.setDetail(e.getMessage());
+        return p;
+    }
+
+    @ExceptionHandler(PinNuevoInvalidoException.class)
+    public ProblemDetail pinNuevoInvalido(PinNuevoInvalidoException e) {
+        // 400 como la contraseña nueva: es un dato del cuerpo. El texto es fijo y
+        // nunca lleva el PIN.
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
+        p.setTitle("PIN nuevo no válido");
+        p.setDetail(e.getMessage());
+        return p;
+    }
+
+    @ExceptionHandler(PinInvalidoException.class)
+    public ProblemDetail pinInvalido(PinInvalidoException e) {
+        // 403 y no 401: el cliente trata todo 401 como «la sesión expiró». Un solo
+        // texto para un PIN errado y para un administrador que no vale (de otra
+        // empresa, sin PIN, inactivo): quien tantea no debe poder distinguirlos
+        // (ADR-0032).
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.FORBIDDEN);
+        p.setTitle("PIN incorrecto");
+        p.setType(TIPO_PIN_INVALIDO);
+        int minutos = e.getMinutosDeBloqueo();
+        p.setDetail("El administrador o el PIN no son correctos. Si te equivocas varias veces, "
+                + "la autorización se bloquea durante " + minutos
+                + (minutos == 1 ? " minuto." : " minutos."));
+        return p;
+    }
+
+    @ExceptionHandler(PinBloqueadoException.class)
+    public ProblemDetail pinBloqueado(PinBloqueadoException e) {
+        // 403 por la misma razón que el PIN errado. No distingue quién está
+        // bloqueado, si el administrador o quien pide: a los dos les sirve esperar.
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.FORBIDDEN);
+        p.setTitle("Autorización bloqueada");
+        p.setType(TIPO_PIN_BLOQUEADO);
+        int minutos = e.getMinutosDeBloqueo();
+        p.setDetail("Se superó el número de intentos con el PIN. Espera " + minutos
+                + (minutos == 1 ? " minuto" : " minutos")
+                + " desde el bloqueo e inténtalo de nuevo.");
+        return p;
+    }
+
+    @ExceptionHandler(AutorizacionRequeridaException.class)
+    public ProblemDetail autorizacionRequerida(AutorizacionRequeridaException e) {
+        // 403: se sabe quién pide y aun así no puede. Texto fijo: no dice qué se
+        // quería hacer ni qué datos llegaron.
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.FORBIDDEN);
+        p.setTitle("Autorización requerida");
+        p.setType(TIPO_AUTORIZACION_REQUERIDA);
         p.setDetail(e.getMessage());
         return p;
     }
@@ -197,6 +279,172 @@ public class ManejadorErrores {
         // funciona.
         ProblemDetail p = ProblemDetail.forStatus(HttpStatus.CONFLICT);
         p.setTitle("La empresa quedaría sin administrador");
+        p.setDetail(e.getMessage());
+        return p;
+    }
+
+    @ExceptionHandler(UltimoMedioActivoException.class)
+    public ProblemDetail ultimoMedioActivo(UltimoMedioActivoException e) {
+        // 409: la petición es válida y es el estado actual lo que impide
+        // atenderla. Con otro medio activo, la misma petición funciona.
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.CONFLICT);
+        p.setTitle("La empresa quedaría sin medios de pago");
+        p.setDetail(e.getMessage());
+        return p;
+    }
+
+    @ExceptionHandler(MedioDePagoInvalidoException.class)
+    public ProblemDetail medioDePagoInvalido(MedioDePagoInvalidoException e) {
+        // 400: el medio de sistema lo gestiona el sistema; ninguna empresa
+        // puede crearlo, activarlo ni desactivarlo, en el estado que esté.
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
+        p.setTitle("Medio de pago no modificable");
+        p.setDetail(e.getMessage());
+        return p;
+    }
+
+    @ExceptionHandler(DatoDeClienteInvalidoException.class)
+    public ProblemDetail datoDeClienteInvalido(DatoDeClienteInvalidoException e) {
+        // 400: el cuerpo está bien formado, pero el consentimiento y la ciudad
+        // dependen de la empresa y de la decisión del cliente, que una
+        // anotación no puede mirar.
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
+        p.setTitle("Datos del cliente inválidos");
+        p.setDetail(e.getMessage());
+        return p;
+    }
+
+    @ExceptionHandler(DatosDeDomicilioIncompletosException.class)
+    public ProblemDetail datosDeDomicilioIncompletos(DatosDeDomicilioIncompletosException e) {
+        // 400: la venta a domicilio está mal armada para este cliente; con
+        // otro cliente, o con sus datos completos, la misma petición funciona.
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
+        p.setTitle("Datos de domicilio incompletos");
+        p.setDetail(e.getMessage());
+        return p;
+    }
+
+    @ExceptionHandler(ClienteNoEditableException.class)
+    public ProblemDetail clienteNoEditable(ClienteNoEditableException e) {
+        // 409: la petición es válida y es la naturaleza del cliente genérico,
+        // que lo gestiona el sistema, lo que impide atenderla.
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.CONFLICT);
+        p.setTitle("Cliente no editable");
+        p.setDetail(e.getMessage());
+        return p;
+    }
+
+    @ExceptionHandler(DescuentoInvalidoException.class)
+    public ProblemDetail descuentoInvalido(DescuentoInvalidoException e) {
+        // 400: el descuento pedido no cabe en la regla (negativo, más del 100 %, mayor que el
+        // valor). El texto lo fija el cálculo y no repite lo enviado.
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
+        p.setTitle("Descuento no válido");
+        p.setDetail(e.getMessage());
+        return p;
+    }
+
+    @ExceptionHandler(EfectivoRecibidoInvalidoException.class)
+    public ProblemDetail efectivoRecibidoInvalido(EfectivoRecibidoInvalidoException e) {
+        // 400: el efectivo recibido no sirve para dar cambio. Texto fijo, sin eco del monto.
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
+        p.setTitle("Efectivo recibido no válido");
+        p.setDetail(e.getMessage());
+        return p;
+    }
+
+    @ExceptionHandler(DatoDeTurnoInvalidoException.class)
+    public ProblemDetail datoDeTurnoInvalido(DatoDeTurnoInvalidoException e) {
+        // 400: el cuerpo está bien formado, pero la base de efectivo no es un monto
+        // que el turno admita. Texto fijo: no repite lo enviado.
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
+        p.setTitle("Turno no válido");
+        p.setDetail(e.getMessage());
+        return p;
+    }
+
+    @ExceptionHandler(TurnoYaAbiertoException.class)
+    public ProblemDetail turnoYaAbierto(TurnoYaAbiertoException e) {
+        // 409: la petición es válida y es el estado del cajero, que ya tiene su turno
+        // abierto, lo que impide atenderla.
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.CONFLICT);
+        p.setTitle("Ya hay un turno abierto");
+        p.setDetail(e.getMessage());
+        return p;
+    }
+
+    @ExceptionHandler(SinTurnoAbiertoException.class)
+    public ProblemDetail sinTurnoAbierto(SinTurnoAbiertoException e) {
+        // 409: la operación es válida y falta el turno abierto que la ampara, o se
+        // cerró mientras tanto.
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.CONFLICT);
+        p.setTitle("Sin turno abierto");
+        p.setDetail(e.getMessage());
+        return p;
+    }
+
+    /**
+     * Una restricción CHECK de la base violada (MySQL 3819). Spring no la traduce a una excepción de
+     * integridad: llega como {@code UncategorizedSQLException}. Es una validación que faltó en la
+     * solicitud, como un 1048 o un 1406: 400 con un texto fijo, sin el nombre de la restricción ni el
+     * valor, y un aviso en el registro con solo el nombre de la restricción. Cualquier otra excepción
+     * SQL sin categoría sigue siendo un 500 genérico.
+     */
+    @ExceptionHandler(org.springframework.jdbc.UncategorizedSQLException.class)
+    public ProblemDetail violacionDeReglaDeLaBase(org.springframework.jdbc.UncategorizedSQLException e) {
+        SQLException sql = e.getSQLException();
+        if (sql != null && sql.getErrorCode() == MYSQL_CHECK_VIOLADO) {
+            var restriccion = CHECK_VIOLADO.matcher(String.valueOf(sql.getMessage()));
+            LOG.warn("Una regla de la base rechazó la operación (código {}, restricción {}): falta una validación.",
+                    MYSQL_CHECK_VIOLADO, restriccion.find() ? restriccion.group(1) : "desconocida");
+            ProblemDetail p = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
+            p.setTitle("Dato no válido");
+            p.setDetail("Uno de los datos no cumple una regla del sistema.");
+            return p;
+        }
+        LOG.error("El motor rechazó la operación por un error SQL sin categoría", e);
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.INTERNAL_SERVER_ERROR);
+        p.setTitle("Error interno");
+        p.setDetail("No se pudo completar la operación. Inténtalo de nuevo; "
+                + "si persiste, avisa al administrador.");
+        return p;
+    }
+
+    @ExceptionHandler(VentaInvalidaException.class)
+    public ProblemDetail ventaInvalida(VentaInvalidaException e) {
+        // 400: el cuerpo está bien formado, pero la regla que incumple depende de la base (el
+        // precio, los medios, el total) o de algo que aún no está disponible. Texto fijo.
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
+        p.setTitle("Venta no válida");
+        p.setDetail(e.getMessage());
+        return p;
+    }
+
+    @ExceptionHandler(ExistenciaInsuficienteException.class)
+    public ProblemDetail existenciaInsuficiente(ExistenciaInsuficienteException e) {
+        // 409: la venta es válida y es el estado del inventario lo que impide atenderla.
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.CONFLICT);
+        p.setTitle("Existencia insuficiente");
+        p.setDetail(e.getMessage());
+        return p;
+    }
+
+    @ExceptionHandler(ClaveDeIdempotenciaEnUsoException.class)
+    public ProblemDetail claveDeIdempotenciaEnUso(ClaveDeIdempotenciaEnUsoException e) {
+        // 409: la clave ya registró otra venta. Texto fijo, sin la clave.
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.CONFLICT);
+        p.setTitle("Clave de idempotencia en uso");
+        p.setType(TIPO_CLAVE_EN_USO);
+        p.setDetail(e.getMessage());
+        return p;
+    }
+
+    @ExceptionHandler(EstadoNoAdmiteLaOperacionException.class)
+    public ProblemDetail estadoNoAdmiteLaOperacion(EstadoNoAdmiteLaOperacionException e) {
+        // 409: la petición es válida y es el estado de lo que toca (una venta ya pagada, un domicilio ya
+        // entregado) lo que impide atenderla. Texto fijo, sin repetir lo enviado.
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.CONFLICT);
+        p.setTitle("Estado que no admite la operación");
         p.setDetail(e.getMessage());
         return p;
     }

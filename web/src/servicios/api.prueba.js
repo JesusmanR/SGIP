@@ -97,6 +97,13 @@ describe('cliente del API', () => {
     expect(e.tipo).toBe('urn:sgip:producto-cambio')
   })
 
+  it('el error lleva también el título del problema', async () => {
+    responder(409, { type: 'urn:sgip:caja:clave-en-uso', title: 'Clave en uso', detail: 'x' })
+    const e = await api.editarProducto(1, {}).catch((x) => x)
+    expect(e.titulo).toBe('Clave en uso')
+    expect(e.tipo).toBe('urn:sgip:caja:clave-en-uso')
+  })
+
   it('usa el detalle del ProblemDetail como mensaje', async () => {
     responder(409, { detail: 'Ya existe una categoría llamada «Bebidas».' })
     await expect(api.categorias()).rejects.toThrow('Ya existe una categoría llamada «Bebidas».')
@@ -247,6 +254,25 @@ describe('imágenes protegidas', () => {
 
     await expect(imagenAutenticada('/api/v1/productos/6/imagen')).rejects.toBeInstanceOf(ErrorApi)
     expect(global.URL.createObjectURL).not.toHaveBeenCalled()
+  })
+})
+
+describe('PIN de autorización', () => {
+  it('lee si ya está configurado y lo fija con el actual solo cuando lo hay', async () => {
+    guardarSesion({ token: 'abc', nombre: 'Ana' })
+    global.fetch.mockResolvedValue({ ok: true, status: 200, json: async () => ({ configurado: true }) })
+    await expect(api.estadoPin()).resolves.toEqual({ configurado: true })
+    expect(global.fetch.mock.calls[0][0]).toBe('/api/v1/perfil/pin')
+
+    global.fetch.mockResolvedValue({ ok: true, status: 204, json: async () => { throw new Error('sin cuerpo') } })
+    await api.fijarPin('1111', '4821')
+    const [ruta, opciones] = global.fetch.mock.calls[1]
+    expect(ruta).toBe('/api/v1/perfil/pin')
+    expect(opciones.method).toBe('PUT')
+    expect(JSON.parse(opciones.body)).toEqual({ pinActual: '1111', pinNuevo: '4821' })
+
+    await api.fijarPin(null, '4821')
+    expect(JSON.parse(global.fetch.mock.calls[2][1].body)).toEqual({ pinActual: null, pinNuevo: '4821' })
   })
 })
 

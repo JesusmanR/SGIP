@@ -19,7 +19,13 @@ vi.mock('./paginas/Panel.jsx', () => ({ default: () => <p>pagina:/panel</p> }))
 vi.mock('./paginas/Catalogo.jsx', () => ({ default: () => <p>pagina:/catalogo</p> }))
 vi.mock('./paginas/Importacion.jsx', () => ({ default: () => <p>pagina:/importar</p> }))
 vi.mock('./paginas/Empresa.jsx', () => ({ default: () => <p>pagina:/empresa</p> }))
-vi.mock('./paginas/usuarios/index.jsx', () => ({ default: () => <p>pagina:/usuarios</p> }))
+vi.mock('./paginas/caja/Rutas.jsx', () => ({ default: () => <p>pagina:/caja</p> }))
+vi.mock('./paginas/caja/Turnos.jsx', () => ({ default: () => <p>pagina:/caja/turnos</p> }))
+vi.mock('./paginas/caja/Domicilios.jsx', () => ({ default: () => <p>pagina:/caja/domicilios</p> }))
+vi.mock('./paginas/caja/Devolucion.jsx', () => ({ default: () => <p>pagina:/caja/devoluciones</p> }))
+vi.mock('./paginas/caja/Encargos.jsx', () => ({ default: () => <p>pagina:/caja/encargos</p> }))
+vi.mock('./paginas/caja/MediosPago.jsx', () => ({ default: () => <p>pagina:/caja/medios-pago</p> }))
+vi.mock('./paginas/usuarios/index.jsx',() => ({ default: () => <p>pagina:/usuarios</p> }))
 vi.mock('./paginas/proveedores/index.jsx', () => ({ default: () => <p>pagina:/proveedores</p> }))
 vi.mock('./paginas/compras/index.jsx', () => ({ default: () => <p>pagina:/compras</p> }))
 vi.mock('./paginas/inventario/index.jsx', () => ({ default: () => <p>pagina:/inventario</p> }))
@@ -30,7 +36,7 @@ vi.mock('./paginas/plataforma-tributario/index.jsx', () => ({ default: () => <p>
 
 const INICIO = {
   ADMINISTRADOR: '/panel',
-  VENDEDOR: '/catalogo',
+  VENDEDOR: '/caja',
   CLIENTE: '/catalogo',
   SUPER_ADMIN: '/plataforma/empresas',
 }
@@ -69,10 +75,10 @@ describe('cada sección, por rol', () => {
 })
 
 describe('guardas', () => {
-  it('/importar por URL como vendedor va al catálogo', async () => {
+  it('/importar por URL como vendedor va a la caja', async () => {
     guardarSesion({ token: 't', nombre: 'Luis', rol: 'VENDEDOR' })
     ir('/importar')
-    expect(await screen.findByText('pagina:/catalogo')).toBeInTheDocument()
+    expect(await screen.findByText('pagina:/caja')).toBeInTheDocument()
     expect(screen.queryByText('pagina:/importar')).not.toBeInTheDocument()
   })
 
@@ -92,7 +98,7 @@ describe('guardas', () => {
   it('una subruta profunda también queda bajo la guarda', async () => {
     guardarSesion({ token: 't', nombre: 'Luis', rol: 'VENDEDOR' })
     ir('/compras/ordenes/5')
-    expect(await screen.findByText('pagina:/catalogo')).toBeInTheDocument()
+    expect(await screen.findByText('pagina:/caja')).toBeInTheDocument()
     expect(screen.queryByText('pagina:/compras')).not.toBeInTheDocument()
   })
 
@@ -119,7 +125,7 @@ describe('guardas', () => {
   it('/COMPRAS no esquiva la guarda: el vendedor termina en su inicio', async () => {
     guardarSesion({ token: 't', nombre: 'Luis', rol: 'VENDEDOR' })
     ir('/COMPRAS')
-    expect(await screen.findByText('pagina:/catalogo')).toBeInTheDocument()
+    expect(await screen.findByText('pagina:/caja')).toBeInTheDocument()
     expect(screen.queryByText('pagina:/compras')).not.toBeInTheDocument()
   })
 
@@ -163,5 +169,20 @@ describe('menú y rutas', () => {
     await screen.findByText('pagina:/usuarios')
     expect(screen.getByRole('navigation', { name: /principal/i })).toBeInTheDocument()
     expect(screen.getAllByRole('main')).toHaveLength(1)
+  })
+})
+
+describe('rutas de la caja', () => {
+  it('/caja/turnos por URL como vendedor va a su inicio, la caja, y no monta Turnos', async () => {
+    guardarSesion({ token: 't', nombre: 'Luis', rol: 'VENDEDOR' })
+    ir('/caja/turnos')
+    expect(await screen.findByText('pagina:/caja')).toBeInTheDocument()
+    expect(screen.queryByText('pagina:/caja/turnos')).not.toBeInTheDocument()
+  })
+
+  it('/caja/cierre y /caja/mis-cierres las atiende la caja, para el vendedor también', async () => {
+    guardarSesion({ token: 't', nombre: 'Luis', rol: 'VENDEDOR' })
+    ir('/caja/cierre')
+    expect(await screen.findByText('pagina:/caja')).toBeInTheDocument()
   })
 })

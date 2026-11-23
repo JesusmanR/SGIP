@@ -40,7 +40,7 @@ y al que cada comercio entra como inquilino.
 
 | Componente | Tecnología | Estado |
 |---|---|---|
-| `backend/` | Java 25 · Spring Boot 4.1.2 · API REST | En construcción: seguridad, catálogo, proveedores e imágenes |
+| `backend/` | Java 25 · Spring Boot 4.1.2 · API REST | En construcción: seguridad, catálogo, proveedores, imágenes y caja |
 | `web/` | React 18 sobre HTML, CSS y JavaScript · Vite · Node 24 en local, 26 en la CI | En construcción: acceso, catálogo y datos de empresa |
 | `escritorio/` | React Native · cliente con respaldo sin conexión | Sin iniciar |
 | `movil/` | React Native · vendedor y cliente | Sin iniciar |
@@ -70,6 +70,45 @@ justificación, en `docs/decisiones/`.
 El reparto no es arbitrario. Configurar la plataforma y administrar un
 inventario exige pantallas densas —tablas de muchas columnas,
 formularios largos— que un teléfono no presenta bien.
+
+### La caja
+
+El módulo de caja vive en el backend, bajo `/api/v1/caja/**` (más
+`/api/v1/medios-pago` y `/api/v1/perfil/pin`), y reparte su trabajo así:
+
+| Pieza | Qué hace | Quién la usa |
+|---|---|---|
+| Turno | abrir con una base de efectivo, ver el resumen, cerrar contando el efectivo y explicar la diferencia | administrador y vendedor |
+| Venta | registrar la venta del mostrador, con pagos mixtos y clave de idempotencia; consultarla por su consecutivo; su recibo en JSON y en PDF de 80 mm | administrador y vendedor |
+| Productos | buscar por código o por texto | administrador y vendedor |
+| Encargos | lo que se vendió sin existencia, hasta que llega y se entrega | solo el administrador |
+| Domicilios | contra entrega: despachar y cobrar después | administrador y vendedor |
+| Devoluciones | devolver parte de una venta o anularla, con saldo a favor | administrador y vendedor (este con el PIN de un administrador) |
+| Clientes y medios de pago | el cliente identificado, y los medios con que se cobra; administrar los medios es solo del administrador | según la ruta |
+
+Lo que un vendedor no puede hacer por sí solo (un descuento, un encargo,
+una devolución) lo autoriza un administrador con su PIN, que viaja dentro
+de la misma petición. La caja no crea productos: solo el administrador los
+crea, desde el catálogo (una venta con `productoNuevo` recibe 400). El cliente y el super
+administrador reciben 403 en todo el módulo.
+
+Las decisiones están en `ADR-0014` (la existencia negativa y el encargo),
+`ADR-0032` (el PIN), `ADR-0033` (el saldo a favor) y `ADR-0035` (el PDF
+del recibo).
+
+Dos comprobaciones cuidan el módulo de punta a punta:
+
+- `CajaRolesTest` lee las rutas de los controladores y exige que cada una
+  tenga su fila de roles esperados. Una ruta nueva sin fila hace fallar la
+  prueba.
+- `database/verificar_caja.sh` arranca el backend desde el JAR y recorre un
+  turno completo por la API contra una base desechable: venta mixta,
+  encargo, el rechazo del producto nuevo, domicilio, cobro, devolución con saldo a favor,
+  cierre con diferencia y kárdex. También mide «buscar por código» y
+  «registrar una venta» con 20.000 referencias. Se niega a correr si no se
+  declara la base desechable (`SGIP_CAJA_BD_DESECHABLE=si`), si el servidor
+  no es de esta máquina o si la base tiene usuarios ajenos a la
+  demostración; ver `database/README.md`.
 
 ## Puesta en marcha de la base de datos
 

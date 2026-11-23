@@ -83,3 +83,17 @@ gratuito son 30 días calendario contados desde el día siguiente al alta, no
 un mes. Y una empresa en PRUEBA escribe solo hasta las 23:59:59 de Bogotá de su
 último día: desde entonces el filtro la trata como en modo consulta, sin que
 nadie cambie su estado. Los tres estados de la base siguen siendo los mismos.
+
+## Excepción: cerrar el turno de caja (2026-11-20)
+
+Decisión del usuario: una empresa en modo de consulta, desactivada o con la prueba
+vencida, **sí puede cerrar** el turno de caja que dejó abierto. Cerrar no trae dinero
+nuevo: solo cuadra el cajón con el efectivo contado (RF-45). Negarlo dejaría un turno
+abierto sin salida mientras dure el modo de consulta, con su efectivo sin cuadrar.
+
+La excepción es una sola ruta y un solo método: `POST /api/v1/caja/turnos/actual/cierre`,
+comparada tal como llega, sin prefijos ni variantes. Abrir un turno, vender, cobrar un
+contra entrega y devolver siguen en 403 porque mueven dinero. Las lecturas (el resumen
+y la lista de turnos) ya pasaban por ser GET. Vive en `FiltroEmpresaActiva`, junto a la
+exención del cambio de clave y la salida, y la protegen `FiltroEmpresaActivaTest` y
+`TurnosCierreAutorizacionTest`.

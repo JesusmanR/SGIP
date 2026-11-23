@@ -1,0 +1,275 @@
+/* Estilos de la caja (Sprint 9): solo esta sección escribe aquí.
+   Esta hoja queda cargada en toda la aplicación, así que las reglas genéricas
+   cuelgan de `.seccion-caja` y las demás llevan el prefijo `caja-` o `recibo`.
+   El color sale solo de tokens.css.
+
+   Es una pantalla de trabajo (modo Operate), con el diseño nuevo: encabezado con rótulo,
+   tarjetas numeradas a la izquierda (01 Cliente, 02 Productos) y, a la derecha, una
+   tarjeta «Resumen» fija con el total grande, los pagos y «Cobrar». Objetivos de toque
+   de 44 px y nada que dependa solo del color. En el celular las tarjetas se apilan y
+   el resumen queda debajo. */
+
+.seccion-caja.contenido { max-width: 1280px; }
+
+/* ── Controles: el cajero toca, no apunta ──────────────────────────── */
+.seccion-caja .boton,
+.seccion-caja .campo input,
+.seccion-caja .campo select,
+.caja-entrada,
+.caja-velo .boton,
+.caja-velo .campo input,
+.caja-velo .campo select {
+  min-height: var(--toque-minimo);
+}
+.seccion-caja .boton.menudo { width: auto; padding: var(--espacio-2) var(--espacio-3); min-height: var(--toque-minimo); }
+.seccion-caja .campo input,
+.seccion-caja .campo select,
+.caja-velo .campo input,
+.caja-velo .campo select { font-size: var(--t-cuerpo); }
+.seccion-caja .casilla input { width: 1.4rem; height: 1.4rem; }
+.seccion-caja .casilla { min-height: var(--toque-minimo); }
+.caja-entrada {
+  width: 100%; padding: var(--espacio-2) var(--espacio-3); font-size: var(--t-cuerpo);
+  border: 1px solid var(--borde-control); border-radius: var(--radio-control);
+  background: var(--tarjeta); color: var(--tinta);
+}
+.caja-entrada:focus-visible { outline: 3px solid var(--acento-sutil); border-color: var(--acento); }
+.caja-cantidad { max-width: 6rem; text-align: right; font-variant-numeric: tabular-nums; }
+
+.caja-acciones { display: flex; flex-wrap: wrap; gap: var(--espacio-2); margin-top: var(--espacio-3); }
+.caja-error-texto { color: var(--peligro); font-weight: 600; font-size: var(--t-cuerpo); margin: 0 0 var(--espacio-3); }
+
+/* ── Abrir turno ───────────────────────────────────────────────────── */
+.caja-abrir { max-width: 28rem; }
+.caja-abrir h2 { margin: 0 0 var(--espacio-2); font-size: var(--t-titulo-pantalla); }
+
+/* ── Encabezado propio de la caja ──────────────────────────────────── */
+.caja-cabecera { margin-bottom: var(--espacio-5); }
+.caja-eyebrow {
+  margin: 0; color: var(--acento); font-size: var(--t-etiqueta); font-weight: 800;
+  letter-spacing: .14em; text-transform: uppercase;
+}
+.caja-cabecera h1 { margin: var(--espacio-1) 0 0; font-size: 28px; line-height: 34px; font-weight: 750; letter-spacing: -.03em; }
+.caja-subtitulo { margin: var(--espacio-1) 0 0; color: var(--tinta-3); font-size: var(--t-cuerpo); }
+
+/* ── Rejilla de la venta ───────────────────────────────────────────── */
+.caja-rejilla {
+  display: grid; gap: var(--espacio-4) var(--espacio-5); align-items: start;
+  grid-template-columns: minmax(0, 1fr) minmax(19rem, 22rem);
+}
+.caja-columna-principal { min-width: 0; }
+.caja-columna-resumen {
+  min-width: 0; position: sticky; top: var(--espacio-4); display: grid; gap: var(--espacio-3);
+  /* En una pantalla baja el resumen se desplaza por dentro y «Cobrar» no queda fuera de alcance.
+     El relleno (con el margen que lo compensa) deja sitio al anillo de foco, que si no se recortaría. */
+  max-height: calc(100vh - 2 * var(--espacio-4)); overflow-y: auto;
+  padding: var(--espacio-2); margin: calc(-1 * var(--espacio-2));
+}
+.caja-secciones { display: grid; gap: var(--espacio-4); }
+
+/* ── Tarjetas numeradas ────────────────────────────────────────────── */
+.caja-seccion, .caja-resumen {
+  background: var(--tarjeta); border: 1px solid var(--borde); border-radius: var(--radio-panel);
+  box-shadow: var(--sombra-panel); padding: var(--espacio-5);
+}
+.caja-seccion-cabeza { display: flex; align-items: center; gap: var(--espacio-3); margin-bottom: var(--espacio-4); }
+.caja-paso {
+  flex: none; display: grid; place-items: center; width: 32px; height: 32px;
+  border-radius: 9px; background: var(--acento-sutil); color: var(--acento);
+  font-size: var(--t-etiqueta); font-weight: 700; font-variant-numeric: tabular-nums;
+}
+.caja-seccion-titulo { margin: 0; font-size: var(--t-titulo-tarjeta); line-height: 20px; }
+.caja-seccion-descripcion { margin: 2px 0 0; color: var(--tinta-3); font-size: var(--t-etiqueta); }
+.caja-seccion > .caja-buscador { margin-bottom: var(--espacio-4); }
+
+/* ── Buscador ──────────────────────────────────────────────────────── */
+.caja-buscador-fila { display: flex; flex-wrap: wrap; gap: var(--espacio-3); align-items: flex-end; }
+.caja-buscador-fila .campo { flex: 1 1 18rem; margin-bottom: 0; }
+.caja-buscador-fila .boton { flex: 0 0 auto; }
+.caja-buscador .aviso-estado { margin-top: var(--espacio-3); margin-bottom: var(--espacio-2); }
+.caja-resultados { list-style: none; margin: var(--espacio-3) 0 0; padding: 0; }
+.caja-resultados li {
+  display: flex; align-items: center; gap: var(--espacio-3); justify-content: space-between;
+  padding: var(--espacio-2) 0; border-bottom: 1px solid var(--borde);
+}
+.caja-resultados li > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+
+/* ── Carrito ───────────────────────────────────────────────────────── */
+.caja-vacio {
+  margin: 0; padding: calc(var(--espacio-5) * 2) var(--espacio-4); text-align: center;
+  color: var(--tinta-2); background: var(--tarjeta); border: 1px dashed var(--borde-control);
+  border-radius: var(--radio-tarjeta);
+}
+.caja-producto { display: flex; flex-direction: column; align-items: flex-start; gap: var(--espacio-1); text-align: left; }
+.caja-falta { color: var(--aviso); font-weight: 600; font-size: var(--t-cuerpo); }
+.caja-fecha { display: grid; gap: var(--espacio-1); font-size: var(--t-etiqueta); color: var(--tinta-2); }
+/* Descuento: tipo (% / $) y valor en una sola fila compacta; mismo control en las líneas y en el total. */
+.caja-descuento { display: inline-flex; flex-wrap: nowrap; align-items: center; gap: var(--espacio-2); }
+.caja-descuento .caja-descuento-tipo { flex: 0 0 auto; width: 4.5rem; min-height: var(--toque-minimo); }
+.caja-descuento .caja-descuento-valor { flex: 0 0 auto; width: 7rem; min-width: 0; min-height: var(--toque-minimo); text-align: right; }
+.caja-descuento-total { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--espacio-2) var(--espacio-4); }
+.caja-descuento-total label { font-size: var(--t-cuerpo); font-weight: 600; }
+/* Las líneas van dentro de su tarjeta, sin un segundo marco pesado. */
+.caja-carrito .tabla-tarjetas-caja { border-radius: 9px; }
+.caja-carrito .tabla-tarjetas thead th { background: var(--lienzo); }
+.caja-pie-carrito { display: grid; gap: var(--espacio-3); margin-top: var(--espacio-3); max-width: 28rem; }
+.caja-pie-carrito .campo { margin-bottom: 0; }
+
+/* ── Cliente y domicilio ───────────────────────────────────────────── */
+.caja-seccion .caja-acciones[role="group"] { margin-top: 0; }
+.caja-opcion[aria-pressed="true"] {
+  background: var(--acento-sutil); border-color: var(--acento); color: var(--tinta); font-weight: 700;
+}
+/* El estado activo no depende del color: lleva marca y peso. */
+.caja-opcion[aria-pressed="true"]::before { content: "✓ "; }
+.caja-cliente-actual { margin: var(--espacio-3) 0 0; display: grid; gap: var(--espacio-1); }
+.caja-formulario-cliente { margin-top: var(--espacio-3); }
+.caja-casilla-domicilio { margin: var(--espacio-3) 0 0; }
+.caja-domicilio { margin-top: var(--espacio-2); }
+
+/* ── Cobro ─────────────────────────────────────────────────────────── */
+.caja-cobro { display: flex; flex-direction: column; gap: var(--espacio-3); }
+.caja-resumen-titulo { margin: 0; font-size: 17px; line-height: 24px; font-weight: 500; }
+.caja-cobro .nota, .caja-cobro .campo { margin-bottom: 0; }
+.caja-total {
+  display: flex; align-items: baseline; justify-content: space-between; gap: var(--espacio-3);
+  padding: var(--espacio-3) 0 var(--espacio-4); border-top: 1px solid var(--borde);
+}
+.caja-total-rotulo { margin: 0; color: var(--tinta); font-size: var(--t-cuerpo); font-weight: 700; }
+.caja-total-valor {
+  margin: 0; font-size: 1.75rem; line-height: 1.1; font-weight: 700; font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere; text-align: right;
+}
+.caja-cobrar-bloque { display: grid; gap: var(--espacio-2); }
+.caja-total-mensaje { margin: 0; color: var(--aviso); font-weight: 600; font-size: var(--t-cuerpo); }
+.seccion-caja .boton.caja-cobrar { width: 100%; font-size: 1.05rem; min-height: 3.25rem; }
+.caja-desglose { margin: 0; display: grid; gap: var(--espacio-2); padding-top: var(--espacio-3); font-size: var(--t-cuerpo); }
+.caja-desglose div, .caja-falta-pagar, .caja-cambio {
+  display: flex; justify-content: space-between; gap: var(--espacio-3); align-items: baseline;
+}
+.caja-desglose dt { color: var(--tinta-2); }
+.caja-desglose dd { margin: 0; }
+.caja-pago { display: grid; gap: var(--espacio-3); border-top: 1px solid var(--borde); padding-top: var(--espacio-3); }
+.caja-pago .boton { justify-self: start; }
+.caja-pagos { list-style: none; margin: 0; padding: 0; }
+.caja-pagos li {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--espacio-3);
+  padding: var(--espacio-2) 0; border-bottom: 1px solid var(--borde); font-size: var(--t-cuerpo);
+}
+.caja-falta-pagar, .caja-cambio { margin: 0; font-size: var(--t-cuerpo); font-weight: 600; }
+.caja-cambio { color: var(--exito); }
+
+/* ── Diálogos ──────────────────────────────────────────────────────── */
+.caja-velo {
+  position: fixed; inset: 0; z-index: 50; padding: var(--espacio-4);
+  background: var(--velo); display: grid; place-items: center;
+}
+.caja-velo:focus { outline: none; }
+.caja-dialogo { width: 100%; max-width: 32rem; max-height: 90vh; overflow: auto; }
+.caja-dialogo-titulo { margin: 0 0 var(--espacio-3); font-size: var(--t-titulo-pantalla); line-height: 28px; }
+.caja-autorizar { margin: 0 0 var(--espacio-4); padding-left: var(--espacio-5); font-weight: 600; }
+.caja-video { width: 100%; max-height: 50vh; background: var(--chrome); border-radius: var(--radio-control); }
+
+/* ── Después de cobrar ─────────────────────────────────────────────── */
+.caja-recibo-pantalla { display: grid; gap: var(--espacio-4); justify-items: start; }
+.caja-recibo-acciones h2 { margin: 0 0 var(--espacio-2); font-size: var(--t-titulo-pantalla); }
+
+/* ── Recibo (tirilla de 80 mm) ─────────────────────────────────────── */
+.recibo {
+  width: 100%; max-width: 80mm; padding: var(--espacio-4); font-size: var(--t-cuerpo);
+  background: var(--tarjeta); color: var(--tinta); border: 1px solid var(--borde);
+  border-radius: var(--radio-control);
+}
+.recibo p { margin: 0 0 var(--espacio-1); overflow-wrap: anywhere; }
+.recibo-cabecera { text-align: center; margin-bottom: var(--espacio-3); }
+.recibo-empresa { font-weight: 700; font-size: var(--t-titulo-tarjeta); }
+.recibo-datos { margin-bottom: var(--espacio-3); }
+.recibo-lineas { list-style: none; margin: 0 0 var(--espacio-3); padding: var(--espacio-3) 0; border-top: 1px dashed var(--borde-control); border-bottom: 1px dashed var(--borde-control); }
+.recibo-lineas li + li { margin-top: var(--espacio-2); }
+.recibo-linea-nombre, .recibo-fila { display: flex; justify-content: space-between; gap: var(--espacio-3); }
+.recibo-linea-nombre { font-weight: 600; }
+.recibo-linea-nombre > :last-child, .recibo-fila > :last-child { flex-shrink: 0; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.recibo-linea-detalle { color: var(--tinta-2); font-size: var(--t-etiqueta); }
+.recibo-marca { font-weight: 700; }
+.recibo-total { font-weight: 700; font-size: var(--t-titulo-tarjeta); border-top: 1px solid var(--tinta); padding-top: var(--espacio-1); }
+.recibo-pagos { margin-top: var(--espacio-3); }
+.recibo-pie { margin-top: var(--espacio-3); text-align: center; color: var(--tinta-2); font-size: var(--t-etiqueta); }
+
+/* ── Celular: una columna, las tarjetas se apilan y el resumen queda debajo ── */
+@media (max-width: 72rem) {
+  .caja-rejilla { grid-template-columns: minmax(0, 1fr); }
+  .caja-columna-resumen { position: static; max-height: none; overflow-y: visible; }
+}
+@media (max-width: 48rem) {
+  .caja-seccion, .caja-resumen { padding: var(--espacio-4); }
+  .caja-cabecera h1 { font-size: 24px; line-height: 30px; }
+  .caja-buscador-fila .boton { flex: 1 1 100%; }
+  .caja-descuento-total { flex-direction: column; align-items: flex-start; }
+  .caja-velo { padding: 0; place-items: stretch; }
+  .caja-dialogo { max-width: none; max-height: 100%; border-radius: 0; }
+}
+
+/* ── Imprimir: solo el recibo, en una tirilla continua de 80 mm ───────
+   El alto de la página lo fija `imprimirRecibo()` (imprimir.js) con un @page
+   temporal: mezclar una medida con `auto` en `size` no es CSS válido y Chrome caería a Carta.
+   En pantalla la copia del recibo vive fuera de vista, a 80 mm, para poder medirla. */
+.recibo-impresion { position: absolute; left: -9999px; top: 0; width: 80mm; visibility: hidden; }
+.recibo-impresion .recibo {
+  width: 100%; max-width: none; box-sizing: border-box; border: 0; border-radius: 0;
+  padding: 3mm; font-size: 12px; line-height: 1.35;
+}
+@media print {
+  body > *:not(.recibo-impresion) { display: none !important; }
+  .recibo-impresion { position: static; visibility: visible; }
+}
+
+/* ── Venta congelada (resultado ambiguo): un fieldset deshabilitado apaga todo lo de dentro ── */
+.caja-congelable { border: 0; margin: 0; padding: 0; min-width: 0; }
+.caja-congelable:disabled { opacity: .7; }
+.caja-columna-resumen .aviso-estado .caja-acciones { display: flex; }
+
+/* ── Turnos y cierre del turno ─────────────────────────────────────── */
+.caja-cabecera-fila { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: var(--espacio-3) var(--espacio-4); }
+.caja-cabecera-acciones { display: flex; flex-wrap: wrap; gap: var(--espacio-2); }
+.seccion-caja .enlace-boton { min-height: var(--toque-minimo); padding: 0 var(--espacio-4); }
+.seccion-caja.caja-angosta { max-width: 44rem; }
+.caja-subtitulo-lista { margin: var(--espacio-4) 0 0; font-size: var(--t-cuerpo); font-weight: 700; color: var(--tinta-2); }
+.caja-diferencia { margin: 0 0 var(--espacio-3); min-height: 1.5rem; font-size: var(--t-titulo-tarjeta); font-weight: 700; font-variant-numeric: tabular-nums; }
+.caja-cerrado { display: grid; gap: var(--espacio-3); justify-items: start; }
+.caja-filtros { display: flex; flex-wrap: wrap; gap: var(--espacio-3); margin-bottom: var(--espacio-4); }
+.caja-filtros .campo { margin-bottom: 0; }
+.caja-filtros input { min-height: var(--toque-minimo); }
+
+/* ── Pestañas, domicilios, medios de pago y devolución ─────────────── */
+.caja-pestanas-lista { display: flex; gap: var(--espacio-1); border-bottom: 1px solid var(--borde); margin-bottom: var(--espacio-4); }
+.caja-pestana {
+  min-height: var(--toque-minimo); padding: 0 var(--espacio-4); border: 0; background: none; cursor: pointer;
+  color: var(--tinta-2); font: inherit; font-size: var(--t-cuerpo); font-weight: 600;
+  border-bottom: 3px solid transparent; margin-bottom: -1px;
+}
+.caja-pestana[aria-selected="true"] { color: var(--tinta); border-bottom-color: var(--acento); }
+/* El acento (más de 3:1 sobre blanco), no el halo claro: el foco tiene que verse. */
+.caja-pestana:focus-visible { outline: 3px solid var(--acento); outline-offset: -3px; }
+.caja-acciones-fila { display: flex; flex-wrap: wrap; gap: var(--espacio-2); justify-content: flex-end; }
+.seccion-caja .caja-pestanas + .caja-columna-resumen { margin-top: var(--espacio-4); }
+
+.caja-medios { list-style: none; margin: 0; padding: 0; }
+.caja-medios li {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--espacio-3);
+  min-height: var(--toque-minimo); padding: var(--espacio-3) 0; border-bottom: 1px solid var(--borde);
+}
+.caja-medios li:last-child { border-bottom: 0; }
+.caja-medio-nombre { margin: 0; font-weight: 600; font-size: var(--t-cuerpo); }
+.caja-medio-sistema { margin: 0; color: var(--tinta-3); font-size: var(--t-etiqueta); }
+.caja-interruptor { display: inline-flex; align-items: center; gap: var(--espacio-2); min-height: var(--toque-minimo); font-size: var(--t-cuerpo); }
+.caja-interruptor input { width: 1.4rem; height: 1.4rem; }
+
+.caja-reembolso { display: grid; gap: var(--espacio-2); max-width: 28rem; }
+.caja-reembolso .campo { margin-bottom: 0; }
+.caja-reparto { display: grid; gap: var(--espacio-1); }
+.caja-reparto p { margin: 0; }
+.caja-cliente-actual strong { margin-right: var(--espacio-2); }
+.caja-estado-busqueda:not(:empty) { margin-top: var(--espacio-3); }
+.caja-estado-busqueda .nota { margin-bottom: var(--espacio-1); }
+.caja-grupo { display: flex; flex-direction: column; align-items: flex-start; gap: var(--espacio-1); }
+.caja-grupo .caja-resultados { align-self: stretch; }

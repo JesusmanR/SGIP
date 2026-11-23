@@ -53,11 +53,11 @@ describe('pantalla de acceso', () => {
     expect(document.title).toBe('SGIP')
   })
 
-  it('guarda la sesión y entra al catálogo', async () => {
+  it('guarda la sesión y el vendedor entra a la caja', async () => {
     api.entrar.mockResolvedValue({ token: 'abc', nombre: 'Ana', rol: 'VENDEDOR' })
     await entrar()
     await waitFor(() => expect(leerSesion()?.nombre).toBe('Ana'))
-    expect(navegar).toHaveBeenCalledWith('/catalogo', { replace: true })
+    expect(navegar).toHaveBeenCalledWith('/caja', { replace: true })
   })
 
   it('al administrador lo lleva al panel, que es su primera pantalla', async () => {

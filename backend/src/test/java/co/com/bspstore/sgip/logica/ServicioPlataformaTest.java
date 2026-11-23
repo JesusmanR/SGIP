@@ -1,6 +1,7 @@
 package co.com.bspstore.sgip.logica;
 
 import co.com.bspstore.sgip.api.dto.EmpresaEnPlataforma;
+import co.com.bspstore.sgip.api.dto.MedioDePago;
 import co.com.bspstore.sgip.api.dto.SolicitudAltaEmpresa;
 import co.com.bspstore.sgip.api.dto.UsuarioEnPlataforma;
 import co.com.bspstore.sgip.config.UsuarioAutenticado;
@@ -10,6 +11,8 @@ import co.com.bspstore.sgip.datos.UsuarioRepositorio;
 import co.com.bspstore.sgip.modelo.AccionPlataforma;
 import co.com.bspstore.sgip.modelo.EstadoEmpresa;
 import co.com.bspstore.sgip.modelo.Rol;
+import co.com.bspstore.sgip.modelo.TipoDocumento;
+import co.com.bspstore.sgip.modelo.TipoMedio;
 import co.com.bspstore.sgip.modelo.Usuario;
 import co.com.bspstore.sgip.util.Seguridad;
 import org.junit.jupiter.api.AfterEach;
@@ -138,9 +141,9 @@ class ServicioPlataformaTest {
 
     /**
      * Una empresa nueva tiene que poder cobrar desde el primer día, y el
-     * punto de venta pide un medio de pago en cada venta. Sin estas cuatro
-     * filas el comercio abre su primera pantalla de venta con la lista
-     * vacía y nada que hacer.
+     * punto de venta pide un medio de pago en cada venta. Sin estas filas el
+     * comercio abre su primera pantalla de venta con la lista vacía y nada
+     * que hacer (RF-43, M17).
      */
     @Test
     void elAltaSiembraLosMediosDePago() {
@@ -148,7 +151,99 @@ class ServicioPlataformaTest {
 
         servicio.darDeAlta(solicitud());
 
-        verify(plataforma).sembrarMediosDePago(12);
+        verify(plataforma).sembrarMediosDePago(12, ServicioMediosPago.MEDIOS_DEL_ALTA);
+    }
+
+    @Test
+    void elAltaSiembraEfectivoTarjetaYTransferencia() {
+        altaViable(12, 30);
+
+        servicio.darDeAlta(solicitud());
+
+        ArgumentCaptor<List<MedioDePago>> sembrados = ArgumentCaptor.captor();
+        verify(plataforma).sembrarMediosDePago(eq(12), sembrados.capture());
+        assertEquals(List.of(
+                        new MedioDePago(null, "Efectivo", TipoMedio.EFECTIVO, true),
+                        new MedioDePago(null, "Tarjeta", TipoMedio.TARJETA, true),
+                        new MedioDePago(null, "Transferencia", TipoMedio.TRANSFERENCIA, true)),
+                sembrados.getValue().stream().filter(MedioDePago::activo).toList(),
+                "los activos del alta son exactamente estos tres");
+    }
+
+    @Test
+    void elAltaSiembraElSaldoAFavorInactivo() {
+        altaViable(12, 30);
+
+        servicio.darDeAlta(solicitud());
+
+        ArgumentCaptor<List<MedioDePago>> sembrados = ArgumentCaptor.captor();
+        verify(plataforma).sembrarMediosDePago(eq(12), sembrados.capture());
+        assertEquals(List.of(new MedioDePago(null, "Saldo a favor", TipoMedio.SALDO_A_FAVOR, false)),
+                sembrados.getValue().stream().filter(m -> !m.activo()).toList());
+        assertEquals(4, sembrados.getValue().size());
+    }
+
+    /**
+     * La primera venta del mostrador suele ser sin datos del comprador, y la venta
+     * exige un cliente: el alta deja el «Consumidor final» (CC 222222222222, el
+     * documento genérico de la DIAN) con la ciudad de la empresa (RF-66).
+     */
+    @Test
+    void elAltaSiembraElConsumidorFinalConLaCiudadDeLaEmpresa() {
+        altaViable(12, 30);
+
+        servicio.darDeAlta(solicitud());
+
+        verify(plataforma).sembrarConsumidorFinal(12, "Consumidor final", TipoDocumento.CC,
+                "222222222222", "Bucaramanga");
+    }
+
+    /**
+     * El producto que se crea dentro de la venta necesita proveedor y categoría (las dos columnas
+     * son obligatorias): el alta deja «Sin proveedor» y «Sin categoría» para que la venta solo los
+     * busque y no los cree a mitad de una venta (R3 del 2026-11-16).
+     */
+    @Test
+    void elAltaSiembraSinProveedorYSinCategoria() {
+        altaViable(12, 30);
+
+        servicio.darDeAlta(solicitud());
+
+        verify(plataforma).sembrarSinProveedorYSinCategoria(12);
+    }
+
+    @Test
+    void siSinProveedorFallaElAltaSePropagaYNoSeAudita() {
+        altaViable(12, 1);
+        doThrow(new IllegalStateException("siembra rota")).when(plataforma).sembrarSinProveedorYSinCategoria(12);
+
+        assertThrows(IllegalStateException.class, () -> servicio.darDeAlta(solicitud()));
+
+        verify(plataforma, never()).registrar(any(), any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void elAltaSinCiudadSiembraElConsumidorFinalSinCiudad() {
+        altaViable(12, 30);
+        var sinCiudad = new SolicitudAltaEmpresa(
+                "900123456-1", "Ferretería El Tornillo S.A.S.", "contacto@tornillo.co",
+                "3001234567", "  ", null, "Ana Pérez", "Ana@Tornillo.CO", "clave-de-prueba");
+
+        servicio.darDeAlta(sinCiudad);
+
+        verify(plataforma).sembrarConsumidorFinal(12, "Consumidor final", TipoDocumento.CC,
+                "222222222222", null);
+    }
+
+    @Test
+    void siElConsumidorFinalFallaElAltaSePropagaYNoSeAudita() {
+        altaViable(12, 1);
+        doThrow(new IllegalStateException("siembra rota"))
+                .when(plataforma).sembrarConsumidorFinal(eq(12), any(), any(), any(), any());
+
+        assertThrows(IllegalStateException.class, () -> servicio.darDeAlta(solicitud()));
+
+        verify(plataforma, never()).registrar(any(), any(), any(), any(), any(), any(), any(), any());
     }
 
     /**
@@ -171,10 +266,11 @@ class ServicioPlataformaTest {
                 .toList();
         assertEquals(
                 List.of("insertarEmpresa", "insertarSuscripcion", "insertarConfiguracion",
-                        "sembrarMediosDePago"),
+                        "sembrarMediosDePago", "sembrarConsumidorFinal", "sembrarSinProveedorYSinCategoria"),
                 escrituras,
-                "el alta solo escribe la empresa, la suscripción, la configuración vacía "
-                        + "y los medios de pago; ni márgenes ni reglas de IVA");
+                "el alta solo escribe la empresa, la suscripción, la configuración vacía, "
+                        + "los medios de pago, el consumidor final y el proveedor y la categoría "
+                        + "genéricos (V45); ni márgenes ni reglas de IVA");
     }
 
     /**
@@ -187,7 +283,7 @@ class ServicioPlataformaTest {
     void siLaSiembraFallaElAltaSePropagaYNoSeAudita() {
         altaViable(12, 1);
         doThrow(new IllegalStateException("siembra rota"))
-                .when(plataforma).sembrarMediosDePago(12);
+                .when(plataforma).sembrarMediosDePago(eq(12), any());
 
         IllegalStateException e = assertThrows(IllegalStateException.class,
                 () -> servicio.darDeAlta(solicitud()));

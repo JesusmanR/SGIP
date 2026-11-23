@@ -1,3 +1,5 @@
+import { borrarVentaPendiente } from './ventaPendiente.js'
+
 /**
  * Dónde vive el token de la sesión.
  *
@@ -32,6 +34,8 @@ export function leerSesion() {
 
 export function borrarSesion() {
   sessionStorage.removeItem(CLAVE)
+  // Una venta de la caja sin confirmar es de quien la hizo: no pasa a quien entre después.
+  borrarVentaPendiente()
 }
 
 export function haySesion() {
@@ -53,8 +57,8 @@ export function esAdministrador(sesion = leerSesion()) {
  *
  * La especificación de P-02 dice que el panel «es la primera pantalla
  * tras el acceso del administrador», de modo que esto no es una
- * preferencia de navegación: es parte del requisito. Para los demás
- * roles sigue siendo el catálogo, que es donde un vendedor trabaja.
+ * preferencia de navegación: es parte del requisito. El vendedor empieza
+ * en la caja, que es donde trabaja; el cliente, en el catálogo.
  *
  * Está aquí y no en cada pantalla porque hay tres sitios que deciden lo
  * mismo —el acceso, la ruta comodín y la barra— y con la regla
@@ -69,7 +73,8 @@ export function inicioSegunRol(sesion = leerSesion()) {
   if (sesion?.debeCambiarClave) return '/cambiar-clave'
   // SUPER_ADMIN no pertenece a una empresa: el catálogo no le sirve datos.
   if (sesion?.rol === 'SUPER_ADMIN') return '/plataforma/empresas'
-  return esAdministrador(sesion) ? '/panel' : '/catalogo'
+  if (esAdministrador(sesion)) return '/panel'
+  return sesion?.rol === 'VENDEDOR' ? '/caja' : '/catalogo'
 }
 
 /** Si quien tiene la sesión abierta aún debe cambiar su contraseña inicial. */

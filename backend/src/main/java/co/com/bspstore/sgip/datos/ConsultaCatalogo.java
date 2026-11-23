@@ -61,6 +61,18 @@ public class ConsultaCatalogo {
                 AND p.producto_id = v.producto_id)
             """;
 
+    /**
+     * Si el costo del producto es el provisional con que nació dentro de una venta (RF-42). Está en
+     * `productos` y no en la vista, por la misma razón que la versión: rehacer `v_precios_producto`
+     * tocaría un plan que `EscalaDeReglasPropiasTest` vigila. Subconsulta por clave primaria, con el
+     * filtro de empresa repetido. La caja y quien vende no lo reciben: solo el administrador.
+     */
+    private static final String COSTO_PROVISIONAL = """
+            (SELECT p.costo_provisional FROM productos p
+              WHERE p.empresa_id = v.empresa_id
+                AND p.producto_id = v.producto_id)
+            """;
+
     private static final String COLUMNAS = """
             producto_id, codigo, sku, nombre, presentacion,
             descripcion, codigo_barras,
@@ -75,8 +87,9 @@ public class ConsultaCatalogo {
             margen_contado, margen_credito,
             precio_fijo_contado, precio_fijo_credito,
             porcentaje_contado, porcentaje_credito,
-            %2$s AS version
-            """.formatted(IMAGEN_PRINCIPAL, VERSION);
+            %2$s AS version,
+            %3$s AS costo_provisional
+            """.formatted(IMAGEN_PRINCIPAL, VERSION, COSTO_PROVISIONAL);
 
     private final JdbcClient jdbc;
 
@@ -153,6 +166,25 @@ public class ConsultaCatalogo {
                         """.formatted(COLUMNAS))
                 .param("empresa", empresaId)
                 .param("barras", codigoBarras)
+                .query(ProductoEnCatalogo.class)
+                .optional();
+    }
+
+    /**
+     * El producto de la empresa con ese código interno, para la caja. Va por la vista y con el
+     * filtro de empresa, igual que {@link #porCodigoBarras}: la vista solo muestra productos
+     * activos, y {@code (empresa_id, codigo)} es único (V10), así que hay a lo sumo una fila.
+     * La comparación usa la intercalación de la columna, que no distingue mayúsculas: lo que se
+     * teclea en el mostrador no tiene que coincidir con cómo se guardó.
+     */
+    public Optional<ProductoEnCatalogo> porCodigo(Integer empresaId, String codigo) {
+        return jdbc.sql("""
+                        SELECT %s FROM v_precios_producto v
+                         WHERE empresa_id = :empresa
+                           AND codigo = :codigo
+                        """.formatted(COLUMNAS))
+                .param("empresa", empresaId)
+                .param("codigo", codigo)
                 .query(ProductoEnCatalogo.class)
                 .optional();
     }

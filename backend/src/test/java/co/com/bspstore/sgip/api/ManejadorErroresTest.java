@@ -1,12 +1,17 @@
 package co.com.bspstore.sgip.api;
 
+import co.com.bspstore.sgip.logica.AutorizacionRequeridaException;
 import co.com.bspstore.sgip.logica.ClaveActualIncorrectaException;
+import co.com.bspstore.sgip.logica.PinBloqueadoException;
+import co.com.bspstore.sgip.logica.PinInvalidoException;
 import co.com.bspstore.sgip.logica.ClaveNuevaInvalidaException;
 import co.com.bspstore.sgip.logica.CorreoRepetidoException;
 import co.com.bspstore.sgip.logica.NitRepetidoException;
 import co.com.bspstore.sgip.logica.RegistroRepetidoException;
 import co.com.bspstore.sgip.logica.CredencialesInvalidasException;
 import co.com.bspstore.sgip.logica.CuentaBloqueadaException;
+import co.com.bspstore.sgip.logica.DescuentoInvalidoException;
+import co.com.bspstore.sgip.logica.EfectivoRecibidoInvalidoException;
 import co.com.bspstore.sgip.logica.EstadoDeCargaInvalidoException;
 import co.com.bspstore.sgip.logica.ImpuestoNoDisponibleException;
 import co.com.bspstore.sgip.logica.RecursoNoEncontradoException;
@@ -179,6 +184,48 @@ class ManejadorErroresTest {
 
         assertEquals(2, registro.list.size());
         registro.list.forEach(ev -> assertEquals(Level.WARN, ev.getLevel()));
+    }
+
+    /**
+     * Spring no traduce el 3819 de MySQL (una restricción CHECK) a una excepción de integridad: llega
+     * como {@code UncategorizedSQLException}. Es una validación que faltó en la solicitud.
+     */
+    private static org.springframework.jdbc.UncategorizedSQLException delCheck(String texto, int codigo) {
+        return new org.springframework.jdbc.UncategorizedSQLException("tarea", "INSERT INTO t ...",
+                new java.sql.SQLException(texto, "HY000", codigo));
+    }
+
+    @Test
+    void unaViolacionDeCheckEsUn400SinExponerLaRestriccionNiElValor() {
+        var e = delCheck("Check constraint 'ck_restriccion_secreta' is violated.", 3819);
+
+        ProblemDetail p = manejador.violacionDeReglaDeLaBase(e);
+
+        assertEquals(400, p.getStatus());
+        assertEquals("Dato no válido", p.getTitle());
+        assertEquals("Uno de los datos no cumple una regla del sistema.", p.getDetail());
+        sinTextoDelMotor(p, "ck_restriccion_secreta", "Check constraint");
+    }
+
+    @Test
+    void unaViolacionDeCheckQuedaComoAvisoConElNombreDeLaRestriccion() {
+        manejador.violacionDeReglaDeLaBase(delCheck("Check constraint 'ck_restriccion_secreta' is violated.", 3819));
+
+        assertEquals(Level.WARN, nivelRegistrado());
+        String mensaje = registro.list.get(0).getFormattedMessage();
+        assertTrue(mensaje.contains("ck_restriccion_secreta"), mensaje);
+        assertTrue(mensaje.contains("falta una validación"), mensaje);
+    }
+
+    @Test
+    void otraExcepcionSqlSinCategoriaSigueSiendoUn500GenericoSinExponerNada() {
+        var e = delCheck("Table 'tabla_secreta.x' doesn't exist", 1146);
+
+        ProblemDetail p = manejador.violacionDeReglaDeLaBase(e);
+
+        assertEquals(500, p.getStatus());
+        sinTextoDelMotor(p, "tabla_secreta");
+        assertEquals(Level.ERROR, nivelRegistrado());
     }
 
     @Test
@@ -397,5 +444,72 @@ class ManejadorErroresTest {
         assertEquals(422, p.getStatus());
         assertEquals("Impuesto no disponible", p.getTitle());
         assertEquals("El impuesto «X» no existe o no está activo.", p.getDetail());
+    }
+
+    @Test
+    void unDescuentoInvalidoEsUn400ConTextoFijoYSinEco() {
+        ProblemDetail p = manejador.descuentoInvalido(
+                new DescuentoInvalidoException("El descuento no puede ser mayor que el valor descontado."));
+
+        assertEquals(400, p.getStatus());
+        assertEquals("Descuento no válido", p.getTitle());
+        assertEquals("El descuento no puede ser mayor que el valor descontado.", p.getDetail());
+    }
+
+    @Test
+    void unEfectivoRecibidoInvalidoEsUn400ConTextoFijoYSinEco() {
+        ProblemDetail p = manejador.efectivoRecibidoInvalido(
+                new EfectivoRecibidoInvalidoException("El efectivo recibido no cubre el total."));
+
+        assertEquals(400, p.getStatus());
+        assertEquals("Efectivo recibido no válido", p.getTitle());
+        assertEquals("El efectivo recibido no cubre el total.", p.getDetail());
+    }
+
+    // ------------------------------------------------------- los 403 del PIN llevan su propio tipo
+
+    /**
+     * Un 403 por el PIN y un 403 por una empresa sin escritura se parecen en el estado; el cliente los
+     * distingue por el tipo (contiene «pin» o «autorizacion»), no por el texto.
+     */
+    @Test
+    void elPinIncorrectoLlevaSuPropioTipoYConservaEstadoYTexto() {
+        ProblemDetail p = manejador.pinInvalido(new PinInvalidoException(15));
+
+        assertEquals(403, p.getStatus());
+        assertEquals("PIN incorrecto", p.getTitle());
+        assertEquals("urn:sgip:caja:pin-invalido", p.getType().toString());
+        assertEquals("El administrador o el PIN no son correctos. Si te equivocas varias veces, "
+                + "la autorización se bloquea durante 15 minutos.", p.getDetail());
+    }
+
+    @Test
+    void laAutorizacionBloqueadaLlevaSuPropioTipoYConservaEstadoYTexto() {
+        ProblemDetail p = manejador.pinBloqueado(new PinBloqueadoException(15));
+
+        assertEquals(403, p.getStatus());
+        assertEquals("Autorización bloqueada", p.getTitle());
+        assertEquals("urn:sgip:caja:pin-bloqueado", p.getType().toString());
+        assertEquals("Se superó el número de intentos con el PIN. Espera 15 minutos desde el bloqueo e inténtalo de nuevo.",
+                p.getDetail());
+    }
+
+    @Test
+    void laAutorizacionRequeridaLlevaSuPropioTipoYConservaEstadoYTexto() {
+        ProblemDetail p = manejador.autorizacionRequerida(new AutorizacionRequeridaException());
+
+        assertEquals(403, p.getStatus());
+        assertEquals("Autorización requerida", p.getTitle());
+        assertEquals("urn:sgip:caja:autorizacion-requerida", p.getType().toString());
+        assertEquals("Esta operación necesita la autorización de un administrador.", p.getDetail());
+    }
+
+    @Test
+    void elPermisoDeRolNoLlevaUnTipoDePin() {
+        ProblemDetail p = manejador.accesoDenegado(new org.springframework.security.access.AccessDeniedException("x"));
+
+        assertEquals(403, p.getStatus());
+        assertEquals(false, String.valueOf(p.getType()).contains("pin")
+                || String.valueOf(p.getType()).contains("autorizacion"));
     }
 }

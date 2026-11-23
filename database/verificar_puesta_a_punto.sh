@@ -341,8 +341,8 @@ acepta "una línea de venta con NO_GRAVADO se guarda" \
    SELECT 1, 'PAP-V1', (SELECT cliente_id FROM clientes WHERE empresa_id = 1 LIMIT 1),
           (SELECT usuario_id FROM usuarios WHERE empresa_id = 1 LIMIT 1), 'CONTADO';
    INSERT INTO venta_items (venta_id, empresa_id, producto_id, cantidad, precio_unitario,
-                            costo_unitario, tarifa_iva, tratamiento_iva)
-   VALUES (LAST_INSERT_ID(), 1, $PIDB, 1, 1500, 1000, 0, 'NO_GRAVADO');
+                            costo_unitario, tarifa_iva, tratamiento_iva, subtotal, valor_iva, utilidad)
+   VALUES (LAST_INSERT_ID(), 1, $PIDB, 1, 1500, 1000, 0, 'NO_GRAVADO', 1500, 0, 500);
    ROLLBACK;"
 acepta "una línea de cotización con NO_GRAVADO se guarda" \
   "START TRANSACTION;
@@ -359,8 +359,8 @@ rechaza "y un tratamiento inventado sigue rechazado" 1265 tratamiento_iva \
    SELECT 1, 'PAP-V2', (SELECT cliente_id FROM clientes WHERE empresa_id = 1 LIMIT 1),
           (SELECT usuario_id FROM usuarios WHERE empresa_id = 1 LIMIT 1), 'CONTADO';
    INSERT INTO venta_items (venta_id, empresa_id, producto_id, cantidad, precio_unitario,
-                            costo_unitario, tarifa_iva, tratamiento_iva)
-   VALUES (LAST_INSERT_ID(), 1, $PIDB, 1, 1500, 1000, 0, 'INVENTADO');
+                            costo_unitario, tarifa_iva, tratamiento_iva, subtotal, valor_iva, utilidad)
+   VALUES (LAST_INSERT_ID(), 1, $PIDB, 1, 1500, 1000, 0, 'INVENTADO', 1500, 0, 500);
    ROLLBACK;"
 
 # ── Un año sin UVT avisa y no impide vender (V35) ───────────────────────
@@ -520,6 +520,127 @@ rechaza "un cambio de UVT atribuido a una empresa sigue rechazado" 3819 ck_audit
   "$(bitacora "$AJENA" UVT_CAMBIO PAP-D4 "'1'")"
 rechaza "una activación sin estado anterior sigue rechazada" 3819 ck_auditoria_plataforma_cambio \
   "$(bitacora "$AJENA" EMPRESA_ACTIVACION PAP-D5 NULL)"
+
+# ── El domicilio, el producto nuevo y el encargo entregado (V45) ────────
+# La V45 siembra «Sin proveedor» y «Sin categoría» para las empresas que ya
+# existían (el producto que se crea dentro de la venta los necesita y la
+# venta nunca los crea), y sus restricciones tienen que rechazar de verdad.
+# Solo se mira la empresa 1, la de los datos de demostración, que existía antes de la V45: las
+# empresas que otros guiones de esta cadena crean después (aislamiento, importación, panel y la PAP-900-1
+# de este) no pasan por la V45 ni por el alta, y no llevan siembra.
+echo
+echo "── el domicilio, el producto nuevo y el encargo entregado (V45) ──"
+
+igual "la empresa 1, anterior a la V45, tiene su proveedor (por su NIT) y su categoría (por su marca) genéricos, una vez" "1|1" \
+  "$(consulta "SELECT CONCAT((SELECT COUNT(*) FROM proveedores p
+                               WHERE p.empresa_id = 1 AND p.nit = 'SIN-PROVEEDOR'), '|',
+                              (SELECT COUNT(*) FROM categorias c
+                               WHERE c.empresa_id = 1 AND c.generica = TRUE));")"
+
+VENTA_V45="INSERT INTO ventas (empresa_id, consecutivo, cliente_id, usuario_id, forma_pago, tipo_entrega)
+   SELECT 1, 'PAP-V45', (SELECT cliente_id FROM clientes WHERE empresa_id = 1 LIMIT 1),
+          (SELECT usuario_id FROM usuarios WHERE empresa_id = 1 LIMIT 1), 'CONTADO', 'DOMICILIO';"
+acepta "un domicilio completo y sin entregar se guarda"   "START TRANSACTION;
+   $VENTA_V45
+   INSERT INTO domicilios_venta (venta_id, empresa_id, direccion, ciudad, telefono, recibe)
+   VALUES (LAST_INSERT_ID(), 1, 'Calle 1 # 2-3', 'Cali', '3001112233', 'Ana');
+   ROLLBACK;"
+rechaza "un domicilio con la dirección en blanco" 3819 ck_domicilios_texto   "START TRANSACTION;
+   $VENTA_V45
+   INSERT INTO domicilios_venta (venta_id, empresa_id, direccion, ciudad, telefono, recibe)
+   VALUES (LAST_INSERT_ID(), 1, '  ', 'Cali', '3001112233', 'Ana');
+   ROLLBACK;"
+rechaza "una entrega con el momento y sin quien entregó" 3819 ck_domicilios_entrega   "START TRANSACTION;
+   $VENTA_V45
+   INSERT INTO domicilios_venta (venta_id, empresa_id, direccion, ciudad, telefono, recibe, entregado_en)
+   VALUES (LAST_INSERT_ID(), 1, 'Calle 1 # 2-3', 'Cali', '3001112233', 'Ana', '2026-11-12 10:00:00');
+   ROLLBACK;"
+rechaza "un pago contra entrega en una venta del mostrador" 3819 ck_ventas_contra_entrega   "START TRANSACTION;
+   INSERT INTO ventas (empresa_id, consecutivo, cliente_id, usuario_id, forma_pago, tipo_entrega,
+                       pago_contra_entrega)
+   SELECT 1, 'PAP-V46', (SELECT cliente_id FROM clientes WHERE empresa_id = 1 LIMIT 1),
+          (SELECT usuario_id FROM usuarios WHERE empresa_id = 1 LIMIT 1), 'CONTADO', 'MOSTRADOR', TRUE;
+   ROLLBACK;"
+rechaza "la entrega de un encargo en una línea que no lo es" 3819 ck_venitems_encargo_entregado   "START TRANSACTION;
+   $VENTA_V45
+   INSERT INTO venta_items (venta_id, empresa_id, producto_id, cantidad, precio_unitario, costo_unitario,
+                            tarifa_iva, tratamiento_iva, subtotal, valor_iva, utilidad,
+                            encargo_entregado_en, encargo_entregado_por)
+   VALUES (LAST_INSERT_ID(), 1, $PIDB, 1, 1500, 1000, 0, 'NO_GRAVADO', 1500, 0, 500, '2026-11-12 10:00:00',
+           (SELECT usuario_id FROM usuarios WHERE empresa_id = 1 LIMIT 1));
+   ROLLBACK;"
+
+# ── Devoluciones y saldo a favor (V46) ──────────────────────────────────
+# Lo que la V46 impide aunque la aplicación se equivoque: un saldo negativo, un movimiento del saldo sin
+# su origen, una devolución sin motivo, un reembolso de cero y un saldo de un cliente de otra empresa. Las
+# filas se crean dentro de una transacción que se deshace, como en la sección de la V45; solo se mira la
+# empresa 1, que existía antes de la V46.
+echo
+echo "── devoluciones y saldo a favor (V46) ──"
+
+VENTA_V46="INSERT INTO ventas (empresa_id, consecutivo, cliente_id, usuario_id, forma_pago, tipo_entrega)
+   SELECT 1, 'PAP-V46D', (SELECT cliente_id FROM clientes WHERE empresa_id = 1 LIMIT 1),
+          (SELECT usuario_id FROM usuarios WHERE empresa_id = 1 LIMIT 1), 'CONTADO', 'MOSTRADOR';
+   SET @venta_v46 = LAST_INSERT_ID();"
+DEVOLUCION_V46="INSERT INTO devoluciones (empresa_id, consecutivo, venta_id, motivo, autorizado_por, registrado_por,
+                              creado_en, clave_idempotencia, huella_carga, estado_resultante, saldo_por_cobrar)
+   SELECT 1, 'PAP-D46', @venta_v46, 'Prueba', u.usuario_id, u.usuario_id, '2026-11-12 09:00:00',
+          '00000000-0000-0000-0000-0000000046aa', REPEAT('0', 64), 'ANULADA', 0
+     FROM usuarios u WHERE u.empresa_id = 1 LIMIT 1;
+   SET @devolucion_v46 = LAST_INSERT_ID();"
+CLIENTE1=$(consulta "SELECT cliente_id FROM clientes WHERE empresa_id = 1 LIMIT 1;")
+
+igual "una venta admite el estado DEVUELTA_PARCIAL" "enum('REGISTRADA','ANULADA','DEVUELTA_PARCIAL')"   "$(consulta "SELECT column_type FROM information_schema.columns
+                WHERE table_schema = DATABASE() AND table_name = 'ventas' AND column_name = 'estado';")"
+acepta "una devolución con motivo, venta, autorizador y quien la hizo se guarda" "START TRANSACTION;
+   $VENTA_V46
+   $DEVOLUCION_V46
+   ROLLBACK;"
+rechaza "una devolución con el motivo en blanco" 3819 ck_devoluciones_motivo "START TRANSACTION;
+   $VENTA_V46
+   INSERT INTO devoluciones (empresa_id, consecutivo, venta_id, motivo, autorizado_por, registrado_por, creado_en,
+                             clave_idempotencia, huella_carga, estado_resultante, saldo_por_cobrar)
+   SELECT 1, 'PAP-D46B', @venta_v46, '   ', u.usuario_id, u.usuario_id, '2026-11-12 09:00:00',
+          '00000000-0000-0000-0000-0000000046bb', REPEAT('0', 64), 'ANULADA', 0
+     FROM usuarios u WHERE u.empresa_id = 1 LIMIT 1;
+   ROLLBACK;"
+rechaza "la misma clave de idempotencia dos veces en la empresa" 1062 uq_devoluciones_idempotencia "START TRANSACTION;
+   $VENTA_V46
+   $DEVOLUCION_V46
+   INSERT INTO devoluciones (empresa_id, consecutivo, venta_id, motivo, autorizado_por, registrado_por, creado_en,
+                             clave_idempotencia, huella_carga, estado_resultante, saldo_por_cobrar)
+   SELECT 1, 'PAP-D46C', @venta_v46, 'Prueba', u.usuario_id, u.usuario_id, '2026-11-12 09:00:00',
+          '00000000-0000-0000-0000-0000000046aa', REPEAT('0', 64), 'ANULADA', 0
+     FROM usuarios u WHERE u.empresa_id = 1 LIMIT 1;
+   ROLLBACK;"
+rechaza "un reembolso de cero pesos" 3819 ck_reembolsos_monto "START TRANSACTION;
+   $VENTA_V46
+   $DEVOLUCION_V46
+   INSERT INTO reembolsos (devolucion_id, empresa_id, medio_id, monto)
+   SELECT @devolucion_v46, 1, m.medio_id, 0 FROM medios_pago m WHERE m.empresa_id = 1 LIMIT 1;
+   ROLLBACK;"
+rechaza "un ítem de devolución con cero unidades" 3819 ck_devitems_importes "START TRANSACTION;
+   $VENTA_V46
+   $DEVOLUCION_V46
+   INSERT INTO devolucion_items (devolucion_id, empresa_id, producto_id, cantidad, valor)
+   SELECT @devolucion_v46, 1, p.producto_id, 0, 100 FROM productos p WHERE p.empresa_id = 1 LIMIT 1;
+   ROLLBACK;"
+rechaza "un saldo a favor negativo" 3819 ck_saldos_cliente_saldo "START TRANSACTION;
+   INSERT INTO saldos_cliente (empresa_id, cliente_id, saldo) VALUES (1, $CLIENTE1, -1);
+   ROLLBACK;"
+rechaza "el saldo a favor de un cliente de otra empresa" 1452 fk_saldos_cliente_emp "START TRANSACTION;
+   INSERT INTO saldos_cliente (empresa_id, cliente_id, saldo) VALUES ($AJENA, $CLIENTE1, 10);
+   ROLLBACK;"
+rechaza "un abono al saldo que no viene de una devolución" 3819 ck_movsaldo_origen "START TRANSACTION;
+   INSERT INTO movimientos_saldo (empresa_id, cliente_id, tipo, monto, creado_en)
+   VALUES (1, $CLIENTE1, 'ABONO', 100, '2026-11-12 09:00:00');
+   ROLLBACK;"
+rechaza "un uso del saldo que no se hizo en una venta" 3819 ck_movsaldo_origen "START TRANSACTION;
+   $VENTA_V46
+   $DEVOLUCION_V46
+   INSERT INTO movimientos_saldo (empresa_id, cliente_id, tipo, monto, devolucion_id, creado_en)
+   VALUES (1, $CLIENTE1, 'USO', 100, @devolucion_v46, '2026-11-12 09:00:00');
+   ROLLBACK;"
 
 echo
 if [[ "$fallos" -eq 0 ]]; then

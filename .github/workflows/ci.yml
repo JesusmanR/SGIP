@@ -141,7 +141,7 @@ jobs:
           funciones=$(consulta "SELECT COUNT(*) FROM information_schema.routines
                                 WHERE routine_schema='sgip' AND routine_type='FUNCTION';")
           echo "tablas=$tablas vistas=$vistas funciones=$funciones"
-          test "$tablas" -eq 41
+          test "$tablas" -eq 49
           test "$vistas" -eq 6
           test "$funciones" -eq 4
 
@@ -157,7 +157,13 @@ jobs:
           test "$n" -eq 1
 
       # Veinte de la V11, cuatro de la V12, cinco de la V24, siete de
-      # la V28, diez de la V31 y una de la V36.
+      # la V28, diez de la V31, una de la V36, cinco de la V44 (cuatro de
+      # `pagos_venta` y una del kárdex), menos la del medio de `ventas`,
+      # que la V44 retira porque el medio va en cada pago, tres de la V45
+      # (dos de `domicilios_venta` y una de la entrega del encargo en
+      # `venta_items`) y doce de la V46 (cuatro de `devoluciones`, dos de
+      # `devolucion_items`, dos de `reembolsos`, una de `saldos_cliente` y
+      # tres de `movimientos_saldo`).
       #
       # Este número se sube a mano al añadir claves, y a propósito: es un
       # centinela, no un conteo informativo. Una migración que quita una
@@ -187,7 +193,7 @@ jobs:
             "SELECT COUNT(*) FROM information_schema.referential_constraints
              WHERE constraint_schema='sgip' AND constraint_name LIKE '%\\_emp';")
           echo "claves foráneas por empresa: $n"
-          test "$n" -eq 47
+          test "$n" -eq 66
 
           descuidadas=$(mysql -h 127.0.0.1 -u root -psgip_ci -N -B -e \
             "SELECT GROUP_CONCAT(x.table_name, '.', x.constraint_name SEPARATOR ', ')
@@ -436,8 +442,9 @@ jobs:
           n=$(mysql -h 127.0.0.1 -N -B sgip -e \
             "SELECT (SELECT COUNT(*) FROM usuarios)
                   + (SELECT COUNT(*) FROM productos)
-                  + (SELECT COUNT(*) FROM clientes)
-                  + (SELECT COUNT(*) FROM proveedores);")
+                  + (SELECT COUNT(*) FROM clientes WHERE NOT consumidor_final)
+                  + (SELECT COUNT(*) FROM proveedores
+                       WHERE NOT (razon_social = 'Sin proveedor' AND nit = 'SIN-PROVEEDOR'));")
           echo "filas de demostración: $n"
           test "$n" -eq 0 || {
             echo "::error::la base tiene datos de demostración"; exit 1; }
@@ -445,6 +452,10 @@ jobs:
       - name: Analizar el SQL escrito a mano del backend
         run: python3 database/verificar_sql_del_backend.py -h 127.0.0.1 -u root
 
+  # OJO: el JAR que se construye en este trabajo lleva dentro un application.yml
+  # copiado del ejemplo (ver «Preparar la configuración»). Es solo para las
+  # pruebas de este trabajo: no se debe publicar, subir como artefacto ni
+  # desplegar nunca. Un JAR para publicar se construye sin ese archivo.
   backend:
     name: Compilación y pruebas del backend
     runs-on: ubuntu-latest
@@ -564,6 +575,28 @@ jobs:
           echo "filas BASELINE con versión 31: $n"
           test "$n" -eq 1 || {
             echo "::error::flyway_schema_history no tiene la línea base en la V31"; exit 1; }
+
+      # La caja de punta a punta, contra el JAR que acaba de empaquetar
+      # `mvn verify` y sobre la base de este trabajo, que ya tiene todas
+      # las migraciones (las pruebas con base las aplicaron por Flyway).
+      # Recorre un turno completo por la API y comprueba el PDF del recibo
+      # desde dentro del JAR ejecutable. Crea sus propios usuarios y
+      # productos, de modo que no depende de lo que dejaron las pruebas.
+      # La contraseña va en MYSQL_PWD y no en la línea de órdenes. La base de este
+      # trabajo es desechable (un servicio que muere con el trabajo): se declara
+      # con SGIP_CAJA_BD_DESECHABLE, sin lo cual el guion se niega a correr.
+      - name: Comprobar que el verificador de la caja se niega donde no debe
+        env:
+          MYSQL_PWD: sgip_ci
+        run: bash database/verificar_caja_guardas.sh -h 127.0.0.1 -P 3306 -u root
+
+      - name: Verificar la caja de punta a punta, desde el JAR
+        env:
+          MYSQL_PWD: sgip_ci
+          SGIP_CAJA_BD_DESECHABLE: 'si'
+        run: |
+          jar=$(ls "$PWD"/backend/target/backend-*.jar | grep -v '\.original$' | head -1)
+          SGIP_CAJA_JAR="$jar" bash database/verificar_caja.sh -h 127.0.0.1 -P 3306 -u root
 
   web:
     name: Compilación del front web

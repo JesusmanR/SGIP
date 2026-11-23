@@ -24,6 +24,13 @@ describe('sesión del navegador', () => {
     expect(sessionStorage.getItem('sgip.sesion')).toBeNull()
   })
 
+  it('borrar también suelta la venta ambigua guardada: no pasa a quien entre después en la misma pestaña', () => {
+    sessionStorage.setItem('sgip.venta-pendiente', '{}')
+    guardarSesion({ token: 'abc' })
+    borrarSesion()
+    expect(sessionStorage.getItem('sgip.venta-pendiente')).toBeNull()
+  })
+
   it('borrar deja la sesión vacía', () => {
     guardarSesion({ token: 'abc' })
     borrarSesion()
@@ -34,7 +41,8 @@ describe('sesión del navegador', () => {
 describe('inicio según el rol', () => {
   it.each([
     ['ADMINISTRADOR', '/panel'],
-    ['VENDEDOR', '/catalogo'],
+    // Quien vende empieza donde vende: en la caja.
+    ['VENDEDOR', '/caja'],
     ['CLIENTE', '/catalogo'],
     // El backend no le sirve catálogo a quien no pertenece a una empresa.
     ['SUPER_ADMIN', '/plataforma/empresas'],

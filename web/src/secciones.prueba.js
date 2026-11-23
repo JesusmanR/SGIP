@@ -4,11 +4,17 @@
  * si alguien cambia una fila sin querer, aquí se nota.
  */
 import { describe, expect, it } from 'vitest'
-import { puedeVer, secciones, seccionesDe } from './secciones.js'
+import { puedeVer, seccionDe, secciones, seccionesDe } from './secciones.js'
 
 const ADMIN = ['ADMINISTRADOR']
+const VENDEN = ['ADMINISTRADOR', 'VENDEDOR']
 const TODOS = ['ADMINISTRADOR', 'VENDEDOR', 'CLIENTE']
 const ESPERADO = [
+  ['/caja', 'Caja', VENDEN, 'Operación'],
+  ['/caja/domicilios', 'Domicilios', VENDEN, 'Operación'],
+  ['/caja/devoluciones', 'Devoluciones', VENDEN, 'Operación'],
+  ['/caja/encargos', 'Encargos', ADMIN, 'Operación'],
+  ['/caja/turnos', 'Turnos de caja', ADMIN, 'Operación'],
   ['/panel', 'Panel', ADMIN, 'Operación'],
   ['/catalogo', 'Catálogo', TODOS, 'Operación'],
   ['/importar', 'Importar precios', ADMIN, 'Operación'],
@@ -17,6 +23,7 @@ const ESPERADO = [
   ['/inventario', 'Inventario', ADMIN, 'Inventario'],
   ['/precios', 'Reglas de ganancia', ADMIN, 'Configuración'],
   ['/impuestos', 'Impuestos', ADMIN, 'Configuración'],
+  ['/caja/medios-pago', 'Medios de pago', ADMIN, 'Configuración'],
   ['/usuarios', 'Usuarios', ADMIN, 'Configuración'],
   ['/empresa', 'Mi empresa', TODOS, 'Configuración'],
   ['/plataforma/empresas', 'Empresas', ['SUPER_ADMIN'], 'Plataforma'],
@@ -25,6 +32,35 @@ const ESPERADO = [
 const ROLES = ['ADMINISTRADOR', 'VENDEDOR', 'CLIENTE', 'SUPER_ADMIN']
 
 describe('tabla de secciones', () => {
+  it('cajaSoloParaAdministradorYVendedor: el cliente y el super administrador no la ven', () => {
+    expect(puedeVer('/caja', 'ADMINISTRADOR')).toBe(true)
+    expect(puedeVer('/caja', 'VENDEDOR')).toBe(true)
+    expect(puedeVer('/caja', 'CLIENTE')).toBe(false)
+    expect(puedeVer('/caja', 'SUPER_ADMIN')).toBe(false)
+    expect(secciones[0].ruta).toBe('/caja')
+  })
+
+  it('rutasDeLaCajaPorRol: turnos, encargos y medios de pago solo del administrador; domicilios y devoluciones de quien vende', () => {
+    for (const ruta of ['/caja/turnos', '/caja/encargos', '/caja/medios-pago']) {
+      expect(puedeVer(ruta, 'ADMINISTRADOR'), ruta).toBe(true)
+      for (const rol of ['VENDEDOR', 'CLIENTE', 'SUPER_ADMIN']) expect(puedeVer(ruta, rol), `${ruta} ${rol}`).toBe(false)
+    }
+    for (const ruta of ['/caja/domicilios', '/caja/devoluciones']) {
+      expect(puedeVer(ruta, 'ADMINISTRADOR'), ruta).toBe(true)
+      expect(puedeVer(ruta, 'VENDEDOR'), ruta).toBe(true)
+      for (const rol of ['CLIENTE', 'SUPER_ADMIN']) expect(puedeVer(ruta, rol), `${ruta} ${rol}`).toBe(false)
+    }
+    // El cierre y los cierres propios cuelgan de /caja: no tienen entrada de menú propia.
+    expect(puedeVer('/caja/cierre', 'VENDEDOR')).toBe(true)
+    expect(puedeVer('/caja/mis-cierres', 'VENDEDOR')).toBe(true)
+    expect(secciones.some((s) => s.ruta === '/caja/cierre' || s.ruta === '/caja/mis-cierres')).toBe(false)
+  })
+
+  it('manda la sección más específica: /caja/turnos no hereda los roles de /caja', () => {
+    expect(seccionDe('/caja/turnos/5')?.ruta).toBe('/caja/turnos')
+    expect(seccionDe('/caja/cierre')?.ruta).toBe('/caja')
+  })
+
   it('tiene exactamente las filas del encargo', () => {
     expect(secciones.map((s) => [s.ruta, s.etiqueta, s.roles, s.grupo])).toEqual(ESPERADO)
   })

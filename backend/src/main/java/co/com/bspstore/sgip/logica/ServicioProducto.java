@@ -11,12 +11,14 @@ import co.com.bspstore.sgip.datos.ProveedorRepositorio;
 import co.com.bspstore.sgip.datos.RepositorioCostos;
 import co.com.bspstore.sgip.util.Hoy;
 import co.com.bspstore.sgip.modelo.Producto;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.sql.SQLException;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.util.List;
@@ -24,9 +26,31 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Supplier;
+import java.util.regex.Pattern;
 
 @Service
 public class ServicioProducto {
+
+    /** El código de barras lo tiene un producto que ya no se vende (M12). */
+    static final String CODIGO_DE_BARRAS_DE_UN_INACTIVO =
+            "Ese código de barras ya lo usa un producto inactivo de tu empresa.";
+
+    /** Dos altas o ediciones simultáneas reclamaron el mismo código de barras (M13). */
+    static final String CODIGO_DE_BARRAS_REPETIDO_AL_GUARDAR =
+            "Ya existe un producto con ese código de barras.";
+
+    /** El código de error de MySQL para «entrada duplicada en una clave única». */
+    private static final int MYSQL_ENTRADA_DUPLICADA = 1062;
+
+    /**
+     * La clave violada, tal como la nombra el motor al final de su mensaje
+     * ({@code Duplicate entry '8-770…' for key 'productos.uq_productos_barras'}; antes de MySQL 8
+     * sin el prefijo de la tabla). Va anclada al final porque el mensaje repite el valor, que lo
+     * escribe quien da el alta, y un valor que nombrara la clave no debe engañar a la traducción.
+     */
+    private static final Pattern CLAVE_DE_BARRAS =
+            Pattern.compile("for key '(?:[^'.]*\\.)?uq_productos_barras'$");
 
     /** Un listado sin tope puede traer el inventario entero a la memoria. */
     private static final int LIMITE_MAXIMO = 200;
@@ -138,8 +162,8 @@ public class ServicioProducto {
         }
         String barras = normalizarCodigoBarras(s.codigoBarras());
         if (barras != null && productos.existsByEmpresaIdAndCodigoBarras(empresa, barras)) {
-            throw new NombreRepetidoException(
-                    "Ya existe un producto con el código de barras " + barras + ".");
+            throw codigoDeBarrasRepetido(barras,
+                    productos.existsByEmpresaIdAndCodigoBarrasAndActivoFalse(empresa, barras));
         }
         precios.exigirPrecioDeAlta(s.costo(), s.contado(), s.credito());
 
@@ -147,7 +171,7 @@ public class ServicioProducto {
                 codigo, sku, s.nombre(), s.costo());
         p.describir(s.presentacion(), s.descripcion(), barras);
         p.fijarExistenciaMinima(s.existenciaMinima() == null ? 5 : s.existenciaMinima());
-        Producto guardado = productos.save(p);
+        Producto guardado = traduciendoElChoqueDelCodigoDeBarras(() -> productos.save(p));
         precios.escribirPrecios(empresa, guardado.getId(), s.costo(), s.contado(), s.credito(), null);
 
         // El producto nace en cero y el kárdex lo sube, dentro de esta misma
@@ -222,8 +246,8 @@ public class ServicioProducto {
         String barras = normalizarCodigoBarras(s.codigoBarras());
         if (barras != null
                 && productos.existsByEmpresaIdAndCodigoBarrasAndIdNot(empresa, barras, productoId)) {
-            throw new NombreRepetidoException(
-                    "Ya existe un producto con el código de barras " + barras + ".");
+            throw codigoDeBarrasRepetido(barras,
+                    productos.existsByEmpresaIdAndCodigoBarrasAndIdNotAndActivoFalse(empresa, barras, productoId));
         }
         // Con los centavos de la columna, DECIMAL(14,2): un 3100.004 no es un cambio, y lo
         // que se comprueba, se escribe en el histórico y se guarda es lo mismo. Se compara
@@ -255,12 +279,58 @@ public class ServicioProducto {
         // Se vacía a la base antes de escribir los precios: las reglas se leen de la
         // vista, que junta el producto con la regla de su categoría, y con la
         // categoría nueva sin escribir seguiría viendo la vieja (M3).
-        productos.saveAndFlush(p);
+        traduciendoElChoqueDelCodigoDeBarras(() -> productos.saveAndFlush(p));
         // Sin tocar `version`: la regla es una fila aparte, y un cambio solo de
         // precio no le quita a nadie los datos del producto que tenía abiertos.
         precios.escribirPrecios(empresa, productoId, costo, s.contado(), s.credito(),
                 s.creditoIgualAlContado(), hoy);
         return Optional.of(p);
+    }
+
+    /**
+     * El 409 de un código de barras que ya tiene dueño en esta empresa.
+     *
+     * Si el dueño está inactivo el texto lo dice (M12): el producto no sale en la caja ni en el
+     * catálogo, y «ya existe» sin más manda a buscar lo que no se ve. Solo se consulta al
+     * repositorio de la empresa de la sesión, de modo que de otra empresa no se revela nada. Con
+     * un dueño activo se conserva el mensaje de siempre.
+     */
+    private static NombreRepetidoException codigoDeBarrasRepetido(String barras, boolean delInactivo) {
+        return new NombreRepetidoException(delInactivo
+                ? CODIGO_DE_BARRAS_DE_UN_INACTIVO
+                : "Ya existe un producto con el código de barras " + barras + ".");
+    }
+
+    /**
+     * La comprobación previa de «ya existe» no ve lo que otra transacción aún no confirmó. Si dos
+     * altas reclaman a la vez el mismo código de barras, la segunda llega al INSERT, espera a la
+     * primera y choca con {@code uq_productos_barras}: sin esta traducción sale como un error de
+     * acceso a datos y no como el 409 (M13).
+     *
+     * Solo se traduce el choque de ESA clave. Otra violación de integridad (el código interno, el
+     * SKU, una clave foránea) es un error de verdad que la red de seguridad de
+     * {@code ManejadorErrores} contesta con su texto: llamarla «código de barras repetido»
+     * mandaría a quien corrige a mirar el campo equivocado. Es el mismo criterio de
+     * {@code ServicioTurnos.abrir}.
+     */
+    static <T> T traduciendoElChoqueDelCodigoDeBarras(Supplier<T> escritura) {
+        try {
+            return escritura.get();
+        } catch (DataIntegrityViolationException e) {
+            if (chocaConLaClaveDeBarras(e)) {
+                throw new NombreRepetidoException(CODIGO_DE_BARRAS_REPETIDO_AL_GUARDAR);
+            }
+            throw e;
+        }
+    }
+
+    private static boolean chocaConLaClaveDeBarras(Throwable e) {
+        for (Throwable t = e; t != null; t = (t.getCause() == t ? null : t.getCause())) {
+            if (t instanceof SQLException sql && sql.getErrorCode() == MYSQL_ENTRADA_DUPLICADA) {
+                return CLAVE_DE_BARRAS.matcher(String.valueOf(sql.getMessage()).strip()).find();
+            }
+        }
+        return false;
     }
 
     /**

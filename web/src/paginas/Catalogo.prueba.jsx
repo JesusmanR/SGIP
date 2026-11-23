@@ -477,3 +477,39 @@ describe('catálogo de productos', () => {
     expect(fila(screen, 'PC-001')).toBeInTheDocument()
   })
 })
+
+
+describe('el aviso de costo pendiente (producto nuevo de la caja)', () => {
+  // Un producto creado al vender nace con un costo provisional de 1 peso: hasta que el
+  // administrador registre el verdadero, su ganancia no significa nada.
+  const PROVISIONAL = { ...CEL, productoId: 7, codigo: 'RAP-1', nombre: 'Llave rápida', costoProvisional: true, costo: 1 }
+
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    sessionStorage.clear()
+    api.catalogo.mockResolvedValue([PC, PROVISIONAL])
+    api.categorias.mockResolvedValue(CATEGORIAS)
+    api.proveedores.mockResolvedValue(PROVEEDORES)
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.clearAllMocks()
+  })
+
+  it('catalogoAvisaCostoPendienteSoloAlAdministrador: el administrador lo ve en el producto marcado y en ningún otro', async () => {
+    guardarSesion({ token: 't', nombre: 'Jesús Manuel', rol: 'ADMINISTRADOR' })
+    montar()
+    await act(async () => { await vi.advanceTimersByTimeAsync(400) })
+    await waitFor(() => expect(screen.getByText('RAP-1', { exact: false })).toBeInTheDocument())
+    expect(fila(screen, 'RAP-1')).toHaveTextContent('Costo pendiente de registrar')
+    expect(fila(screen, 'PC-001')).not.toHaveTextContent('Costo pendiente de registrar')
+  })
+
+  it('el vendedor no lo ve: no ve costos y el servidor ni siquiera manda la marca', async () => {
+    guardarSesion({ token: 't', nombre: 'Luis', rol: 'VENDEDOR' })
+    montar()
+    await act(async () => { await vi.advanceTimersByTimeAsync(400) })
+    await waitFor(() => expect(screen.getByText('RAP-1', { exact: false })).toBeInTheDocument())
+    expect(screen.queryByText(/costo pendiente de registrar/i)).not.toBeInTheDocument()
+  })
+})
