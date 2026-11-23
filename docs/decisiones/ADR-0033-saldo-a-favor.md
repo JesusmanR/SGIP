@@ -58,7 +58,8 @@ reembolsado por esos medios, para que la pantalla acote lo que queda por devolve
 medio. En cambio, una devolución cuyo reembolso va a saldo sí se registra en el turno
 abierto de quien la hace (como cualquier devolución con dinero): el dinero no sale de la
 caja, pero el turno es el que responde por la operación. El dinero que se reembolsa en
-efectivo resta del esperado de ese turno (cierre, tarea 10).
+efectivo resta del esperado de ese turno (cierre, tarea 10). *(Enmendado el 2026-11-23: el
+administrador sin turno puede devolver sin efectivo; ver la enmienda al final.)*
 
 **Solo en la venta.** El cobro posterior de un domicilio contra entrega **no** admite
 saldo: no toma el bloqueo del saldo del cliente, y un pago con saldo sin descontarlo sería
@@ -104,8 +105,37 @@ venta, y se lee siempre de la base.
 
 - Hay cinco tablas nuevas (V46) y doce claves foráneas compuestas con `empresa_id`.
 - El cierre de turno (tarea 10) cuenta lo reembolsado en efectivo por `devoluciones.cierre_id`
-  y excluye los pagos con saldo (no tienen `cierre_id`).
+  y excluye los pagos con saldo (no tienen `cierre_id`). Las devoluciones sin turno de la
+  enmienda tienen `cierre_id` nulo y por eso ningún cierre las cuenta.
 - Si algún día el saldo debe vencer, retirarse o transferirse, se añade sin cambiar lo
   guardado: un movimiento de tipo nuevo.
 - Quien consulte los reembolsos de una devolución de saldo no verá referencia: el medio de
   sistema no la lleva.
+
+## Enmienda · 2026-11-23: el administrador devuelve sin turno, pero sin efectivo
+
+Sustituye la regla de que toda devolución con dinero necesita el turno abierto de quien la
+hace. La decisión la tomó el usuario en las mejoras posteriores a la muestra (diseño: M4 de
+`docs/superpowers/specs/2026-11-21-mejoras-post-muestra-design.md`).
+
+- **Quién y qué.** Se evalúa por el **rol del usuario en sesión** (`ContextoEmpresa.esAdministrador()`),
+  nunca por quien autoriza con PIN. Un `ADMINISTRADOR` sin turno abierto puede registrar una
+  devolución de una venta pagada si **ningún** reembolso es de tipo `EFECTIVO`: valen tarjeta,
+  transferencia, saldo a favor o una mezcla. La devolución queda con `devoluciones.cierre_id`
+  nulo.
+- **Con efectivo, 409.** Si algún reembolso es en efectivo, responde 409
+  `urn:sgip:caja:turno-requerido-para-efectivo` con «Abre un turno de caja para devolver
+  efectivo.». El tipo de cada reembolso sale del medio de pago de la empresa que ya se cargó
+  para validarlo; no hay una segunda carga. No queda nada a medias: la comprobación va antes
+  de insertar y la transacción lo revierte todo.
+- **El vendedor sigue igual.** Sin turno recibe el 409 de siempre (`SinTurnoAbiertoException`),
+  aunque traiga el PIN de un administrador.
+- **Con turno, igual que antes.** Un administrador con turno que devuelve solo con tarjeta
+  asocia la devolución a ese turno. Un reembolso de 0 sigue siendo 400.
+- **Orden de bloqueos (ADR-0030).** No cambia. Sin turno no hay fila de turno que tomar; el
+  resto (venta, productos, saldo, consecutivo, kárdex) sigue igual. El turno que se lee al
+  empezar es el que decide: si otro se abre mientras la devolución espera la venta, no se
+  queda con ella.
+- **Cuadre.** Esas devoluciones no entran en ningún cierre, porque ningún efectivo sale de un
+  cajón. Se ven en el listado de devoluciones y en los reportes futuros. Esa brecha queda
+  aceptada por escrito.
