@@ -137,5 +137,5 @@ hace. La decisión la tomó el usuario en las mejoras posteriores a la muestra (
   empezar es el que decide: si otro se abre mientras la devolución espera la venta, no se
   queda con ella.
 - **Cuadre.** Esas devoluciones no entran en ningún cierre, porque ningún efectivo sale de un
-  cajón. Se ven en el listado de devoluciones y en los reportes futuros. Esa brecha queda
+  cajón. Quedan en `devoluciones` con `cierre_id` nulo; ninguna pantalla ni reporte actual las lista, y un reporte futuro tendrá que leerlas por esa columna. Esa brecha queda
   aceptada por escrito.
