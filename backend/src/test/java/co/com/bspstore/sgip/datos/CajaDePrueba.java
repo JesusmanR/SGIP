@@ -221,7 +221,7 @@ final class CajaDePrueba {
         return id;
     }
 
-    /** La empresa mal sembrada: sin el proveedor ni la categoría del producto nuevo. */
+    /** La empresa mal sembrada: sin el proveedor ni la categoría genéricos que siembra la V45. */
     void quitarSinProveedorYSinCategoria() {
         jdbc.sql("DELETE FROM proveedores WHERE empresa_id = :e AND nit = 'SIN-PROVEEDOR'")
                 .param("e", empresa.empresaId).update();

@@ -88,10 +88,10 @@ public class Producto {
     private int existencia;
 
     /**
-     * El producto que nació dentro de una venta (RF-42) tiene costo 1,00 porque la columna exige un
-     * costo mayor que cero. La marca dura hasta que alguien escribe el costo real: editar el producto
-     * con otro costo ({@link #reemplazarDatos}) o aplicar una lista de precios. El alta de catálogo
-     * nunca la enciende.
+     * Marca de los productos que nacieron dentro de una venta (RF-42) con costo 1,00. La caja ya no crea
+     * productos y el alta de catálogo nunca la enciende, así que hoy solo la traen los que se crearon
+     * antes de retirar ese camino. Se apaga cuando alguien escribe el costo real: editar el producto
+     * con otro costo ({@link #reemplazarDatos}) o aplicar una lista de precios.
      */
     @Column(name = "costo_provisional", nullable = false)
     private boolean costoProvisional;

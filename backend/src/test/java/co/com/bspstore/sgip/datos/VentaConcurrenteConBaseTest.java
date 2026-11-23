@@ -549,4 +549,52 @@ class VentaConcurrenteConBaseTest {
         assertEquals(turnoDelVendedor, turnoDe.get(ventaDelVendedor));
 
     }
+
+    // ------------------------------------------------------- la fila de la empresa (las claves foráneas)
+
+    /**
+     * ADR-0030: la venta no toma la fila de la empresa, pero sus INSERT comprueban claves foráneas hacia
+     * {@code empresas} y toman sobre ella un bloqueo compartido. ServicioPrecios toma la empresa primero y
+     * después escribe reglas del producto. Aquí el titular toma la empresa (FOR UPDATE), la venta, que ya
+     * tiene el producto P, llega a pedirla, y el titular escribe una regla de IVA de P: no debe haber ciclo.
+     */
+    @Test
+    void quienTomaLaFilaDeLaEmpresaYLuegoEscribeUnaReglaDelProductoNoSeInterbloqueaConUnaVenta() throws Exception {
+        Integer p = caja.producto("A", 5, "10000");
+        CountDownLatch productoBloqueado = new CountDownLatch(1);
+        CountDownLatch tomada = new CountDownLatch(1);
+        CountDownLatch seguir = new CountDownLatch(1);
+        // La venta se detiene justo después de bloquear P, hasta que el titular tenga la empresa: así el cruce
+        // es siempre el mismo (la venta con P y pidiendo la empresa; el titular con la empresa y pidiendo P).
+        doAnswer(llamada -> {
+            Object bloqueados = llamada.callRealMethod();
+            productoBloqueado.countDown();
+            esperar(tomada);
+            return bloqueados;
+        }).when(repositorioVentas).bloquearProductos(any(), any());
+        Future<?> titular = hilos.submit(() -> new TransactionTemplate(transacciones).execute(estado -> {
+            esperar(productoBloqueado);
+            jdbc.sql("SELECT empresa_id FROM empresas WHERE empresa_id = :e FOR UPDATE")
+                    .param("e", caja.empresa.empresaId).query(Integer.class).single();
+            tomada.countDown();
+            esperar(seguir);
+            jdbc.sql("""
+                    INSERT INTO reglas_iva (empresa_id, producto_id, tipo_impuesto_id, vigente_desde)
+                    SELECT :e, :p, tipo_impuesto_id, '2026-01-01' FROM tipos_impuesto WHERE codigo = 'IVA_19'
+                    """).param("e", caja.empresa.empresaId).param("p", p).update();
+            return null;
+        }));
+        Future<ResultadoDeVenta> venta = comoAdministrador(() -> ventas.procesar(venta(UUID.randomUUID(), p, 1, "10000")));
+        assertTrue(tomada.await(ESPERA_MAXIMA_EN_SEGUNDOS, TimeUnit.SECONDS), "el titular no tomó la empresa");
+        esperarAQueEsperen("empresas", 1, venta);
+
+        seguir.countDown();
+
+        // Ninguno de los dos recibe un 1213 (el motor mata a uno cuando se esperan en círculo).
+        titular.get(ESPERA_MAXIMA_EN_SEGUNDOS, TimeUnit.SECONDS);
+        resultado(venta);
+        assertEquals(1, caja.cuantas("ventas"));
+        assertEquals(1, jdbc.sql("SELECT COUNT(*) FROM reglas_iva WHERE empresa_id = :e AND producto_id = :p")
+                .param("e", caja.empresa.empresaId).param("p", p).query(Integer.class).single());
+    }
 }
