@@ -73,28 +73,22 @@ public class RepositorioEncargos {
     /**
      * Toma la fila de la venta de la línea {@code FOR UPDATE} por clave primaria, hasta el fin de la
      * transacción, y dice si la línea es un encargo de la empresa. Es lo primero que hace la entrega
-     * (véase {@link RepositorioDomicilios#bloquearVentaParaEntregar}). El {@code venta_id} de una línea
-     * no cambia nunca, de modo que leerlo sin bloqueo antes de tomar la venta no abre ninguna carrera.
+     * (véase {@link RepositorioDomicilios#bloquearVentaParaEntregar}). Una sola sentencia: la línea se lee
+     * sin bloquear (el {@code venta_id} de una línea no cambia nunca) y solo la venta ({@code OF v}) se
+     * bloquea; {@code STRAIGHT_JOIN} y {@code FORCE INDEX (PRIMARY)} fijan el camino, como en
+     * {@link RepositorioDomicilios#bloquearVenta}.
      */
     public boolean bloquearVentaDelEncargo(Integer empresaId, Long itemId) {
-        Optional<Long> venta = jdbc.sql("""
-                        SELECT venta_id FROM venta_items
-                         WHERE empresa_id = :empresa AND item_id = :item AND cantidad_encargo > 0
+        return jdbc.sql("""
+                        SELECT v.venta_id
+                          FROM venta_items i
+                          STRAIGHT_JOIN ventas v FORCE INDEX (PRIMARY)
+                            ON v.venta_id = i.venta_id AND v.empresa_id = i.empresa_id
+                         WHERE i.empresa_id = :empresa AND i.item_id = :item AND i.cantidad_encargo > 0
+                           FOR UPDATE OF v
                         """)
                 .param("empresa", empresaId)
                 .param("item", itemId)
-                .query(Long.class)
-                .optional();
-        if (venta.isEmpty()) {
-            return false;
-        }
-        return jdbc.sql("""
-                        SELECT venta_id FROM ventas FORCE INDEX (PRIMARY)
-                         WHERE venta_id = :venta AND empresa_id = :empresa
-                           FOR UPDATE
-                        """)
-                .param("venta", venta.get())
-                .param("empresa", empresaId)
                 .query(Long.class)
                 .optional()
                 .isPresent();
