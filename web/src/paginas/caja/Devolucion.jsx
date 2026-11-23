@@ -65,10 +65,12 @@ export default function Devolucion() {
   const [enviando, setEnviando] = useState(false)
   const [hecho, setHecho] = useState(null)
   const saldoAuto = useRef('')
-  // La clave de idempotencia de la devolución que se está confirmando, con el cuerpo exacto al que
-  // pertenece (sin el PIN). El mismo cuerpo reutiliza la clave (red caída, resultado dudoso, PIN rechazado);
-  // si el cajero cambia algo, el cuerpo cambia y la clave es otra.
-  const envioActual = useRef(null)
+  // Las claves de idempotencia de esta devolución, una por cuerpo exacto (la firma, sin el PIN). El mismo
+  // cuerpo reutiliza su clave (red caída, resultado dudoso, PIN rechazado), también si en medio se mandó otro:
+  // A, B, A usa dos claves y no tres, porque el servidor pudo haber registrado A la primera vez. Si el cajero
+  // cambia algo, el cuerpo cambia y la clave es otra. Se vacía al registrar, al buscar otra venta y en
+  // «Otra devolución»; un 409 de clave en uso suelta solo la de ese cuerpo.
+  const clavesPorCuerpo = useRef(new Map())
 
   const pendiente = venta?.estadoPago === 'PENDIENTE'
   const clienteIdentificado = Boolean(venta?.cliente && !venta.cliente.consumidorFinal)
@@ -148,7 +150,7 @@ export default function Devolucion() {
       setMotivo('')
       setDinero({})
       saldoAuto.current = ''
-      envioActual.current = null
+      clavesPorCuerpo.current.clear()
       setReferencias({})
       setErrores({})
     } catch (error) {
@@ -212,20 +214,20 @@ export default function Devolucion() {
       reembolsos: armarReembolsos(),
     }
     const firma = JSON.stringify(cuerpo)
-    if (envioActual.current?.firma !== firma) envioActual.current = { clave: nuevaClaveDeVenta(), firma }
-    const solicitud = { clave: envioActual.current.clave, ...cuerpo }
+    if (!clavesPorCuerpo.current.has(firma)) clavesPorCuerpo.current.set(firma, nuevaClaveDeVenta())
+    const solicitud = { clave: clavesPorCuerpo.current.get(firma), ...cuerpo }
     if (autorizacion) solicitud.autorizacion = autorizacion
     try {
       // Un 200 con lo ya guardado (la misma clave y el mismo cuerpo) llega aquí igual que un 201.
       setHecho(await registrarDevolucion(solicitud))
-      envioActual.current = null
+      clavesPorCuerpo.current.clear()
       setDialogo(false)
       return null
     } catch (error) {
       setEnviando(false)
       let mensaje = error.message || 'No se pudo registrar la devolución.'
       if (error instanceof ErrorApi && error.estado === 409 && error.tipo === CLAVE_EN_USO) {
-        envioActual.current = null
+        clavesPorCuerpo.current.delete(firma)
         mensaje = 'Esta devolución ya se registró con otros datos. Revisa las devoluciones de la venta.'
       } else if (!(error instanceof ErrorApi) || error.estado >= 500 || error.estado === 408) {
         mensaje = 'No sabemos si se registró la devolución. Vuelve a confirmar: no se devolverá dos veces.'
@@ -238,7 +240,7 @@ export default function Devolucion() {
   function otra() {
     setHecho(null)
     setVenta(null)
-    envioActual.current = null
+    clavesPorCuerpo.current.clear()
     setConsecutivo('')
     setNoEncontrada(false)
     setEnviando(false)
