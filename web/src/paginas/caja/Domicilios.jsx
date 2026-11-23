@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import Aviso from '../../componentes/comun/Aviso.jsx'
 import EstadoCarga from '../../componentes/comun/EstadoCarga.jsx'
@@ -8,7 +8,7 @@ import EstadoVacio from '../../componentes/comun/EstadoVacio.jsx'
 import TablaOTarjetas from '../../componentes/comun/TablaOTarjetas.jsx'
 import { useDatos } from '../../hooks/useDatos.js'
 import {
-  cobrarDomicilio, entregarDomicilio, listarDomicilios, mediosDePago, saldoDeCliente,
+  cobrarDomicilio, entregarDomicilio, listarDomicilios, mediosDePago,
 } from '../../servicios/api/caja.js'
 import { PESOS } from '../../servicios/formato.js'
 import '../../estilos/caja.css'
@@ -35,24 +35,17 @@ export function antiguedad(dias) {
 
 /**
  * El cobro de un domicilio que se entregó sin cobrar: el mismo `Cobro` de la venta, por el saldo por
- * cobrar de esa venta. Vive en su propia pieza para pedir los medios y el saldo solo cuando se abre.
+ * cobrar de esa venta. Vive en su propia pieza para pedir los medios solo cuando se abre.
+ *
+ * No ofrece «Saldo a favor»: el servidor rechaza el saldo en este cobro a propósito (400
+ * SALDO_NO_ADMITIDO, `ValidadorDePagos` con `admiteSaldo=false`), así que ni se consulta.
  */
 function PanelCobro({ venta, alTerminar, alCancelar }) {
   const enLinea = useEnLinea()
   const medios = useDatos(() => mediosDePago())
-  const [saldo, setSaldo] = useState({ saldo: 0, medioId: null })
   const [pagos, setPagos] = useState([])
   const [enviando, setEnviando] = useState(false)
   const [fallo, setFallo] = useState(null)
-
-  useEffect(() => {
-    if (!venta.clienteId) return undefined
-    let vigente = true
-    saldoDeCliente(venta.clienteId)
-      .then((r) => { if (vigente) setSaldo({ saldo: Number(r?.saldo) || 0, medioId: r?.medioId ?? null }) })
-      .catch(() => {})
-    return () => { vigente = false }
-  }, [venta.clienteId])
 
   async function cobrar() {
     setFallo(null)
@@ -73,7 +66,7 @@ function PanelCobro({ venta, alTerminar, alCancelar }) {
       {medios.error && <Aviso tipo="peligro">No se pudieron traer los medios de pago.</Aviso>}
       <Cobro
         vista={{ subtotal: total, iva: 0, descuento: 0, total, motivo: null, lineas: [{}] }}
-        medios={medios.datos ?? []} saldo={saldo.saldo} medioSaldoId={saldo.medioId}
+        medios={medios.datos ?? []} saldo={0}
         pagos={pagos} alCambiarPagos={setPagos} bloqueo={null} contraEntrega={false}
         sinConexion={!enLinea} enviando={enviando} alCobrar={cobrar}
         titulo={`Cobro de ${venta.consecutivo}`} rotulo="Domicilio" desglose={false} totalRotulo="Saldo por cobrar"
