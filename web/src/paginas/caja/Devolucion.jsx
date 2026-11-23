@@ -101,7 +101,9 @@ export default function Devolucion() {
   // turno falla, no se bloquea nada: el servidor decide.
   const sinTurno = admin && !turno.cargando && !turno.error && !turno.datos
   const efectivoBloqueado = !efectivo || sinTurno
-  const ayudaEfectivo = sinTurno ? 'Para devolver efectivo, abre un turno de caja.' : efectivo ? 'Sale del cajón.' : undefined
+  const ayudaEfectivo = sinTurno && efectivo ? 'Para devolver efectivo, abre un turno de caja.' : efectivo ? 'Sale del cajón.' : undefined
+  // Si el turno se supo ausente cuando ya había un monto escrito, ese monto no se enviaría bien: se borra.
+  useEffect(() => { if (sinTurno) setDinero((d) => (d.efectivo ? { ...d, efectivo: '' } : d)) }, [sinTurno])
   const claves = ['efectivo', 'saldo', ...mismos.map((m) => `medio-${m.medioId}`)]
   const montos = claves.map((c) => pesosDe(dinero[c]))
   const montoInvalido = montos.some(Number.isNaN)
