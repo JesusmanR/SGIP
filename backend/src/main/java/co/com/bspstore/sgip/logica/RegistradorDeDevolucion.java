@@ -53,7 +53,7 @@ import java.util.Optional;
  *   <li>el <b>turno</b> del cajero, {@code FOR SHARE}, <b>sin fallar si no tiene</b>
  *       ({@link ServicioTurnos#intentarTurnoAbierto()}): solo hace falta si la devolución mueve dinero, y
  *       eso no se sabe hasta mirar la venta, que va después. Se toma siempre primero para no invertir el
- *       orden;</li>
+ *       orden. Sin turno no hay fila que tomar: el resto del orden sigue igual;</li>
  *   <li>la <b>venta</b>, {@code FOR UPDATE}: dos devoluciones de la misma venta (o una devolución y el
  *       cobro contra entrega de esa venta) se ponen en fila aquí, y la segunda lee lo que la primera
  *       confirmó;</li>
@@ -83,7 +83,18 @@ import java.util.Optional;
  *
  * <ul>
  *   <li>Venta {@code PAGADA}: los reembolsos suman exactamente lo que valen las unidades y la devolución
- *       se registra en el turno abierto de quien la hace (409 si no tiene), también si todo va al saldo.</li>
+ *       se registra en el turno abierto de quien la hace, también si todo va al saldo. Sin turno:
+ *       <ul>
+ *         <li>un <b>vendedor</b> recibe el 409 {@link SinTurnoAbiertoException}, aunque autorice con el PIN
+ *             de un administrador (cuenta el rol de quien hace la petición);</li>
+ *         <li>un <b>administrador</b> puede devolver por tarjeta, transferencia o saldo a favor, o una mezcla:
+ *             la devolución queda con {@code cierre_id} nulo, porque ningún efectivo sale de un cajón, y por eso
+ *             ningún cierre de turno la cuenta;</li>
+ *         <li>un administrador con algún reembolso en <b>efectivo</b> recibe el 409
+ *             {@link TurnoRequeridoParaEfectivoException}.</li>
+ *       </ul>
+ *       Un turno que se abre mientras la devolución espera la venta no se queda con ella: se decide con el
+ *       turno que se leyó al empezar.</li>
  *   <li>Venta {@code PENDIENTE} (contra entrega sin cobrar): no se pagó nada, no hay reembolso, no se exige
  *       turno y {@code cierre_id} queda nulo. Lo devuelto reduce lo que queda por cobrar; si ya no queda
  *       nada, la venta se anula.</li>
@@ -194,6 +205,7 @@ public class RegistradorDeDevolucion {
         List<Reembolso> reembolsos = s.reembolsos();
         BigDecimal reembolsado = BigDecimal.ZERO;
         BigDecimal aSaldo = BigDecimal.ZERO;
+        boolean hayEfectivo = false;
         Cliente cliente = null;
         if (porCobrar) {
             if (!reembolsos.isEmpty()) {
@@ -204,6 +216,7 @@ public class RegistradorDeDevolucion {
             reembolsos = validados.guardados();
             reembolsado = validados.total();
             aSaldo = validados.aSaldo();
+            hayEfectivo = validados.hayEfectivo();
             if (aSaldo.signum() > 0) {
                 cliente = clientes.buscar(empresa, venta.clienteId())
                         .orElseThrow(() -> new RecursoNoEncontradoException(VENTA_NO_EXISTE));
@@ -220,8 +233,15 @@ public class RegistradorDeDevolucion {
                 }
             }
         }
+        // Sin turno: solo el administrador devuelve, y nada que salga de un cajón (M4). El rol es el del usuario
+        // en sesión, no el de quien autoriza con PIN: un vendedor con el PIN de un administrador sigue sin poder.
         if (reembolsado.signum() > 0 && turno.isEmpty()) {
-            throw new SinTurnoAbiertoException();
+            if (!ContextoEmpresa.esAdministrador()) {
+                throw new SinTurnoAbiertoException();
+            }
+            if (hayEfectivo) {
+                throw new TurnoRequeridoParaEfectivoException();
+            }
         }
 
         // 4. Los productos devueltos, en orden ascendente de id.
@@ -259,7 +279,7 @@ public class RegistradorDeDevolucion {
         Long devolucionId;
         try {
             devolucionId = devoluciones.insertarDevolucion(new NuevaDevolucion(empresa, consecutivo, venta.ventaId(),
-                    s.motivo(), autorizacion.administradorId(), cajero, reembolsado.signum() > 0 ? turno.get() : null,
+                    s.motivo(), autorizacion.administradorId(), cajero, reembolsado.signum() > 0 ? turno.orElse(null) : null,
                     ahora, clave, huella, estado, porCobrarRespondido));
         } catch (DuplicateKeyException e) {
             // La misma clave ya registró una devolución de OTRA venta (la de esta venta se vio arriba): otra carga.
@@ -291,8 +311,11 @@ public class RegistradorDeDevolucion {
 
     // ------------------------------------------------------------ reembolsos
 
-    /** Los reembolsos como se guardan, lo que suman y lo que de ellos va al saldo del cliente. */
-    private record Reembolsos(List<Reembolso> guardados, BigDecimal total, BigDecimal aSaldo) {}
+    /**
+     * Los reembolsos como se guardan, lo que suman, lo que de ellos va al saldo del cliente y si alguno sale
+     * en efectivo (del cajón de un turno). El tipo sale del medio que ya se cargó para validarlos.
+     */
+    private record Reembolsos(List<Reembolso> guardados, BigDecimal total, BigDecimal aSaldo, boolean hayEfectivo) {}
 
     /**
      * Que cada reembolso vaya a un medio de la empresa que se pueda usar (activo, o el de sistema «Saldo a
@@ -309,6 +332,7 @@ public class RegistradorDeDevolucion {
         List<Reembolso> guardados = new ArrayList<>(pedidos.size());
         BigDecimal total = BigDecimal.ZERO;
         BigDecimal aSaldo = BigDecimal.ZERO;
+        boolean hayEfectivo = false;
         for (Reembolso r : pedidos) {
             MedioDePago medio = medios.get(r.medioId());
             if (medio == null || (!medio.activo() && !medio.tipo().esDeSistema())) {
@@ -318,6 +342,7 @@ public class RegistradorDeDevolucion {
                 throw new VentaInvalidaException(SIN_REFERENCIA);
             }
             total = total.add(r.monto());
+            hayEfectivo |= medio.tipo() == TipoMedio.EFECTIVO;
             if (medio.tipo() == TipoMedio.SALDO_A_FAVOR) {
                 aSaldo = aSaldo.add(r.monto());
                 guardados.add(new Reembolso(r.medioId(), r.monto(), null));
@@ -329,7 +354,7 @@ public class RegistradorDeDevolucion {
             throw new VentaInvalidaException(NO_SUMAN_EL_VALOR);
         }
         return new Reembolsos(List.copyOf(guardados), total.setScale(2, RoundingMode.UNNECESSARY),
-                aSaldo.setScale(2, RoundingMode.UNNECESSARY));
+                aSaldo.setScale(2, RoundingMode.UNNECESSARY), hayEfectivo);
     }
 
     private static Integer cajeroEnSesion() {

@@ -26,6 +26,7 @@ import co.com.bspstore.sgip.logica.ServicioDomicilios;
 import co.com.bspstore.sgip.logica.ServicioSaldoAFavor;
 import co.com.bspstore.sgip.logica.ServicioVentas;
 import co.com.bspstore.sgip.logica.SinTurnoAbiertoException;
+import co.com.bspstore.sgip.logica.TurnoRequeridoParaEfectivoException;
 import co.com.bspstore.sgip.logica.VentaInvalidaException;
 import co.com.bspstore.sgip.logica.venta.Descuento;
 import co.com.bspstore.sgip.logica.venta.TipoDescuento;
@@ -487,8 +488,14 @@ class DevolucionesConBaseTest {
         Integer producto = caja.producto("A", 5, "10000");
         VentaRegistrada v = vender(producto, 1, "10000");
         caja.cerrarTurno(turnoDelAdministrador);
+        caja.cerrarTurno(turnoDelVendedor);
 
-        assertThrows(SinTurnoAbiertoException.class, () -> anular(v.id(), enEfectivo("10000")));
+        // El administrador sin turno puede devolver sin efectivo (DevolucionSinTurnoConBaseTest); el efectivo no.
+        assertThrows(TurnoRequeridoParaEfectivoException.class, () -> anular(v.id(), enEfectivo("10000")));
+        // El vendedor sin turno no devuelve nada, ni con el PIN del administrador.
+        caja.entrarComoVendedor();
+        assertThrows(SinTurnoAbiertoException.class, () -> devoluciones.registrar(new SolicitudDevolucion(
+                UUID.randomUUID(), v.id(), List.of(), "Falló", List.of(enEfectivo("10000")), conPinDelAdministrador())));
 
         nadaDevuelto(producto, 4);
         assertEquals("REGISTRADA", ventaGuardada(v.id()).get("estado"));

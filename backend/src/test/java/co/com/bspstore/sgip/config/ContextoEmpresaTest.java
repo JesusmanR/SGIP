@@ -72,6 +72,23 @@ class ContextoEmpresaTest {
     }
 
     @Test
+    void soloElAdministradorDeEmpresaEsAdministrador() {
+        autenticar(new UsuarioAutenticado(7, "ana@tienda.co", "ADMINISTRADOR", 3));
+        assertTrue(ContextoEmpresa.esAdministrador());
+
+        autenticar(new UsuarioAutenticado(8, "luis@tienda.co", "VENDEDOR", 3));
+        assertFalse(ContextoEmpresa.esAdministrador());
+
+        autenticar(new UsuarioAutenticado(1, "bsp@bspstore.com.co", "SUPER_ADMIN", null));
+        assertFalse(ContextoEmpresa.esAdministrador());
+    }
+
+    @Test
+    void sinAutenticacionNadieEsAdministrador() {
+        assertFalse(ContextoEmpresa.esAdministrador());
+    }
+
+    @Test
     void alRegistrarseEnUnLogSoloApareceElCorreo() {
         assertEquals("ana@tienda.co",
                 new UsuarioAutenticado(7, "ana@tienda.co", "ADMINISTRADOR", 3).toString());

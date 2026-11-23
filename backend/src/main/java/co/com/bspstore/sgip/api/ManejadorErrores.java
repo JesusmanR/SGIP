@@ -25,6 +25,7 @@ import co.com.bspstore.sgip.logica.DatoDeTurnoInvalidoException;
 import co.com.bspstore.sgip.logica.DescuentoInvalidoException;
 import co.com.bspstore.sgip.logica.EfectivoRecibidoInvalidoException;
 import co.com.bspstore.sgip.logica.SinTurnoAbiertoException;
+import co.com.bspstore.sgip.logica.TurnoRequeridoParaEfectivoException;
 import co.com.bspstore.sgip.logica.ClaveDeIdempotenciaEnUsoException;
 import co.com.bspstore.sgip.logica.EstadoNoAdmiteLaOperacionException;
 import co.com.bspstore.sgip.logica.ExistenciaInsuficienteException;
@@ -102,6 +103,8 @@ public class ManejadorErrores {
     public static final URI TIPO_PIN_BLOQUEADO = URI.create("urn:sgip:caja:pin-bloqueado");
     public static final URI TIPO_AUTORIZACION_REQUERIDA = URI.create("urn:sgip:caja:autorizacion-requerida");
     public static final URI TIPO_CLAVE_EN_USO = URI.create("urn:sgip:caja:clave-en-uso");
+    public static final URI TIPO_TURNO_REQUERIDO_PARA_EFECTIVO =
+            URI.create("urn:sgip:caja:turno-requerido-para-efectivo");
 
     // Códigos de error de MySQL (no los SQLState, que son los mismos
     // 23000 para casi todo y no distinguen un duplicado de una referencia).
@@ -379,6 +382,17 @@ public class ManejadorErrores {
         // cerró mientras tanto.
         ProblemDetail p = ProblemDetail.forStatus(HttpStatus.CONFLICT);
         p.setTitle("Sin turno abierto");
+        p.setDetail(e.getMessage());
+        return p;
+    }
+
+    @ExceptionHandler(TurnoRequeridoParaEfectivoException.class)
+    public ProblemDetail turnoRequeridoParaEfectivo(TurnoRequeridoParaEfectivoException e) {
+        // 409: el administrador puede devolver sin turno, pero no efectivo. Tipo propio para que la pantalla
+        // lo distinga del «sin turno» general. Texto fijo.
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.CONFLICT);
+        p.setTitle("Se necesita un turno para devolver efectivo");
+        p.setType(TIPO_TURNO_REQUERIDO_PARA_EFECTIVO);
         p.setDetail(e.getMessage());
         return p;
     }
