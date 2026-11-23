@@ -89,11 +89,31 @@ public class RepositorioDomicilios {
     // ------------------------------------------------------------ la entrega
 
     /**
+     * Toma la fila de la venta {@code FOR UPDATE} por clave primaria, hasta el fin de la transacción, y
+     * dice si existe en la empresa. Es lo primero que hace la entrega, antes de marcar nada: una anulación
+     * o una devolución en curso tiene esa fila, y la entrega espera a que confirme para leer una venta
+     * que ya está anulada (y no marcar una entrega que la anulación no vio). No hay turno que tomar antes:
+     * en el orden global de la caja la venta va primero. {@code FORCE INDEX (PRIMARY)} como en
+     * {@link #bloquearVenta}.
+     */
+    public boolean bloquearVentaParaEntregar(Integer empresaId, Long ventaId) {
+        return jdbc.sql("""
+                        SELECT venta_id FROM ventas FORCE INDEX (PRIMARY)
+                         WHERE venta_id = :venta AND empresa_id = :empresa
+                           FOR UPDATE
+                        """)
+                .param("venta", ventaId)
+                .param("empresa", empresaId)
+                .query(Long.class)
+                .optional()
+                .isPresent();
+    }
+
+    /**
      * Marca el domicilio como entregado, <b>solo si todavía no lo estaba</b>: la condición
      * {@code entregado_en IS NULL} va en la propia actualización y es lo que decide quién llegó primero
-     * cuando dos entregas coinciden. La segunda espera la fila de la primera, la encuentra ya entregada y
-     * no cambia nada: devuelve cero filas. Nadie lee antes de escribir, porque una lectura previa no ve
-     * lo que la otra aún no confirmó.
+     * cuando dos entregas coinciden. La segunda espera la venta de la primera (que la entrega ya tiene
+     * tomada), la encuentra ya entregada y no cambia nada: devuelve cero filas.
      */
     public int marcarEntregado(Integer empresaId, Long ventaId, LocalDateTime cuando, Integer quien) {
         return jdbc.sql("""

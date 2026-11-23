@@ -71,6 +71,36 @@ public class RepositorioEncargos {
     }
 
     /**
+     * Toma la fila de la venta de la línea {@code FOR UPDATE} por clave primaria, hasta el fin de la
+     * transacción, y dice si la línea es un encargo de la empresa. Es lo primero que hace la entrega
+     * (véase {@link RepositorioDomicilios#bloquearVentaParaEntregar}). El {@code venta_id} de una línea
+     * no cambia nunca, de modo que leerlo sin bloqueo antes de tomar la venta no abre ninguna carrera.
+     */
+    public boolean bloquearVentaDelEncargo(Integer empresaId, Long itemId) {
+        Optional<Long> venta = jdbc.sql("""
+                        SELECT venta_id FROM venta_items
+                         WHERE empresa_id = :empresa AND item_id = :item AND cantidad_encargo > 0
+                        """)
+                .param("empresa", empresaId)
+                .param("item", itemId)
+                .query(Long.class)
+                .optional();
+        if (venta.isEmpty()) {
+            return false;
+        }
+        return jdbc.sql("""
+                        SELECT venta_id FROM ventas FORCE INDEX (PRIMARY)
+                         WHERE venta_id = :venta AND empresa_id = :empresa
+                           FOR UPDATE
+                        """)
+                .param("venta", venta.get())
+                .param("empresa", empresaId)
+                .query(Long.class)
+                .optional()
+                .isPresent();
+    }
+
+    /**
      * Marca la línea de encargo como entregada, <b>solo si es un encargo y todavía no lo estaba</b>: la
      * condición {@code encargo_entregado_en IS NULL} va en la propia actualización y es lo que decide quién
      * llegó primero cuando dos entregas coinciden (véase {@link RepositorioDomicilios#marcarEntregado}).

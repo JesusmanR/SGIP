@@ -33,8 +33,9 @@ import java.util.Locale;
  *
  * Una consulta con tope ({@value #TOPE_DE_LA_LISTA}), del que prometió la fecha más cercana al más
  * lejano. La entrega queda con quién y cuándo (hora de Bogotá del reloj de la aplicación) y la segunda es
- * un 409, también si coinciden dos: la actualización es condicionada a que siga sin entregar y no se lee
- * nada antes. Marcar la entrega no toca el inventario: el encargo ya descontó su existencia al venderse.
+ * un 409, también si coinciden dos: la entrega toma primero la venta ({@code FOR UPDATE}; una anulación en
+ * curso la tiene, y la entrega espera a que confirme) y la actualización es condicionada a que siga sin
+ * entregar. Marcar la entrega no toca el inventario: el encargo ya descontó su existencia al venderse.
  * Los datos personales del cliente son de esta ruta y no se escriben en ningún registro del servidor.
  */
 @Service
@@ -97,6 +98,11 @@ public class ServicioEncargos {
         Integer quien = ContextoEmpresa.actual().map(UsuarioAutenticado::usuarioId).orElseThrow(() ->
                 new IllegalStateException("No hay usuario autenticado en el contexto. Revise la cadena de seguridad."));
         LocalDateTime cuando = Hoy.ahora(reloj);
+        // La venta primero (no hay turno que tomar antes): una anulación en curso la tiene, y así la entrega
+        // espera a que confirme y la lee ya anulada, en vez de marcar lo que la anulación no vio.
+        if (!encargos.bloquearVentaDelEncargo(empresa, itemId)) {
+            throw new RecursoNoEncontradoException(NO_EXISTE);
+        }
         int filas = encargos.marcarEntregado(empresa, itemId, cuando, quien);
         EstadoDelEncargo estado = encargos.estadoDelEncargo(empresa, itemId)
                 .orElseThrow(() -> new RecursoNoEncontradoException(NO_EXISTE));

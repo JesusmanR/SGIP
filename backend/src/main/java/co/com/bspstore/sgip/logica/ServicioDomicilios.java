@@ -39,9 +39,12 @@ import java.util.Locale;
  *
  * <h2>La entrega</h2>
  *
- * Quién la marcó y cuándo (la hora de Bogotá del reloj de la aplicación). La actualización es
- * condicionada a que siga sin entregar ({@code entregado_en IS NULL}) y no se lee nada antes: con dos
- * entregas a la vez, la segunda espera la fila de la primera y no encuentra nada que cambiar (409).
+ * Quién la marcó y cuándo (la hora de Bogotá del reloj de la aplicación). Toma primero la venta
+ * ({@code FOR UPDATE}, por clave primaria; no hay turno, así que la venta es lo primero del orden global):
+ * una anulación en curso la tiene y la entrega espera a que confirme, de modo que nunca queda marcada
+ * la entrega de una venta anulada. La actualización es condicionada a que siga sin entregar
+ * ({@code entregado_en IS NULL}): con dos entregas a la vez, la segunda espera la venta de la primera y
+ * no encuentra nada que cambiar (409).
  *
  * <h2>El cobro posterior</h2>
  *
@@ -156,6 +159,11 @@ public class ServicioDomicilios {
         Integer empresa = ContextoEmpresa.empresaActual();
         Integer quien = usuarioEnSesion();
         LocalDateTime cuando = Hoy.ahora(reloj);
+        // La venta primero (no hay turno que tomar antes): una anulación en curso la tiene, y así la entrega
+        // espera a que confirme y la lee ya anulada, en vez de marcar lo que la anulación no vio.
+        if (!domicilios.bloquearVentaParaEntregar(empresa, ventaId)) {
+            throw new RecursoNoEncontradoException(NO_EXISTE);
+        }
         int filas = domicilios.marcarEntregado(empresa, ventaId, cuando, quien);
         EstadoDelDomicilio estado = domicilios.estadoDelDomicilio(empresa, ventaId)
                 .orElseThrow(() -> new RecursoNoEncontradoException(NO_EXISTE));
