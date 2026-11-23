@@ -81,14 +81,15 @@ El módulo de caja vive en el backend, bajo `/api/v1/caja/**` (más
 | Turno | abrir con una base de efectivo, ver el resumen, cerrar contando el efectivo y explicar la diferencia | administrador y vendedor |
 | Venta | registrar la venta del mostrador, con pagos mixtos y clave de idempotencia; consultarla por su consecutivo; su recibo en JSON y en PDF de 80 mm | administrador y vendedor |
 | Productos | buscar por código o por texto | administrador y vendedor |
-| Encargos | lo que se vendió sin existencia o sin estar en el catálogo, hasta que llega y se entrega | solo el administrador |
+| Encargos | lo que se vendió sin existencia, hasta que llega y se entrega | solo el administrador |
 | Domicilios | contra entrega: despachar y cobrar después | administrador y vendedor |
 | Devoluciones | devolver parte de una venta o anularla, con saldo a favor | administrador y vendedor (este con el PIN de un administrador) |
 | Clientes y medios de pago | el cliente identificado, y los medios con que se cobra; administrar los medios es solo del administrador | según la ruta |
 
 Lo que un vendedor no puede hacer por sí solo (un descuento, un encargo,
-un producto nuevo, una devolución) lo autoriza un administrador con su
-PIN, que viaja dentro de la misma petición. El cliente y el super
+una devolución) lo autoriza un administrador con su PIN, que viaja dentro
+de la misma petición. La caja no crea productos: solo el administrador los
+crea, desde el catálogo (una venta con `productoNuevo` recibe 400). El cliente y el super
 administrador reciben 403 en todo el módulo.
 
 Las decisiones están en `ADR-0014` (la existencia negativa y el encargo),
@@ -102,7 +103,7 @@ Dos comprobaciones cuidan el módulo de punta a punta:
   prueba.
 - `database/verificar_caja.sh` arranca el backend desde el JAR y recorre un
   turno completo por la API contra una base desechable: venta mixta,
-  encargo, producto nuevo, domicilio, cobro, devolución con saldo a favor,
+  encargo, el rechazo del producto nuevo, domicilio, cobro, devolución con saldo a favor,
   cierre con diferencia y kárdex. También mide «buscar por código» y
   «registrar una venta» con 20.000 referencias. Se niega a correr si no se
   declara la base desechable (`SGIP_CAJA_BD_DESECHABLE=si`), si el servidor

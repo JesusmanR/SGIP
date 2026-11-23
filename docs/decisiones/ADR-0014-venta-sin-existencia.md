@@ -123,7 +123,9 @@ no se puede desincronizar de la existencia porque no se guarda (RF-69 en esta en
 mano por el administrador (`venta_items.encargo_entregado_en` y `encargo_entregado_por`, V45) y no mueve el
 inventario: la existencia ya se descontó al vender.
 
-**El producto nuevo es un encargo.** El producto que se crea dentro de la venta (RF-42) nace con existencia 0,
-así que toda su venta es encargo: pide la autorización de producto nuevo y la de encargo con un solo PIN, la
-fecha de entrega de la línea y el motivo de la venta. Su costo es provisional (1,00) hasta que el administrador
-escriba el real.
+**El producto nuevo dentro de la venta se retiró (enmienda del 2026-11-21).** Se había pensado que el producto
+creado dentro de la venta (RF-42) naciera con existencia 0 y se vendiera como encargo. El usuario resolvió que
+el vendedor solo vende y nunca crea productos, y que los productos los crea únicamente el administrador, desde
+el catálogo. Una línea de la venta debe llevar un `productoId` existente; si aún trae un `productoNuevo`, la
+venta se rechaza con 400 «Los productos se crean en el catálogo.», sin tocar nada. La V45 conserva sus columnas
+y `TipoConsecutivo.PRODUCTO_RAPIDO` queda como esquema sin uso: no se editan las migraciones.

@@ -72,9 +72,8 @@ bloqueo, que ya está en el orden global.
   la fila o pide directamente el bloqueo exclusivo. Un `INSERT IGNORE` seguido de una
   lectura toma un bloqueo compartido y, con tres transacciones a la vez, produce un ciclo
   (es la misma razón de `RepositorioConsecutivos`).
-- La venta que paga con saldo lo bloquea **al principio**, antes de crear nada: una venta
-  con productos nuevos toma enseguida el consecutivo de `PRODUCTO_RAPIDO`, y el saldo va
-  antes que cualquier consecutivo.
+- La venta que paga con saldo lo bloquea **al principio**, antes de crear nada: el saldo va
+  antes que cualquier consecutivo (la caja ya no crea productos; ver ADR-0014).
 
 **Qué no se cachea.** Nada: el saldo es un dato que cambia con cada devolución y cada
 venta, y se lee siempre de la base.

@@ -7,7 +7,8 @@
 #   1. abrir el turno;
 #   2. una venta mixta (efectivo y transferencia, con cambio);
 #   3. un encargo autorizado con PIN, hasta que llega y se entrega;
-#   4. un producto nuevo vendido con un solo PIN;
+#   4. un producto nuevo dentro de la venta se rechaza (400): los productos
+#      se crean solo en el catálogo, por el administrador;
 #   5. un domicilio contra entrega, que se despacha;
 #   6. el cobro posterior del domicilio;
 #   7. una devolución parcial con saldo a favor, y su reintento;
@@ -466,18 +467,16 @@ fi
 api GET "/caja/encargos?estado=LLEGO" "$T_ADMIN"
 igual "ya no queda por entregar" "" "$(json 'o.find(e=>e.productoId===('"$PROD_B"'))?.itemId' <<<"$CUERPO")"
 
-# ── 5. Producto nuevo con un solo PIN ───────────────────────────────────
-paso "5. un producto nuevo vendido con un solo PIN"
+# ── 5. La caja no crea productos ────────────────────────────────────────
+paso "5. un producto nuevo dentro de la venta se rechaza: los productos se crean en el catálogo"
 P_NUEVO=30000
 T4=$(total $P_NUEVO)
+PRODUCTOS_ANTES=$(consulta "SELECT COUNT(*) FROM productos WHERE empresa_id = 1;")
 api POST /caja/ventas "$T_VEND" "{\"claveIdempotencia\":\"$(uuid)\",\"lineas\":[{\"productoNuevo\":{\"nombre\":\"Producto nuevo $RUN\",\"precioVenta\":$P_NUEVO},\"cantidad\":1,\"entregaEstimada\":\"$manana\"}],\"motivoEncargo\":\"No estaba en el catálogo\",\"pagos\":[{\"medioId\":$MEDIO_EFECTIVO,\"monto\":$T4,\"recibido\":$T4}],\"autorizacion\":{\"administradorId\":$ADMIN_ID,\"pin\":\"$PIN\"}}"
-espera "el producto nuevo se vende con un solo PIN" 201 || abortar "el producto nuevo falló"
-ESPERADO=$((ESPERADO + T4))
-NUEVO_ID=$(consulta "SELECT producto_id FROM productos WHERE empresa_id = 1 AND nombre = 'Producto nuevo $RUN';")
-[[ -n "$NUEVO_ID" ]] && ok "el producto nació en el catálogo (id $NUEVO_ID)" || abortar "el producto nuevo no está en el catálogo"
-igual "su código es de los rápidos (RAP-n)" "1" "$(consulta "SELECT codigo LIKE 'RAP-%' FROM productos WHERE producto_id = $NUEVO_ID;")"
-igual "su costo es provisional" "1" "$(consulta "SELECT costo_provisional FROM productos WHERE producto_id = $NUEVO_ID;")"
-igual "quedó debiendo una unidad: es un encargo" "-1" "$(consulta "SELECT existencia FROM productos WHERE producto_id = $NUEVO_ID;")"
+espera "una línea con productoNuevo se rechaza, aun con el PIN del administrador" 400
+igual "el mensaje manda al catálogo" "Los productos se crean en el catálogo." "$(resumen_error)"
+igual "no nació ningún producto" "0" "$(consulta "SELECT COUNT(*) FROM productos WHERE empresa_id = 1 AND nombre = 'Producto nuevo $RUN';")"
+igual "el catálogo quedó con los mismos productos" "$PRODUCTOS_ANTES" "$(consulta "SELECT COUNT(*) FROM productos WHERE empresa_id = 1;")"
 
 # ── 6. Domicilio contra entrega ─────────────────────────────────────────
 paso "6. un domicilio contra entrega"
@@ -678,7 +677,7 @@ SUMA="CASE m.tipo
         WHEN 'AJUSTE' THEN m.existencia_posterior - m.existencia_anterior
         ELSE m.cantidad
       END"
-TOCADOS="$PROD_A,$PROD_B,$PROD_C,$NUEVO_ID"
+TOCADOS="$PROD_A,$PROD_B,$PROD_C"
 descuadres=$(consulta "
   SELECT COUNT(*) FROM (
     SELECT p.producto_id, p.existencia, COALESCE(SUM($SUMA), 0) AS suma
@@ -696,8 +695,8 @@ done < <(consulta "
     LEFT JOIN movimientos_inventario m ON m.empresa_id = p.empresa_id AND m.producto_id = p.producto_id
    WHERE p.empresa_id = 1 AND p.producto_id IN ($TOCADOS)
    GROUP BY p.producto_id, p.codigo, p.existencia ORDER BY p.producto_id;")
-igual "las existencias finales son A 48, B 4, C $((300 - MUESTRAS - 1)) y el producto nuevo -1" \
-  "48 4 $((300 - MUESTRAS - 1)) -1" \
+igual "las existencias finales son A 48, B 4 y C $((300 - MUESTRAS - 1))" \
+  "48 4 $((300 - MUESTRAS - 1))" \
   "$(consulta "SELECT GROUP_CONCAT(existencia ORDER BY producto_id SEPARATOR ' ') FROM productos WHERE producto_id IN ($TOCADOS);")"
 huecos=$(consulta "
   SELECT COUNT(*) FROM (

@@ -143,17 +143,19 @@ propias del producto.
   orden ascendente de `producto_id`.
 - Como red de seguridad, `ManejadorErrores` traduce un interbloqueo (1213) o una espera
   agotada (1205) a 409 con un texto fijo, sin eco de datos.
-- **La caja y la fila de la empresa (nota de la entrega 1 de la caja).** La caja (venta, cobro, devolución,
-  producto nuevo) no pide la fila de `empresas` con `FOR UPDATE`, y su orden (turno → venta → productos →
+- **La caja y la fila de la empresa (nota de la entrega 1 de la caja).** La caja (venta, cobro, devolución) no pide la fila de `empresas` con `FOR UPDATE`, y su orden (turno → venta → productos →
   saldo del cliente → consecutivo → kárdex) no la incluye. Pero casi toda sentencia suya que inserta
   (`ventas`, `productos`, `reglas_margen`...) comprueba una clave foránea hacia `empresas` y toma sobre esa fila
   un bloqueo **compartido**: una venta espera a quien tenga la empresa bloqueada en exclusivo (crear, corregir
   o reemplazar una regla de ámbito). No hay ciclo con el orden de arriba: quien tiene la empresa y después
   escribe una regla de un producto que la venta ya bloqueó no espera a la venta, porque la clave foránea de la
   regla toma su bloqueo compartido sobre la entrada del índice único `uq_productos_empresa` y no sobre la fila
-  del producto que la venta tiene. Lo fija `ProductoNuevoConcurrenteConBaseTest`
-  (`quienTomaLaFilaDeLaEmpresa...`). Quien cambie el orden de la caja, o añada una clave foránea que apunte a la
+  del producto que la venta tiene. Lo fija `VentaConcurrenteConBaseTest`
+  (`quienTomaLaFilaDeLaEmpresa...`; antes lo fijaba la del producto nuevo, retirada con ese camino, ADR-0014).
+  Quien cambie el orden de la caja, o añada una clave foránea que apunte a la
   fila del producto en lugar de a ese índice, tiene que volver a pasar esa prueba.
+  La entrega de un domicilio o de un encargo no tiene turno: toma la venta (`FOR UPDATE`) antes de marcar,
+  para esperar a una anulación en curso (`DomiciliosConcurrentesConBaseTest`).
 
 ## Bloqueos de reglas de ganancia (M14)
 
