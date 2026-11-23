@@ -318,7 +318,7 @@ class DomiciliosConcurrentesConBaseTest {
                 """).param("v", r.id()).param("e", caja.empresa.empresaId).query(Long.class).single())) {
             cobro = comoVendedor(() -> domicilios.cobrar(r.id(), pagoTotal()));
             entrega = comoAdministrador(() -> domicilios.entregar(r.id()));
-            esperarAQueEsperen("ventas", 1, cobro);
+            esperarAQueEsperen("ventas", 2, cobro, entrega);
         }
 
         resultado(cobro);

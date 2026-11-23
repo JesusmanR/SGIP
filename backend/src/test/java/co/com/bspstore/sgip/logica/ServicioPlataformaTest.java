@@ -269,8 +269,8 @@ class ServicioPlataformaTest {
                         "sembrarMediosDePago", "sembrarConsumidorFinal", "sembrarSinProveedorYSinCategoria"),
                 escrituras,
                 "el alta solo escribe la empresa, la suscripción, la configuración vacía, "
-                        + "los medios de pago, el consumidor final y el proveedor y la categoría de los "
-                        + "productos nuevos; ni márgenes ni reglas de IVA");
+                        + "los medios de pago, el consumidor final y el proveedor y la categoría "
+                        + "genéricos (V45); ni márgenes ni reglas de IVA");
     }
 
     /**

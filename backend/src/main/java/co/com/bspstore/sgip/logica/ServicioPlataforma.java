@@ -108,7 +108,7 @@ public class ServicioPlataforma {
      * Da de alta una empresa con su administrador inicial (RF-01).
      *
      * Las ocho escrituras —empresa, suscripción, configuración, medios
-     * de pago, consumidor final, proveedor y categoría de los productos nuevos, usuario y bitácora— van en una sola transacción, y no es
+     * de pago, consumidor final, proveedor y categoría genéricos (V45), usuario y bitácora— van en una sola transacción, y no es
      * celo: a medias queda una empresa en la que nadie puede entrar, o
      * que no puede cobrar, y nadie de fuera puede crearle el primer
      * usuario, porque crear usuarios es cosa de su propio administrador
