@@ -465,6 +465,43 @@ describe('devolución', () => {
       expect(claveDe(1)).not.toBe(claveDe(0))
     })
 
+    it('A falla sin saberse, se manda B y se vuelve a A: A reutiliza su clave y B conserva la suya', async () => {
+      registrarDevolucion.mockRejectedValue(new TypeError('Failed to fetch'))
+      await prepararAdmin()
+      await confirmar() // A
+      await screen.findByRole('alert')
+      await userEvent.type(screen.getByLabelText(/motivo de la devolución/i), ' y no sirvió')
+      await confirmar() // B
+      await waitFor(() => expect(registrarDevolucion).toHaveBeenCalledTimes(2))
+      await userEvent.clear(screen.getByLabelText(/motivo de la devolución/i))
+      await userEvent.type(screen.getByLabelText(/motivo de la devolución/i), 'El cliente se equivocó de medida')
+      await confirmar() // A otra vez
+      await waitFor(() => expect(registrarDevolucion).toHaveBeenCalledTimes(3))
+      expect(claveDe(1)).not.toBe(claveDe(0))
+      expect(claveDe(2)).toBe(claveDe(0))
+      expect(registrarDevolucion.mock.calls[2][0]).toEqual(registrarDevolucion.mock.calls[0][0])
+      // Y B, si vuelve, también reutiliza la suya.
+      await userEvent.type(screen.getByLabelText(/motivo de la devolución/i), ' y no sirvió')
+      await confirmar()
+      await waitFor(() => expect(registrarDevolucion).toHaveBeenCalledTimes(4))
+      expect(claveDe(3)).toBe(claveDe(1))
+    })
+
+    it('buscar otra venta suelta todas las claves pendientes', async () => {
+      registrarDevolucion.mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      await prepararAdmin()
+      await confirmar()
+      await screen.findByRole('alert')
+      await userEvent.clear(screen.getByLabelText(/consecutivo de la venta/i))
+      await buscar()
+      await cantidad('Tornillo M6', 1)
+      await dinero(/^efectivo$/i, 11900)
+      await motivo()
+      await confirmar()
+      await waitFor(() => expect(registrarDevolucion).toHaveBeenCalledTimes(2))
+      expect(claveDe(1)).not.toBe(claveDe(0))
+    })
+
     it('después de registrar, la siguiente devolución usa otra clave', async () => {
       await prepararAdmin()
       await confirmar()
@@ -476,6 +513,31 @@ describe('devolución', () => {
       await confirmar()
       await waitFor(() => expect(registrarDevolucion).toHaveBeenCalledTimes(2))
       expect(claveDe(1)).not.toBe(claveDe(0))
+    })
+
+    it('el 409 de clave en uso suelta solo la clave de ese cuerpo: la de otro cuerpo pendiente se conserva', async () => {
+      registrarDevolucion
+        .mockRejectedValueOnce(new TypeError('Failed to fetch')) // A
+        .mockRejectedValueOnce(new TypeError('Failed to fetch')) // B
+        .mockRejectedValueOnce(errorApi(409, 'La clave ya se usó.', CLAVE_EN_USO)) // A otra vez
+        .mockRejectedValue(new TypeError('Failed to fetch'))
+      await prepararAdmin()
+      await confirmar() // A
+      await screen.findByRole('alert')
+      await userEvent.type(screen.getByLabelText(/motivo de la devolución/i), ' y no sirvió')
+      await confirmar() // B
+      await waitFor(() => expect(registrarDevolucion).toHaveBeenCalledTimes(2))
+      await userEvent.clear(screen.getByLabelText(/motivo de la devolución/i))
+      await userEvent.type(screen.getByLabelText(/motivo de la devolución/i), 'El cliente se equivocó de medida')
+      await confirmar() // A: 409, se suelta la de A
+      await waitFor(() => expect(registrarDevolucion).toHaveBeenCalledTimes(3))
+      await confirmar() // A de nuevo: clave nueva
+      await waitFor(() => expect(registrarDevolucion).toHaveBeenCalledTimes(4))
+      expect(claveDe(3)).not.toBe(claveDe(0))
+      await userEvent.type(screen.getByLabelText(/motivo de la devolución/i), ' y no sirvió')
+      await confirmar() // B: conserva la suya
+      await waitFor(() => expect(registrarDevolucion).toHaveBeenCalledTimes(5))
+      expect(claveDe(4)).toBe(claveDe(1))
     })
 
     it('el 409 de clave en uso dice que ya se registró con otros datos y suelta la clave', async () => {
