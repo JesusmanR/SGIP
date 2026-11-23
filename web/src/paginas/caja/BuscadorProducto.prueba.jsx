@@ -9,7 +9,6 @@ import BuscadorProducto from './BuscadorProducto.jsx'
 vi.mock('../../servicios/api/caja.js')
 
 const alAgregar = vi.fn()
-const alCrearProducto = vi.fn()
 const campo = () => screen.getByLabelText(/buscar producto/i)
 
 beforeEach(() => {
@@ -21,7 +20,7 @@ afterEach(() => {
   delete navigator.mediaDevices
 })
 
-const montar = () => render(<BuscadorProducto alAgregar={alAgregar} alCrearProducto={alCrearProducto} />)
+const montar = () => render(<BuscadorProducto alAgregar={alAgregar} />)
 
 describe('buscador de producto', () => {
   it('Enter con un código lo busca por código, lo agrega y deja el campo limpio y con el foco', async () => {
@@ -53,7 +52,7 @@ describe('buscador de producto', () => {
     await userEvent.type(campo(), '000{Enter}7709990001112{Enter}')
     await waitFor(() => expect(alAgregar).toHaveBeenCalledWith(PINTURA))
     expect(screen.getByText(/no encontramos ese código: 000/i)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /crear producto \(requiere administrador\)/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /buscar por nombre/i })).toBeInTheDocument()
     // Se atiende (o se descarta) a propósito, no se borra solo.
     await userEvent.click(screen.getByRole('button', { name: /descartar el código 000/i }))
     expect(screen.queryByText(/no encontramos ese código/i)).not.toBeInTheDocument()
@@ -76,28 +75,27 @@ describe('buscador de producto', () => {
     await userEvent.type(campo(), '111{Enter}222{Enter}')
     expect(await screen.findByText(/no encontramos ese código: 111/i)).toBeInTheDocument()
     expect(await screen.findByText(/no encontramos ese código: 222/i)).toBeInTheDocument()
-    await userEvent.click(screen.getAllByRole('button', { name: /crear producto/i })[1])
-    expect(alCrearProducto).toHaveBeenCalledWith('222')
+    expect(screen.queryByRole('button', { name: /crear producto/i })).not.toBeInTheDocument()
   })
 
   it('avisa a la pantalla cuántos escaneos siguen pendientes', async () => {
     const alCambiarPendientes = vi.fn()
     let soltar
     productoPorCodigo.mockImplementationOnce(() => new Promise((resolver) => { soltar = () => resolver(TORNILLO) }))
-    render(<BuscadorProducto alAgregar={alAgregar} alCrearProducto={alCrearProducto} alCambiarPendientes={alCambiarPendientes} />)
+    render(<BuscadorProducto alAgregar={alAgregar} alCambiarPendientes={alCambiarPendientes} />)
     await userEvent.type(campo(), '7701234567890{Enter}')
     expect(alCambiarPendientes).toHaveBeenLastCalledWith(1)
     soltar()
     await waitFor(() => expect(alCambiarPendientes).toHaveBeenLastCalledWith(0))
   })
 
-  it('un código que no existe dice «No encontramos ese código» y ofrece buscar por nombre o crear', async () => {
+  it('un código que no existe dice «No encontramos ese código» y solo ofrece buscar por nombre: nada crea productos', async () => {
     montar()
     await userEvent.type(campo(), '000{Enter}')
     expect(await screen.findByText(/no encontramos ese código/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /buscar por nombre/i })).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: /crear producto \(requiere administrador\)/i }))
-    expect(alCrearProducto).toHaveBeenCalledWith('000')
+    expect(screen.queryByRole('button', { name: /crear/i })).not.toBeInTheDocument()
+    expect(screen.queryByText(/requiere administrador/i)).not.toBeInTheDocument()
   })
 
   describe('lo que no es un código se busca por nombre sin otro clic', () => {
@@ -137,13 +135,13 @@ describe('buscador de producto', () => {
       expect(screen.queryByRole('button', { name: 'Agregar Pintura blanca' })).not.toBeInTheDocument()
     })
 
-    it('si tampoco hay productos con ese nombre, avisa «No encontramos ese código» y sigue ofreciendo buscar y crear', async () => {
+    it('si tampoco hay productos con ese nombre, avisa «No encontramos ese código» y sigue ofreciendo buscar, sin crear', async () => {
       montar()
       await userEvent.type(campo(), '000{Enter}')
       expect(await screen.findByText(/no encontramos ese código: 000/i)).toBeInTheDocument()
       expect(productosPorTexto).toHaveBeenCalledWith('000')
       expect(screen.queryByText(/no es un código/i)).not.toBeInTheDocument()
-      expect(screen.getByRole('button', { name: /crear producto \(requiere administrador\)/i })).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /crear producto/i })).not.toBeInTheDocument()
       await userEvent.click(screen.getByRole('button', { name: /descartar el código 000/i }))
       expect(screen.queryByText(/no encontramos ese código/i)).not.toBeInTheDocument()
     })
@@ -220,7 +218,7 @@ describe('buscador de producto', () => {
       const alCambiarPendientes = vi.fn()
       let soltar
       productosPorTexto.mockImplementationOnce(() => new Promise((resolver) => { soltar = resolver }))
-      render(<BuscadorProducto alAgregar={alAgregar} alCrearProducto={alCrearProducto} alCambiarPendientes={alCambiarPendientes} />)
+      render(<BuscadorProducto alAgregar={alAgregar} alCambiarPendientes={alCambiarPendientes} />)
       await userEvent.type(campo(), 'pintura{Enter}')
       await waitFor(() => expect(productoPorCodigo).toHaveBeenCalled())
       await act(async () => {})

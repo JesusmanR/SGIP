@@ -94,46 +94,27 @@ describe('caja: buscar y agregar', () => {
     expect(buscador()).toHaveFocus()
     await agregar()
     await waitFor(() => expect(buscador()).toHaveFocus())
-    await userEvent.type(buscador(), '000{Enter}')
-    await userEvent.click(await screen.findByRole('button', { name: /crear producto/i }))
-    expect(await screen.findByRole('dialog', { name: /producto nuevo/i })).toBeInTheDocument()
+  })
+
+  it('elFocoVuelveAlBuscadorAlCerrarElPin', async () => {
+    entrar('VENDEDOR')
+    await abrir()
+    await agregar()
+    await userEvent.type(screen.getByLabelText('Descuento de Tornillo M6'), '10')
+    await pagarTodo()
+    await userEvent.click(cobrar())
+    expect(await screen.findByRole('dialog', { name: /autorización del administrador/i })).toBeInTheDocument()
     await userEvent.keyboard('{Escape}')
     await waitFor(() => expect(buscador()).toHaveFocus())
   })
 
-  it('noEncontradoOfreceBuscarYCrear', async () => {
+  it('noEncontradoSoloOfreceBuscarPorNombre: la caja no crea productos', async () => {
     await abrir()
     await userEvent.type(buscador(), '000{Enter}')
     expect(await screen.findByText(/no encontramos ese código/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /buscar por nombre/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /crear producto \(requiere administrador\)/i })).toBeInTheDocument()
-  })
-
-  it('productoNuevoSeAgregaAlCarritoSinCrearloYSeEnviaEnLaVenta', async () => {
-    await abrir()
-    await userEvent.type(buscador(), '7705550001{Enter}')
-    await userEvent.click(await screen.findByRole('button', { name: /crear producto/i }))
-    const dialogo = await screen.findByRole('dialog', { name: /producto nuevo/i })
-    await userEvent.type(within(dialogo).getByLabelText(/^nombre/i), 'Llave de paso')
-    await userEvent.type(within(dialogo).getByLabelText(/precio de venta/i), '5000')
-    const fecha = sumarDias(hoyISO(), 10)
-    await userEvent.type(within(dialogo).getByLabelText(/fecha de entrega/i), fecha)
-    await userEvent.type(within(dialogo).getByLabelText(/motivo del encargo/i), 'Llega con el proveedor')
-    await userEvent.click(within(dialogo).getByRole('button', { name: /agregar al carrito/i }))
-    // No se crea nada en el servidor: solo hay una línea marcada.
-    expect(screen.getByText('Producto nuevo — encargo')).toBeInTheDocument()
-    expect(registrarVenta).not.toHaveBeenCalled()
-    expect(total()).toHaveTextContent(pesos(5000))
-    await pagarTodo()
-    await userEvent.click(cobrar())
-    await waitFor(() => expect(registrarVenta).toHaveBeenCalledTimes(1))
-    const solicitud = registrarVenta.mock.calls[0][0]
-    expect(solicitud.lineas).toEqual([{
-      productoNuevo: { nombre: 'Llave de paso', precioVenta: 5000, codigoBarras: '7705550001' },
-      cantidad: 1, entregaEstimada: fecha,
-    }])
-    expect(solicitud.motivoEncargo).toBe('Llega con el proveedor')
-    expect(solicitud.autorizacion).toBeUndefined()
+    expect(screen.queryByRole('button', { name: /crear producto/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
   it('el carrito nunca manda un precio de un producto registrado', async () => {
@@ -320,27 +301,6 @@ describe('caja: autorización con PIN', () => {
     expect(s.lineas[0].descuento).toEqual({ tipo: 'PORCENTAJE', valor: 10 })
     expect(await screen.findByText(/venta registrada/i)).toBeInTheDocument()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-  })
-
-  it('vendedorConProductoNuevoAbreUnSoloPin: un diálogo y un campo de PIN para todo', async () => {
-    entrar('VENDEDOR')
-    await abrir()
-    await userEvent.type(buscador(), '7705550001{Enter}')
-    await userEvent.click(await screen.findByRole('button', { name: /crear producto/i }))
-    const nuevo = await screen.findByRole('dialog', { name: /producto nuevo/i })
-    await userEvent.type(within(nuevo).getByLabelText(/^nombre/i), 'Llave de paso')
-    await userEvent.type(within(nuevo).getByLabelText(/precio de venta/i), '5000')
-    await userEvent.type(within(nuevo).getByLabelText(/fecha de entrega/i), sumarDias(hoyISO(), 5))
-    await userEvent.type(within(nuevo).getByLabelText(/motivo del encargo/i), 'Llega con el proveedor')
-    await userEvent.click(within(nuevo).getByRole('button', { name: /agregar al carrito/i }))
-    await pagarTodo()
-    await userEvent.click(cobrar())
-    expect(await screen.findAllByRole('dialog')).toHaveLength(1)
-    expect(screen.getAllByLabelText(/^pin$/i)).toHaveLength(1)
-    const lista = screen.getByRole('list', { name: /se va a autorizar/i })
-    expect(within(lista).getAllByRole('listitem').length).toBeGreaterThanOrEqual(2)
-    await autorizar()
-    await waitFor(() => expect(registrarVenta).toHaveBeenCalledTimes(1))
   })
 
   it('adminConDescuentoNoPidePin', async () => {
