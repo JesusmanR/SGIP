@@ -1,12 +1,12 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
-  CLAVE_EN_USO, registrarDevolucion, saldoDeCliente, turnoActual, ventaPorConsecutivo,
+  CLAVE_EN_USO, mediosDePago, registrarDevolucion, saldoDeCliente, turnoActual, ventaPorConsecutivo,
 } from '../../servicios/api/caja.js'
-import { entrar, errorApi, pesos, prepararApi } from './ayuda.js'
+import { MEDIOS, entrar, errorApi, pesos, prepararApi } from './ayuda.js'
 import Devolucion from './Devolucion.jsx'
 
 vi.mock('../../servicios/api/caja.js')
@@ -364,11 +364,46 @@ describe('devolución', () => {
       expect(await screen.findByRole('alert')).toHaveTextContent('Abre un turno de caja para devolver efectivo.')
     })
 
+    it('sinTurnoLimpiaElEfectivoEscritoMientrasCargabaElTurno', async () => {
+      entrar('ADMINISTRADOR')
+      let resolver
+      turnoActual.mockReturnValue(new Promise((r) => { resolver = r }))
+      montar()
+      await buscar()
+      await dinero(/^efectivo$/i, 11900)
+      expect(screen.getByLabelText(/^efectivo$/i)).toHaveValue('11900')
+      await act(async () => { resolver(null) })
+      const campo = screen.getByLabelText(/^efectivo$/i)
+      await waitFor(() => expect(campo).toBeDisabled())
+      expect(campo).toHaveValue('')
+      await cantidad('Tornillo M6', 1)
+      await dinero(/^por tarjeta/i, 11900)
+      await userEvent.type(screen.getByLabelText(/n\.º de aprobación/i), 'A-1')
+      await motivo()
+      await confirmar()
+      await waitFor(() => expect(registrarDevolucion).toHaveBeenCalled())
+      expect(registrarDevolucion.mock.calls[0][0].reembolsos).toEqual([{ medioId: 2, monto: 11900, referencia: 'A-1' }])
+    })
+
+    it('sinMedioDeEfectivoNoPideAbrirTurno', async () => {
+      entrar('ADMINISTRADOR')
+      turnoActual.mockResolvedValue(null)
+      mediosDePago.mockResolvedValue(MEDIOS.filter((m) => m.tipo !== 'EFECTIVO'))
+      montar()
+      await buscar()
+      await waitFor(() => expect(turnoActual).toHaveBeenCalled())
+      await act(async () => {})
+      expect(screen.getByLabelText(/^efectivo$/i)).toBeDisabled()
+      expect(screen.queryByText(AYUDA)).not.toBeInTheDocument()
+    })
+
     it('falloAlConsultarElTurnoNoBloqueaLaPantalla', async () => {
       entrar('ADMINISTRADOR')
       turnoActual.mockRejectedValue(errorApi(500, 'Falla'))
       montar()
       await buscar()
+      await waitFor(() => expect(turnoActual).toHaveBeenCalled())
+      await act(async () => {})
       expect(screen.getByLabelText(/^efectivo$/i)).toBeEnabled()
       expect(screen.queryByText(AYUDA)).not.toBeInTheDocument()
     })
