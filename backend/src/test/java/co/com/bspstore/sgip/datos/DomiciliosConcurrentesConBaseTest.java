@@ -39,6 +39,7 @@ import java.util.concurrent.TimeoutException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -263,7 +264,10 @@ class DomiciliosConcurrentesConBaseTest {
                 """).param("v", r.id()).param("e", caja.empresa.empresaId).query(Long.class).single())) {
             uno = comoAdministrador(() -> domicilios.entregar(r.id()));
             otro = comoVendedor(() -> domicilios.entregar(r.id()));
-            esperarAQueEsperen("domicilios_venta", 2, uno, otro);
+            // Las dos toman primero la venta (el orden global: la venta antes que su domicilio): la primera
+            // llega a la fila del domicilio y espera ahí; la otra espera la venta que la primera tiene.
+            esperarAQueEsperen("domicilios_venta", 1, uno, otro);
+            esperarAQueEsperen("ventas", 1, uno, otro);
         }
 
         Throwable perdedora = laQueFallo(uno, otro, 1);
@@ -289,7 +293,9 @@ class DomiciliosConcurrentesConBaseTest {
                 """).param("i", item).param("e", caja.empresa.empresaId).query(Long.class).single())) {
             uno = comoAdministrador(() -> encargos.entregar(item));
             otro = comoAdministrador(() -> encargos.entregar(item));
-            esperarAQueEsperen("venta_items", 2, uno, otro);
+            // Primero la venta, después la línea: una espera la línea y la otra espera la venta de la primera.
+            esperarAQueEsperen("venta_items", 1, uno, otro);
+            esperarAQueEsperen("ventas", 1, uno, otro);
         }
 
         Throwable perdedora = laQueFallo(uno, otro, 1);
@@ -322,5 +328,56 @@ class DomiciliosConcurrentesConBaseTest {
                 .param("v", r.id()).query(String.class).single());
         assertEquals(1, jdbc.sql("SELECT COUNT(*) FROM domicilios_venta WHERE venta_id = :v AND entregado_en IS NOT NULL")
                 .param("v", r.id()).query(Integer.class).single());
+    }
+
+    // ------------------------------------------------------- una entrega y una anulación de la misma venta
+
+    /** Lo que hace la anulación mientras no confirma: tiene la fila de la venta y ya la marcó anulada. */
+    private Bloqueo anulando(Long ventaId) {
+        return new Bloqueo(() -> jdbc.sql("""
+                UPDATE ventas SET estado = 'ANULADA', estado_pago = 'ANULADA' WHERE venta_id = :v AND empresa_id = :e
+                """).param("v", ventaId).param("e", caja.empresa.empresaId).update());
+    }
+
+    @Test
+    void unaEntregaDeUnDomicilioQueLlegaMientrasSeAnulaLaVentaEsperaLaVentaYAlFinalRecibe409SinMarca() throws Exception {
+        Integer producto = caja.producto("A", 5, "10000");
+        VentaRegistrada r = contraEntrega(producto);
+        Future<EntregaRegistrada> entrega;
+        try (Bloqueo anulacion = anulando(r.id())) {
+            entrega = comoAdministrador(() -> domicilios.entregar(r.id()));
+            // La entrega tiene que pedir la venta antes de marcar: si marcara primero y leyera después, vería
+            // la venta vigente (la anulación no ha confirmado) y la marca sobreviviría a la anulación.
+            esperarAQueEsperen("ventas", 1, entrega);
+        }
+
+        Future<EntregaRegistrada> enMarcha = entrega;
+        Throwable fallo = assertThrows(ExecutionException.class, () -> resultado(enMarcha)).getCause();
+
+        assertInstanceOf(EstadoNoAdmiteLaOperacionException.class, fallo, String.valueOf(fallo));
+        assertEquals(0, jdbc.sql("SELECT COUNT(*) FROM domicilios_venta WHERE venta_id = :v AND entregado_en IS NOT NULL")
+                .param("v", r.id()).query(Integer.class).single(), "no quedó marca de entrega");
+    }
+
+    @Test
+    void unaEntregaDeUnEncargoQueLlegaMientrasSeAnulaLaVentaEsperaLaVentaYAlFinalRecibe409SinMarca() throws Exception {
+        Integer producto = caja.producto("A", 0, "10000");
+        VentaRegistrada r = ventas.registrar(new SolicitudVenta(UUID.randomUUID(), null,
+                List.of(new LineaSolicitada(producto, null, 1, null, LocalDate.now().plusDays(7))), null,
+                pagoTotal(), "No había existencia", null, null));
+        Long item = jdbc.sql("SELECT item_id FROM venta_items WHERE venta_id = :v")
+                .param("v", r.id()).query(Long.class).single();
+        Future<EntregaRegistrada> entrega;
+        try (Bloqueo anulacion = anulando(r.id())) {
+            entrega = comoAdministrador(() -> encargos.entregar(item));
+            esperarAQueEsperen("ventas", 1, entrega);
+        }
+
+        Future<EntregaRegistrada> enMarcha = entrega;
+        Throwable fallo = assertThrows(ExecutionException.class, () -> resultado(enMarcha)).getCause();
+
+        assertInstanceOf(EstadoNoAdmiteLaOperacionException.class, fallo, String.valueOf(fallo));
+        assertEquals(0, jdbc.sql("SELECT COUNT(*) FROM venta_items WHERE item_id = :i AND encargo_entregado_en IS NOT NULL")
+                .param("i", item).query(Integer.class).single(), "no quedó marca de entrega");
     }
 }
