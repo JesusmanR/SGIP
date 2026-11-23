@@ -245,19 +245,22 @@ class DevolucionSinTurnoConBaseTest {
     @Test
     void cierreDeUnTurnoNoCuentaLaDevolucionSinTurno() {
         Integer producto = caja.producto("A", 5, "10000");
+        // El vendedor vende en SU turno, que sigue abierto. El administrador, sin turno, devuelve esa venta por
+        // tarjeta: la devolución no se cuelga del turno de la venta ni del vendedor, y su cierre no la cuenta.
+        caja.entrarComoVendedor();
         VentaRegistrada v = vender(producto, 1, "10000");
-        ResumenDeTurno primero = turnos.cerrar(new SolicitudCierre(new BigDecimal("10000"), null));
-        igual("10000", primero.efectivoEsperado());
+        ResumenDeTurno antes = turnos.resumenActual();
+        igual("10000", antes.efectivoEsperado());
+        caja.cerrarTurno(turnoDelAdministrador);
+        caja.entrarComoAdministrador();
 
         DevolucionRegistrada r = devoluciones.registrar(anulacion(v.id(), enTarjeta("10000")));
 
-        assertNull(devolucionGuardada(r.id()).get("cierre_id"));
-        Long segundoTurno = caja.abrirTurno(caja.administradorId, "5000");
-        ResumenDeTurno abierto = turnos.resumenActual();
-        assertEquals(segundoTurno, abierto.id());
-        igual("5000", abierto.efectivoEsperado());
-        ResumenDeTurno cerrado = turnos.cerrar(new SolicitudCierre(new BigDecimal("5000"), null));
-        igual("5000", cerrado.efectivoEsperado());
+        assertNull(devolucionGuardada(r.id()).get("cierre_id"), "ni el turno del vendedor ni ningún otro");
+        caja.entrarComoVendedor();
+        igual("10000", turnos.resumenActual().efectivoEsperado());
+        ResumenDeTurno cerrado = turnos.cerrar(new SolicitudCierre(new BigDecimal("10000"), null));
+        igual("10000", cerrado.efectivoEsperado());
         igual("0", cerrado.diferencia());
         assertEquals(0, jdbc.sql("SELECT COUNT(*) FROM devoluciones WHERE empresa_id = :e AND cierre_id IS NOT NULL")
                 .param("e", caja.empresa.empresaId).query(Integer.class).single(), "ningún turno la tiene");
