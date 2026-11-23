@@ -90,8 +90,6 @@ public class ServicioTurnos {
     /** Una lista de más de un año de turnos no es una consulta de caja: se pide por partes. */
     private static final int DIAS_MAXIMOS_DE_LISTA = 366;
 
-    private static final String ADMINISTRADOR = "ADMINISTRADOR";
-
     private static final String BASE_NO_VALIDA =
             "La base de efectivo debe ser un monto en pesos enteros, de cero en adelante y de hasta 12 dígitos.";
 
@@ -252,7 +250,7 @@ public class ServicioTurnos {
             throw new DatoDeTurnoInvalidoException(RANGO_NO_VALIDO);
         }
         Integer empresa = ContextoEmpresa.empresaActual();
-        Integer cajeroONulo = esAdministrador() ? null : cajeroEnSesion();
+        Integer cajeroONulo = ContextoEmpresa.esAdministrador() ? null : cajeroEnSesion();
         LocalDateTime desdeInclusive = desde.atStartOfDay();
         LocalDateTime hastaExclusive = hasta.plusDays(1).atStartOfDay();
 
@@ -295,10 +293,6 @@ public class ServicioTurnos {
             throw new DatoDeTurnoInvalidoException(OBSERVACION_MUY_LARGA);
         }
         return limpia.isEmpty() ? null : limpia;
-    }
-
-    private static boolean esAdministrador() {
-        return ContextoEmpresa.actual().map(u -> ADMINISTRADOR.equals(u.rol())).orElse(false);
     }
 
     /**
