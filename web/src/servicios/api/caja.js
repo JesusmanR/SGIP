@@ -3,17 +3,6 @@ import { ErrorApi, pedir } from '../api.js'
 /**
  * Llamadas de la caja (Sprint 9). Una función por ruta: si el backend cambia
  * una ruta, se ajusta aquí y en ningún otro sitio.
- *
- * Supuestos que el backend de esta rama todavía no cumple (se simulan en las
- * pruebas y se ajustan aquí cuando existan):
- * - `saldoDeCliente`: GET /caja/clientes/{id}/saldo responde `{ saldo, medioId }`, con el
- *   medio de sistema SALDO_A_FAVOR con el que se paga con el saldo.
- * - Tareas 8 a 11 (domicilios, encargos, devoluciones, cierre): las formas de respuesta de las
- *   listas y de `GET /caja/ventas?consecutivo=` están descritas en las pantallas que las usan.
- * - Una venta con `domicilio` o con un `productoNuevo` hoy responde 400
- *   «aún no disponible»; el cuerpo que se arma ya es el definitivo.
- * - El medio de pago «Saldo a favor» (de sistema) llega en `mediosDePago`
- *   para poder pagar con él.
  */
 
 /** Un 404 quiere decir «no hay»; es una respuesta, no un fallo. */
@@ -103,6 +92,6 @@ export const registrarVenta = (solicitud) => pedir('/caja/ventas', { method: 'PO
 
 /**
  * El `type` del ProblemDetail del 409 que responde el servidor cuando la clave de idempotencia
- * ya se usó con otra carga. Supuesto de contrato: hoy no existe; el backend lo añadirá al integrar.
+ * ya se usó con otra carga (`ManejadorErrores.TIPO_CLAVE_EN_USO`).
  */
 export const CLAVE_EN_USO = 'urn:sgip:caja:clave-en-uso'
