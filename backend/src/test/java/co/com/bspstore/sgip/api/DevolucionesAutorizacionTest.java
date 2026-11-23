@@ -20,6 +20,7 @@ import co.com.bspstore.sgip.logica.ServicioDevoluciones;
 import co.com.bspstore.sgip.logica.ServicioSaldoAFavor;
 import co.com.bspstore.sgip.logica.ServicioSesion;
 import co.com.bspstore.sgip.logica.SinTurnoAbiertoException;
+import co.com.bspstore.sgip.logica.TurnoRequeridoParaEfectivoException;
 import co.com.bspstore.sgip.logica.VentaInvalidaException;
 import co.com.bspstore.sgip.modelo.EstadoEmpresa;
 import org.junit.jupiter.api.BeforeEach;
@@ -205,6 +206,16 @@ class DevolucionesAutorizacionTest {
         doThrow(new VentaInvalidaException("No se puede devolver más de lo vendido.")).when(devoluciones).procesar(any());
         devolver("VENDEDOR", CUERPO).andExpect(status().isBadRequest())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
+    }
+
+    @Test
+    void devolverEfectivoSinTurnoEs409ConSuTipoPropio() throws Exception {
+        doThrow(new TurnoRequeridoParaEfectivoException()).when(devoluciones).procesar(any());
+
+        devolver("ADMINISTRADOR", CUERPO).andExpect(status().isConflict())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.type").value("urn:sgip:caja:turno-requerido-para-efectivo"))
+                .andExpect(jsonPath("$.detail").value("Abre un turno de caja para devolver efectivo."));
     }
 
     @Test
