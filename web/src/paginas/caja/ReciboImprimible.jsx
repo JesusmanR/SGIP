@@ -42,7 +42,6 @@ export default function ReciboImprimible({ recibo }) {
               {l.descuento > 0 ? ` · descuento ${PESOS.format(l.descuento)}` : ''}
               {l.iva > 0 ? ` · IVA ${PESOS.format(l.iva)}` : ''}
             </p>
-            {l.nuevo && <p className="recibo-marca">Producto nuevo</p>}
             {l.encargo && (
               <p className="recibo-marca">Encargo — entrega estimada: {fechaDia(l.entregaEstimada)}</p>
             )}

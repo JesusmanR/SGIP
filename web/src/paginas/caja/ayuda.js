@@ -53,8 +53,7 @@ export const ANA = {
 
 // ── El servidor simulado ─────────────────────────────────────────────
 // Repite, escrito aparte y sin usar el código del front, lo que hacen NormalizadorDeVenta y
-// CalculoDeVenta: las líneas de catálogo se ordenan por productoId y los productos nuevos van
-// después, en el orden de la solicitud (nacen con ids mayores); el residuo del reparto del
+// CalculoDeVenta: las líneas se ordenan por productoId; el residuo del reparto del
 // descuento total va a la línea de mayor base y, a igual base, a la de menor productoId; y los
 // pagos tienen que sumar exactamente el total (si no, 400). Así una diferencia de un peso entre
 // la vista previa y el servidor se ve en las pruebas.
@@ -67,13 +66,11 @@ function descontado(descuento, valor) {
 }
 
 export function ventaDelServidor(solicitud) {
-  let siguienteId = 900
-  const delCatalogo = solicitud.lineas.filter((l) => l.productoId != null).sort((a, b) => a.productoId - b.productoId)
-  const nuevas = solicitud.lineas.filter((l) => l.productoNuevo).map((l) => ({ ...l, productoId: siguienteId++ }))
-  const lineas = [...delCatalogo, ...nuevas].map((l) => {
+  const ordenadas = [...solicitud.lineas].sort((a, b) => a.productoId - b.productoId)
+  const lineas = ordenadas.map((l) => {
     const producto = PRODUCTOS.find((p) => p.id === l.productoId)
-    const precio = producto ? producto.precio : l.productoNuevo.precioVenta
-    const tarifa = producto ? producto.tarifaIva : 0
+    const precio = producto.precio
+    const tarifa = producto.tarifaIva
     const subtotal = precio * l.cantidad
     const propio = descontado(l.descuento, subtotal)
     return { productoId: l.productoId, cantidad: l.cantidad, precio, tarifa, subtotal, propio, base: subtotal - propio }

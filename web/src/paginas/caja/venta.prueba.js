@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { PINTURA, TORNILLO } from './ayuda.js'
 import {
-  armarRecibo, lineaDeProducto, lineaDeProductoNuevo, lineasParaVista, puedeCobrar,
+  armarRecibo, armarSolicitud, lineaDeProducto, lineasParaVista, puedeCobrar,
 } from './venta.js'
 
 const delServidor = (productoId, cantidad, precioUnitario, iva) => ({
@@ -11,12 +11,11 @@ const delServidor = (productoId, cantidad, precioUnitario, iva) => ({
   total: precioUnitario * cantidad + iva,
 })
 const EMPRESA = { razonSocial: 'Black Steel Parts', nit: '1' }
-const nuevo = (nombre) => lineaDeProductoNuevo({ nombre, precioVenta: 500, codigoBarras: '', entregaEstimada: '2026-12-01' })
 
 describe('lo que se manda a la vista previa', () => {
-  it('cada línea lleva su productoId, o null si es un producto nuevo', () => {
-    const lineas = [lineaDeProducto(PINTURA), nuevo('Llave de paso')]
-    expect(lineasParaVista(lineas).map((l) => l.productoId)).toEqual([31, null])
+  it('cada línea lleva su productoId', () => {
+    const lineas = [lineaDeProducto(PINTURA), lineaDeProducto(TORNILLO)]
+    expect(lineasParaVista(lineas).map((l) => l.productoId)).toEqual([31, 30])
   })
 })
 
@@ -34,19 +33,15 @@ describe('recibo', () => {
     expect(por['Tornillo M6']).toMatchObject({ precioUnitario: 10000, iva: 1900, total: 11900 })
   })
 
-  it('los productos nuevos toman las líneas que quedan, en el orden en que se agregaron', () => {
+  it('un producto que el servidor no devolvió se recibe con importes en cero, sin tomar el de otra línea', () => {
     const recibo = armarRecibo({
       empresa: EMPRESA,
-      venta: {
-        consecutivo: 'V-2', total: 0, cambio: 0,
-        lineas: [delServidor(30, 1, 10000, 1900), delServidor(900, 1, 500, 0), delServidor(901, 2, 700, 0)],
-      },
-      lineas: [nuevo('Primero'), lineaDeProducto(TORNILLO), { ...nuevo('Segundo'), cantidad: '2' }],
+      venta: { consecutivo: 'V-2', total: 0, cambio: 0, lineas: [delServidor(30, 1, 10000, 1900)] },
+      lineas: [lineaDeProducto(PINTURA), lineaDeProducto(TORNILLO)],
       pagos: [], cliente: null, cajero: 'Marta', domicilio: null,
     })
     const por = Object.fromEntries(recibo.lineas.map((l) => [l.nombre, l]))
-    expect(por.Primero).toMatchObject({ precioUnitario: 500, cantidad: 1 })
-    expect(por.Segundo).toMatchObject({ precioUnitario: 700, cantidad: 2 })
+    expect(por['Pintura blanca'].total).toBe(0)
     expect(por['Tornillo M6'].total).toBe(11900)
   })
 })
@@ -70,5 +65,16 @@ describe('cuándo se puede cobrar', () => {
 
   it('contra entrega no pide pagos', () => {
     expect(puedeCobrar({ ...base, contraEntrega: true, pagos: [] })).toBe(true)
+  })
+})
+
+describe('la solicitud de venta', () => {
+  it('cada línea es un producto del catálogo: lleva su productoId y nunca un productoNuevo', () => {
+    const solicitud = armarSolicitud({
+      claveIdempotencia: 'k', cliente: null, lineas: [lineaDeProducto(PINTURA), lineaDeProducto(TORNILLO)],
+      descuentoTotal: null, pagos: [], motivoEncargo: '', domicilio: null,
+    })
+    expect(solicitud.lineas.map((l) => l.productoId)).toEqual([31, 30])
+    for (const l of solicitud.lineas) expect(l).not.toHaveProperty('productoNuevo')
   })
 })

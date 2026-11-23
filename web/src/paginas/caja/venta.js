@@ -2,9 +2,9 @@
  * La venta en curso: funciones puras que arman líneas, avisos y el cuerpo que se envía.
  * La pantalla guarda el estado; aquí no hay estado ni llamadas a la API.
  *
- * Una línea es `{ clave, producto | nuevo, cantidad (texto), descuentoTipo, descuentoValor (texto),
- * encargo, entregaEstimada }`. `producto` es el `ProductoParaCaja` del servidor; `nuevo` es un
- * producto que todavía no existe y se crea al cobrar, dentro de la venta.
+ * Una línea es `{ clave, producto, cantidad (texto), descuentoTipo, descuentoValor (texto),
+ * encargo, entregaEstimada }`. `producto` es el `ProductoParaCaja` del servidor: la caja solo vende
+ * productos del catálogo, nunca crea uno.
  */
 import { hoyISO } from '../../servicios/fechas.js'
 
@@ -22,14 +22,9 @@ function base(extra) {
 
 export const lineaDeProducto = (producto) => base({ producto })
 
-export function lineaDeProductoNuevo({ nombre, precioVenta, codigoBarras, entregaEstimada }) {
-  return base({ nuevo: { nombre, precioVenta, codigoBarras: codigoBarras || '' }, encargo: true, entregaEstimada })
-}
-
-export const nombreDe = (l) => l.producto?.nombre ?? l.nuevo.nombre
-export const precioDe = (l) => Number(l.producto?.precio ?? l.nuevo.precioVenta)
-/** El IVA de un producto nuevo lo fija el servidor al crearlo: la vista previa no lo conoce. */
-export const tarifaDe = (l) => Number(l.producto?.tarifaIva ?? 0)
+export const nombreDe = (l) => l.producto.nombre
+export const precioDe = (l) => Number(l.producto.precio)
+export const tarifaDe = (l) => Number(l.producto.tarifaIva ?? 0)
 
 /** La cantidad como número entero de 1 a 99 999, o NaN si lo escrito no vale. */
 export function cantidadDe(l) {
@@ -51,7 +46,7 @@ export function descuentoDe(descuento) {
 export function lineasParaVista(lineas) {
   return lineas.map((l) => ({
     clave: l.clave,
-    productoId: l.producto?.id ?? null,
+    productoId: l.producto.id,
     precio: precioDe(l),
     tarifaIva: tarifaDe(l),
     cantidad: Number.isNaN(cantidadDe(l)) ? 0 : cantidadDe(l),
@@ -59,9 +54,9 @@ export function lineasParaVista(lineas) {
   }))
 }
 
-/** El mismo producto dos veces suma 1; un producto nuevo siempre es su propia línea. */
+/** El mismo producto dos veces suma 1. */
 export function agregarProducto(lineas, producto) {
-  const existente = lineas.find((l) => l.producto?.id === producto.id)
+  const existente = lineas.find((l) => l.producto.id === producto.id)
   if (!existente) return [...lineas, lineaDeProducto(producto)]
   return lineas.map((l) => {
     if (l !== existente) return l
@@ -72,24 +67,22 @@ export function agregarProducto(lineas, producto) {
 
 /** Cuántas unidades piden de más de las que hay; 0 si alcanza o no se sabe. */
 export function faltante(l) {
-  if (!l.producto) return 0
   const n = cantidadDe(l)
   if (Number.isNaN(n)) return 0
   return Math.max(0, n - Math.max(0, l.producto.existencia))
 }
 
-export const esEncargo = (l) => Boolean(l.nuevo) || l.encargo
+export const esEncargo = (l) => l.encargo
 export const tieneEncargo = (lineas) => lineas.some(esEncargo)
 
 /**
  * Lo que un vendedor no puede hacer solo y necesita el PIN de un administrador
- * (descuento, encargo, producto nuevo). Una sola lista para un solo PIN.
+ * (descuento, encargo). Una sola lista para un solo PIN.
  */
 export function motivosDeAutorizacion(lineas, descuentoTotal) {
   const motivos = []
   const conDescuento = lineas.some((l) => descuentoDe({ tipo: l.descuentoTipo, valor: l.descuentoValor }))
   if (conDescuento || descuentoDe(descuentoTotal)) motivos.push('Descuento en la venta')
-  for (const l of lineas.filter((x) => x.nuevo)) motivos.push(`Producto nuevo: «${l.nuevo.nombre}»`)
   if (tieneEncargo(lineas)) motivos.push('Venta como encargo (sin existencia)')
   return motivos
 }
@@ -153,13 +146,7 @@ export function pagoParaApi(p) {
 }
 
 function lineaParaApi(l) {
-  const linea = { cantidad: cantidadDe(l) }
-  if (l.nuevo) {
-    linea.productoNuevo = { nombre: l.nuevo.nombre.trim(), precioVenta: Number(l.nuevo.precioVenta) }
-    if (l.nuevo.codigoBarras) linea.productoNuevo.codigoBarras = l.nuevo.codigoBarras
-  } else {
-    linea.productoId = l.producto.id
-  }
+  const linea = { productoId: l.producto.id, cantidad: cantidadDe(l) }
   const descuento = descuentoDe({ tipo: l.descuentoTipo, valor: l.descuentoValor })
   if (descuento) linea.descuento = descuento
   if (esEncargo(l)) linea.entregaEstimada = l.entregaEstimada
@@ -196,10 +183,8 @@ const dos = (n) => String(n).padStart(2, '0')
 export function armarRecibo({ empresa, venta, lineas, pagos, cliente, cajero, domicilio, ahora = new Date() }) {
   const delServidor = venta.lineas ?? []
   // El servidor devuelve las líneas ordenadas por producto, no como se escanearon: cada una de
-  // catálogo se busca por su productoId, y los productos nuevos toman las que quedan, en orden.
+  // línea se busca por su productoId.
   const porId = new Map(delServidor.map((s) => [s.productoId, s]))
-  const deProductosNuevos = delServidor.filter((s) => !lineas.some((l) => l.producto?.id === s.productoId))
-  let siguienteNuevo = 0
   const suma = (campo) => delServidor.reduce((a, l) => a + Number(l[campo]), 0)
   return {
     empresa,
@@ -208,7 +193,7 @@ export function armarRecibo({ empresa, venta, lineas, pagos, cliente, cajero, do
     cajero,
     cliente: cliente ? { nombre: cliente.nombre, identificacion: cliente.identificacion } : null,
     lineas: lineas.map((l) => {
-      const s = (l.producto ? porId.get(l.producto.id) : deProductosNuevos[siguienteNuevo++]) ?? {}
+      const s = porId.get(l.producto.id) ?? {}
       return {
         nombre: nombreDe(l),
         cantidad: s.cantidad ?? cantidadDe(l),
@@ -218,7 +203,6 @@ export function armarRecibo({ empresa, venta, lineas, pagos, cliente, cajero, do
         iva: Number(s.iva ?? 0),
         total: Number(s.total ?? 0),
         encargo: esEncargo(l),
-        nuevo: Boolean(l.nuevo),
         entregaEstimada: esEncargo(l) ? l.entregaEstimada : null,
       }
     }),

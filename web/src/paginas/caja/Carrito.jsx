@@ -29,15 +29,9 @@ function Producto({ linea, alCambiar }) {
     <span className="caja-producto">
       <strong>{nombre}</strong>
       <span className="sub-linea">
-        {linea.producto ? `${linea.producto.codigo}${linea.producto.presentacion ? ` · ${linea.producto.presentacion}` : ''}` : (linea.nuevo.codigoBarras || 'Sin código')}
+        {`${linea.producto.codigo}${linea.producto.presentacion ? ` · ${linea.producto.presentacion}` : ''}`}
       </span>
-      {linea.nuevo && (
-        <>
-          <span className="insignia umbral">Producto nuevo — encargo</span>
-          <span className="sub-linea">El IVA lo calcula el servidor al cobrar.</span>
-        </>
-      )}
-      {linea.producto && linea.encargo && <span className="insignia umbral">Encargo</span>}
+      {linea.encargo && <span className="insignia umbral">Encargo</span>}
       {falta > 0 && !linea.encargo && (
         <>
           <span className="caja-falta">Hay {Math.max(0, linea.producto.existencia)} en existencia; faltan {falta}.</span>
@@ -46,7 +40,7 @@ function Producto({ linea, alCambiar }) {
           </button>
         </>
       )}
-      {linea.producto && linea.encargo && (
+      {linea.encargo && (
         <button type="button" className="enlace" onClick={() => alCambiar(linea.clave, { encargo: false })}>
           Ya no es encargo
         </button>

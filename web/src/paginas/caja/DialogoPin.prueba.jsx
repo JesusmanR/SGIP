@@ -18,7 +18,7 @@ beforeEach(() => {
   alConfirmar.mockResolvedValue(null)
 })
 
-const MOTIVOS = ['Descuento en la venta', 'Producto nuevo: «Llave de paso»']
+const MOTIVOS = ['Descuento en la venta', 'Venta como encargo (sin existencia)']
 const montar = () => render(<DialogoPin motivos={MOTIVOS} alConfirmar={alConfirmar} alCerrar={alCerrar} />)
 const pin = () => screen.getByLabelText(/^pin$/i)
 
@@ -27,7 +27,7 @@ describe('diálogo del PIN', () => {
     montar()
     expect(screen.getByRole('dialog', { name: /autorización del administrador/i })).toBeInTheDocument()
     expect(screen.getByText('Descuento en la venta')).toBeInTheDocument()
-    expect(screen.getByText('Producto nuevo: «Llave de paso»')).toBeInTheDocument()
+    expect(screen.getByText('Venta como encargo (sin existencia)')).toBeInTheDocument()
     expect(await screen.findByRole('option', { name: 'Laura Pérez' })).toBeInTheDocument()
     expect(pin()).toHaveAttribute('type', 'password')
     expect(pin()).toHaveAttribute('inputmode', 'numeric')

@@ -20,14 +20,13 @@ import Carrito from './Carrito.jsx'
 import Cobro from './Cobro.jsx'
 import DatosCliente from './DatosCliente.jsx'
 import DialogoPin from './DialogoPin.jsx'
-import ProductoNuevo from './ProductoNuevo.jsx'
 import ReciboImprimible from './ReciboImprimible.jsx'
 import SeccionCaja from './SeccionCaja.jsx'
 import useEnLinea from './useEnLinea.js'
 import { imprimirRecibo } from './imprimir.js'
 import useVentaEnCurso, { MENSAJE_AMBIGUO } from './useVentaEnCurso.js'
 import {
-  agregarProducto, armarRecibo, armarSolicitud, bloqueoDeVenta, descuentoDe, lineaDeProductoNuevo,
+  agregarProducto, armarRecibo, armarSolicitud, bloqueoDeVenta, descuentoDe,
   lineasParaVista, motivosDeAutorizacion, puedeCobrar,
 } from './venta.js'
 
@@ -95,8 +94,7 @@ function Venta({ turno }) {
   const [medioSaldoId, setMedioSaldoId] = useState(null)
   // Una venta restaurada tras recargar: ya no hay carrito, solo se puede reintentar su cuerpo guardado o abandonarla.
   const [registrada, setRegistrada] = useState(null)
-  const [dialogo, setDialogo] = useState(null) // 'producto' | 'pin' | null
-  const [codigoNuevo, setCodigoNuevo] = useState('')
+  const [dialogo, setDialogo] = useState(null) // 'pin' | null
   const [mensaje, setMensaje] = useState(null)
   const [abandonando, setAbandonando] = useState(false)
   const [recibo, setRecibo] = useState(null)
@@ -208,14 +206,6 @@ function Venta({ turno }) {
     setPagos([])
   }
 
-  function agregarNuevo(datos) {
-    if (congeladoAhora.current) return
-    setLineas((actuales) => [...actuales, lineaDeProductoNuevo(datos)])
-    if (datos.motivo) setMotivoEncargo(datos.motivo)
-    setPagos([])
-    setDialogo(null)
-  }
-
   /** Envía la venta. Devuelve el texto del error, o null si quedó registrada. */
   async function enviar(autorizacion) {
     setMensaje(null)
@@ -316,7 +306,6 @@ function Venta({ turno }) {
             <SeccionCaja numero="02" titulo="Productos" descripcion="Escanea o busca y agrega los artículos de esta venta.">
               <BuscadorProducto
                 entradaRef={buscador} alAgregar={agregarDelCatalogo} alCambiarPendientes={(n) => setEscaneando(n > 0)}
-                alCrearProducto={(codigo) => { setCodigoNuevo(codigo); setDialogo('producto') }}
               />
               <Carrito
                 lineas={lineas} vista={vista} alCambiar={cambiarLinea} alQuitar={quitarLinea}
@@ -367,12 +356,6 @@ function Venta({ turno }) {
         </div>
       </div>
 
-      {dialogo === 'producto' && (
-        <ProductoNuevo
-          codigoInicial={codigoNuevo} motivoInicial={motivoEncargo}
-          alAgregar={agregarNuevo} alCerrar={() => setDialogo(null)}
-        />
-      )}
       {dialogo === 'pin' && (
         <DialogoPin motivos={motivos} alConfirmar={enviar} alCerrar={() => setDialogo(null)} />
       )}

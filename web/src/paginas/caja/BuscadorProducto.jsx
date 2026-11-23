@@ -84,9 +84,9 @@ function DialogoCamara({ alLeer, alCerrar }) {
 /**
  * El campo de la caja: un lector de código de barras es un teclado que escribe
  * el código y pulsa Enter, así que Enter busca por código. Si no existe, se
- * ofrece buscar por nombre o, con un administrador, crear el producto.
+ * ofrece buscar por nombre. La caja no crea productos: los crea el administrador en el catálogo.
  */
-export default function BuscadorProducto({ alAgregar, alCrearProducto, entradaRef, alCambiarPendientes }) {
+export default function BuscadorProducto({ alAgregar, entradaRef, alCambiarPendientes }) {
   const propia = useRef(null)
   const campo = entradaRef ?? propia
   const [texto, setTexto] = useState('')
@@ -268,13 +268,6 @@ export default function BuscadorProducto({ alAgregar, alCrearProducto, entradaRe
               onClick={() => buscarPorNombre(codigo)}
             >
               Buscar por nombre
-            </button>
-            <button
-              type="button" className="boton secundario"
-              aria-label={`Crear producto (requiere administrador) para el código ${codigo}`}
-              onClick={() => { olvidar(codigo); alCrearProducto(codigo) }}
-            >
-              Crear producto (requiere administrador)
             </button>
             <button type="button" className="enlace" aria-label={`Descartar el código ${codigo}`} onClick={() => olvidar(codigo)}>
               Descartar

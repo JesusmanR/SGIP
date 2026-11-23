@@ -71,16 +71,6 @@ describe('carrito', () => {
     expect(alCambiarMotivo).toHaveBeenCalledWith('x')
   })
 
-  it('un producto nuevo se marca como encargo y aclara que el IVA lo pone el servidor', () => {
-    const nuevo = {
-      clave: 'n1', nuevo: { nombre: 'Llave de paso', precioVenta: 15000, codigoBarras: '' },
-      cantidad: '1', descuentoTipo: 'PORCENTAJE', descuentoValor: '', encargo: true, entregaEstimada: '2026-12-01',
-    }
-    montar([nuevo])
-    expect(screen.getByText('Producto nuevo — encargo')).toBeInTheDocument()
-    expect(screen.getByText(/el iva lo calcula el servidor/i)).toBeInTheDocument()
-  })
-
   it('el descuento de toda la compra tiene su propio campo', async () => {
     montar([lineaDeProducto(TORNILLO)])
     await userEvent.type(screen.getByLabelText('Descuento de toda la compra'), '1')

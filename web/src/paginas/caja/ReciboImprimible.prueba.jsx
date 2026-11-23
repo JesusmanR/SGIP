@@ -14,11 +14,11 @@ const RECIBO = {
   lineas: [
     {
       nombre: 'Tornillo M6', cantidad: 2, precioUnitario: 10000, subtotal: 20000, descuento: 2000,
-      iva: 3420, total: 21420, encargo: false, nuevo: false, entregaEstimada: null,
+      iva: 3420, total: 21420, encargo: false, entregaEstimada: null,
     },
     {
       nombre: 'Llave de paso', cantidad: 1, precioUnitario: 15000, subtotal: 15000, descuento: 0,
-      iva: 0, total: 15000, encargo: true, nuevo: true, entregaEstimada: '2026-12-01',
+      iva: 0, total: 15000, encargo: true, entregaEstimada: '2026-12-01',
     },
   ],
   subtotal: 35000, descuento: 2000, iva: 3420, total: 36420, cambio: 3580,
@@ -45,7 +45,7 @@ describe('recibo', () => {
     expect(screen.getByText(/^Cambio/)).toHaveTextContent(pesos(3580))
   })
 
-  it('lleva las marcas de encargo, producto nuevo y domicilio', () => {
+  it('lleva las marcas de encargo y domicilio', () => {
     render(<ReciboImprimible recibo={RECIBO} />)
     expect(screen.getByText(/encargo — entrega estimada: 1 dic 2026/i)).toBeInTheDocument()
     expect(screen.getByText(/domicilio/i, { selector: '.recibo-marca' })).toHaveTextContent('Calle 1 # 2-3')

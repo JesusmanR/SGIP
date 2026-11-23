@@ -84,16 +84,6 @@ describe('vista previa de la venta (misma regla que el servidor)', () => {
         for (const l of base.lineas) expect(r.lineas.find((x) => x.clave === l.clave)).toEqual(l)
       }
     })
-
-    it('los productos nuevos (sin id) cuentan después de los del catálogo, en el orden en que se agregaron', () => {
-      const nuevo = (clave) => linea({ clave, productoId: null, precio: 100, tarifaIva: 0 })
-      const r = calcularVistaPrevia(
-        [nuevo('n1'), linea({ clave: 'cat', productoId: 99, precio: 100, tarifaIva: 0 }), nuevo('n2')],
-        { tipo: 'PESOS', valor: 100 },
-      )
-      // Orden del servidor: cat (99), n1, n2. El peso que sobra va al primero: cat.
-      expect(r.lineas.map((l) => [l.clave, l.descuento])).toEqual([['cat', 34], ['n1', 33], ['n2', 33]])
-    })
   })
 
   it('un descuento mayor que el valor no se calcula y dice por qué', () => {

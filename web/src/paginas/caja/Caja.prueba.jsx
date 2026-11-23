@@ -3,7 +3,6 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { hoyISO, sumarDias } from '../../servicios/fechas.js'
 import {
   abrirTurno, CLAVE_EN_USO, mediosDePago, productoPorCodigo, productosPorTexto, registrarVenta, saldoDeCliente, turnoActual,
 } from '../../servicios/api/caja.js'
