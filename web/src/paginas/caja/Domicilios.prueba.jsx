@@ -90,6 +90,20 @@ describe('domicilios', () => {
     expect(screen.queryByRole('region', { name: /cobro de V-0043/i })).not.toBeInTheDocument()
   })
 
+  it('el cobro de un domicilio no ofrece «Saldo a favor» aunque el cliente tenga saldo, y ni siquiera lo consulta', async () => {
+    saldoDeCliente.mockResolvedValue({ saldo: 30000, medioId: 9 })
+    montar()
+    await screen.findByText('V-0042')
+    await userEvent.click(screen.getByRole('tab', { name: /por cobrar/i }))
+    await userEvent.click(await screen.findByRole('button', { name: /registrar cobro.*V-0043/i }))
+    const cobro = await screen.findByRole('region', { name: /cobro de V-0043/i })
+    // El backend lo rechaza a propósito (400 SALDO_NO_ADMITIDO): el cobro posterior es solo con medios de pago.
+    const medio = within(cobro).getByLabelText(/medio de pago/i)
+    expect(within(medio).getAllByRole('option').length).toBeGreaterThan(0)
+    expect(within(medio).queryByRole('option', { name: /saldo a favor/i })).toBeNull()
+    expect(saldoDeCliente).not.toHaveBeenCalled()
+  })
+
   it('un cobro rechazado se anuncia y deja el cobro abierto', async () => {
     cobrarDomicilio.mockRejectedValueOnce(errorApi(409, 'Necesitas un turno abierto para cobrar.'))
     montar()
