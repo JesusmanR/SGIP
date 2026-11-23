@@ -1,6 +1,7 @@
 package co.com.bspstore.sgip.datos;
 
 import co.com.bspstore.sgip.api.dto.Cliente;
+import co.com.bspstore.sgip.api.dto.ClienteEnLista;
 import co.com.bspstore.sgip.modelo.TipoDocumento;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
@@ -8,6 +9,7 @@ import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -25,6 +27,17 @@ public class RepositorioClientes {
 
     public RepositorioClientes(JdbcClient jdbc) {
         this.jdbc = jdbc;
+    }
+
+    /** Esqueleto: lo implementa el paso verde. */
+    public List<ClienteEnLista> listar(Integer empresa, String prefijoDeIdentificacion, String contieneNombre,
+                                       int limite, long desplazamiento) {
+        throw new UnsupportedOperationException("pendiente");
+    }
+
+    /** Esqueleto: lo implementa el paso verde. */
+    public long contar(Integer empresa, String prefijoDeIdentificacion, String contieneNombre) {
+        throw new UnsupportedOperationException("pendiente");
     }
 
     public Optional<Cliente> buscar(Integer empresa, Integer id) {

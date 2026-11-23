@@ -1,6 +1,7 @@
 package co.com.bspstore.sgip.logica;
 
 import co.com.bspstore.sgip.api.dto.Cliente;
+import co.com.bspstore.sgip.api.dto.PaginaDeClientes;
 import co.com.bspstore.sgip.api.dto.SolicitudCliente;
 import co.com.bspstore.sgip.config.ContextoEmpresa;
 import co.com.bspstore.sgip.datos.RepositorioClientes;
@@ -51,6 +52,12 @@ public class ServicioClientes {
             throw new FiltroInvalidoException("La identificación es obligatoria.");
         }
         return clientes.buscarPorIdentificacion(ContextoEmpresa.empresaActual(), tipo, buscada);
+    }
+
+    /** Esqueleto: lo implementa el paso verde. */
+    @Transactional(readOnly = true)
+    public PaginaDeClientes listar(String buscar, int pagina, int tamano) {
+        throw new UnsupportedOperationException("pendiente");
     }
 
     @Transactional
