@@ -15,10 +15,12 @@ const CORREO = /^\S+@\S+\.\S+$/
  *
  * Con `documentoEditable` el tipo y el número se escriben en el formulario (pantalla Clientes);
  * sin él, el documento va fijo y solo se muestra (la caja, que ya buscó al cliente por él).
+ * Con `domicilioEditable` se piden también la dirección y la ciudad (pantalla Clientes); la ciudad vacía la
+ * completa el servidor con la de la empresa.
  * `inicial.autorizoDatos` deja la casilla marcada si el cliente ya había autorizado.
  */
 export default function FormularioCliente({
-  inicial, titulo, textoGuardar, alGuardar, alCancelar, documentoEditable = false,
+  inicial, titulo, textoGuardar, alGuardar, alCancelar, documentoEditable = false, domicilioEditable = false,
 }) {
   const [datos, setDatos] = useState({
     tipoDocumento: inicial.tipoDocumento, identificacion: inicial.identificacion ?? '',
@@ -89,6 +91,16 @@ export default function FormularioCliente({
       <Campo etiqueta="Teléfono (opcional)">
         <input type="text" inputMode="tel" value={datos.telefono} onChange={cambiar('telefono')} maxLength={20} autoComplete="off" />
       </Campo>
+      {domicilioEditable && (
+        <>
+          <Campo etiqueta="Dirección (opcional)">
+            <input type="text" value={datos.direccion} onChange={cambiar('direccion')} maxLength={200} autoComplete="off" />
+          </Campo>
+          <Campo etiqueta="Ciudad" ayuda="Si la dejas vacía, se usa la ciudad de la empresa.">
+            <input type="text" value={datos.ciudad} onChange={cambiar('ciudad')} maxLength={80} autoComplete="off" />
+          </Campo>
+        </>
+      )}
       <label className="casilla">
         <input
           type="checkbox" checked={autoriza} onChange={(e) => setAutoriza(e.target.checked)}

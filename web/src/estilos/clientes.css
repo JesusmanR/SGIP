@@ -23,3 +23,5 @@
 @media (max-width: 48rem) {
   .seccion-clientes .tabla-tarjetas .boton { min-height: var(--toque-minimo); padding: 0 var(--espacio-4); }
 }
+/* Un botón de página apagado se distingue por el borde y el texto tenue, no por un relleno que parece activo. */
+.seccion-clientes .clientes-paginas .boton:disabled { background: var(--tarjeta); color: var(--tinta-3); border-color: var(--borde); }

@@ -133,6 +133,7 @@ export default function Clientes() {
           <FormularioCliente
             key={editando?.id ?? 'nuevo'}
             documentoEditable
+            domicilioEditable
             inicial={editando ?? NUEVO}
             titulo={editando ? 'Editar cliente' : 'Cliente nuevo'}
             textoGuardar={editando ? 'Guardar cambios' : 'Guardar cliente'}
