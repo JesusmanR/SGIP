@@ -642,6 +642,67 @@ rechaza "un uso del saldo que no se hizo en una venta" 3819 ck_movsaldo_origen "
    VALUES (1, $CLIENTE1, 'USO', 100, @devolucion_v46, '2026-11-12 09:00:00');
    ROLLBACK;"
 
+# ── Los datos de la empresa, su identidad con tipo y la copia en la venta (V48) ─
+# El tipo del documento (NIT o CC) lo cierra un ENUM; el cambio de identidad de
+# una empresa entra en la bitácora de la plataforma con la misma regla de las
+# demás acciones de empresa (con empresa y con valor anterior), y la venta
+# gana las cinco columnas de la copia, todas nulas.
+echo "── los datos de la empresa y la copia en la venta (V48) ──"
+
+igual "empresas.tipo_documento es NIT o CC, no admite nulo y por omisión es NIT" \
+  "enum('NIT','CC')|NO|NIT" \
+  "$(consulta "SELECT CONCAT(column_type, '|', is_nullable, '|', column_default)
+                 FROM information_schema.columns
+                WHERE table_schema = DATABASE() AND table_name = 'empresas'
+                  AND column_name = 'tipo_documento';")"
+igual "el nombre comercial (150) y la dirección (200) de la empresa admiten nulo" "150|200|2" \
+  "$(consulta "SELECT CONCAT(MAX(IF(column_name = 'nombre_comercial', character_maximum_length, 0)), '|',
+                            MAX(IF(column_name = 'direccion', character_maximum_length, 0)), '|',
+                            COUNT(*))
+                 FROM information_schema.columns
+                WHERE table_schema = DATABASE() AND table_name = 'empresas'
+                  AND column_name IN ('nombre_comercial', 'direccion') AND is_nullable = 'YES';")"
+igual "la venta lleva cinco columnas de la copia de la empresa, todas nulas" "5" \
+  "$(consulta "SELECT COUNT(*) FROM information_schema.columns
+                WHERE table_schema = DATABASE() AND table_name = 'ventas' AND is_nullable = 'YES'
+                  AND column_name IN ('empresa_nombre', 'empresa_tipo_documento', 'empresa_nit',
+                                      'empresa_direccion', 'empresa_telefono');")"
+igual "las columnas de la copia miden lo que miden las de la empresa" "160|20|200|20" \
+  "$(consulta "SELECT CONCAT(MAX(IF(column_name = 'empresa_nombre', character_maximum_length, 0)), '|',
+                            MAX(IF(column_name = 'empresa_nit', character_maximum_length, 0)), '|',
+                            MAX(IF(column_name = 'empresa_direccion', character_maximum_length, 0)), '|',
+                            MAX(IF(column_name = 'empresa_telefono', character_maximum_length, 0)))
+                 FROM information_schema.columns
+                WHERE table_schema = DATABASE() AND table_name = 'ventas';")"
+
+rechaza "un tipo de documento de empresa que no es NIT ni CC" 1265 tipo_documento \
+  "UPDATE empresas SET tipo_documento = 'RUT' WHERE empresa_id = $AJENA;"
+acepta "una empresa puede identificarse con CC" \
+  "UPDATE empresas SET tipo_documento = 'CC' WHERE empresa_id = $AJENA;
+   UPDATE empresas SET tipo_documento = 'NIT' WHERE empresa_id = $AJENA;"
+
+identidad () {
+  echo "INSERT INTO auditoria_plataforma
+          (usuario_id, empresa_id, accion, entidad, campo, referencia, valor_anterior, valor_nuevo, motivo)
+        VALUES ($USU, $1, 'CAMBIO_IDENTIDAD_EMPRESA', 'empresas', 'nit', '$2', $3, '800555111',
+                'Corrección pedida por la tienda');"
+}
+
+acepta "un cambio de identidad de una empresa entra en la bitácora, con su campo" \
+  "$(identidad "$AJENA" PAP-V48-1 "'900123456'")"
+rechaza "un cambio de identidad sin empresa" 3819 ck_auditoria_plataforma_ambito \
+  "$(identidad NULL PAP-V48-2 "'900123456'")"
+rechaza "un cambio de identidad sin el valor anterior" 3819 ck_auditoria_plataforma_cambio \
+  "$(identidad "$AJENA" PAP-V48-3 NULL)"
+rechaza "una acción que el ENUM no conoce" 1265 accion \
+  "INSERT INTO auditoria_plataforma (usuario_id, empresa_id, accion, entidad, referencia, valor_anterior)
+   VALUES ($USU, $AJENA, 'CAMBIO_DE_NIT', 'empresas', 'PAP-V48-4', 'x');"
+# Las restricciones se volvieron a escribir: lo anterior tiene que seguir negado.
+rechaza "un cambio de UVT atribuido a una empresa sigue rechazado tras la V48" 3819 ck_auditoria_plataforma_ambito \
+  "$(bitacora "$AJENA" UVT_CAMBIO PAP-V48-5 "'1'")"
+rechaza "un desbloqueo sin el estado anterior sigue rechazado tras la V48" 3819 ck_auditoria_plataforma_cambio \
+  "$(bitacora "$AJENA" USUARIO_DESBLOQUEO PAP-V48-6 NULL)"
+
 echo
 if [[ "$fallos" -eq 0 ]]; then
   echo "TODO EN VERDE"

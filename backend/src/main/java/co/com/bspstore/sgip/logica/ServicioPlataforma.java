@@ -2,6 +2,7 @@ package co.com.bspstore.sgip.logica;
 
 import co.com.bspstore.sgip.api.dto.EmpresaEnPlataforma;
 import co.com.bspstore.sgip.api.dto.SolicitudAltaEmpresa;
+import co.com.bspstore.sgip.api.dto.SolicitudIdentidad;
 import co.com.bspstore.sgip.api.dto.UsuarioEnPlataforma;
 import co.com.bspstore.sgip.config.ContextoEmpresa;
 import co.com.bspstore.sgip.config.UsuarioAutenticado;
@@ -10,7 +11,9 @@ import co.com.bspstore.sgip.datos.RolRepositorio;
 import co.com.bspstore.sgip.datos.UsuarioRepositorio;
 import co.com.bspstore.sgip.modelo.AccionPlataforma;
 import co.com.bspstore.sgip.modelo.EstadoEmpresa;
+import co.com.bspstore.sgip.modelo.IdentidadDeEmpresa;
 import co.com.bspstore.sgip.modelo.Rol;
+import co.com.bspstore.sgip.modelo.TipoDocumentoEmpresa;
 import co.com.bspstore.sgip.modelo.Usuario;
 import co.com.bspstore.sgip.util.Hoy;
 import co.com.bspstore.sgip.util.Seguridad;
@@ -124,7 +127,11 @@ public class ServicioPlataforma {
      */
     @Transactional
     public EmpresaEnPlataforma darDeAlta(SolicitudAltaEmpresa solicitud) {
-        String nit = texto(solicitud.nit());
+        // NIT o CC más el número, sin puntos, espacios ni guiones y sin dígito de verificación (que nunca se
+        // pide). Es la misma regla del cambio de identidad, para que las dos rutas no discrepen.
+        TipoDocumentoEmpresa tipoDocumento = solicitud.tipoDocumento() == null
+                ? TipoDocumentoEmpresa.NIT : solicitud.tipoDocumento();
+        String nit = DocumentoEmpresa.normalizar(solicitud.nit());
         String correoAdmin = solicitud.administradorCorreo().trim().toLowerCase(Locale.ROOT);
 
         if (plataforma.existeNit(nit)) {
@@ -137,6 +144,7 @@ public class ServicioPlataforma {
         }
 
         Integer empresaId = plataforma.insertarEmpresa(
+                tipoDocumento,
                 nit,
                 texto(solicitud.razonSocial()),
                 texto(solicitud.correoContacto()),
@@ -198,6 +206,70 @@ public class ServicioPlataforma {
         // calculó, en lugar de lo que este método cree que escribió.
         return plataforma.buscar(empresaId).orElseThrow(() -> new IllegalStateException(
                 "La empresa " + empresaId + " no se encontró justo después de crearla."));
+    }
+
+    /**
+     * Cambia la identidad de una empresa: el tipo y el número de su documento (NIT o CC) y su razón social.
+     * Es lo único que el comercio no puede hacer por sí mismo (anti-objetivo del diseño: que la tienda
+     * cambie su NIT), y por eso vive aquí y no en {@code ServicioEmpresa}.
+     *
+     * Una fila de la bitácora POR CADA campo que cambia, cada una con el NIT anterior como referencia, el
+     * valor anterior y el nuevo, el motivo y el responsable, en la misma transacción que el UPDATE: o
+     * quedan las dos cosas o ninguna. Si nada cambia no se escribe nada, ni en la empresa ni en la
+     * bitácora, y la respuesta es la misma 200.
+     *
+     * «Cambió el número» se mide sobre el número normalizado, no sobre el texto: la semilla
+     * {@code 900000000-0} y un {@code 9000000000} son el mismo número, y una edición que solo toca la razón
+     * social no reescribe la columna del documento ni dice que lo cambió. Por la misma razón el choque con
+     * otra empresa (409) excluye a la que se edita: cambiar solo la razón social no puede chocar consigo
+     * misma.
+     *
+     * El orden de los errores es 404 (la empresa), luego 400 (el documento) y luego 409. La fila se lee con
+     * bloqueo, para que dos cambios simultáneos no anoten el mismo valor anterior. Vacío si la empresa no
+     * existe, para que el controlador responda 404.
+     */
+    @Transactional
+    public Optional<EmpresaEnPlataforma> cambiarIdentidad(Integer empresaId, SolicitudIdentidad solicitud) {
+        Optional<IdentidadDeEmpresa> actual = plataforma.identidadDe(empresaId);
+        if (actual.isEmpty()) {
+            return Optional.empty();
+        }
+        IdentidadDeEmpresa antes = actual.get();
+        String numero = DocumentoEmpresa.normalizar(solicitud.numero());
+        if (plataforma.existeNit(numero, empresaId)) {
+            throw new NitRepetidoException(
+                    "Ya hay otra empresa registrada con la identificación tributaria " + numero + ".");
+        }
+
+        boolean cambiaElTipo = antes.tipoDocumento() != solicitud.tipoDocumento();
+        boolean cambiaElNumero = !DocumentoEmpresa.normalizadoOTalCual(antes.nit()).equals(numero);
+        boolean cambiaLaRazon = !antes.razonSocial().equals(solicitud.razonSocial());
+        if (!cambiaElTipo && !cambiaElNumero && !cambiaLaRazon) {
+            return plataforma.buscar(empresaId);
+        }
+
+        plataforma.cambiarIdentidad(empresaId, solicitud.tipoDocumento(),
+                cambiaElNumero ? numero : antes.nit(), solicitud.razonSocial());
+
+        // La referencia es el NIT que tenía antes de este cambio, igual en las tres filas: es lo que
+        // alguien busca en la bitácora para encontrar «qué le pasó a esta empresa».
+        Integer responsable = responsable();
+        String referencia = antes.nit();
+        if (cambiaElTipo) {
+            plataforma.registrar(responsable, empresaId, AccionPlataforma.CAMBIO_IDENTIDAD_EMPRESA,
+                    "empresas", "tipo_documento", referencia,
+                    antes.tipoDocumento().name(), solicitud.tipoDocumento().name(), solicitud.motivo());
+        }
+        if (cambiaElNumero) {
+            plataforma.registrar(responsable, empresaId, AccionPlataforma.CAMBIO_IDENTIDAD_EMPRESA,
+                    "empresas", "nit", referencia, antes.nit(), numero, solicitud.motivo());
+        }
+        if (cambiaLaRazon) {
+            plataforma.registrar(responsable, empresaId, AccionPlataforma.CAMBIO_IDENTIDAD_EMPRESA,
+                    "empresas", "razon_social", referencia,
+                    antes.razonSocial(), solicitud.razonSocial(), solicitud.motivo());
+        }
+        return plataforma.buscar(empresaId);
     }
 
     /** RF-02. Vacío si la empresa no existe, para que el controlador responda 404. */

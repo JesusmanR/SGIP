@@ -1,5 +1,6 @@
 package co.com.bspstore.sgip.api.dto;
 
+import co.com.bspstore.sgip.modelo.TipoDocumentoEmpresa;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -25,6 +26,16 @@ import jakarta.validation.constraints.Size;
  */
 public record SolicitudAltaEmpresa(
 
+        /**
+         * NIT o CC. Es opcional y, si falta, es NIT: así el formulario del alta que todavía no lo manda
+         * sigue funcionando. Del número no se pide ni se valida dígito de verificación.
+         */
+        TipoDocumentoEmpresa tipoDocumento,
+
+        /**
+         * El número, con o sin puntos, espacios o guiones. Se normaliza (solo dígitos, de 5 a 15) antes de
+         * comprobar que no esté repetido y de guardarlo.
+         */
         @NotBlank(message = "La identificación tributaria es obligatoria")
         @Size(max = 20, message = "La identificación tributaria no puede pasar de 20 caracteres")
         String nit,

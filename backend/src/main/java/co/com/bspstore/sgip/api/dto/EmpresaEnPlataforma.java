@@ -11,6 +11,9 @@ import java.time.LocalDateTime;
  * suscripción. Aquí sí vienen, porque son justo lo que el super
  * administrador gobierna.
  *
+ * {@code tipoDocumento} es NIT o CC, y {@code nit} es el número tal como está guardado: las semillas
+ * anteriores a la V48 pueden llevar guion.
+ *
  * Lo que no trae, y no por olvido: nada operativo. Ni catálogo, ni
  * ventas, ni inventario, ni los correos de los usuarios del comercio. La
  * RN-17 dice que el super administrador «no accede a los datos
@@ -20,6 +23,7 @@ import java.time.LocalDateTime;
  */
 public record EmpresaEnPlataforma(
         Integer empresaId,
+        String tipoDocumento,
         String nit,
         String razonSocial,
         String correoContacto,

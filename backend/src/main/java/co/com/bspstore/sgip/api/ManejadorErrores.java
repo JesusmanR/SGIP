@@ -8,7 +8,9 @@ import co.com.bspstore.sgip.logica.PinNuevoInvalidoException;
 import co.com.bspstore.sgip.logica.CategoriaEnUsoException;
 import co.com.bspstore.sgip.logica.ClaveActualIncorrectaException;
 import co.com.bspstore.sgip.logica.ClaveNuevaInvalidaException;
+import co.com.bspstore.sgip.logica.CampoNoPermitidoException;
 import co.com.bspstore.sgip.logica.DatoTributarioInvalidoException;
+import co.com.bspstore.sgip.logica.DocumentoEmpresaInvalidoException;
 import co.com.bspstore.sgip.logica.EstadoDeCargaInvalidoException;
 import co.com.bspstore.sgip.logica.RecursoNoEncontradoException;
 import co.com.bspstore.sgip.logica.CorreoRepetidoException;
@@ -92,6 +94,8 @@ public class ManejadorErrores {
      */
     public static final URI TIPO_NIT_REPETIDO = URI.create("urn:sgip:nit-repetido");
     public static final URI TIPO_CORREO_REPETIDO = URI.create("urn:sgip:correo-repetido");
+    public static final URI TIPO_DOCUMENTO_EMPRESA_INVALIDO =
+            URI.create("urn:sgip:empresa:documento-invalido");
     public static final URI TIPO_CLAVE_ACTUAL_INCORRECTA = URI.create("urn:sgip:clave-actual-incorrecta");
 
     /**
@@ -261,6 +265,27 @@ public class ManejadorErrores {
         // puede corregirla con lo que el detalle le dice.
         ProblemDetail p = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
         p.setTitle("Dato tributario inválido");
+        p.setDetail(e.getMessage());
+        return p;
+    }
+
+    @ExceptionHandler(DocumentoEmpresaInvalidoException.class)
+    public ProblemDetail documentoDeEmpresaInvalido(DocumentoEmpresaInvalidoException e) {
+        // 400: el cuerpo está bien formado y el número no tiene el formato (solo dígitos, de 5 a 15). Tipo
+        // propio para que el formulario marque el campo del documento. Texto fijo, sin eco de lo escrito.
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
+        p.setType(TIPO_DOCUMENTO_EMPRESA_INVALIDO);
+        p.setTitle("Documento de la empresa inválido");
+        p.setDetail(e.getMessage());
+        return p;
+    }
+
+    @ExceptionHandler(CampoNoPermitidoException.class)
+    public ProblemDetail campoNoPermitido(CampoNoPermitidoException e) {
+        // 400: el cuerpo trae un campo que esta operación no acepta (por ejemplo el NIT en la edición de
+        // los datos de contacto). El mensaje lo arma la excepción, que limita lo que cita del cliente.
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
+        p.setTitle("Campo no permitido");
         p.setDetail(e.getMessage());
         return p;
     }
