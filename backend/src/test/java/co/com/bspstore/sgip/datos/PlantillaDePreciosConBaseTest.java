@@ -44,8 +44,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @SpringBootTest
 class PlantillaDePreciosConBaseTest {
 
-    /** El tope de memoria que el plan fija para la plantilla de 20 000 productos. */
-    private static final long TOPE_MEMORIA = 64L * 1024 * 1024;
+    /** El tope de memoria retenida con 20 000 productos: lo medido es de 1 a 2 MB, y 16 MB atrapa un recorrido que no sea en flujo. */
+    private static final long TOPE_MEMORIA = 16L * 1024 * 1024;
     private static final int FILAS_DE_LA_MEDICION = 20_000;
 
     @Autowired GeneradorPlantillaPrecios generador;
@@ -236,7 +236,7 @@ class PlantillaDePreciosConBaseTest {
         assertTrue(escritos > 100_000, "la plantilla salió: " + escritos + " bytes");
         assertTrue(crecimiento < TOPE_MEMORIA,
                 "el montón vivo creció " + crecimiento / 1024 / 1024 + " MB con " + FILAS_DE_LA_MEDICION
-                        + " productos y el tope son 64 MB");
+                        + " productos y el tope son 16 MB");
     }
 
     private static final class CuentaBytes extends OutputStream {

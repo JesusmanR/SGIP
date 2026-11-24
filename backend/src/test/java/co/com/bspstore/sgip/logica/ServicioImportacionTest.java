@@ -248,6 +248,34 @@ class ServicioImportacionTest {
     }
 
     @Test
+    void elMotivoDeUnaReferenciaRepetidaNoPasaDe200Caracteres() throws IOException {
+        String larga = "R".repeat(300);
+        catalogo(Map.of(larga,
+                new ProductoDelCatalogo(2, larga, larga, new BigDecimal("2000"), PROVEEDOR)));
+        lector.filas = List.of(
+                new FilaLeida(2, larga, null, "1500"),
+                new FilaLeida(3, larga, null, "1600"));
+
+        FilaDeCarga repetida = cargar().get(1);
+
+        assertEquals("REFERENCIA_REPETIDA", repetida.motivoCodigo());
+        assertTrue(repetida.motivoRechazo().length() <= 200,
+                "el motivo mide " + repetida.motivoRechazo().length() + " y la columna admite 200");
+    }
+
+    @Test
+    void elMotivoDeUnaReferenciaInexistenteNoPasaDe200Caracteres() throws IOException {
+        catalogo(Map.of());
+        lector.filas = List.of(new FilaLeida(2, "X".repeat(300), null, "1500"));
+
+        FilaDeCarga f = cargar().get(0);
+
+        assertEquals("REFERENCIA_INEXISTENTE", f.motivoCodigo());
+        assertTrue(f.motivoRechazo().length() <= 200,
+                "el motivo mide " + f.motivoRechazo().length() + " y la columna admite 200");
+    }
+
+    @Test
     void cadaCausaSeNombraPorSuNombre() throws IOException {
         catalogo(Map.of("PC-001",
                 new ProductoDelCatalogo(1, "PC-001", "PC-001", new BigDecimal("1000"), PROVEEDOR)));

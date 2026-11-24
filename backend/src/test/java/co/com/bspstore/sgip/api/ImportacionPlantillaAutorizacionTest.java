@@ -18,6 +18,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.MediaType;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -26,14 +27,21 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
+
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -140,6 +148,44 @@ class ImportacionPlantillaAutorizacionTest {
                 .andExpect(jsonPath("$.status").value(404))
                 .andExpect(header().doesNotExist("Content-Disposition"));
         verify(generador, never()).escribir(any(), any(), any());
+    }
+
+    @Test
+    void siEscribirFallaAntesDeEscribirLaRespuestaEsElProblemaNormalSinCabecerasDeDescarga() throws Exception {
+        when(generador.nombreDeArchivo(4, 8)).thenReturn("plantilla-precios-otro.xlsx");
+        doThrow(new RecursoNoEncontradoException("El proveedor desapareció."))
+                .when(generador).escribir(eq(4), eq(8), any());
+
+        mvc.perform(get(RUTA).param("proveedorId", "8").with(como("ADMINISTRADOR")))
+                .andExpect(status().isNotFound())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.status").value(404))
+                .andExpect(header().doesNotExist("Content-Disposition"));
+    }
+
+    @Test
+    void lasCabecerasDeDescargaNoSeFijanAntesDeLeerLosProductos() throws Exception {
+        // Lo que el controlador ya le puso a la respuesta justo cuando el generador empieza a leer.
+        AtomicReference<String> disposicion = new AtomicReference<>("sin mirar");
+        AtomicReference<String> tipo = new AtomicReference<>("sin mirar");
+        doAnswer(llamada -> {
+            HttpServletResponse respuesta = ((ServletRequestAttributes)
+                    RequestContextHolder.getRequestAttributes()).getResponse();
+            disposicion.set(respuesta.getHeader("Content-Disposition"));
+            tipo.set(respuesta.getContentType());
+            OutputStream salida = llamada.getArgument(2);
+            salida.write("XLSX-FALSO".getBytes(StandardCharsets.UTF_8));
+            return null;
+        }).when(generador).escribir(eq(4), eq(3), any());
+
+        mvc.perform(get(RUTA).param("proveedorId", "3").with(como("ADMINISTRADOR")))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(XLSX))
+                .andExpect(header().string("Content-Disposition",
+                        "attachment; filename=\"plantilla-precios-ferreteria-nandu.xlsx\""));
+
+        assertNull(disposicion.get(), "la cabecera se pone con el primer byte, no antes de leer");
+        assertNull(tipo.get(), "el tipo xlsx se pone con el primer byte, no antes de leer");
     }
 
     @Test
