@@ -132,7 +132,7 @@ class ServicioVentasTest {
     }
 
     private static final VentaRegistrada REGISTRADA = new VentaRegistrada(9L, "V-00000001",
-            new BigDecimal("10000.00"), BigDecimal.ZERO.setScale(2), List.of());
+            new BigDecimal("10000.00"), BigDecimal.ZERO.setScale(2), List.of(), null);
 
     private SolicitudVenta lasQueRecibeElRegistrador() {
         ArgumentCaptor<SolicitudVenta> recibida = ArgumentCaptor.forClass(SolicitudVenta.class);

@@ -40,6 +40,12 @@ class VentaConsultasConBaseTest {
     /** Una venta de un administrador sin nada que autorizar cuesta 11 (medido: la lectura del reintento, la transacción de la venta y su cierre); el tope deja un margen corto. */
     private static final int TOPE_DE_SENTENCIAS = 12;
 
+    /**
+     * Lo que costaba una venta de una línea y un pago antes de que guardara la copia de la empresa (V48): 11
+     * sentencias de {@code JdbcClient}. La copia suma una, la lectura de {@code empresas} sin bloqueo, y ninguna más.
+     */
+    private static final int CONTEO_ANTERIOR = 11;
+
     @Autowired ServicioVentas ventas;
     @Autowired RepositorioPlataforma plataforma;
     @Autowired CategoriaRepositorio categorias;
@@ -100,6 +106,15 @@ class VentaConsultasConBaseTest {
 
         assertEquals(conUna, conDiez, "con una línea fueron " + conUna + " consultas y con diez, " + conDiez);
         assertTrue(conDiez <= TOPE_DE_SENTENCIAS, "una venta costó " + conDiez + " consultas");
+    }
+
+    @Test
+    void registrarVentaUsaElConteoAnteriorMasUna() {
+        sentenciasDeUnaVentaDe(1, 1);
+
+        long ahora = sentenciasDeUnaVentaDe(1, 1);
+
+        assertEquals(CONTEO_ANTERIOR + 1, ahora, "la copia de la empresa cuesta exactamente una consulta");
     }
 
     @Test

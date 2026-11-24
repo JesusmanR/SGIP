@@ -112,6 +112,18 @@ class ReciboConsultasConBaseTest {
     }
 
     @Test
+    void consultasDelReciboSiguenConstantes() {
+        sentenciasDelJson(1);
+
+        long conUna = sentenciasDelJson(1);
+        long conVeinte = sentenciasDelJson(LINEAS);
+
+        // la copia de la empresa viaja en la misma consulta de la venta: el recibo sigue costando tres
+        assertEquals(TOPE_DE_SENTENCIAS, conUna);
+        assertEquals(TOPE_DE_SENTENCIAS, conVeinte);
+    }
+
+    @Test
     void elPdfHaceLasMismasConsultasQueElJson() {
         sentenciasDelPdf(1);
 

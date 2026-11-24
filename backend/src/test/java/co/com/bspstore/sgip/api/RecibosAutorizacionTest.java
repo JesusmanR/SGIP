@@ -74,7 +74,7 @@ class RecibosAutorizacionTest {
             new BigDecimal("20000.00"), BigDecimal.ZERO, new BigDecimal("3800.00"), new BigDecimal("23800.00"),
             List.of(new PagoDeRecibo("Efectivo", TipoMedio.EFECTIVO, new BigDecimal("23800.00"),
                     new BigDecimal("25000.00"), null)),
-            new BigDecimal("1200.00"), List.of("Domicilio"));
+            new BigDecimal("1200.00"), List.of("Domicilio"), "NIT", null, null);
 
     @Autowired MockMvc mvc;
 

@@ -55,7 +55,7 @@ class ReciboPdfTest {
                 "CC 79123456", lineas, d("20000.00"), d("1000.00"), iva, d("22610.00"),
                 List.of(new PagoDeRecibo("Tarjeta", TipoMedio.TARJETA, d("12610.00"), null, "AUT-889"),
                         new PagoDeRecibo("Efectivo", TipoMedio.EFECTIVO, d("10000.00"), d("15000.00"), null)),
-                d("5000.00"), marcas);
+                d("5000.00"), marcas, "NIT", null, null);
     }
 
     private static LineaDeRecibo linea(String nombre) {
@@ -78,6 +78,44 @@ class ReciboPdfTest {
         try (PDDocument documento = abrir(bytes)) {
             return new PDFTextStripper().getText(documento);
         }
+    }
+
+    // ------------------------------------------------------- la empresa (V48)
+
+    private static Recibo conEmpresa(String tipo, String direccion, String telefono) {
+        Recibo base = recibo(lineas(1), d("3610.00"), List.of());
+        return new Recibo(base.empresa(), base.nitEmpresa(), base.consecutivo(), base.fecha(), base.cajero(),
+                base.cliente(), base.identificacionCliente(), base.lineas(), base.subtotal(), base.descuento(),
+                base.iva(), base.total(), base.pagos(), base.cambio(), base.marcas(), tipo, direccion, telefono);
+    }
+
+    @Test
+    void elPdfImprimeLaDireccionYElTelefonoDeLaEmpresaBajoElDocumento() throws IOException {
+        String t = texto(pdf.generar(conEmpresa("NIT", "Calle 5 # 6-7, Cali", "3001234567")));
+
+        int documento = t.indexOf("NIT 900123456-7");
+        assertTrue(documento >= 0, t);
+        int direccion = t.indexOf("Calle 5 # 6-7, Cali");
+        int telefono = t.indexOf("Tel. 3001234567");
+        assertTrue(direccion > documento, t);
+        assertTrue(telefono > direccion, t);
+        assertTrue(telefono < t.indexOf("Venta V-00000012"), "van en el encabezado, antes de la venta: " + t);
+    }
+
+    @Test
+    void sinDireccionNiTelefonoElPdfNoImprimeRenglonesVacios() throws IOException {
+        String t = texto(pdf.generar(conEmpresa("NIT", null, "  ")));
+
+        assertFalse(t.contains("Tel."), t);
+        assertTrue(t.contains("NIT 900123456-7"), t);
+    }
+
+    @Test
+    void unaEmpresaConCedulaSeImprimeConCcNoConNit() throws IOException {
+        String t = texto(pdf.generar(conEmpresa("CC", null, null)));
+
+        assertTrue(t.contains("CC 900123456-7"), t);
+        assertFalse(t.contains("NIT 900123456-7"), t);
     }
 
     // ------------------------------------------------------- el formato
@@ -301,7 +339,8 @@ class ReciboPdfTest {
                         Recibo suyo = new Recibo(base.empresa(), base.nitEmpresa(), consecutivo, base.fecha(),
                                 base.cajero(), base.cliente(), base.identificacionCliente(), base.lineas(),
                                 base.subtotal(), base.descuento(), base.iva(), base.total(), base.pagos(),
-                                base.cambio(), base.marcas());
+                                base.cambio(), base.marcas(), base.tipoDocumentoEmpresa(), base.direccionEmpresa(),
+                                base.telefonoEmpresa());
                         String t = texto(pdf.generar(suyo));
                         if (t.contains("Venta " + consecutivo) && t.contains("Celular económico " + consecutivo)) {
                             bien++;
