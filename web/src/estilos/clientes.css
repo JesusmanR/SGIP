@@ -20,4 +20,6 @@
 .seccion-clientes .clientes-paginas { display: flex; align-items: center; gap: var(--espacio-3); }
 .seccion-clientes .clientes-paginas span { color: var(--tinta-2); font-size: var(--t-cuerpo); font-variant-numeric: tabular-nums; }
 .seccion-clientes .clientes-paginas .boton { min-height: var(--toque-minimo); }
-.seccion-clientes .tabla-tarjetas .boton { min-height: var(--toque-minimo); padding: 0 var(--espacio-4); }
+@media (max-width: 48rem) {
+  .seccion-clientes .tabla-tarjetas .boton { min-height: var(--toque-minimo); padding: 0 var(--espacio-4); }
+}
