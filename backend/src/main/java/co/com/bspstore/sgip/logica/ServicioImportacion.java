@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -95,7 +96,7 @@ public class ServicioImportacion {
                                 + "Se admiten .xlsx y .csv."));
 
         List<FilaLeida> leidas = lector.leer(contenido, nombreArchivo, MAXIMO_FILAS);
-        List<FilaDeCarga> juzgadas = juzgar(empresa, leidas);
+        List<FilaDeCarga> juzgadas = juzgar(empresa, proveedorId, leidas);
 
         int aceptados = (int) juzgadas.stream().filter(FilaDeCarga::aceptado).count();
         Long cargaId = importacion.insertarCarga(empresa, proveedorId, responsable(),
@@ -244,13 +245,21 @@ public class ServicioImportacion {
      *      señalarlo como «referencia inexistente» mandaría a quien lo
      *      corrige a mirar el catálogo, que está bien;
      *   3. referencia inexistente;
-     *   4. costo no numérico;
-     *   5. costo menor o igual a cero.
+     *   4. producto de otro proveedor — la referencia existe, pero la lista
+     *      es de un proveedor y el producto es de otro. Va después de la
+     *      inexistente (primero hay que encontrar el producto para saber de
+     *      quién es) y antes del costo: con el producto equivocado el costo
+     *      no importa, y corregirlo no arreglaría la fila;
+     *   5. costo no numérico;
+     *   6. costo menor o igual a cero.
      *
-     * Las cuatro últimas son, literalmente, las que el requisito
-     * enumera.
+     * La 3, la 5 y la 6 son, literalmente, las que el requisito
+     * enumera; la 4 es la que impide que la lista de un proveedor
+     * reescriba el costo de los productos de otro. Solo rechaza esa
+     * fila: el resto de la lista se aplica.
      */
-    private List<FilaDeCarga> juzgar(Integer empresa, List<FilaLeida> leidas) {
+    private List<FilaDeCarga> juzgar(Integer empresa, Integer proveedorId,
+                                     List<FilaLeida> leidas) {
         Map<String, ProductoDelCatalogo> catalogo = importacion.catalogoPorReferencia(empresa);
         Map<String, Integer> vistas = new HashMap<>();
         List<FilaDeCarga> juzgadas = new ArrayList<>(leidas.size());
@@ -267,7 +276,7 @@ public class ServicioImportacion {
             Integer repetidaEn = vistas.putIfAbsent(referencia, fila.numeroFila());
             if (repetidaEn != null) {
                 juzgadas.add(rechazo(fila, null, null, "REFERENCIA_REPETIDA",
-                        "La referencia " + fila.referencia() + " ya venía en la fila "
+                        "La referencia " + recortar(fila.referencia()) + " ya venía en la fila "
                                 + repetidaEn + " de este archivo."));
                 continue;
             }
@@ -275,8 +284,18 @@ public class ServicioImportacion {
             ProductoDelCatalogo producto = catalogo.get(referencia);
             if (producto == null) {
                 juzgadas.add(rechazo(fila, null, null, "REFERENCIA_INEXISTENTE",
-                        "La referencia " + fila.referencia()
+                        "La referencia " + recortar(fila.referencia())
                                 + " no existe en el catálogo de esta empresa."));
+                continue;
+            }
+
+            if (!Objects.equals(producto.proveedorId(), proveedorId)) {
+                // Sin productoId ni costo anterior, como la referencia inexistente: la
+                // fila no apunta a nada que esta lista pueda actualizar. La referencia
+                // se recorta porque el motivo cabe en 200 caracteres y el texto crudo no.
+                juzgadas.add(rechazo(fila, null, null, "PRODUCTO_DE_OTRO_PROVEEDOR",
+                        "La referencia " + recortar(fila.referencia())
+                                + " es de otro proveedor: esta lista no puede cambiar su costo."));
                 continue;
             }
 

@@ -26,3 +26,14 @@ El precio de esa flexibilidad es que los errores de configuración se
 manifiestan en tiempo de ejecución, no de compilación. Por eso la
 validación previa a la aplicación es obligatoria y la carga se presenta
 para revisión antes de tocar el catálogo.
+
+## Enmienda (2026): POI también para escribir la plantilla
+
+La acotación de la biblioteca es esta: **Apache POI solo se importa en las
+clases de lectura y escritura de hojas de cálculo.** Eran una, la que lee
+(`LectorHojaDeCalculo`); desde la plantilla de precios son dos, con
+`GeneradorPlantillaPrecios`, que escribe el .xlsx que el administrador llena y
+vuelve a subir. Lo que importa no ha cambiado: el importador y el resto del
+backend hablan con `LectorListaPrecios` y con datos de la plantilla, y no saben
+qué hay detrás. No hay una prueba de arquitectura que lo haga cumplir; se
+sostiene por revisión.

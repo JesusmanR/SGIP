@@ -126,6 +126,10 @@ export default function Catalogo() {
     return () => { vigente = false; clearTimeout(temporizador) }
   }, [busqueda, categoria, proveedor, estado, intento])
 
+  // El proveedor reservado agrupa lo que nació sin proveedor (p. ej. un producto
+  // creado al vender). Solo el administrador recibe la lista de proveedores, así que
+  // quien vende no ve la marca; es lo esperado.
+  const reservadoId = proveedores.find((p) => p.nit === 'SIN-PROVEEDOR')?.id
   const hayFiltro = Boolean(busqueda || categoria || proveedor || estado)
   const limpiarFiltros = () => {
     setBusqueda(''); setCategoria(''); setProveedor(''); setEstado('')
@@ -205,6 +209,11 @@ export default function Catalogo() {
               administrador registre el real, su ganancia no significa nada. Quien vende no ve costos. */}
           {esAdmin && (p.costoProvisional === true || p.costoProvisional === 1) && (
             <span><span className="insignia critico">Costo pendiente de registrar</span></span>
+          )}
+          {/* Hasta que el administrador le asigne el proveedor real, el producto no
+              entra en ninguna lista de precios: se marca para encontrarlo. */}
+          {esAdmin && reservadoId != null && p.proveedorId === reservadoId && (
+            <span><span className="insignia critico">Sin proveedor</span></span>
           )}
           {/* El código va bajo el nombre. El SKU solo aparece cuando difiere:
               por omisión se copia del código y repetirlo sería ruido. */}

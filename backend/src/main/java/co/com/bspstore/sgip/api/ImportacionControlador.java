@@ -1,8 +1,11 @@
 package co.com.bspstore.sgip.api;
 
 import co.com.bspstore.sgip.api.dto.ResumenCarga;
+import co.com.bspstore.sgip.config.ContextoEmpresa;
+import co.com.bspstore.sgip.logica.GeneradorPlantillaPrecios;
 import co.com.bspstore.sgip.logica.RecursoNoEncontradoException;
 import co.com.bspstore.sgip.logica.ServicioImportacion;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -14,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.io.OutputStream;
 
 /**
  * Importación de listas de precios (RF-24, RF-26, RF-27).
@@ -33,10 +37,16 @@ import java.io.IOException;
 @PreAuthorize("hasRole('ADMINISTRADOR')")
 public class ImportacionControlador {
 
-    private final ServicioImportacion servicio;
+    /** El tipo de contenido de un .xlsx. */
+    private static final String XLSX =
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
-    public ImportacionControlador(ServicioImportacion servicio) {
+    private final ServicioImportacion servicio;
+    private final GeneradorPlantillaPrecios plantillas;
+
+    public ImportacionControlador(ServicioImportacion servicio, GeneradorPlantillaPrecios plantillas) {
         this.servicio = servicio;
+        this.plantillas = plantillas;
     }
 
     /**
@@ -52,6 +62,74 @@ public class ImportacionControlador {
             throws IOException {
         return servicio.cargar(proveedorId, archivo.getOriginalFilename(),
                 archivo.getSize(), archivo.getInputStream());
+    }
+
+    /**
+     * Descarga la plantilla de precios de un proveedor: un .xlsx con sus productos activos y su
+     * costo actual, listo para llenarlo y subirlo otra vez.
+     *
+     * La ruta literal va antes que `/{cargaId}` y gana a ella: «plantilla» no es una carga. Se
+     * escribe directamente en la respuesta, en el hilo de la petición, y no con un cuerpo de
+     * streaming que corre en otro hilo: la empresa sale del contexto de seguridad, que otro hilo
+     * no tiene. El proveedor se comprueba antes de poner ninguna cabecera, de modo que uno ajeno
+     * da un 404 normal y no una descarga vacía.
+     *
+     * Un `proveedorId` ausente o que no es un número da 400.
+     */
+    @GetMapping("/plantilla")
+    public void plantilla(@RequestParam("proveedorId") Integer proveedorId,
+                          HttpServletResponse respuesta) throws IOException {
+        Integer empresa = ContextoEmpresa.empresaActual();
+        String nombre = plantillas.nombreDeArchivo(empresa, proveedorId);
+
+        // Las cabeceras de descarga se ponen con el primer byte y no antes: si la lectura de la base
+        // falla a medias, el manejador de errores contesta su problema normal y no un «adjunto». No se
+        // usa `reset()` para deshacerlas: borraría también las cabeceras de seguridad.
+        SalidaDeDescarga salida = new SalidaDeDescarga(respuesta, nombre);
+        plantillas.escribir(empresa, proveedorId, salida);
+        salida.aplicarCabeceras();
+    }
+
+    /**
+     * La salida de la respuesta, que fija las cabeceras de descarga al primer `write` o `flush`.
+     * No cierra la respuesta: eso es del contenedor.
+     */
+    private static final class SalidaDeDescarga extends OutputStream {
+        private final HttpServletResponse respuesta;
+        private final String nombre;
+        private OutputStream destino;
+
+        SalidaDeDescarga(HttpServletResponse respuesta, String nombre) {
+            this.respuesta = respuesta;
+            this.nombre = nombre;
+        }
+
+        void aplicarCabeceras() throws IOException {
+            if (destino == null) {
+                respuesta.setContentType(XLSX);
+                respuesta.setHeader("Content-Disposition", "attachment; filename=\"" + nombre + "\"");
+                respuesta.setHeader("Cache-Control", "no-store");
+                destino = respuesta.getOutputStream();
+            }
+        }
+
+        @Override
+        public void write(int b) throws IOException {
+            aplicarCabeceras();
+            destino.write(b);
+        }
+
+        @Override
+        public void write(byte[] b, int desde, int largo) throws IOException {
+            aplicarCabeceras();
+            destino.write(b, desde, largo);
+        }
+
+        @Override
+        public void flush() throws IOException {
+            aplicarCabeceras();
+            destino.flush();
+        }
     }
 
     /** El resumen de una carga con su muestra para la vista previa. */

@@ -129,19 +129,19 @@ class ServicioImportacionTest {
         for (int i = 1; i <= 88; i++) {
             String ref = "REF-" + i;
             indice.put(ref, new ProductoDelCatalogo(1000 + i, ref, ref,
-                    new BigDecimal("1000")));
+                    new BigDecimal("1000"), PROVEEDOR));
             archivo.add(new FilaLeida(i + 1, ref, "Producto " + i, "1500"));
         }
         // Y doce defectuosas, tres de cada causa que el requisito nombra.
         int fila = 90;
         for (int i = 1; i <= 3; i++) {                      // costo no numérico
             String ref = "MAL-N" + i;
-            indice.put(ref, new ProductoDelCatalogo(2000 + i, ref, ref, new BigDecimal("1000")));
+            indice.put(ref, new ProductoDelCatalogo(2000 + i, ref, ref, new BigDecimal("1000"), PROVEEDOR));
             archivo.add(new FilaLeida(fila++, ref, null, "consultar"));
         }
         for (int i = 1; i <= 3; i++) {                      // costo <= 0
             String ref = "MAL-C" + i;
-            indice.put(ref, new ProductoDelCatalogo(3000 + i, ref, ref, new BigDecimal("1000")));
+            indice.put(ref, new ProductoDelCatalogo(3000 + i, ref, ref, new BigDecimal("1000"), PROVEEDOR));
             archivo.add(new FilaLeida(fila++, ref, null, i == 1 ? "0" : "-250"));
         }
         for (int i = 1; i <= 3; i++) {                      // referencia inexistente
@@ -173,10 +173,112 @@ class ServicioImportacionTest {
                 100, 88, 12);
     }
 
+    // ------------------------------------------------ el producto de otro proveedor
+
+    private static final int OTRO_PROVEEDOR = 99;
+
+    @Test
+    void filaDeOtroProveedorSeRechazaYElRestoSeAplica() throws IOException {
+        Map<String, ProductoDelCatalogo> indice = new HashMap<>();
+        indice.put("PC-001", new ProductoDelCatalogo(1, "PC-001", "PC-001", new BigDecimal("1000"), PROVEEDOR));
+        indice.put("AJ-002", new ProductoDelCatalogo(2, "AJ-002", "AJ-002", new BigDecimal("2000"), OTRO_PROVEEDOR));
+        indice.put("PC-003", new ProductoDelCatalogo(3, "PC-003", "PC-003", new BigDecimal("3000"), PROVEEDOR));
+        catalogo(indice);
+        lector.filas = List.of(
+                new FilaLeida(2, "PC-001", null, "1500"),
+                new FilaLeida(3, "AJ-002", "De otro proveedor", "2500"),
+                new FilaLeida(4, "PC-003", null, "3500"));
+
+        List<FilaDeCarga> juzgadas = cargar();
+
+        assertTrue(juzgadas.get(0).aceptado(), "la del proveedor entra");
+        assertTrue(juzgadas.get(2).aceptado(), "el resto de la lista se aplica");
+        FilaDeCarga ajena = juzgadas.get(1);
+        assertFalse(ajena.aceptado());
+        assertEquals("PRODUCTO_DE_OTRO_PROVEEDOR", ajena.motivoCodigo());
+        assertNull(ajena.costo(), "una rechazada no lleva costo");
+        assertNull(ajena.productoId(), "no se apunta al producto de otro proveedor");
+        assertTrue(ajena.motivoRechazo().contains("AJ-002"), ajena.motivoRechazo());
+        // Y la cabecera cuenta dos aceptadas y una rechazada.
+        verify(importacion).insertarCarga(EMPRESA, PROVEEDOR, USUARIO, "lista.csv", 3, 2, 1);
+    }
+
+    @Test
+    void laFilaQueCoincidePorSkuConUnProductoDeOtroProveedorTambienSeRechaza() throws IOException {
+        catalogo(Map.of("SKU-9",
+                new ProductoDelCatalogo(1, "PC-001", "SKU-9", new BigDecimal("1000"), OTRO_PROVEEDOR)));
+        lector.filas = List.of(new FilaLeida(2, "sku-9", null, "1500"));
+
+        FilaDeCarga f = cargar().get(0);
+
+        assertFalse(f.aceptado());
+        assertEquals("PRODUCTO_DE_OTRO_PROVEEDOR", f.motivoCodigo());
+    }
+
+    @Test
+    void ordenDeCausas() throws IOException {
+        // Con la referencia inexistente manda REFERENCIA_INEXISTENTE aunque el costo sea inválido.
+        catalogo(Map.of("AJ-002",
+                new ProductoDelCatalogo(2, "AJ-002", "AJ-002", new BigDecimal("2000"), OTRO_PROVEEDOR)));
+        lector.filas = List.of(
+                new FilaLeida(2, "FANTASMA", null, "consultar"),
+                // Y con un producto de otro proveedor manda esta causa sobre las del costo.
+                new FilaLeida(3, "AJ-002", null, "consultar"),
+                new FilaLeida(4, "AJ-002-B", null, "-5"));
+
+        List<FilaDeCarga> juzgadas = cargar();
+
+        assertEquals("REFERENCIA_INEXISTENTE", juzgadas.get(0).motivoCodigo());
+        assertEquals("PRODUCTO_DE_OTRO_PROVEEDOR", juzgadas.get(1).motivoCodigo());
+        assertEquals("REFERENCIA_INEXISTENTE", juzgadas.get(2).motivoCodigo());
+    }
+
+    @Test
+    void elMotivoDeLaFilaDeOtroProveedorNoPasaDe200Caracteres() throws IOException {
+        String larga = "R".repeat(300);
+        catalogo(Map.of(larga,
+                new ProductoDelCatalogo(2, larga, larga, new BigDecimal("2000"), OTRO_PROVEEDOR)));
+        lector.filas = List.of(new FilaLeida(2, larga, null, "1500"));
+
+        FilaDeCarga f = cargar().get(0);
+
+        assertEquals("PRODUCTO_DE_OTRO_PROVEEDOR", f.motivoCodigo());
+        assertTrue(f.motivoRechazo().length() <= 200,
+                "el motivo mide " + f.motivoRechazo().length() + " y la columna admite 200");
+    }
+
+    @Test
+    void elMotivoDeUnaReferenciaRepetidaNoPasaDe200Caracteres() throws IOException {
+        String larga = "R".repeat(300);
+        catalogo(Map.of(larga,
+                new ProductoDelCatalogo(2, larga, larga, new BigDecimal("2000"), PROVEEDOR)));
+        lector.filas = List.of(
+                new FilaLeida(2, larga, null, "1500"),
+                new FilaLeida(3, larga, null, "1600"));
+
+        FilaDeCarga repetida = cargar().get(1);
+
+        assertEquals("REFERENCIA_REPETIDA", repetida.motivoCodigo());
+        assertTrue(repetida.motivoRechazo().length() <= 200,
+                "el motivo mide " + repetida.motivoRechazo().length() + " y la columna admite 200");
+    }
+
+    @Test
+    void elMotivoDeUnaReferenciaInexistenteNoPasaDe200Caracteres() throws IOException {
+        catalogo(Map.of());
+        lector.filas = List.of(new FilaLeida(2, "X".repeat(300), null, "1500"));
+
+        FilaDeCarga f = cargar().get(0);
+
+        assertEquals("REFERENCIA_INEXISTENTE", f.motivoCodigo());
+        assertTrue(f.motivoRechazo().length() <= 200,
+                "el motivo mide " + f.motivoRechazo().length() + " y la columna admite 200");
+    }
+
     @Test
     void cadaCausaSeNombraPorSuNombre() throws IOException {
         catalogo(Map.of("PC-001",
-                new ProductoDelCatalogo(1, "PC-001", "PC-001", new BigDecimal("1000"))));
+                new ProductoDelCatalogo(1, "PC-001", "PC-001", new BigDecimal("1000"), PROVEEDOR)));
         lector.filas = List.of(
                 new FilaLeida(2, "PC-001", null, "consultar"),
                 new FilaLeida(3, "FANTASMA", null, "1500"),
@@ -193,7 +295,7 @@ class ServicioImportacionTest {
     @Test
     void laFilaRepetidaSenalaDondeEstabaLaPrimera() throws IOException {
         catalogo(Map.of("PC-001",
-                new ProductoDelCatalogo(1, "PC-001", "PC-001", new BigDecimal("1000"))));
+                new ProductoDelCatalogo(1, "PC-001", "PC-001", new BigDecimal("1000"), PROVEEDOR)));
         lector.filas = List.of(
                 new FilaLeida(2, "PC-001", null, "1500"),
                 new FilaLeida(47, "PC-001", null, "1600"));
@@ -212,7 +314,7 @@ class ServicioImportacionTest {
     @Test
     void unaFilaAceptadaLlevaElCostoQueRegiaParaPoderCompararse() throws IOException {
         catalogo(Map.of("PC-001",
-                new ProductoDelCatalogo(1, "PC-001", "PC-001", new BigDecimal("1000"))));
+                new ProductoDelCatalogo(1, "PC-001", "PC-001", new BigDecimal("1000"), PROVEEDOR)));
         lector.filas = List.of(new FilaLeida(2, "PC-001", "Portátil", "1500"));
 
         FilaDeCarga f = cargar().get(0);
@@ -229,7 +331,7 @@ class ServicioImportacionTest {
     void elSkuTambienSirveParaEncontrarElProducto() throws IOException {
         // El proveedor nombra sus productos como quiere.
         catalogo(Map.of("SKU-9",
-                new ProductoDelCatalogo(1, "PC-001", "SKU-9", new BigDecimal("1000"))));
+                new ProductoDelCatalogo(1, "PC-001", "SKU-9", new BigDecimal("1000"), PROVEEDOR)));
         lector.filas = List.of(new FilaLeida(2, " sku-9 ", null, "1500"));
 
         assertTrue(cargar().get(0).aceptado(), "la referencia se coteja sin espacios ni caja");
@@ -431,7 +533,7 @@ class ServicioImportacionTest {
     @Test
     void validarNoTocaNingunCosto() throws IOException {
         catalogo(Map.of("PC-001",
-                new ProductoDelCatalogo(1, "PC-001", "PC-001", new BigDecimal("1000"))));
+                new ProductoDelCatalogo(1, "PC-001", "PC-001", new BigDecimal("1000"), PROVEEDOR)));
         lector.filas = List.of(new FilaLeida(2, "PC-001", null, "1500"));
 
         cargar();
