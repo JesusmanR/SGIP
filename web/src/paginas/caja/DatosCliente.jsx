@@ -1,82 +1,11 @@
-import { useId, useState } from 'react'
+import { useState } from 'react'
 import Aviso from '../../componentes/comun/Aviso.jsx'
+import FormularioCliente, { TIPOS_DOCUMENTO } from '../../componentes/clientes/FormularioCliente.jsx'
 import Campo from '../../componentes/comun/Campo.jsx'
 import { actualizarCliente, clientePorIdentificacion, crearCliente } from '../../servicios/api/caja.js'
 import '../../estilos/caja.css'
 import SeccionCaja from './SeccionCaja.jsx'
 import { domicilioVacio } from './venta.js'
-
-const TIPOS_DOCUMENTO = [['CC', 'Cédula de ciudadanía'], ['NIT', 'NIT'], ['CE', 'Cédula de extranjería'], ['PASAPORTE', 'Pasaporte']]
-const CORREO = /^\S+@\S+\.\S+$/
-
-/** Alta o corrección de un cliente: nombre, correo y la autorización de datos, que es obligatoria. */
-function FormularioCliente({ inicial, titulo, textoGuardar, alGuardar, alCancelar }) {
-  const [datos, setDatos] = useState({
-    nombre: inicial.nombre ?? '', correo: inicial.correo ?? '', telefono: inicial.telefono ?? '',
-    direccion: inicial.direccion ?? '', ciudad: inicial.ciudad ?? '',
-  })
-  const [autoriza, setAutoriza] = useState(false)
-  const [intentado, setIntentado] = useState(false)
-  const [guardando, setGuardando] = useState(false)
-  const [fallo, setFallo] = useState(null)
-  const idAutorizacion = useId()
-  const cambiar = (campo) => (e) => setDatos((d) => ({ ...d, [campo]: e.target.value }))
-
-  const motivos = {}
-  if (!datos.nombre.trim()) motivos.nombre = 'Escribe el nombre del cliente.'
-  if (!CORREO.test(datos.correo.trim())) motivos.correo = 'Escribe un correo válido.'
-  if (!autoriza) motivos.autoriza = 'Falta la autorización para tratar sus datos.'
-  const mostrar = (campo) => (intentado ? motivos[campo] : undefined)
-
-  async function enviar(evento) {
-    evento.preventDefault()
-    setIntentado(true)
-    if (Object.keys(motivos).length > 0) return
-    setGuardando(true)
-    setFallo(null)
-    try {
-      const cuerpo = {
-        nombre: datos.nombre.trim(), tipoDocumento: inicial.tipoDocumento, identificacion: inicial.identificacion,
-        correo: datos.correo.trim(), autorizacionDatos: true,
-      }
-      for (const campo of ['telefono', 'direccion', 'ciudad']) {
-        if (datos[campo].trim()) cuerpo[campo] = datos[campo].trim()
-      }
-      await alGuardar(cuerpo)
-    } catch (error) {
-      setFallo(error.message || 'No se pudo guardar el cliente.')
-      setGuardando(false)
-    }
-  }
-
-  return (
-    <form onSubmit={enviar} noValidate className="caja-formulario-cliente" aria-label={titulo}>
-      <p className="nota">{inicial.tipoDocumento} {inicial.identificacion}</p>
-      {fallo && <Aviso tipo="peligro">{fallo}</Aviso>}
-      <Campo etiqueta="Nombre completo" motivo={mostrar('nombre')}>
-        <input type="text" value={datos.nombre} onChange={cambiar('nombre')} maxLength={160} autoComplete="off" />
-      </Campo>
-      <Campo etiqueta="Correo electrónico" motivo={mostrar('correo')}>
-        <input type="email" value={datos.correo} onChange={cambiar('correo')} maxLength={120} autoComplete="off" />
-      </Campo>
-      <Campo etiqueta="Teléfono (opcional)">
-        <input type="text" inputMode="tel" value={datos.telefono} onChange={cambiar('telefono')} maxLength={20} autoComplete="off" />
-      </Campo>
-      <label className="casilla">
-        <input
-          type="checkbox" checked={autoriza} onChange={(e) => setAutoriza(e.target.checked)}
-          aria-describedby={mostrar('autoriza') ? idAutorizacion : undefined}
-        />
-        El cliente autoriza el tratamiento de sus datos
-      </label>
-      <small id={idAutorizacion} role="status" className="campo-mensaje error">{mostrar('autoriza') ?? ''}</small>
-      <div className="caja-acciones">
-        <button type="submit" className="boton" disabled={guardando}>{textoGuardar}</button>
-        <button type="button" className="boton secundario" disabled={guardando} onClick={alCancelar}>Cancelar</button>
-      </div>
-    </form>
-  )
-}
 
 function DatosDeDomicilio({ domicilio, cliente, alCambiar }) {
   const cambiar = (campo) => (e) => alCambiar({ ...domicilio, [campo]: e.target.value })
