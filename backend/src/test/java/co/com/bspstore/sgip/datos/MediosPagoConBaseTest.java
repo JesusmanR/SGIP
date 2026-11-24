@@ -125,7 +125,12 @@ class MediosPagoConBaseTest {
     }
 
     private String nit() {
-        return "M" + marca.toUpperCase();
+        return documento(marca);
+    }
+
+    /** Un documento de solo dígitos (el alta normaliza y rechaza las letras), único por prueba. */
+    private static String documento(String marca) {
+        return new java.math.BigInteger(marca, 16).toString();
     }
 
     // ------------------------------------------------------------ la migración
@@ -274,7 +279,7 @@ class MediosPagoConBaseTest {
 
     private void darDeAlta() {
         new ServicioPlataforma(plataforma, usuarios, roles, Clock.systemUTC(), new PoliticaDeBloqueo(15))
-                .darDeAlta(new SolicitudAltaEmpresa(nit(), "Medios de pago " + marca, null, null, null,
+                .darDeAlta(new SolicitudAltaEmpresa(null, nit(), "Medios de pago " + marca, null, null, null,
                         null, "Administración", "admin-" + marca + "@ejemplo.co", "ClaveDePrueba2026"));
     }
 

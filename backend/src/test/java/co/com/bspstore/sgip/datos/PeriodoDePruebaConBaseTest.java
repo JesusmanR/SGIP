@@ -96,7 +96,12 @@ class PeriodoDePruebaConBaseTest {
     }
 
     private String nit() {
-        return "P" + marca.toUpperCase();
+        return documento(marca);
+    }
+
+    /** Un documento de solo dígitos (el alta normaliza y rechaza las letras), único por prueba. */
+    private static String documento(String marca) {
+        return new java.math.BigInteger(marca, 16).toString();
     }
 
     private static Clock deNocheEnBogota(LocalDate dia) {
@@ -111,7 +116,7 @@ class PeriodoDePruebaConBaseTest {
     }
 
     private SolicitudAltaEmpresa solicitud() {
-        return new SolicitudAltaEmpresa(nit(), "Prueba de periodo " + marca, null, null, null,
+        return new SolicitudAltaEmpresa(null, nit(), "Prueba de periodo " + marca, null, null, null,
                 null, "Administración", "admin-" + marca + "@ejemplo.co", "ClaveDePrueba2026");
     }
 

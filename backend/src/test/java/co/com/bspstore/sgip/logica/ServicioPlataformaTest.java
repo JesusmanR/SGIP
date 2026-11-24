@@ -3,6 +3,7 @@ package co.com.bspstore.sgip.logica;
 import co.com.bspstore.sgip.api.dto.EmpresaEnPlataforma;
 import co.com.bspstore.sgip.api.dto.MedioDePago;
 import co.com.bspstore.sgip.api.dto.SolicitudAltaEmpresa;
+import co.com.bspstore.sgip.api.dto.SolicitudIdentidad;
 import co.com.bspstore.sgip.api.dto.UsuarioEnPlataforma;
 import co.com.bspstore.sgip.config.UsuarioAutenticado;
 import co.com.bspstore.sgip.datos.RepositorioPlataforma;
@@ -11,7 +12,9 @@ import co.com.bspstore.sgip.datos.UsuarioRepositorio;
 import co.com.bspstore.sgip.modelo.AccionPlataforma;
 import co.com.bspstore.sgip.modelo.EstadoEmpresa;
 import co.com.bspstore.sgip.modelo.Rol;
+import co.com.bspstore.sgip.modelo.IdentidadDeEmpresa;
 import co.com.bspstore.sgip.modelo.TipoDocumento;
+import co.com.bspstore.sgip.modelo.TipoDocumentoEmpresa;
 import co.com.bspstore.sgip.modelo.TipoMedio;
 import co.com.bspstore.sgip.modelo.Usuario;
 import co.com.bspstore.sgip.util.Seguridad;
@@ -99,7 +102,7 @@ class ServicioPlataformaTest {
 
     private SolicitudAltaEmpresa solicitud() {
         return new SolicitudAltaEmpresa(
-                "900123456-1", "Ferretería El Tornillo S.A.S.", "contacto@tornillo.co",
+                TipoDocumentoEmpresa.NIT, "900.123.456-1", "Ferretería El Tornillo S.A.S.", "contacto@tornillo.co",
                 "3001234567", "Bucaramanga", null,
                 "Ana Pérez", "Ana@Tornillo.CO", "clave-de-prueba");
     }
@@ -107,7 +110,7 @@ class ServicioPlataformaTest {
     private void altaViable(int empresaId, int diasPrueba) {
         when(plataforma.existeNit(anyString())).thenReturn(false);
         when(usuarios.existsByCorreo(anyString())).thenReturn(false);
-        when(plataforma.insertarEmpresa(anyString(), anyString(), any(), any(), any()))
+        when(plataforma.insertarEmpresa(any(), anyString(), anyString(), any(), any(), any()))
                 .thenReturn(empresaId);
         when(plataforma.diasDePrueba(any())).thenReturn(diasPrueba);
         when(roles.findByNombre("ADMINISTRADOR"))
@@ -116,7 +119,7 @@ class ServicioPlataformaTest {
     }
 
     private EmpresaEnPlataforma empresaEnPlataforma(int id) {
-        return new EmpresaEnPlataforma(id, "900123456-1", "Ferretería El Tornillo S.A.S.",
+        return new EmpresaEnPlataforma(id, "NIT", "9001234561", "Ferretería El Tornillo S.A.S.",
                 "contacto@tornillo.co", "3001234567", "Bucaramanga", "PRUEBA",
                 HOY.atStartOfDay(), "BASICO", HOY, HOY.plusDays(30), "PRUEBA", 1);
     }
@@ -130,8 +133,9 @@ class ServicioPlataformaTest {
         EmpresaEnPlataforma creada = servicio.darDeAlta(solicitud());
 
         assertEquals(Integer.valueOf(12), creada.empresaId());
-        verify(plataforma).insertarEmpresa("900123456-1", "Ferretería El Tornillo S.A.S.",
-                "contacto@tornillo.co", "3001234567", "Bucaramanga");
+        // El documento se guarda normalizado: sin puntos ni guion, y sin recalcular ningún dígito.
+        verify(plataforma).insertarEmpresa(TipoDocumentoEmpresa.NIT, "9001234561",
+                "Ferretería El Tornillo S.A.S.", "contacto@tornillo.co", "3001234567", "Bucaramanga");
         // El plan llegó nulo y la suscripción arranca hoy. La prueba son
         // treinta días contados desde mañana (RF-04 de la v4, ADR-0031):
         // con HOY = 17 de octubre, el último día es el 16 de noviembre.
@@ -226,7 +230,7 @@ class ServicioPlataformaTest {
     void elAltaSinCiudadSiembraElConsumidorFinalSinCiudad() {
         altaViable(12, 30);
         var sinCiudad = new SolicitudAltaEmpresa(
-                "900123456-1", "Ferretería El Tornillo S.A.S.", "contacto@tornillo.co",
+                TipoDocumentoEmpresa.NIT, "900123456-1", "Ferretería El Tornillo S.A.S.", "contacto@tornillo.co",
                 "3001234567", "  ", null, "Ana Pérez", "Ana@Tornillo.CO", "clave-de-prueba");
 
         servicio.darDeAlta(sinCiudad);
@@ -329,7 +333,7 @@ class ServicioPlataformaTest {
         servicio.darDeAlta(solicitud());
 
         verify(plataforma).registrar(eq(USUARIO_SUPER_ADMIN), eq(12),
-                eq(AccionPlataforma.EMPRESA_ALTA), eq("empresas"), eq("900123456-1"),
+                eq(AccionPlataforma.EMPRESA_ALTA), eq("empresas"), eq("9001234561"),
                 isNull(), eq("PRUEBA"), anyString());
     }
 
@@ -374,15 +378,15 @@ class ServicioPlataformaTest {
 
     @Test
     void rechazaLaIdentificacionTributariaYaRegistrada() {
-        when(plataforma.existeNit("900123456-1")).thenReturn(true);
+        when(plataforma.existeNit("9001234561")).thenReturn(true);
 
         RegistroRepetidoException e = assertThrows(NitRepetidoException.class,
                 () -> servicio.darDeAlta(solicitud()));
 
-        assertTrue(e.getMessage().contains("900123456-1"),
+        assertTrue(e.getMessage().contains("9001234561"),
                 "el mensaje debe decir cuál de los dos datos choca");
         // Nada se escribió: ni la empresa, ni el usuario, ni la bitácora.
-        verify(plataforma, never()).insertarEmpresa(anyString(), anyString(), any(), any(), any());
+        verify(plataforma, never()).insertarEmpresa(any(), anyString(), anyString(), any(), any(), any());
         verifyNoInteractions(usuarios);
     }
 
@@ -395,8 +399,137 @@ class ServicioPlataformaTest {
                 () -> servicio.darDeAlta(solicitud()));
 
         assertTrue(e.getMessage().contains("ana@tornillo.co"));
-        verify(plataforma, never()).insertarEmpresa(anyString(), anyString(), any(), any(), any());
+        verify(plataforma, never()).insertarEmpresa(any(), anyString(), anyString(), any(), any(), any());
         verify(usuarios, never()).save(any());
+    }
+
+    // ------------------------------------------- el alta con NIT o CC, sin dígito de verificación
+
+    @Test
+    void altaConCcSinDigitoDeVerificacion() {
+        altaViable(12, 30);
+        var persona = new SolicitudAltaEmpresa(
+                TipoDocumentoEmpresa.CC, "1.098.765.432", "María Pérez Gómez", null,
+                null, "Cúcuta", null, "María Pérez", "maria@correo.co", "clave-de-prueba");
+
+        servicio.darDeAlta(persona);
+
+        // El número se guarda tal como está, sin ningún dígito calculado ni pedido.
+        verify(plataforma).existeNit("1098765432");
+        verify(plataforma).insertarEmpresa(TipoDocumentoEmpresa.CC, "1098765432", "María Pérez Gómez",
+                null, null, "Cúcuta");
+    }
+
+    @Test
+    void sinTipoDeDocumentoElAltaEsUnNit() {
+        altaViable(12, 30);
+        var sinTipo = new SolicitudAltaEmpresa(
+                null, "900123456", "Ferretería El Tornillo S.A.S.", null,
+                null, "Cúcuta", null, "Ana Pérez", "ana@tornillo.co", "clave-de-prueba");
+
+        servicio.darDeAlta(sinTipo);
+
+        verify(plataforma).insertarEmpresa(eq(TipoDocumentoEmpresa.NIT), eq("900123456"), anyString(),
+                any(), any(), any());
+    }
+
+    @Test
+    void unDocumentoConLetrasEnElAltaEs400YNoEscribeNada() {
+        var conLetras = new SolicitudAltaEmpresa(
+                TipoDocumentoEmpresa.NIT, "90012345A", "Ferretería El Tornillo S.A.S.", null,
+                null, "Cúcuta", null, "Ana Pérez", "ana@tornillo.co", "clave-de-prueba");
+
+        assertThrows(DocumentoEmpresaInvalidoException.class, () -> servicio.darDeAlta(conLetras));
+
+        verify(plataforma, never()).insertarEmpresa(any(), anyString(), anyString(), any(), any(), any());
+        verifyNoInteractions(usuarios);
+    }
+
+    // ------------------------------------------- el cambio de identidad (solo la plataforma)
+
+    private static final String MOTIVO = "Corrección pedida por la tienda";
+
+    private void empresaConIdentidad(int id, TipoDocumentoEmpresa tipo, String nit, String razon) {
+        when(plataforma.identidadDe(id)).thenReturn(Optional.of(new IdentidadDeEmpresa(tipo, nit, razon)));
+        when(plataforma.existeNit(anyString(), eq(id))).thenReturn(false);
+        when(plataforma.buscar(id)).thenReturn(Optional.of(empresaEnPlataforma(id)));
+    }
+
+    @Test
+    void cadaCampoQueCambiaDejaSuPropiaFilaConElNitAnteriorComoReferencia() {
+        empresaConIdentidad(5, TipoDocumentoEmpresa.NIT, "900123456", "Tornillo S.A.S.");
+
+        servicio.cambiarIdentidad(5,
+                new SolicitudIdentidad(TipoDocumentoEmpresa.CC, "1.098.765.432", "María Pérez", MOTIVO));
+
+        verify(plataforma).existeNit("1098765432", 5);
+        verify(plataforma).cambiarIdentidad(5, TipoDocumentoEmpresa.CC, "1098765432", "María Pérez");
+        verify(plataforma).registrar(USUARIO_SUPER_ADMIN, 5, AccionPlataforma.CAMBIO_IDENTIDAD_EMPRESA,
+                "empresas", "tipo_documento", "900123456", "NIT", "CC", MOTIVO);
+        verify(plataforma).registrar(USUARIO_SUPER_ADMIN, 5, AccionPlataforma.CAMBIO_IDENTIDAD_EMPRESA,
+                "empresas", "nit", "900123456", "900123456", "1098765432", MOTIVO);
+        verify(plataforma).registrar(USUARIO_SUPER_ADMIN, 5, AccionPlataforma.CAMBIO_IDENTIDAD_EMPRESA,
+                "empresas", "razon_social", "900123456", "Tornillo S.A.S.", "María Pérez", MOTIVO);
+    }
+
+    @Test
+    void siSoloCambiaLaRazonSocialSoloAuditaLaRazonSocialYElNumeroNoChocaConsigoMismo() {
+        empresaConIdentidad(5, TipoDocumentoEmpresa.NIT, "900123456-1", "Tornillo S.A.S.");
+
+        servicio.cambiarIdentidad(5,
+                new SolicitudIdentidad(TipoDocumentoEmpresa.NIT, "900.123.456 1", "Tornillo y Tuercas", MOTIVO));
+
+        // El número ya es el de la empresa: se pregunta excluyéndola, y la columna conserva su guion.
+        verify(plataforma).existeNit("9001234561", 5);
+        verify(plataforma).cambiarIdentidad(5, TipoDocumentoEmpresa.NIT, "900123456-1", "Tornillo y Tuercas");
+        verify(plataforma).registrar(USUARIO_SUPER_ADMIN, 5, AccionPlataforma.CAMBIO_IDENTIDAD_EMPRESA,
+                "empresas", "razon_social", "900123456-1", "Tornillo S.A.S.", "Tornillo y Tuercas", MOTIVO);
+        verify(plataforma, times(1)).registrar(any(), any(), any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void sinCambiosNoEscribeNiAuditaPeroResponde() {
+        empresaConIdentidad(5, TipoDocumentoEmpresa.NIT, "900123456", "Tornillo S.A.S.");
+
+        Optional<EmpresaEnPlataforma> respuesta = servicio.cambiarIdentidad(5,
+                new SolicitudIdentidad(TipoDocumentoEmpresa.NIT, "900123456", "Tornillo S.A.S.", MOTIVO));
+
+        assertTrue(respuesta.isPresent());
+        verify(plataforma, never()).cambiarIdentidad(anyInt(), any(), any(), any());
+        verify(plataforma, never()).registrar(any(), any(), any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void unNumeroDeOtraEmpresaEs409YNoEscribeNada() {
+        empresaConIdentidad(5, TipoDocumentoEmpresa.NIT, "900123456", "Tornillo S.A.S.");
+        when(plataforma.existeNit("800555111", 5)).thenReturn(true);
+
+        assertThrows(NitRepetidoException.class, () -> servicio.cambiarIdentidad(5,
+                new SolicitudIdentidad(TipoDocumentoEmpresa.NIT, "800.555.111", "Tornillo S.A.S.", MOTIVO)));
+
+        verify(plataforma, never()).cambiarIdentidad(anyInt(), any(), any(), any());
+        verify(plataforma, never()).registrar(any(), any(), any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void unaEmpresaQueNoExisteDevuelveVacioAntesDeMirarElDocumento() {
+        when(plataforma.identidadDe(404)).thenReturn(Optional.empty());
+
+        // El documento ni se mira: 404 antes que 400.
+        assertTrue(servicio.cambiarIdentidad(404,
+                new SolicitudIdentidad(TipoDocumentoEmpresa.NIT, "con letras", "Nada", MOTIVO)).isEmpty());
+
+        verify(plataforma, never()).cambiarIdentidad(anyInt(), any(), any(), any());
+    }
+
+    @Test
+    void unDocumentoConLetrasEnLaIdentidadEs400YNoEscribeNada() {
+        empresaConIdentidad(5, TipoDocumentoEmpresa.NIT, "900123456", "Tornillo S.A.S.");
+
+        assertThrows(DocumentoEmpresaInvalidoException.class, () -> servicio.cambiarIdentidad(5,
+                new SolicitudIdentidad(TipoDocumentoEmpresa.NIT, "90012345A", "Tornillo S.A.S.", MOTIVO)));
+
+        verify(plataforma, never()).cambiarIdentidad(anyInt(), any(), any(), any());
     }
 
     // ------------------------------------------------------- RF-02 y RF-03
