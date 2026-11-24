@@ -42,6 +42,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -186,6 +187,31 @@ class PlataformaIdentidadAutorizacionTest {
         }
 
         verifyNoInteractions(servicio);
+    }
+
+    private static String altaConNit(String nit) {
+        return "{\"nit\":\"" + nit + "\",\"razonSocial\":\"Tornillo S.A.S.\",\"administradorNombre\":\"Ana\","
+                + "\"administradorCorreo\":\"ana@tornillo.co\",\"administradorClave\":\"clave-de-prueba\"}";
+    }
+
+    /**
+     * El tope del número crudo es el de la identidad (40), no 20: quince dígitos escritos con puntos y espacios
+     * miden 23, y es el servicio, al normalizar, quien protege la columna.
+     */
+    @Test
+    void unNumeroDe23CaracteresConPuntosYEspaciosPasaLaValidacionDelAlta() throws Exception {
+        String conSeparadores = "123. 456. 789. 012. 345";
+        assertEquals(23, conSeparadores.length());
+        when(servicio.darDeAlta(any())).thenReturn(empresa());
+
+        mvc.perform(post("/api/v1/plataforma/empresas").contentType(MediaType.APPLICATION_JSON)
+                        .content(altaConNit(conSeparadores)).with(como("SUPER_ADMIN")))
+                .andExpect(status().isCreated());
+        verify(servicio).darDeAlta(any());
+
+        mvc.perform(post("/api/v1/plataforma/empresas").contentType(MediaType.APPLICATION_JSON)
+                        .content(altaConNit("1".repeat(41))).with(como("SUPER_ADMIN")))
+                .andExpect(status().isBadRequest());
     }
 
     @Test

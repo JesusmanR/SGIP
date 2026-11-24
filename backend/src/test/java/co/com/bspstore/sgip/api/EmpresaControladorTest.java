@@ -109,6 +109,7 @@ class EmpresaControladorTest {
                         {"nombreComercial":"Ferretería","nit":"900123456"}""").with(como("ADMINISTRADOR")))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.type").value("urn:sgip:campo-no-permitido"))
                 .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.containsString("nit")));
 
         verifyNoInteractions(servicio);
@@ -120,6 +121,21 @@ class EmpresaControladorTest {
                         {"razonSocial":"Otra razón S.A.S.","telefono":"3001234567"}""").with(como("ADMINISTRADOR")))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.containsString("razonSocial")));
+
+        verifyNoInteractions(servicio);
+    }
+
+    /**
+     * Un campo desconocido con valor null también se nombra: antes el null reventaba al copiar el mapa y el
+     * cliente recibía el «Cuerpo no válido» genérico, sin saber cuál campo sobraba.
+     */
+    @Test
+    void unCampoDesconocidoConValorNullTambienSeNombra() throws Exception {
+        mvc.perform(editar("{\"nit\":null,\"logoUrl\":null}").with(como("ADMINISTRADOR")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.type").value("urn:sgip:campo-no-permitido"))
+                .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.containsString("nit")))
+                .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.containsString("logoUrl")));
 
         verifyNoInteractions(servicio);
     }

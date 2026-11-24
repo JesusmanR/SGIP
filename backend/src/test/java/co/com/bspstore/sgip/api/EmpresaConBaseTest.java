@@ -269,6 +269,46 @@ class EmpresaConBaseTest {
         assertEquals("Tornillo", f.nombre());
     }
 
+    /**
+     * El logo se sube tras una normalización lenta de la imagen: la copia de la empresa que se leyó antes
+     * no puede devolver el contacto a su valor viejo (sin {@code @DynamicUpdate} Hibernate escribe todas
+     * las columnas de la fila que leyó).
+     */
+    @Test
+    void subirElLogoNoPisaElContactoEditadoEntremedias() {
+        transaccion.executeWithoutResult(estado -> {
+            Empresa copiaVieja = empresas.findById(empresaA).orElseThrow();
+            jdbc.sql("""
+                    UPDATE empresas SET nombre_comercial = 'Editado entremedias', telefono = '3009998877'
+                     WHERE empresa_id = :id
+                    """).param("id", empresaA).update();
+            copiaVieja.cambiarLogo("logos/nuevo.png");
+            empresas.flush();
+        });
+
+        Fila f = fila(empresaA);
+        assertEquals("Editado entremedias", f.nombre());
+        assertEquals("3009998877", f.telefono());
+        assertEquals("logos/nuevo.png", jdbc.sql("SELECT logo_ruta FROM empresas WHERE empresa_id = :id")
+                .param("id", empresaA).query((rs, n) -> rs.getString(1)).single());
+    }
+
+    /** El caso inverso: editar el contacto con una copia vieja no devuelve el logo a la ruta anterior. */
+    @Test
+    void editarElContactoNoPisaElLogoSubidoEntremedias() {
+        transaccion.executeWithoutResult(estado -> {
+            Empresa copiaVieja = empresas.findById(empresaA).orElseThrow();
+            jdbc.sql("UPDATE empresas SET logo_ruta = 'logos/subido-entremedias.png' WHERE empresa_id = :id")
+                    .param("id", empresaA).update();
+            copiaVieja.actualizarContacto("Tornillo", null, null, null, null);
+            empresas.flush();
+        });
+
+        assertEquals("logos/subido-entremedias.png", jdbc.sql("SELECT logo_ruta FROM empresas WHERE empresa_id = :id")
+                .param("id", empresaA).query((rs, n) -> rs.getString(1)).single());
+        assertEquals("Tornillo", fila(empresaA).nombre());
+    }
+
     // ------------------------------------------------ el super administrador cambia la identidad
 
     @Test
@@ -340,6 +380,36 @@ class EmpresaConBaseTest {
 
         assertEquals(sembrado, fila(empresaA).nit());
         assertEquals(List.of("razon_social"), auditoria(empresaA).stream().map(Auditoria::campo).toList());
+    }
+
+    @Test
+    void siElNumeroNoCambiaNoHayFalso409AunqueOtraFilaViejaSeLeaIgual() throws Exception {
+        // Dos filas viejas que se leen como el mismo número: A «NNN-1» y B «NNN». La UNIQUE las admite
+        // porque el texto difiere; editar la razón social de A mandando «NNN» no cambia su número.
+        jdbc.sql("UPDATE empresas SET nit = :nit WHERE empresa_id = :id")
+                .param("nit", nitA + "-1").param("id", empresaA).update();
+        jdbc.sql("UPDATE empresas SET nit = :nit WHERE empresa_id = :id")
+                .param("nit", nitA).param("id", empresaB).update();
+
+        identidad(empresaA, comoSuperAdmin(), "NIT", nitA, "Razón sin falso conflicto", MOTIVO)
+                .andExpect(status().isOk());
+
+        assertEquals(nitA + "-1", fila(empresaA).nit());
+        assertEquals(List.of("razon_social"), auditoria(empresaA).stream().map(Auditoria::campo).toList());
+    }
+
+    @Test
+    void alCambiarElTipoDeUnaSemillaSeEscribeElNumeroSinElSufijo() throws Exception {
+        jdbc.sql("UPDATE empresas SET nit = :nit WHERE empresa_id = :id")
+                .param("nit", nitA + "-7").param("id", empresaA).update();
+
+        identidad(empresaA, comoSuperAdmin(), "CC", nitA, "Empresa A " + marca, MOTIVO)
+                .andExpect(status().isOk());
+
+        Fila f = fila(empresaA);
+        assertEquals(nitA, f.nit());
+        assertEquals("CC", f.tipo());
+        assertEquals(List.of("tipo_documento"), auditoria(empresaA).stream().map(Auditoria::campo).toList());
     }
 
     @Test

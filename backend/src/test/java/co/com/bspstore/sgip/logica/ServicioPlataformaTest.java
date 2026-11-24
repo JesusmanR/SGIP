@@ -40,6 +40,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -385,6 +386,9 @@ class ServicioPlataformaTest {
 
         assertTrue(e.getMessage().contains("900123456"),
                 "el mensaje debe decir cuál de los dos datos choca");
+        // Sirve para NIT y para CC: no habla de «identificación tributaria».
+        assertTrue(e.getMessage().contains("número de documento"), e.getMessage());
+        assertFalse(e.getMessage().contains("tributaria"), e.getMessage());
         // Nada se escribió: ni la empresa, ni el usuario, ni la bitácora.
         verify(plataforma, never()).insertarEmpresa(any(), anyString(), anyString(), any(), any(), any());
         verifyNoInteractions(usuarios);
@@ -493,9 +497,9 @@ class ServicioPlataformaTest {
         servicio.cambiarIdentidad(5,
                 new SolicitudIdentidad(TipoDocumentoEmpresa.NIT, "900.123.456", "Tornillo y Tuercas", MOTIVO));
 
-        // El número ya es el de la empresa (la semilla con su dígito, sin el dígito): se pregunta
-        // excluyéndola, y la columna conserva su formato viejo.
-        verify(plataforma).existeNit("900123456", 5);
+        // El número ya es el de la empresa (la semilla con su dígito, sin el dígito): no cambia, así
+        // que ni se pregunta por duplicados, y la columna conserva su formato viejo.
+        verify(plataforma, never()).existeNit(anyString(), anyInt());
         verify(plataforma).cambiarIdentidad(5, TipoDocumentoEmpresa.NIT, "900123456-1", "Tornillo y Tuercas");
         verify(plataforma).registrar(USUARIO_SUPER_ADMIN, 5, AccionPlataforma.CAMBIO_IDENTIDAD_EMPRESA,
                 "empresas", "razon_social", "900123456-1", "Tornillo S.A.S.", "Tornillo y Tuercas", MOTIVO);
@@ -538,6 +542,35 @@ class ServicioPlataformaTest {
         assertTrue(respuesta.isPresent());
         verify(plataforma, never()).cambiarIdentidad(anyInt(), any(), any(), any());
         verify(plataforma, never()).registrar(any(), any(), any(), any(), any(), any(), any(), any(), any());
+    }
+
+    /**
+     * Si el número no cambia, un duplicado preexistente (dos filas viejas que se leen como el mismo número)
+     * no puede convertir una edición de la razón social en un 409 falso.
+     */
+    @Test
+    void sinCambioDeNumeroNoDaFalso409AunqueOtraEmpresaTengaElMismo() {
+        empresaConIdentidad(5, TipoDocumentoEmpresa.NIT, "900123456-1", "Tornillo S.A.S.");
+        when(plataforma.existeNit("900123456", 5)).thenReturn(true);
+
+        assertTrue(servicio.cambiarIdentidad(5,
+                new SolicitudIdentidad(TipoDocumentoEmpresa.NIT, "900123456", "Tornillo y Tuercas", MOTIVO)).isPresent());
+
+        verify(plataforma).cambiarIdentidad(5, TipoDocumentoEmpresa.NIT, "900123456-1", "Tornillo y Tuercas");
+    }
+
+    /** M-4: al cambiar el tipo se escribe el número normalizado, no el sufijo viejo de la semilla. */
+    @Test
+    void alCambiarElTipoSeEscribeElNumeroSinElSufijoDeLaSemilla() {
+        empresaConIdentidad(5, TipoDocumentoEmpresa.NIT, "900000000-0", "Tornillo S.A.S.");
+
+        servicio.cambiarIdentidad(5,
+                new SolicitudIdentidad(TipoDocumentoEmpresa.CC, "900000000", "Tornillo S.A.S.", MOTIVO));
+
+        verify(plataforma).cambiarIdentidad(5, TipoDocumentoEmpresa.CC, "900000000", "Tornillo S.A.S.");
+        verify(plataforma).registrar(USUARIO_SUPER_ADMIN, 5, AccionPlataforma.CAMBIO_IDENTIDAD_EMPRESA,
+                "empresas", "tipo_documento", "900000000-0", "NIT", "CC", MOTIVO);
+        verify(plataforma, never()).registrar(any(), any(), any(), any(), eq("nit"), any(), any(), any(), any());
     }
 
     @Test
