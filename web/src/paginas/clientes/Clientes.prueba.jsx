@@ -141,6 +141,47 @@ describe('pantalla de clientes', () => {
     }))
   })
 
+  it('editaDireccionYCiudad: el formulario trae los valores de la fila y envía los nuevos', async () => {
+    actualizarCliente.mockResolvedValue(ANA)
+    montar()
+    await screen.findByRole('table')
+    await userEvent.click(screen.getByRole('button', { name: 'Editar a Ana Pérez' }))
+    const formulario = screen.getByRole('form', { name: /editar cliente/i })
+    const direccion = within(formulario).getByLabelText('Dirección (opcional)')
+    const ciudad = within(formulario).getByLabelText('Ciudad')
+    expect(direccion).toHaveValue('Calle 1 # 2-3')
+    expect(ciudad).toHaveValue('Cali')
+    expect(within(formulario).getByText('Si la dejas vacía, se usa la ciudad de la empresa.')).toBeInTheDocument()
+    await userEvent.clear(direccion)
+    await userEvent.type(direccion, 'Carrera 9 # 8-7')
+    await userEvent.clear(ciudad)
+    await userEvent.type(ciudad, 'Medellín')
+    await userEvent.click(within(formulario).getByRole('button', { name: 'Guardar cambios' }))
+    await waitFor(() => expect(actualizarCliente).toHaveBeenCalledWith(7, expect.objectContaining({
+      direccion: 'Carrera 9 # 8-7', ciudad: 'Medellín', telefono: '3001112233',
+    })))
+  })
+
+  it('creaSinCiudad: no envía la ciudad y, si el servidor la rechaza, se ve su mensaje', async () => {
+    crearCliente.mockRejectedValue(errorApi(400, 'La ciudad es obligatoria: el cliente no la trae y la empresa no tiene una por omisión.'))
+    montar()
+    await screen.findByRole('table')
+    await userEvent.click(screen.getByRole('button', { name: 'Nuevo cliente' }))
+    const formulario = screen.getByRole('form', { name: /cliente nuevo/i })
+    expect(within(formulario).getByLabelText('Ciudad')).toHaveValue('')
+    await userEvent.type(within(formulario).getByLabelText('Número de documento'), '555')
+    await userEvent.type(within(formulario).getByLabelText('Nombre completo'), 'Luis Soto')
+    await userEvent.type(within(formulario).getByLabelText('Correo electrónico'), 'luis@correo.co')
+    await userEvent.type(within(formulario).getByLabelText('Dirección (opcional)'), 'Calle 5')
+    await userEvent.click(within(formulario).getByLabelText(/autoriza el tratamiento de sus datos/i))
+    await userEvent.click(within(formulario).getByRole('button', { name: 'Guardar cliente' }))
+    await waitFor(() => expect(crearCliente).toHaveBeenCalledWith({
+      nombre: 'Luis Soto', tipoDocumento: 'CC', identificacion: '555', correo: 'luis@correo.co',
+      direccion: 'Calle 5', autorizacionDatos: true,
+    }))
+    expect(await within(formulario).findByText(/la ciudad es obligatoria/i)).toBeInTheDocument()
+  })
+
   it('consumidorFinalSinBotonEditar: el cliente del sistema se ve pero no se edita', async () => {
     montar()
     await screen.findByRole('table')
