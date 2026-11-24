@@ -282,3 +282,63 @@ describe('pedir exportado', () => {
     expect(typeof pedir).toBe('function')
   })
 })
+
+describe('descarga de la plantilla de precios', () => {
+  beforeEach(() => {
+    sessionStorage.clear()
+    global.fetch = vi.fn()
+    global.URL.createObjectURL = vi.fn(() => 'blob:plantilla')
+    global.URL.revokeObjectURL = vi.fn()
+  })
+  afterEach(() => { vi.restoreAllMocks() })
+
+  function conBinario(nombreEnCabecera) {
+    global.fetch.mockResolvedValue({
+      ok: true, status: 200,
+      headers: { get: (n) => (n.toLowerCase() === 'content-disposition' ? nombreEnCabecera : null) },
+      blob: async () => new Blob(['x']),
+    })
+    const enlaces = []
+    const crear = document.createElement.bind(document)
+    vi.spyOn(document, 'createElement').mockImplementation((etiqueta) => {
+      const el = crear(etiqueta)
+      if (etiqueta === 'a') { el.click = vi.fn(); enlaces.push(el) }
+      return el
+    })
+    return enlaces
+  }
+
+  it('laDescargaPideLaRutaConElProveedorYUsaElNombreDelServidor', async () => {
+    guardarSesion({ token: 'abc123', nombre: 'Ana' })
+    const enlaces = conBinario('attachment; filename="plantilla-precios-mayorista-tech.xlsx"')
+
+    await api.descargarPlantilla(7)
+
+    const [ruta, opciones] = global.fetch.mock.calls[0]
+    expect(ruta).toBe('/api/v1/importaciones/plantilla?proveedorId=7')
+    expect(opciones.headers.Authorization).toBe('Bearer abc123')
+    expect(enlaces).toHaveLength(1)
+    expect(enlaces[0].download).toBe('plantilla-precios-mayorista-tech.xlsx')
+    expect(enlaces[0].click).toHaveBeenCalledTimes(1)
+    expect(global.URL.revokeObjectURL).toHaveBeenCalledWith('blob:plantilla')
+  })
+
+  it('sin Content-Disposition usa el nombre de respaldo', async () => {
+    const enlaces = conBinario(null)
+    await api.descargarPlantilla(7)
+    expect(enlaces[0].download).toBe('plantilla-precios.xlsx')
+  })
+
+  it('un error trae el detalle del servidor y un 401 no cierra la sesión', async () => {
+    guardarSesion({ token: 'abc123', nombre: 'Ana' })
+    global.fetch.mockResolvedValue({
+      ok: false, status: 404, json: async () => ({ detail: 'El proveedor no existe.' }),
+    })
+    await expect(api.descargarPlantilla(7)).rejects.toMatchObject({ estado: 404, message: 'El proveedor no existe.' })
+
+    global.fetch.mockResolvedValue({ ok: false, status: 401, json: async () => { throw new Error('sin cuerpo') } })
+    await expect(api.descargarPlantilla(7)).rejects.toMatchObject({ message: 'No se pudo descargar la plantilla.' })
+    expect(haySesion()).toBe(true)
+    expect(global.URL.createObjectURL).not.toHaveBeenCalled()
+  })
+})

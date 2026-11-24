@@ -25,11 +25,15 @@ vi.mock('../servicios/api.js', () => ({
     verCarga: vi.fn(),
     aplicarCarga: vi.fn(),
     rechazarCarga: vi.fn(),
+    descargarPlantilla: vi.fn(),
   },
   ErrorApi: class extends Error {},
 }))
 
-const PROVEEDORES = [{ id: 1, razonSocial: 'Mayorista Tech SAS' }]
+const PROVEEDORES = [
+  { id: 1, razonSocial: 'Mayorista Tech SAS', nit: '900123456' },
+  { id: 9, razonSocial: 'Sin proveedor', nit: 'SIN-PROVEEDOR' },
+]
 
 const MUESTRA = [
   { numeroFila: 31, productoId: 9, referencia: 'MT-0031', descripcion: 'Teclado mecánico',
@@ -534,5 +538,54 @@ describe('importación de lista de precios', () => {
       // Cadena y no expresión regular: el punto del separador casaría con cualquier carácter.
       expect(screen.getByText((t) => t.includes(`${NUMERO.format(20000)} filas`))).toBeInTheDocument()
     })
+  })
+
+  describe('plantilla con los productos del proveedor', () => {
+    it('alElegirProveedorApareceDescargarPlantilla', async () => {
+      montar()
+      await screen.findByLabelText(/proveedor/i)
+      expect(screen.queryByRole('button', { name: /descargar plantilla con mis productos/i }))
+        .not.toBeInTheDocument()
+
+      await teclado.selectOptions(screen.getByLabelText(/proveedor/i), '1')
+
+      expect(screen.getByRole('button', { name: /descargar plantilla con mis productos/i }))
+        .toBeEnabled()
+    })
+
+    it('al pulsarlo pide la plantilla del proveedor elegido', async () => {
+      api.descargarPlantilla.mockResolvedValue()
+      montar()
+      await teclado.selectOptions(await screen.findByLabelText(/proveedor/i), '1')
+      await teclado.click(screen.getByRole('button', { name: /descargar plantilla con mis productos/i }))
+      expect(api.descargarPlantilla).toHaveBeenCalledWith('1')
+    })
+
+    it('errorDeDescargaSeMuestra', async () => {
+      api.descargarPlantilla.mockRejectedValue(new Error('El proveedor no existe.'))
+      montar()
+      await teclado.selectOptions(await screen.findByLabelText(/proveedor/i), '1')
+      await teclado.click(screen.getByRole('button', { name: /descargar plantilla con mis productos/i }))
+      expect(await screen.findByRole('alert')).toHaveTextContent('El proveedor no existe.')
+    })
+
+    it('no se ofrece para «Sin proveedor», que no tiene plantilla', async () => {
+      montar()
+      await teclado.selectOptions(await screen.findByLabelText(/proveedor/i), '9')
+      expect(screen.queryByRole('button', { name: /descargar plantilla/i })).not.toBeInTheDocument()
+    })
+  })
+
+  it('causaDeOtroProveedorSeMuestraConSuIndicacion', async () => {
+    montar()
+    const otra = { numeroFila: 40, productoId: 5, referencia: 'MT-0040', descripcion: 'Mouse',
+      costo: null, costoAnterior: 50000, aceptado: false,
+      motivoRechazo: 'La referencia MT-0040 es de otro proveedor.',
+      motivoCodigo: 'PRODUCTO_DE_OTRO_PROVEEDOR' }
+    await subirLista(teclado, carga({ muestra: [otra, ...MUESTRA], rechazados: 15 }))
+
+    expect(screen.getByText('De otro proveedor')).toBeInTheDocument()
+    expect(screen.getByText(/Esta referencia pertenece a otro proveedor; súbela en la lista de ese proveedor/))
+      .toBeInTheDocument()
   })
 })

@@ -968,4 +968,25 @@ describe('crear un producto', () => {
         onCerrar={vi.fn()} onGuardado={vi.fn()} />)
     expect(mensajeDe(campo('Categoría'))).toHaveTextContent(/no hay categorías/i)
   })
+
+  it('editarProductoPermiteAsignarProveedor', async () => {
+    const teclado = userEvent.setup()
+    api.editarProducto.mockResolvedValue(PC)
+    const reservado = { id: 9, razonSocial: 'Sin proveedor', nit: 'SIN-PROVEEDOR' }
+    render(
+      <FormularioProducto
+        producto={{ ...PC, proveedorId: 9, proveedor: 'Sin proveedor' }}
+        categorias={CATEGORIAS}
+        proveedores={[...PROVEEDORES, reservado]}
+        onCerrar={vi.fn()} onGuardado={vi.fn()} onActualizado={vi.fn()}
+      />)
+
+    const selector = screen.getByLabelText('Proveedor')
+    expect(selector).toHaveValue('9')
+    await teclado.selectOptions(selector, '2')
+    await teclado.click(screen.getByRole('button', { name: /guardar/i }))
+
+    await waitFor(() => expect(api.editarProducto).toHaveBeenCalled())
+    expect(api.editarProducto.mock.calls[0][1].proveedorId).toBe(2)
+  })
 })
