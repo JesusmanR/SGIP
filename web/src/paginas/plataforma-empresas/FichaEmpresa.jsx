@@ -13,6 +13,7 @@ import Campo from '../../componentes/comun/Campo.jsx'
 import Confirmacion from '../../componentes/comun/Confirmacion.jsx'
 import EstadoEmpresa from './EstadoEmpresa.jsx'
 import UsuariosEmpresa from './UsuariosEmpresa.jsx'
+import IdentidadEmpresa from './IdentidadEmpresa.jsx'
 
 const VOLVER = <Link to="/plataforma/empresas">Volver a empresas</Link>
 
@@ -118,7 +119,7 @@ function Ficha({ empresa, usuarios, recargar, avisoInicial }) {
 
       <section className="tarjeta ficha" aria-label="Datos de la empresa" tabIndex={-1} ref={datos}>
         <dl>
-          <div><dt>NIT</dt><dd>{empresa.nit}</dd></div>
+          <div><dt>{empresa.tipoDocumento ?? 'NIT'}</dt><dd>{empresa.nit}</dd></div>
           <div><dt>Estado</dt><dd><EstadoEmpresa estado={empresa.estado} /></dd></div>
           <div><dt>Ciudad</dt><dd>{empresa.ciudad || '—'}</dd></div>
           <div><dt>Correo</dt><dd>{empresa.correoContacto || '—'}</dd></div>
@@ -153,6 +154,15 @@ function Ficha({ empresa, usuarios, recargar, avisoInicial }) {
             </button>
           )}
         </div>
+      )}
+
+      {/* Mientras se confirma activar o desactivar solo hay un «Motivo» en pantalla. */}
+      {!pedida && (
+        <IdentidadEmpresa
+          key={`${empresa.tipoDocumento}|${empresa.nit}|${empresa.razonSocial}`}
+          empresa={empresa}
+          alExito={(mensaje) => { setError(null); setExito(mensaje); recargar() }}
+        />
       )}
 
       <UsuariosEmpresa

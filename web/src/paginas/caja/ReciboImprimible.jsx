@@ -19,8 +19,10 @@ export default function ReciboImprimible({ recibo }) {
   return (
     <article className="recibo" aria-label="Recibo de venta">
       <header className="recibo-cabecera">
-        <p className="recibo-empresa">{empresa.razonSocial}</p>
-        {empresa.nit && <p>NIT {empresa.nit}</p>}
+        <p className="recibo-empresa">{empresa.nombre}</p>
+        {empresa.nit && <p>{empresa.tipoDocumento ?? 'NIT'} {empresa.nit}</p>}
+        {empresa.direccion && <p>{empresa.direccion}</p>}
+        {empresa.telefono && <p>Tel. {empresa.telefono}</p>}
       </header>
 
       <div className="recibo-datos">

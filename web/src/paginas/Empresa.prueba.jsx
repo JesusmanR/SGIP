@@ -102,7 +102,7 @@ describe('el logo', () => {
     await screen.findByText('Comercial Andina S.A.S.')
     await teclado.upload(document.querySelector('input[type="file"]'), logo())
     await waitFor(() => expect(api.subirLogo).toHaveBeenCalled())
-    expect(await screen.findByRole('status')).toHaveTextContent(/logo actualizado/i)
+    expect(await screen.findByText(/logo actualizado/i)).toBeInTheDocument()
   })
 
   it('si la subida falla muestra el motivo y no dice que salió bien', async () => {

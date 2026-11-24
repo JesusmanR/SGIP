@@ -91,14 +91,90 @@ function MiPin() {
   )
 }
 
+const CONTACTO = [
+  ['nombreComercial', 'Nombre comercial', 150],
+  ['direccion', 'Dirección', 200],
+  ['ciudad', 'Ciudad', 80],
+  ['telefono', 'Teléfono', 20],
+  ['correoContacto', 'Correo de contacto', 120],
+]
+const FORMA_DE_CORREO = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const textoDe = (empresa) => Object.fromEntries(CONTACTO.map(([campo]) => [campo, empresa[campo] ?? '']))
+
+/**
+ * Los datos de contacto que salen en el recibo. El administrador los edita; los demás roles solo los ven.
+ * Siempre se mandan los cinco: el servidor reemplaza los cinco y lo que falte queda en blanco.
+ */
+function DatosDeContacto({ empresa, puedeEditar, alGuardar, alFallar }) {
+  const [valores, setValores] = useState(() => textoDe(empresa))
+  const [motivos, setMotivos] = useState({})
+  const [enviando, setEnviando] = useState(false)
+
+  if (!puedeEditar) {
+    return (
+      <section className="tarjeta empresa-contacto" aria-labelledby="t-contacto">
+        <h2 id="t-contacto">Datos de contacto</h2>
+        <dl className="empresa-lectura">
+          {CONTACTO.map(([campo, etiqueta]) => (
+            <div key={campo}><dt>{etiqueta}</dt><dd>{empresa[campo] || '—'}</dd></div>
+          ))}
+        </dl>
+      </section>
+    )
+  }
+
+  async function guardar(evento) {
+    evento.preventDefault()
+    const nuevos = {}
+    const correo = valores.correoContacto.trim()
+    if (correo !== '' && !FORMA_DE_CORREO.test(correo)) nuevos.correoContacto = 'Escribe un correo válido, como contacto@tienda.com.'
+    setMotivos(nuevos)
+    if (Object.keys(nuevos).length > 0) return
+    setEnviando(true)
+    try {
+      const guardada = await api.guardarEmpresa(Object.fromEntries(
+        CONTACTO.map(([campo]) => [campo, valores[campo].trim()]),
+      ))
+      setValores(textoDe(guardada))
+      alGuardar(guardada)
+    } catch (error) {
+      alFallar(error.message || 'No se pudieron guardar los datos.')
+    } finally {
+      setEnviando(false)
+    }
+  }
+
+  return (
+    <section className="tarjeta empresa-contacto" aria-labelledby="t-contacto">
+      <h2 id="t-contacto">Datos de contacto</h2>
+      <p className="sub-linea">Aparecen en el encabezado del recibo de cada venta.</p>
+      <form onSubmit={guardar} noValidate className="empresa-contacto-formulario">
+        {CONTACTO.map(([campo, etiqueta, max]) => (
+          <Campo key={campo} etiqueta={etiqueta} motivo={motivos[campo]}>
+            <input
+              type={campo === 'correoContacto' ? 'email' : 'text'}
+              autoComplete="off"
+              maxLength={max}
+              value={valores[campo]}
+              onChange={(e) => setValores((v) => ({ ...v, [campo]: e.target.value }))}
+            />
+          </Campo>
+        ))}
+        <div className="acciones">
+          <button type="submit" className="boton" disabled={enviando}>Guardar cambios</button>
+        </div>
+      </form>
+    </section>
+  )
+}
+
 /**
  * Mi empresa.
  *
  * La ven el administrador, el vendedor y el cliente, de modo que aquí no
- * hay ni costos ni márgenes: solo lo que `GET /api/v1/empresa` entrega
- * —razón social, NIT y logo—. El perfil del diseño (pantalla 10) trae
- * además teléfono, correo, dirección y plan; el backend no los guarda
- * y no se fingen campos que no se pueden guardar.
+ * hay ni costos ni márgenes. Razón social y NIT (o CC) son de solo
+ * lectura para todos: los cambia la plataforma. El administrador edita
+ * los datos de contacto y el logo.
  *
  * Los impuestos son opcionales: no cobrar IVA es un estado válido, así
  * que la pantalla no lo marca como pendiente ni como error. Solo el
@@ -161,7 +237,8 @@ export default function Empresa() {
             />
             <div className="empresa-datos">
               <p className="titulo-empresa">{empresa.razonSocial}</p>
-              <p className="sub-linea">NIT {empresa.nit}</p>
+              <p className="sub-linea">{empresa.tipoDocumento ?? 'NIT'} {empresa.nit}</p>
+              <p className="sub-linea">Para cambiarlos, contacta a soporte</p>
               <p className="sub-linea">
                 {esAdmin
                   ? 'Toca el logo para subir o reemplazarlo. JPEG, PNG o WebP; se ajusta solo, sin recortarlo ni deformarlo.'
@@ -169,6 +246,14 @@ export default function Empresa() {
               </p>
             </div>
           </section>
+
+          <DatosDeContacto
+            key={`${empresa.nombreComercial}|${empresa.direccion}|${empresa.ciudad}|${empresa.telefono}|${empresa.correoContacto}`}
+            empresa={empresa}
+            puedeEditar={esAdmin}
+            alGuardar={(guardada) => { setFallo(null); setReemplazo(guardada); setAviso('Datos guardados.') }}
+            alFallar={(mensaje) => { setAviso(null); setFallo(mensaje) }}
+          />
 
           {esAdmin && (
             <section className="tarjeta empresa-impuestos" aria-labelledby="t-impuestos">

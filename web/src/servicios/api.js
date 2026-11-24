@@ -183,6 +183,14 @@ export const api = {
   rechazarCarga: (cargaId) =>
     pedir(`/importaciones/${cargaId}/rechazar`, { method: 'POST' }),
   empresa: () => pedir('/empresa'),
+  /** Los cinco datos de contacto, siempre completos: lo que falte queda en blanco. Nunca el resumen del GET. */
+  guardarEmpresa: (d) => pedir('/empresa', {
+    method: 'PUT',
+    body: {
+      nombreComercial: d.nombreComercial, direccion: d.direccion, ciudad: d.ciudad,
+      telefono: d.telefono, correoContacto: d.correoContacto,
+    },
+  }),
   // El PIN de autorización del administrador (caja). Nunca se lee: solo se sabe si ya hay uno.
   estadoPin: () => pedir('/perfil/pin'),
   fijarPin: (pinActual, pinNuevo) =>

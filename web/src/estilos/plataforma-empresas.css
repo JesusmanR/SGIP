@@ -57,3 +57,8 @@
   /* Sin acción en la fila, la tarjeta no deja un rótulo «Acciones» vacío. */
   .plataforma-empresas .usuarios-empresa td:empty { display: none; }
 }
+
+/* Identidad: la sección que solo cambia la plataforma */
+.plataforma-empresas .identidad { max-width: 36rem; margin-bottom: var(--espacio-4); }
+.plataforma-empresas .identidad h2 { margin: 0 0 var(--espacio-2); font-size: var(--t-titulo-tarjeta); font-weight: 600; }
+.plataforma-empresas .identidad .nota { margin: 0 0 var(--espacio-3); }
