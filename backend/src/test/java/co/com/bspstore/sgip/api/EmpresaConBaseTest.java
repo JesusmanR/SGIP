@@ -331,7 +331,7 @@ class EmpresaConBaseTest {
      */
     @Test
     void unNitSembradoConGuionNoSeReescribeSiSoloCambiaLaRazonSocial() throws Exception {
-        String sembrado = nitA.substring(0, 9) + "-" + nitA.substring(9);
+        String sembrado = nitA + "-7";
         jdbc.sql("UPDATE empresas SET nit = :nit WHERE empresa_id = :id")
                 .param("nit", sembrado).param("id", empresaA).update();
 
@@ -353,8 +353,9 @@ class EmpresaConBaseTest {
 
     @Test
     void numeroRepetidoEs409() throws Exception {
-        // La otra empresa guarda su NIT con guion, como las semillas: el choque es por el número, no por el texto.
-        String sembrado = nitB.substring(0, 9) + "-" + nitB.substring(9);
+        // La otra empresa guarda su NIT con el dígito de verificación, como las semillas (NNNNNNNNN-D): el
+        // choque es por el número sin el dígito, no por el texto.
+        String sembrado = nitB + "-1";
         jdbc.sql("UPDATE empresas SET nit = :nit WHERE empresa_id = :id")
                 .param("nit", sembrado).param("id", empresaB).update();
         Fila antes = fila(empresaA);
@@ -371,6 +372,19 @@ class EmpresaConBaseTest {
     void empresaInexistenteEs404() throws Exception {
         identidad(2_000_000_000, comoSuperAdmin(), "NIT", numeroAlAzar(), "Nada", MOTIVO)
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void unNumeroConGuionYDigitoEs400ConMensajeClaroYNoCambiaNada() throws Exception {
+        Fila antes = fila(empresaA);
+
+        identidad(empresaA, comoSuperAdmin(), "NIT", numeroAlAzar() + "-1", "Nueva", MOTIVO)
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.type").value("urn:sgip:empresa:documento-invalido"))
+                .andExpect(jsonPath("$.detail").value("Escribe solo el número, sin el dígito de verificación."));
+
+        assertEquals(antes, fila(empresaA));
+        assertEquals(0, auditoria(empresaA).size());
     }
 
     @Test
@@ -418,5 +432,13 @@ class EmpresaConBaseTest {
         assertThrows(NitRepetidoException.class, () -> servicioPlataforma.darDeAlta(new SolicitudAltaEmpresa(
                 TipoDocumentoEmpresa.NIT, numero + " ", "Otra " + marca, null, null, null, null,
                 "Otro", "otro-" + marca + "@ejemplo.co", "ClaveDePrueba2026")));
+
+        // Una semilla con su dígito (NNNNNNNNN-D) bloquea el mismo número escrito sin el dígito.
+        String conDigito = numeroAlAzar();
+        jdbc.sql("UPDATE empresas SET nit = :nit WHERE empresa_id = :id")
+                .param("nit", conDigito + "-4").param("id", empresaB).update();
+        assertThrows(NitRepetidoException.class, () -> servicioPlataforma.darDeAlta(new SolicitudAltaEmpresa(
+                TipoDocumentoEmpresa.NIT, conDigito, "Tercera " + marca, null, null, null, null,
+                "Tercero", "tercero-" + marca + "@ejemplo.co", "ClaveDePrueba2026")));
     }
 }

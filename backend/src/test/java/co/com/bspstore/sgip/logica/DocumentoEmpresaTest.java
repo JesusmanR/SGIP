@@ -9,8 +9,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
- * El documento con que se identifica una empresa (NIT o CC): solo dígitos, de 5 a 15, sin dígito de
- * verificación. La norma no cambia con el tipo, así que no hay una prueba por tipo.
+ * El documento con que se identifica una empresa (NIT o CC): solo dígitos, de 5 a 15, y NUNCA con dígito de
+ * verificación. Se aceptan puntos y espacios como separadores; el guion no, porque el guion es justo lo que
+ * separa el dígito de verificación ({@code 900123456-1}) y quitarlo guardaría otro número (9001234561).
  */
 class DocumentoEmpresaTest {
 
@@ -18,7 +19,11 @@ class DocumentoEmpresaTest {
     void nitConPuntosYEspaciosSeNormaliza() {
         assertEquals("900123456", DocumentoEmpresa.normalizar("900.123.456"));
         assertEquals("900123456", DocumentoEmpresa.normalizar(" 900 123 456 "));
-        assertEquals("900123456", DocumentoEmpresa.normalizar("900-123-456"));
+    }
+
+    @Test
+    void nitConPuntosSinDigitoSeNormaliza() {
+        assertEquals("900123456", DocumentoEmpresa.normalizar("900.123.456"));
     }
 
     @Test
@@ -27,8 +32,18 @@ class DocumentoEmpresaTest {
         assertEquals("1098765432", DocumentoEmpresa.normalizar("1 098 765 432"));
     }
 
+    @Test
+    void nitConGuionYDigitoEs400ConMensajeClaro() {
+        for (String texto : new String[]{"900123456-1", "900.123.456-1", "900123456 - 1", "900-123-456", "-900123456"}) {
+            DocumentoEmpresaInvalidoException e = assertThrows(DocumentoEmpresaInvalidoException.class,
+                    () -> DocumentoEmpresa.normalizar(texto), texto);
+
+            assertEquals("Escribe solo el número, sin el dígito de verificación.", e.getMessage(), texto);
+        }
+    }
+
     @ParameterizedTest
-    @ValueSource(strings = {"90012345A", "ABCDEFGHI", "900_123_456", "900/123/456", "9001234,56", "", "   ", "...", "---"})
+    @ValueSource(strings = {"90012345A", "ABCDEFGHI", "900_123_456", "900/123/456", "9001234,56", "", "   ", "..."})
     @NullSource
     void letrasSonInvalidas(String texto) {
         DocumentoEmpresaInvalidoException e = assertThrows(DocumentoEmpresaInvalidoException.class,
@@ -51,18 +66,24 @@ class DocumentoEmpresaTest {
     }
 
     /**
-     * El dígito de verificación nunca se pide ni se valida (decisión del usuario): ni con guion ni
-     * pegado, y un dígito cualquiera no hace inválido el número. {@code 900123456-1} y
-     * {@code 900123456-7} son el mismo documento más un dígito, y los dos pasan: lo que se guarda es
-     * lo que el usuario escribió, sin recalcular nada.
+     * El dígito de verificación nunca se pide ni se valida (decisión del usuario): el número se escribe sin
+     * él, y el sistema no calcula nada. Lo que se guarda es lo que el usuario escribió.
      */
     @Test
     void nuncaExigeDigitoDeVerificacion() {
-        // Sin dígito: pasa.
         assertEquals("900123456", DocumentoEmpresa.normalizar("900123456"));
-        // Con un dígito que no corresponde al módulo 11 de la DIAN: pasa igual, no se valida.
-        assertEquals("9001234561", DocumentoEmpresa.normalizar("900123456-1"));
-        assertEquals("9001234567", DocumentoEmpresa.normalizar("900123456-7"));
-        assertEquals("9001234560", DocumentoEmpresa.normalizar("900123456-0"));
+        assertEquals("900123456", DocumentoEmpresa.normalizar("900.123.456"));
+    }
+
+    /**
+     * Las semillas anteriores guardan el NIT como {@code NNNNNNNNN-D}: para compararlas con un número
+     * nuevo se les quita el sufijo del dígito de verificación, y solo a ellas.
+     */
+    @Test
+    void elFormatoViejoConDigitoSeComparaSinElDigito() {
+        assertEquals("900123456", DocumentoEmpresa.normalizadoOTalCual("900123456-1"));
+        assertEquals("900000000", DocumentoEmpresa.normalizadoOTalCual("900000000-0"));
+        assertEquals("900123456", DocumentoEmpresa.normalizadoOTalCual("900.123.456-7"));
+        assertEquals("900123456", DocumentoEmpresa.normalizadoOTalCual("900123456"));
     }
 }

@@ -102,7 +102,7 @@ class ServicioPlataformaTest {
 
     private SolicitudAltaEmpresa solicitud() {
         return new SolicitudAltaEmpresa(
-                TipoDocumentoEmpresa.NIT, "900.123.456-1", "Ferretería El Tornillo S.A.S.", "contacto@tornillo.co",
+                TipoDocumentoEmpresa.NIT, "900.123.456", "Ferretería El Tornillo S.A.S.", "contacto@tornillo.co",
                 "3001234567", "Bucaramanga", null,
                 "Ana Pérez", "Ana@Tornillo.CO", "clave-de-prueba");
     }
@@ -119,7 +119,7 @@ class ServicioPlataformaTest {
     }
 
     private EmpresaEnPlataforma empresaEnPlataforma(int id) {
-        return new EmpresaEnPlataforma(id, "NIT", "9001234561", "Ferretería El Tornillo S.A.S.",
+        return new EmpresaEnPlataforma(id, "NIT", "900123456", "Ferretería El Tornillo S.A.S.",
                 "contacto@tornillo.co", "3001234567", "Bucaramanga", "PRUEBA",
                 HOY.atStartOfDay(), "BASICO", HOY, HOY.plusDays(30), "PRUEBA", 1);
     }
@@ -133,8 +133,8 @@ class ServicioPlataformaTest {
         EmpresaEnPlataforma creada = servicio.darDeAlta(solicitud());
 
         assertEquals(Integer.valueOf(12), creada.empresaId());
-        // El documento se guarda normalizado: sin puntos ni guion, y sin recalcular ningún dígito.
-        verify(plataforma).insertarEmpresa(TipoDocumentoEmpresa.NIT, "9001234561",
+        // El documento se guarda normalizado: sin puntos ni espacios, y sin dígito de verificación.
+        verify(plataforma).insertarEmpresa(TipoDocumentoEmpresa.NIT, "900123456",
                 "Ferretería El Tornillo S.A.S.", "contacto@tornillo.co", "3001234567", "Bucaramanga");
         // El plan llegó nulo y la suscripción arranca hoy. La prueba son
         // treinta días contados desde mañana (RF-04 de la v4, ADR-0031):
@@ -230,7 +230,7 @@ class ServicioPlataformaTest {
     void elAltaSinCiudadSiembraElConsumidorFinalSinCiudad() {
         altaViable(12, 30);
         var sinCiudad = new SolicitudAltaEmpresa(
-                TipoDocumentoEmpresa.NIT, "900123456-1", "Ferretería El Tornillo S.A.S.", "contacto@tornillo.co",
+                TipoDocumentoEmpresa.NIT, "900123456", "Ferretería El Tornillo S.A.S.", "contacto@tornillo.co",
                 "3001234567", "  ", null, "Ana Pérez", "Ana@Tornillo.CO", "clave-de-prueba");
 
         servicio.darDeAlta(sinCiudad);
@@ -333,7 +333,7 @@ class ServicioPlataformaTest {
         servicio.darDeAlta(solicitud());
 
         verify(plataforma).registrar(eq(USUARIO_SUPER_ADMIN), eq(12),
-                eq(AccionPlataforma.EMPRESA_ALTA), eq("empresas"), eq("9001234561"),
+                eq(AccionPlataforma.EMPRESA_ALTA), eq("empresas"), eq("900123456"),
                 isNull(), eq("PRUEBA"), anyString());
     }
 
@@ -378,12 +378,12 @@ class ServicioPlataformaTest {
 
     @Test
     void rechazaLaIdentificacionTributariaYaRegistrada() {
-        when(plataforma.existeNit("9001234561")).thenReturn(true);
+        when(plataforma.existeNit("900123456")).thenReturn(true);
 
         RegistroRepetidoException e = assertThrows(NitRepetidoException.class,
                 () -> servicio.darDeAlta(solicitud()));
 
-        assertTrue(e.getMessage().contains("9001234561"),
+        assertTrue(e.getMessage().contains("900123456"),
                 "el mensaje debe decir cuál de los dos datos choca");
         // Nada se escribió: ni la empresa, ni el usuario, ni la bitácora.
         verify(plataforma, never()).insertarEmpresa(any(), anyString(), anyString(), any(), any(), any());
@@ -434,6 +434,20 @@ class ServicioPlataformaTest {
     }
 
     @Test
+    void unNitConGuionYDigitoEnElAltaEs400YNoEscribeNada() {
+        var conDigito = new SolicitudAltaEmpresa(
+                TipoDocumentoEmpresa.NIT, "900123456-1", "Ferretería El Tornillo S.A.S.", null,
+                null, "Cúcuta", null, "Ana Pérez", "ana@tornillo.co", "clave-de-prueba");
+
+        DocumentoEmpresaInvalidoException e = assertThrows(DocumentoEmpresaInvalidoException.class,
+                () -> servicio.darDeAlta(conDigito));
+
+        assertEquals("Escribe solo el número, sin el dígito de verificación.", e.getMessage());
+        verify(plataforma, never()).insertarEmpresa(any(), anyString(), anyString(), any(), any(), any());
+        verifyNoInteractions(usuarios);
+    }
+
+    @Test
     void unDocumentoConLetrasEnElAltaEs400YNoEscribeNada() {
         var conLetras = new SolicitudAltaEmpresa(
                 TipoDocumentoEmpresa.NIT, "90012345A", "Ferretería El Tornillo S.A.S.", null,
@@ -477,14 +491,41 @@ class ServicioPlataformaTest {
         empresaConIdentidad(5, TipoDocumentoEmpresa.NIT, "900123456-1", "Tornillo S.A.S.");
 
         servicio.cambiarIdentidad(5,
-                new SolicitudIdentidad(TipoDocumentoEmpresa.NIT, "900.123.456 1", "Tornillo y Tuercas", MOTIVO));
+                new SolicitudIdentidad(TipoDocumentoEmpresa.NIT, "900.123.456", "Tornillo y Tuercas", MOTIVO));
 
-        // El número ya es el de la empresa: se pregunta excluyéndola, y la columna conserva su guion.
-        verify(plataforma).existeNit("9001234561", 5);
+        // El número ya es el de la empresa (la semilla con su dígito, sin el dígito): se pregunta
+        // excluyéndola, y la columna conserva su formato viejo.
+        verify(plataforma).existeNit("900123456", 5);
         verify(plataforma).cambiarIdentidad(5, TipoDocumentoEmpresa.NIT, "900123456-1", "Tornillo y Tuercas");
         verify(plataforma).registrar(USUARIO_SUPER_ADMIN, 5, AccionPlataforma.CAMBIO_IDENTIDAD_EMPRESA,
                 "empresas", "razon_social", "900123456-1", "Tornillo S.A.S.", "Tornillo y Tuercas", MOTIVO);
         verify(plataforma, times(1)).registrar(any(), any(), any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void unaSemillaConDigitoYElMismoNumeroSinDigitoNoCuentaComoCambioDeNumero() {
+        empresaConIdentidad(5, TipoDocumentoEmpresa.NIT, "900000000-0", "Tornillo S.A.S.");
+
+        servicio.cambiarIdentidad(5,
+                new SolicitudIdentidad(TipoDocumentoEmpresa.NIT, "900000000", "Tornillo Nuevo S.A.S.", MOTIVO));
+
+        // Solo cambia la razón social: la columna conserva «900000000-0» y la bitácora no anota el nit.
+        verify(plataforma).cambiarIdentidad(5, TipoDocumentoEmpresa.NIT, "900000000-0", "Tornillo Nuevo S.A.S.");
+        verify(plataforma, never()).registrar(any(), any(), any(), any(), eq("nit"), any(), any(), any(), any());
+        verify(plataforma, never()).registrar(any(), any(), any(), any(), eq("tipo_documento"), any(), any(), any(), any());
+        verify(plataforma, times(1)).registrar(any(), any(), any(), any(), eq("razon_social"), any(), any(), any(), any());
+    }
+
+    @Test
+    void unNumeroConGuionYDigitoEnLaIdentidadEs400() {
+        empresaConIdentidad(5, TipoDocumentoEmpresa.NIT, "900123456", "Tornillo S.A.S.");
+
+        DocumentoEmpresaInvalidoException e = assertThrows(DocumentoEmpresaInvalidoException.class,
+                () -> servicio.cambiarIdentidad(5,
+                        new SolicitudIdentidad(TipoDocumentoEmpresa.NIT, "800555111-3", "Tornillo S.A.S.", MOTIVO)));
+
+        assertEquals("Escribe solo el número, sin el dígito de verificación.", e.getMessage());
+        verify(plataforma, never()).cambiarIdentidad(anyInt(), any(), any(), any());
     }
 
     @Test
