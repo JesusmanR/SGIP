@@ -81,6 +81,44 @@ export async function imagenAutenticada(ruta) {
   return URL.createObjectURL(await respuesta.blob())
 }
 
+/**
+ * Descarga un archivo binario protegido y lo guarda con el nombre que manda el servidor.
+ *
+ * Como `imagenAutenticada`, un 401 NO cierra la sesión: una descarga que falla no
+ * demuestra que la sesión caducó, y la próxima llamada de datos lo detecta. El nombre
+ * sale de `Content-Disposition`; sin él queda `respaldo`.
+ */
+async function descargar(ruta, respaldo, falla) {
+  const sesion = leerSesion()
+  const cabeceras = {}
+  if (sesion?.token) cabeceras.Authorization = `Bearer ${sesion.token}`
+
+  const respuesta = await fetch(ruta, { headers: cabeceras })
+  if (!respuesta.ok) {
+    let detalle = falla
+    let tipo
+    try {
+      const cuerpo = await respuesta.json()
+      if (cuerpo?.detail) detalle = cuerpo.detail
+      tipo = cuerpo?.type
+    } catch {
+      // Sin cuerpo JSON queda el mensaje genérico.
+    }
+    throw new ErrorApi(respuesta.status, detalle, tipo)
+  }
+
+  const disposicion = respuesta.headers?.get('Content-Disposition') ?? ''
+  const nombre = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposicion)?.[1]
+  const url = URL.createObjectURL(await respuesta.blob())
+  const enlace = document.createElement('a')
+  enlace.href = url
+  enlace.download = nombre ? decodeURIComponent(nombre.trim()) : respaldo
+  document.body.appendChild(enlace)
+  enlace.click()
+  enlace.remove()
+  URL.revokeObjectURL(url)
+}
+
 export async function pedir(ruta, opciones = {}) {
   const sesion = leerSesion()
   const cabeceras = { ...opciones.headers }
@@ -182,6 +220,10 @@ export const api = {
     pedir(`/importaciones/${cargaId}/aplicar`, { method: 'POST' }),
   rechazarCarga: (cargaId) =>
     pedir(`/importaciones/${cargaId}/rechazar`, { method: 'POST' }),
+  /** La plantilla .xlsx con los productos del proveedor, lista para llenar los costos. */
+  descargarPlantilla: (proveedorId) =>
+    descargar(`/api/v1/importaciones/plantilla${consulta({ proveedorId })}`,
+      'plantilla-precios.xlsx', 'No se pudo descargar la plantilla.'),
   empresa: () => pedir('/empresa'),
   /** Los cinco datos de contacto, siempre completos: lo que falte queda en blanco. Nunca el resumen del GET. */
   guardarEmpresa: (d) => pedir('/empresa', {

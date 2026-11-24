@@ -75,3 +75,11 @@
 .zona-archivo.arrastrando { border-color: var(--acento); background: var(--acento-sutil); }
 .zona-archivo:focus-within { outline: 3px solid var(--acento-sutil); border-color: var(--acento); }
 .zona-archivo strong { color: var(--acento); font-size: .95rem; }
+
+/* La descarga de la plantilla va bajo el selector de proveedor, antes de la zona de
+   archivo: es el paso previo a subir la lista. */
+.plantilla-accion {
+  display: flex; align-items: center; gap: .75rem; flex-wrap: wrap;
+  margin: .25rem 0 1rem;
+}
+.plantilla-accion .sub-linea { margin-top: 0; flex: 1 1 18rem; }

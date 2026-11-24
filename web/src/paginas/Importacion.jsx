@@ -20,6 +20,7 @@ const PASTILLAS = {
   REFERENCIA_INEXISTENTE: { texto: 'Sin referencia', clase: 'peligro' },
   COSTO_NO_NUMERICO: { texto: 'Costo inválido', clase: 'peligro' },
   COSTO_NO_POSITIVO: { texto: 'Costo inválido', clase: 'peligro' },
+  PRODUCTO_DE_OTRO_PROVEEDOR: { texto: 'De otro proveedor', clase: 'peligro' },
 }
 
 /**
@@ -34,7 +35,12 @@ const QUE_HACER = {
   REFERENCIA_INEXISTENTE: 'Corrige la referencia o registra el producto en el catálogo.',
   COSTO_NO_NUMERICO: 'Corrige el costo: solo números, sin símbolos ni texto.',
   COSTO_NO_POSITIVO: 'Corrige el costo: tiene que ser mayor que cero.',
+  PRODUCTO_DE_OTRO_PROVEEDOR:
+    'Esta referencia pertenece a otro proveedor; súbela en la lista de ese proveedor.',
 }
+
+/** NIT del proveedor reservado: agrupa los productos sin proveedor y no tiene plantilla. */
+const NIT_SIN_PROVEEDOR = 'SIN-PROVEEDOR'
 const QUE_HACER_GENERAL = 'Corrige la fila en el archivo y vuelve a subirlo.'
 
 const PASOS = ['Cargar archivo', 'Revisar', 'Aplicar']
@@ -189,6 +195,7 @@ function ImportacionAdministrador() {
   const [trabajando, setTrabajando] = useState(false)
   const [confirmando, setConfirmando] = useState(false)
   const [arrastrando, setArrastrando] = useState(false)
+  const [descargando, setDescargando] = useState(false)
   const volver = useRef(null)
   const botonAplicar = useRef(null)
   const cerradaPorUsuario = useRef(false)
@@ -238,6 +245,22 @@ function ImportacionAdministrador() {
     }
   }
 
+  async function descargarPlantilla() {
+    if (descargando) return
+    setFallo(null)
+    setDescargando(true)
+    try {
+      await api.descargarPlantilla(proveedor)
+    } catch (e) {
+      setFallo({
+        mensaje: e.message || 'No se pudo descargar la plantilla.',
+        queHacer: 'Vuelve a intentarlo.',
+      })
+    } finally {
+      setDescargando(false)
+    }
+  }
+
   async function decidir(accion, queHacer) {
     if (enCurso.current) return
     setFallo(null)
@@ -260,6 +283,8 @@ function ImportacionAdministrador() {
   const aGravadas = cruces.filter((c) => c.tratamientoDespues === 'GRAVADO')
   const aExcluidas = cruces.length - aGravadas.length
   const decidible = estado === 'VALIDADA'
+  const elegido = proveedores.find((p) => String(p.id) === String(proveedor))
+  const hayPlantilla = Boolean(elegido) && elegido.nit !== NIT_SIN_PROVEEDOR
 
   function cuerpo() {
     if (lista.cargando && !lista.datos) return <EstadoCarga mensaje="Cargando los proveedores…" />
@@ -324,6 +349,21 @@ function ImportacionAdministrador() {
               ))}
             </select>
           </label>
+
+          {/* Un archivo que ya trae los productos del proveedor evita
+              teclear referencias a mano. El proveedor reservado no tiene
+              plantilla: sus productos no son de nadie. */}
+          {hayPlantilla && (
+            <div className="plantilla-accion">
+              <button type="button" className="boton secundario"
+                      disabled={descargando} onClick={descargarPlantilla}>
+                {descargando ? 'Preparando la plantilla…' : 'Descargar plantilla con mis productos'}
+              </button>
+              <span className="sub-linea">
+                Un .xlsx con los productos de este proveedor: llena la columna de costo y súbelo aquí.
+              </span>
+            </div>
+          )}
 
           {/* El control de archivo nativo se oculta y la etiqueta hace
               de botón. No es por estética: su texto lo pone el

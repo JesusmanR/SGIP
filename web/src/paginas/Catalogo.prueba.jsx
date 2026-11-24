@@ -512,40 +512,51 @@ describe('el aviso de costo pendiente (producto nuevo de la caja)', () => {
     await waitFor(() => expect(screen.getByText('RAP-1', { exact: false })).toBeInTheDocument())
     expect(screen.queryByText(/costo pendiente de registrar/i)).not.toBeInTheDocument()
   })
+})
 
-  describe('el proveedor reservado «Sin proveedor»', () => {
-    const RESERVADO = { id: 9, razonSocial: 'Sin proveedor', nit: 'SIN-PROVEEDOR' }
-    const HUERFANO = { ...CEL, productoId: 4, codigo: 'HUE-004', nombre: 'Cable suelto',
-      proveedorId: 9, proveedor: 'Sin proveedor' }
+describe('el proveedor reservado «Sin proveedor»', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    sessionStorage.clear()
+    guardarSesion({ token: 't', nombre: 'Jesús Manuel', rol: 'ADMINISTRADOR' })
+    api.categorias.mockResolvedValue(CATEGORIAS)
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.clearAllMocks()
+  })
 
-    it('catalogoMarcaYFiltraSinProveedor', async () => {
-      const teclado = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
-      api.proveedores.mockResolvedValue([...PROVEEDORES, RESERVADO])
-      api.catalogo.mockResolvedValue([PC, HUERFANO])
-      montar()
-      await conFilas()
+  const RESERVADO = { id: 9, razonSocial: 'Sin proveedor', nit: 'SIN-PROVEEDOR' }
+  const HUERFANO = { ...CEL, productoId: 4, codigo: 'HUE-004', nombre: 'Cable suelto',
+    proveedorId: 9, proveedor: 'Sin proveedor' }
 
-      // La pastilla solo la lleva el producto del proveedor reservado.
-      expect(within(fila(screen, 'HUE-004')).getByText('Sin proveedor')).toHaveClass('insignia')
-      expect(fila(screen, 'PC-001')).not.toHaveTextContent('Sin proveedor')
+  it('catalogoMarcaYFiltraSinProveedor', async () => {
+    const teclado = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    api.proveedores.mockResolvedValue([...PROVEEDORES, RESERVADO])
+    api.catalogo.mockResolvedValue([PC, HUERFANO])
+    montar()
+    await conFilas()
 
-      // El filtro de proveedor ya ofrece «Sin proveedor» y manda su id.
-      api.catalogo.mockClear()
-      await teclado.selectOptions(screen.getByLabelText(/proveedor/i), '9')
-      await pasarLaEspera()
-      await waitFor(() => expect(api.catalogo).toHaveBeenCalledWith(
-        expect.objectContaining({ proveedor: '9' })))
-    })
+    // La pastilla solo la lleva el producto del proveedor reservado.
+    expect(within(fila(screen, 'HUE-004')).getByText('Sin proveedor')).toHaveClass('insignia')
+    expect(fila(screen, 'PC-001')).not.toHaveTextContent('Sin proveedor')
 
-    it('quien vende no ve la pastilla porque no recibe los proveedores', async () => {
-      sessionStorage.clear()
-      guardarSesion({ token: 't', nombre: 'Ana', rol: 'VENDEDOR' })
-      api.proveedores.mockRejectedValue(new Error('403'))
-      api.catalogo.mockResolvedValue([HUERFANO])
-      montar()
-      await pasarLaEspera()
-      await waitFor(() => expect(screen.getByText('HUE-004', { exact: false })).toBeInTheDocument())
-      expect(fila(screen, 'HUE-004')).not.toHaveTextContent('Sin proveedor')
-    })
+    // El filtro de proveedor ya ofrece «Sin proveedor» y manda su id.
+    api.catalogo.mockClear()
+    await teclado.selectOptions(screen.getByLabelText(/proveedor/i), '9')
+    await pasarLaEspera()
+    await waitFor(() => expect(api.catalogo).toHaveBeenCalledWith(
+      expect.objectContaining({ proveedor: '9' })))
+  })
+
+  it('quien vende no ve la pastilla porque no recibe los proveedores', async () => {
+    sessionStorage.clear()
+    guardarSesion({ token: 't', nombre: 'Ana', rol: 'VENDEDOR' })
+    api.proveedores.mockRejectedValue(new Error('403'))
+    api.catalogo.mockResolvedValue([HUERFANO])
+    montar()
+    await pasarLaEspera()
+    await waitFor(() => expect(screen.getByText('HUE-004', { exact: false })).toBeInTheDocument())
+    expect(fila(screen, 'HUE-004')).not.toHaveTextContent('Sin proveedor')
   })
 })
