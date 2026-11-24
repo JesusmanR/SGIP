@@ -21,6 +21,7 @@ export const apiPlataformaEmpresas = {
   darDeAlta: (d) => pedir(RAIZ, {
     method: 'POST',
     body: {
+      tipoDocumento: d.tipoDocumento ?? 'NIT',
       nit: d.nit,
       razonSocial: d.razonSocial,
       correoContacto: opcional(d.correoContacto),
@@ -30,6 +31,11 @@ export const apiPlataformaEmpresas = {
       administradorCorreo: d.administradorCorreo,
       administradorClave: d.administradorClave,
     },
+  }),
+  /** SUPER_ADMIN: tipo (NIT o CC), número sin dígito de verificación, razón social y motivo. */
+  cambiarIdentidad: (empresaId, d) => pedir(`${RAIZ}/${empresaId}/identidad`, {
+    method: 'PUT',
+    body: { tipoDocumento: d.tipoDocumento, numero: d.numero, razonSocial: d.razonSocial, motivo: d.motivo },
   }),
   activar: (empresaId, motivo) =>
     pedir(`${RAIZ}/${empresaId}/activar`, { method: 'POST', body: { motivo: opcional(motivo) } }),

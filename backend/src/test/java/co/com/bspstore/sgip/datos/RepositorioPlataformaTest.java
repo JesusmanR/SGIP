@@ -61,6 +61,16 @@ class RepositorioPlataformaTest {
         verifyNoInteractions(jdbc);
     }
 
+    @Test
+    void unCambioDeIdentidadSinValorAnteriorNoLlegaALaSentencia() {
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+                () -> repositorio().registrar(1, 5, AccionPlataforma.CAMBIO_IDENTIDAD_EMPRESA,
+                        "empresas", "nit", "900123456", null, "800555111", "Corrección pedida"));
+
+        assertTrue(e.getMessage().contains("sin valor anterior"));
+        verifyNoInteractions(jdbc);
+    }
+
     /**
      * El reparto de acciones en los dos grupos tiene que coincidir con el
      * de las restricciones de la V21. Esta prueba es la que avisa si
@@ -81,6 +91,9 @@ class RepositorioPlataformaTest {
                 // Desbloquear a un usuario recae sobre su empresa y cambia algo que ya existía.
                 () -> assertTrue(AccionPlataforma.USUARIO_DESBLOQUEO.esDeEmpresa()),
                 () -> assertTrue(AccionPlataforma.USUARIO_DESBLOQUEO.esCambio()),
+                // Cambiar el NIT o la razón social recae sobre una empresa y cambia algo que ya existía.
+                () -> assertTrue(AccionPlataforma.CAMBIO_IDENTIDAD_EMPRESA.esDeEmpresa()),
+                () -> assertTrue(AccionPlataforma.CAMBIO_IDENTIDAD_EMPRESA.esCambio()),
                 // Un alta no tiene valor anterior; un cambio sí.
                 () -> assertFalse(AccionPlataforma.EMPRESA_ALTA.esCambio()),
                 () -> assertFalse(AccionPlataforma.UVT_ALTA.esCambio()),

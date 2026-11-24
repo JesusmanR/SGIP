@@ -79,7 +79,7 @@ class ServicioRecibosTest {
                 LocalDateTime.of(2026, 11, 21, 15, 30, 5), "Ana Gómez", "Carlos Ruiz", "CC", "79123456",
                 d("20000.00"), d("1000.00"), d(iva), d("22610.00"), estadoPago, contraEntrega, domicilio,
                 domicilio ? "Calle 1 # 2-3" : null, domicilio ? "Cali" : null, domicilio ? "3001112233" : null,
-                domicilio ? "Ana Pérez" : null);
+                domicilio ? "Ana Pérez" : null, "NIT", null, null);
     }
 
     private static LineaDeVenta linea(String nombre, int cantidad, String precio, String descuento, String iva,
@@ -99,6 +99,49 @@ class ServicioRecibosTest {
 
     private static PagoDeVenta efectivo(String monto, String recibido) {
         return new PagoDeVenta("Efectivo", TipoMedio.EFECTIVO, d(monto), recibido == null ? null : d(recibido), null);
+    }
+
+    // ------------------------------------------------------- la empresa del recibo (V48)
+
+    private static CabeceraDeRecibo cabeceraDeEmpresa(String tipoDocumento, String direccion, String telefono) {
+        return new CabeceraDeRecibo("Tienda Aurora", "900123456", true, "V-00000012",
+                LocalDateTime.of(2026, 11, 21, 15, 30, 5), "Ana Gómez", "Carlos Ruiz", "CC", "79123456",
+                d("20000.00"), d("1000.00"), d("3610.00"), d("22610.00"), "PAGADA", false, false,
+                null, null, null, null, tipoDocumento, direccion, telefono);
+    }
+
+    @Test
+    void elReciboMuestraDireccionYTelefono() {
+        venta(cabeceraDeEmpresa("CC", "Calle 5 # 6-7", "3001234567"), List.of(lineaSimple()),
+                List.of(efectivo("22610.00", null)));
+
+        Recibo r = servicio.recibo(VENTA);
+
+        assertEquals("Tienda Aurora", r.empresa());
+        assertEquals("CC", r.tipoDocumentoEmpresa());
+        assertEquals("900123456", r.nitEmpresa());
+        assertEquals("Calle 5 # 6-7", r.direccionEmpresa());
+        assertEquals("3001234567", r.telefonoEmpresa());
+    }
+
+    @Test
+    void sinDireccionNiTelefonoElReciboLosLlevaNulos() {
+        venta(cabeceraDeEmpresa("NIT", null, null), List.of(lineaSimple()), List.of(efectivo("22610.00", null)));
+
+        Recibo r = servicio.recibo(VENTA);
+
+        assertNull(r.direccionEmpresa());
+        assertNull(r.telefonoEmpresa());
+    }
+
+    @Test
+    void laDireccionDeLaEmpresaNoSeConfundeConLaDelDomicilio() {
+        venta(cabecera(true, true, false, "PAGADA"), List.of(lineaSimple()), List.of(efectivo("22610.00", null)));
+
+        Recibo r = servicio.recibo(VENTA);
+
+        assertNull(r.direccionEmpresa(), "el domicilio de entrega es del cliente, no de la empresa");
+        assertTrue(r.marcas().stream().anyMatch(m -> m.contains("Calle 1 # 2-3")));
     }
 
     // ------------------------------------------------------- qué trae (RF-70)

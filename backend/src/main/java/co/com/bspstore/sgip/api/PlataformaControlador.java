@@ -3,6 +3,7 @@ package co.com.bspstore.sgip.api;
 import co.com.bspstore.sgip.api.dto.EmpresaEnPlataforma;
 import co.com.bspstore.sgip.api.dto.SolicitudAltaEmpresa;
 import co.com.bspstore.sgip.api.dto.SolicitudCambioEstado;
+import co.com.bspstore.sgip.api.dto.SolicitudIdentidad;
 import co.com.bspstore.sgip.api.dto.UsuarioEnPlataforma;
 import co.com.bspstore.sgip.logica.RecursoNoEncontradoException;
 import co.com.bspstore.sgip.logica.ServicioPlataforma;
@@ -12,6 +13,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -86,6 +88,21 @@ public class PlataformaControlador {
             @PathVariable Integer empresaId,
             @Valid @RequestBody(required = false) SolicitudCambioEstado solicitud) {
         return servicio.activar(empresaId, SolicitudCambioEstado.motivoDe(solicitud))
+                .map(ResponseEntity::ok)
+                .orElseThrow(() -> new RecursoNoEncontradoException("La empresa no existe."));
+    }
+
+    /**
+     * Cambia el NIT o la CC y la razón social de una empresa: lo único que el comercio no puede cambiar
+     * por sí mismo. Es un PUT porque sustituye los tres datos de identidad (el motivo no se guarda en la
+     * empresa, va a la bitácora), y devuelve la empresa tal como quedó. 404 si no existe, 400 si el
+     * documento no tiene el formato o falta el motivo, 409 si otra empresa ya tiene ese número.
+     */
+    @PutMapping("/{empresaId}/identidad")
+    public ResponseEntity<EmpresaEnPlataforma> cambiarIdentidad(
+            @PathVariable Integer empresaId,
+            @Valid @RequestBody SolicitudIdentidad solicitud) {
+        return servicio.cambiarIdentidad(empresaId, solicitud)
                 .map(ResponseEntity::ok)
                 .orElseThrow(() -> new RecursoNoEncontradoException("La empresa no existe."));
     }

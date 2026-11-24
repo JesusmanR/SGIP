@@ -7,7 +7,7 @@ import Campo from '../../componentes/comun/Campo.jsx'
 
 const FORMA_DE_CORREO = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const VACIO = {
-  nit: '', razonSocial: '', correoContacto: '', telefono: '', ciudad: '',
+  tipoDocumento: 'NIT', nit: '', razonSocial: '', correoContacto: '', telefono: '', ciudad: '',
   administradorNombre: '', administradorCorreo: '', administradorClave: '', repite: '',
 }
 
@@ -19,6 +19,7 @@ const VACIO = {
  */
 const CAMPO_POR_TIPO = {
   'urn:sgip:nit-repetido': 'nit',
+  'urn:sgip:empresa:documento-invalido': 'nit',
   'urn:sgip:correo-repetido': 'administradorCorreo',
 }
 
@@ -32,7 +33,7 @@ function motivos(d) {
   const nombre = d.administradorNombre.trim()
   const correo = d.administradorCorreo.trim()
   return {
-    nit: nit === '' ? 'Escribe la identificación tributaria (NIT).' : largo(nit, 20, 'El NIT'),
+    nit: nit === '' ? 'Escribe el número del documento.' : largo(nit, 40, 'El número'),
     razonSocial: razon === '' ? 'Escribe la razón social.' : largo(razon, 160, 'La razón social'),
     correoContacto: contacto !== '' && !FORMA_DE_CORREO.test(contacto)
       ? 'Escribe un correo válido, como contacto@tienda.com.' : largo(contacto, 120, 'El correo'),
@@ -117,7 +118,7 @@ export default function FormularioEmpresa() {
     } catch (err) {
       enCurso.current = false
       setEnviando(false)
-      const campo = err.estado === 409 ? (CAMPO_POR_TIPO[err.tipo] ?? null) : null
+      const campo = err.estado === 409 || err.estado === 400 ? (CAMPO_POR_TIPO[err.tipo] ?? null) : null
       if (campo) {
         setConflictos((previos) => ({ ...previos, [campo]: err.message }))
         setIntentos((n) => n + 1)
@@ -160,7 +161,15 @@ export default function FormularioEmpresa() {
 
         <fieldset className="grupo">
           <legend>La empresa</legend>
-          {texto('nit', 'Número de identificación tributaria (NIT)')}
+          <Campo etiqueta="Tipo de documento">
+            <select value={datos.tipoDocumento} onChange={cambiar('tipoDocumento')}>
+              <option value="NIT">NIT</option>
+              <option value="CC">CC (cédula)</option>
+            </select>
+          </Campo>
+          <Campo etiqueta="Número" ayuda="Escribe solo el número, sin el dígito de verificación." motivo={ver('nit')}>
+            <input type="text" inputMode="numeric" autoComplete="off" maxLength={40} value={datos.nit} onChange={cambiar('nit')} />
+          </Campo>
           {texto('razonSocial', 'Razón social')}
           {correo('correoContacto', 'Correo de contacto (opcional)')}
           {texto('telefono', 'Teléfono (opcional)')}

@@ -1,5 +1,6 @@
 package co.com.bspstore.sgip.datos;
 
+import co.com.bspstore.sgip.api.dto.CopiaDeEmpresa;
 import co.com.bspstore.sgip.api.dto.MedioDePago;
 import co.com.bspstore.sgip.api.dto.VentaRegistrada;
 import co.com.bspstore.sgip.logica.venta.LineaCalculada;
@@ -135,7 +136,26 @@ public class RepositorioVentas {
                              BigDecimal iva, boolean sinExistencia, Integer autorizadaPor, String motivoSinExistencia,
                              boolean autorizacionAutoconcedida, String claveIdempotencia, String huellaCarga,
                              TipoDescuento descuentoTipo, BigDecimal descuentoValor, boolean domicilio,
-                             boolean contraEntrega) {}
+                             boolean contraEntrega, CopiaDeEmpresa empresa) {}
+
+    /**
+     * Los datos de la empresa de hoy, para guardarlos en la venta (V48): el nombre comercial o, si no lo hay, la
+     * razón social; el tipo de documento; el NIT tal como está guardado, sin normalizar; la dirección y el
+     * teléfono. Es una lectura sin bloqueo (ni {@code FOR UPDATE} ni {@code FOR SHARE}): la venta no toma la fila
+     * de la empresa (ADR-0030) y no puede esperar a quien la edita.
+     */
+    public CopiaDeEmpresa copiaDeLaEmpresa(Integer empresaId) {
+        return jdbc.sql("""
+                        SELECT COALESCE(nombre_comercial, razon_social) AS nombre, tipo_documento, nit, direccion,
+                               telefono
+                          FROM empresas
+                         WHERE empresa_id = :empresa
+                        """)
+                .param("empresa", empresaId)
+                .query(CopiaDeEmpresa.class)
+                .optional()
+                .orElseThrow(() -> new IllegalStateException("La empresa " + empresaId + " no existe."));
+    }
 
     /**
      * Inserta la venta y devuelve su identificador. Una venta con clave de idempotencia ya usada
@@ -154,12 +174,15 @@ public class RepositorioVentas {
                                             sin_existencia, autorizada_por, motivo_sin_existencia,
                                             autorizacion_autoconcedida, reposicion_pendiente, clave_idempotencia,
                                             huella_carga, descuento_tipo, descuento_valor, tipo_entrega,
-                                            pago_contra_entrega)
+                                            pago_contra_entrega, empresa_nombre, empresa_tipo_documento,
+                                            empresa_nit, empresa_direccion, empresa_telefono)
                         VALUES (:empresa, :consecutivo, :cliente, :usuario, :fecha, 'CONTADO',
                                 :estadoPago, :cierre, 0, :subtotal, :descuento, :iva, 0,
                                 :sinExistencia, :autorizadaPor, :motivo,
                                 :autoconcedida, :sinExistencia, :clave,
-                                :huella, :descuentoTipo, :descuentoValor, :tipoEntrega, :contraEntrega)
+                                :huella, :descuentoTipo, :descuentoValor, :tipoEntrega, :contraEntrega,
+                                :empresaNombre, :empresaTipoDocumento, :empresaNit, :empresaDireccion,
+                                :empresaTelefono)
                         """)
                 .param("empresa", v.empresaId())
                 .param("consecutivo", v.consecutivo())
@@ -181,6 +204,11 @@ public class RepositorioVentas {
                 .param("estadoPago", v.contraEntrega() ? "PENDIENTE" : "PAGADA")
                 .param("tipoEntrega", v.domicilio() ? "DOMICILIO" : "MOSTRADOR")
                 .param("contraEntrega", v.contraEntrega())
+                .param("empresaNombre", v.empresa().nombre())
+                .param("empresaTipoDocumento", v.empresa().tipoDocumento())
+                .param("empresaNit", v.empresa().nit())
+                .param("empresaDireccion", v.empresa().direccion())
+                .param("empresaTelefono", v.empresa().telefono())
                 .update(llaves);
         Number clave = llaves.getKey();
         if (clave == null) {
@@ -275,13 +303,20 @@ public class RepositorioVentas {
      */
     public Optional<VentaRegistrada> leer(Integer empresaId, Long ventaId) {
         Optional<Object[]> cabecera = jdbc.sql("""
-                        SELECT venta_id, consecutivo, total, pago_contra_entrega FROM ventas
+                        SELECT venta_id, consecutivo, total, pago_contra_entrega, empresa_nombre,
+                               empresa_tipo_documento, empresa_nit, empresa_direccion, empresa_telefono
+                          FROM ventas
                          WHERE empresa_id = :empresa AND venta_id = :venta
                         """)
                 .param("empresa", empresaId)
                 .param("venta", ventaId)
                 .query((fila, n) -> new Object[]{fila.getLong("venta_id"), fila.getString("consecutivo"),
-                        fila.getBigDecimal("total"), fila.getBoolean("pago_contra_entrega")})
+                        fila.getBigDecimal("total"), fila.getBoolean("pago_contra_entrega"),
+                        // la copia está ausente si y solo si empresa_nit es nulo (V48)
+                        fila.getString("empresa_nit") == null ? null
+                                : new CopiaDeEmpresa(fila.getString("empresa_nombre"),
+                                        fila.getString("empresa_tipo_documento"), fila.getString("empresa_nit"),
+                                        fila.getString("empresa_direccion"), fila.getString("empresa_telefono"))})
                 .optional();
         if (cabecera.isEmpty()) {
             return Optional.empty();
@@ -319,6 +354,6 @@ public class RepositorioVentas {
                 .single();
         Object[] c = cabecera.get();
         return Optional.of(new VentaRegistrada((Long) c[0], (String) c[1], (BigDecimal) c[2],
-                cambio.setScale(2, RoundingMode.HALF_UP), List.copyOf(lineas)));
+                cambio.setScale(2, RoundingMode.HALF_UP), List.copyOf(lineas), (CopiaDeEmpresa) c[4]));
     }
 }

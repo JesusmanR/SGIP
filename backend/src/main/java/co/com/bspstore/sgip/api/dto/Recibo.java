@@ -13,11 +13,16 @@ import java.util.List;
  * {@code iva} (el total y el de cada línea) es nulo cuando la empresa no es responsable de IVA (RF-34): el
  * recibo no discrimina un impuesto que la empresa no cobra. {@code marcas} son los avisos del recibo, ya
  * escritos, en el orden en que se imprimen.
+ *
+ * Los datos de la empresa ({@code empresa}, {@code nitEmpresa} y los tres últimos campos) son los que la venta
+ * guardó el día que se hizo (V48); una venta anterior a esa copia usa los datos actuales. {@code direccionEmpresa}
+ * y {@code telefonoEmpresa} son de la empresa, no del domicilio de entrega del cliente; pueden ser nulos.
  */
 public record Recibo(String empresa, String nitEmpresa, String consecutivo, OffsetDateTime fecha, String cajero,
                      String cliente, String identificacionCliente, List<LineaDeRecibo> lineas,
                      BigDecimal subtotal, BigDecimal descuento, BigDecimal iva, BigDecimal total,
-                     List<PagoDeRecibo> pagos, BigDecimal cambio, List<String> marcas) {
+                     List<PagoDeRecibo> pagos, BigDecimal cambio, List<String> marcas,
+                     String tipoDocumentoEmpresa, String direccionEmpresa, String telefonoEmpresa) {
 
     /** La frase con que termina todo recibo: no sustituye a la factura electrónica. */
     public static final String PIE = "Este recibo no es una factura electrónica.";

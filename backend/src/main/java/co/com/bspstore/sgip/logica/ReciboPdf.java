@@ -108,7 +108,14 @@ public class ReciboPdf {
     private static void componer(Hoja h, Recibo r) {
         h.centrado(r.empresa(), Estilo.NEGRITA, TAMANO_TITULO);
         if (r.nitEmpresa() != null) {
-            h.centrado("NIT " + r.nitEmpresa(), Estilo.NORMAL, TAMANO);
+            String tipo = r.tipoDocumentoEmpresa() == null ? "NIT" : r.tipoDocumentoEmpresa();
+            h.centrado(tipo + " " + r.nitEmpresa(), Estilo.NORMAL, TAMANO);
+        }
+        if (r.direccionEmpresa() != null && !r.direccionEmpresa().isBlank()) {
+            h.centrado(r.direccionEmpresa(), Estilo.NORMAL, TAMANO);
+        }
+        if (r.telefonoEmpresa() != null && !r.telefonoEmpresa().isBlank()) {
+            h.centrado("Tel. " + r.telefonoEmpresa(), Estilo.NORMAL, TAMANO);
         }
         h.espacio();
 

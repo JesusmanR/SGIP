@@ -4,12 +4,15 @@ import co.com.bspstore.sgip.api.dto.EmpresaEnPlataforma;
 import co.com.bspstore.sgip.api.dto.MedioDePago;
 import co.com.bspstore.sgip.modelo.AccionPlataforma;
 import co.com.bspstore.sgip.modelo.EstadoEmpresa;
+import co.com.bspstore.sgip.modelo.IdentidadDeEmpresa;
+import co.com.bspstore.sgip.modelo.TipoDocumentoEmpresa;
 import co.com.bspstore.sgip.modelo.TipoDocumento;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
 
+import java.sql.Types;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -21,17 +24,19 @@ import java.util.Optional;
  * No es JPA, y por un motivo distinto al de {@link ConsultaCatalogo}.
  * Allí era que una vista no es un agregado; aquí es que ya existe una
  * entidad {@code modelo.Empresa} mapeada a esta misma tabla, y lo dice
- * con claridad en su comentario: trae solo «lo que el comercio consulta
- * o cambia de sí mismo», y deja fuera el estado y la suscripción para
- * que ninguna pantalla de empresa los toque.
+ * con claridad en su comentario: trae lo que el comercio consulta o
+ * cambia de sí mismo (el logo y los datos de contacto), lee la
+ * identidad sin poder escribirla, y deja fuera el estado y la
+ * suscripción para que ninguna pantalla de empresa los toque.
  *
  * Mapear una segunda entidad sobre {@code empresas} para añadirle esas
  * columnas desharía esa decisión: a partir de ahí habría dos caminos
  * para escribir la misma fila, y el que ninguna pantalla debía tener lo
  * tendría cualquiera que inyectara el repositorio equivocado. Con
- * sentencias explícitas, la única forma de cambiar el estado de una
- * empresa es llamar al método que lo cambia, que vive en esta clase y
- * exige pasar por el servicio de plataforma.
+ * sentencias explícitas, la única forma de cambiar el estado o la
+ * identidad (NIT o CC, número y razón social) de una empresa es llamar al
+ * método que lo cambia, que vive en esta clase y exige pasar por el
+ * servicio de plataforma.
  *
  * Ninguna consulta de aquí filtra por empresa, al contrario que todas
  * las demás del proyecto. Es correcto y conviene decirlo en voz alta: la
@@ -75,6 +80,7 @@ public class RepositorioPlataforma {
      */
     private static final String SELECCION = """
             SELECT e.empresa_id,
+                   e.tipo_documento,
                    e.nit,
                    e.razon_social,
                    e.correo_contacto,
@@ -113,11 +119,52 @@ public class RepositorioPlataforma {
                 .optional();
     }
 
-    public boolean existeNit(String nit) {
-        return jdbc.sql("SELECT COUNT(*) FROM empresas WHERE nit = :nit")
-                .param("nit", nit)
+    /** Si alguna empresa ya tiene ese número (normalizado). Para el alta: no excluye a nadie. */
+    public boolean existeNit(String numero) {
+        return existeNit(numero, null);
+    }
+
+    /**
+     * Si alguna empresa, distinta de {@code excluirEmpresaId}, ya tiene ese número.
+     *
+     * Compara el número normalizado con el de la columna normalizado también: las semillas anteriores
+     * a la V48 guardan el NIT con su dígito de verificación ({@code NNNNNNNNN-D}, como
+     * {@code 900000000-0}), y ese número es {@code 900000000}. Se descarta el sufijo desde el primer guion
+     * y se quitan los puntos y los espacios, que es lo que hace {@code DocumentoEmpresa}. Compararlo como
+     * texto dejaría pasar un duplicado que la gente lee como el mismo. La empresa que se edita se excluye
+     * para que cambiar solo la razón social no choque consigo misma.
+     * {@code empresas} tiene una fila por comercio, de modo que no hay índice que cuidar.
+     */
+    public boolean existeNit(String numero, Integer excluirEmpresaId) {
+        return jdbc.sql("""
+                        SELECT COUNT(*) FROM empresas
+                         WHERE REPLACE(REPLACE(SUBSTRING_INDEX(nit, '-', 1), '.', ''), ' ', '') = :nit
+                           AND (:excluir IS NULL OR empresa_id <> :excluir)
+                        """)
+                .param("nit", numero)
+                .param("excluir", excluirEmpresaId, Types.INTEGER)
                 .query(Integer.class)
                 .single() > 0;
+    }
+
+    /**
+     * La identidad actual de la empresa, con la fila bloqueada hasta que acabe la transacción: dos cambios
+     * de identidad a la vez no pueden anotar el mismo «valor anterior». Vacío si la empresa no existe.
+     * Tiene que llamarse dentro de una transacción.
+     */
+    public Optional<IdentidadDeEmpresa> identidadDe(Integer empresaId) {
+        return jdbc.sql("""
+                        SELECT tipo_documento, nit, razon_social
+                          FROM empresas
+                         WHERE empresa_id = :empresa
+                           FOR UPDATE
+                        """)
+                .param("empresa", empresaId)
+                .query((rs, fila) -> new IdentidadDeEmpresa(
+                        TipoDocumentoEmpresa.valueOf(rs.getString("tipo_documento")),
+                        rs.getString("nit"),
+                        rs.getString("razon_social")))
+                .optional();
     }
 
     /**
@@ -194,15 +241,22 @@ public class RepositorioPlataforma {
 
     // ---------------------------------------------------------------- escritura
 
-    /** Devuelve el identificador que el motor asignó. */
+    /** Una empresa NIT, que es lo que la columna asume por omisión. */
     public Integer insertarEmpresa(String nit, String razonSocial, String correoContacto,
                                    String telefono, String ciudad) {
+        return insertarEmpresa(TipoDocumentoEmpresa.NIT, nit, razonSocial, correoContacto, telefono, ciudad);
+    }
+
+    /** Devuelve el identificador que el motor asignó. */
+    public Integer insertarEmpresa(TipoDocumentoEmpresa tipoDocumento, String nit, String razonSocial,
+                                   String correoContacto, String telefono, String ciudad) {
         KeyHolder llaves = new GeneratedKeyHolder();
         jdbc.sql("""
                         INSERT INTO empresas
-                               (nit, razon_social, correo_contacto, telefono, ciudad, estado)
-                        VALUES (:nit, :razon, :correo, :telefono, :ciudad, 'PRUEBA')
+                               (tipo_documento, nit, razon_social, correo_contacto, telefono, ciudad, estado)
+                        VALUES (:tipo, :nit, :razon, :correo, :telefono, :ciudad, 'PRUEBA')
                         """)
+                .param("tipo", tipoDocumento.name())
                 .param("nit", nit)
                 .param("razon", razonSocial)
                 .param("correo", correoContacto)
@@ -359,6 +413,26 @@ public class RepositorioPlataforma {
     }
 
     /**
+     * Escribe la identidad de la empresa: el tipo y el número de su documento y su razón social. Devuelve
+     * las filas afectadas: cero si la empresa no existe. Quien llama decide qué número escribir (el
+     * normalizado si cambió, el que ya estaba si no) y anota cada campo cambiado en la bitácora, en la
+     * misma transacción.
+     */
+    public int cambiarIdentidad(Integer empresaId, TipoDocumentoEmpresa tipoDocumento, String nit,
+                                String razonSocial) {
+        return jdbc.sql("""
+                        UPDATE empresas
+                           SET tipo_documento = :tipo, nit = :nit, razon_social = :razon
+                         WHERE empresa_id = :empresa
+                        """)
+                .param("tipo", tipoDocumento.name())
+                .param("nit", nit)
+                .param("razon", razonSocial)
+                .param("empresa", empresaId)
+                .update();
+    }
+
+    /**
      * Anota una decisión en la bitácora de la plataforma (V21).
      *
      * Las dos comprobaciones de arriba repiten en Java lo que la tabla ya
@@ -370,6 +444,16 @@ public class RepositorioPlataforma {
      */
     public void registrar(Integer usuarioId, Integer empresaId, AccionPlataforma accion,
                           String entidad, String referencia,
+                          String valorAnterior, String valorNuevo, String motivo) {
+        registrar(usuarioId, empresaId, accion, entidad, null, referencia, valorAnterior, valorNuevo, motivo);
+    }
+
+    /**
+     * Lo mismo, diciendo qué campo de la fila cambió ({@code auditoria_plataforma.campo}, V48). El
+     * cambio de identidad deja una fila por cada campo, y sin el campo serían indistinguibles.
+     */
+    public void registrar(Integer usuarioId, Integer empresaId, AccionPlataforma accion,
+                          String entidad, String campo, String referencia,
                           String valorAnterior, String valorNuevo, String motivo) {
         if (accion.esDeEmpresa() != (empresaId != null)) {
             throw new IllegalArgumentException(
@@ -384,15 +468,16 @@ public class RepositorioPlataforma {
         }
         jdbc.sql("""
                         INSERT INTO auditoria_plataforma
-                               (usuario_id, empresa_id, accion, entidad, referencia,
+                               (usuario_id, empresa_id, accion, entidad, campo, referencia,
                                 valor_anterior, valor_nuevo, motivo)
-                        VALUES (:usuario, :empresa, :accion, :entidad, :referencia,
+                        VALUES (:usuario, :empresa, :accion, :entidad, :campo, :referencia,
                                 :anterior, :nuevo, :motivo)
                         """)
                 .param("usuario", usuarioId)
                 .param("empresa", empresaId)
                 .param("accion", accion.name())
                 .param("entidad", entidad)
+                .param("campo", campo)
                 .param("referencia", referencia)
                 .param("anterior", valorAnterior)
                 .param("nuevo", valorNuevo)

@@ -91,7 +91,7 @@ class VentasAutorizacionTest {
             new BigDecimal("20000.00"), new BigDecimal("30000.00"),
             List.of(new LineaCalculada(7, 2, new BigDecimal("10000.00"), new BigDecimal("20000.00"),
                     BigDecimal.ZERO.setScale(2), new BigDecimal("20000.00"), new BigDecimal("0.0000"), "NO_GRAVADO",
-                    BigDecimal.ZERO.setScale(2), new BigDecimal("20000.00"))));
+                    BigDecimal.ZERO.setScale(2), new BigDecimal("20000.00"))), null);
 
     @Autowired MockMvc mvc;
 

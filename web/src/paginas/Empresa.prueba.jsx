@@ -14,7 +14,7 @@ import { api } from '../servicios/api.js'
 import { guardarSesion } from '../servicios/sesion.js'
 
 vi.mock('../servicios/api.js', () => ({
-  api: { empresa: vi.fn(), subirLogo: vi.fn(), estadoPin: vi.fn(), fijarPin: vi.fn() },
+  api: { empresa: vi.fn(), guardarEmpresa: vi.fn(), subirLogo: vi.fn(), estadoPin: vi.fn(), fijarPin: vi.fn() },
   imagenAutenticada: vi.fn().mockResolvedValue('blob:logo'),
   ErrorApi: class extends Error {},
 }))
@@ -25,7 +25,8 @@ vi.mock('../servicios/imagenes.js', () => ({
 
 const EMPRESA = {
   id: 1, nit: '901482310-2', razonSocial: 'Comercial Andina S.A.S.',
-  logoUrl: '/api/v1/empresa/logo',
+  logoUrl: '/api/v1/empresa/logo', tipoDocumento: 'NIT', nombreComercial: 'Andina Repuestos',
+  direccion: 'Calle 10 # 5-20', ciudad: 'Cali', telefono: '3001112233', correoContacto: 'info@andina.co',
 }
 
 function montar() {
@@ -101,7 +102,7 @@ describe('el logo', () => {
     await screen.findByText('Comercial Andina S.A.S.')
     await teclado.upload(document.querySelector('input[type="file"]'), logo())
     await waitFor(() => expect(api.subirLogo).toHaveBeenCalled())
-    expect(await screen.findByRole('status')).toHaveTextContent(/logo actualizado/i)
+    expect(await screen.findByText(/logo actualizado/i)).toHaveAttribute('role', 'status')
   })
 
   it('si la subida falla muestra el motivo y no dice que salió bien', async () => {
@@ -241,5 +242,68 @@ describe('Mi PIN de autorización', () => {
     await userEvent.click(screen.getByRole('button', { name: /guardar pin/i }))
     expect(await screen.findByRole('alert')).toHaveTextContent('El PIN actual no es correcto.')
     expect(screen.queryByText(/pin guardado/i)).not.toBeInTheDocument()
+  })
+})
+
+
+describe('datos de contacto editables', () => {
+  it('adminEditaYGuarda: manda exactamente los cinco campos y confirma', async () => {
+    const teclado = userEvent.setup()
+    api.guardarEmpresa.mockResolvedValue({ ...EMPRESA, direccion: 'Carrera 7 # 1-2' })
+    montar()
+    await screen.findByText('Comercial Andina S.A.S.')
+    const direccion = screen.getByLabelText('Dirección')
+    expect(direccion).toHaveValue('Calle 10 # 5-20')
+    await teclado.clear(direccion)
+    await teclado.type(direccion, 'Carrera 7 # 1-2')
+    await teclado.click(screen.getByRole('button', { name: 'Guardar cambios' }))
+    await waitFor(() => expect(api.guardarEmpresa).toHaveBeenCalledTimes(1))
+    expect(api.guardarEmpresa).toHaveBeenCalledWith({
+      nombreComercial: 'Andina Repuestos', direccion: 'Carrera 7 # 1-2', ciudad: 'Cali',
+      telefono: '3001112233', correoContacto: 'info@andina.co',
+    })
+    expect(await screen.findByText('Datos guardados.')).toBeInTheDocument()
+  })
+
+  it('un rechazo del servidor se muestra y no dice que se guardó', async () => {
+    const teclado = userEvent.setup()
+    api.guardarEmpresa.mockRejectedValue(new Error('El correo no tiene forma de correo.'))
+    montar()
+    await screen.findByText('Comercial Andina S.A.S.')
+    await teclado.click(screen.getByRole('button', { name: 'Guardar cambios' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('El correo no tiene forma de correo.')
+    expect(screen.queryByText('Datos guardados.')).not.toBeInTheDocument()
+  })
+
+  it('nitYRazonSocialSonSoloLecturaConNotaDeSoporte', async () => {
+    montar()
+    await screen.findByText('Comercial Andina S.A.S.')
+    expect(screen.getByText(/NIT 901482310-2/)).toBeInTheDocument()
+    expect(screen.getByText('Para cambiarlos, contacta a soporte')).toBeInTheDocument()
+    expect(screen.queryByLabelText(/razón social/i)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/^NIT/i)).not.toBeInTheDocument()
+  })
+
+  it('una cédula se rotula CC', async () => {
+    api.empresa.mockResolvedValue({ ...EMPRESA, tipoDocumento: 'CC', nit: '1020304050' })
+    montar()
+    expect(await screen.findByText(/CC 1020304050/)).toBeInTheDocument()
+  })
+
+  it('vendedorVeSoloLectura: ve los datos sin campos ni botón de guardar', async () => {
+    guardarSesion({ token: 't', nombre: 'Ana', rol: 'VENDEDOR' })
+    montar()
+    await screen.findByText('Comercial Andina S.A.S.')
+    expect(screen.getByText('Calle 10 # 5-20')).toBeInTheDocument()
+    expect(screen.getByText('3001112233')).toBeInTheDocument()
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Guardar cambios' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/contacta a soporte/i)).not.toBeInTheDocument()
+  })
+
+  it('el texto de ayuda solo promete lo que el recibo imprime', async () => {
+    montar()
+    await screen.findByText('Comercial Andina S.A.S.')
+    expect(screen.getByText('El nombre comercial, la dirección y el teléfono salen en el encabezado del recibo.')).toBeInTheDocument()
   })
 })

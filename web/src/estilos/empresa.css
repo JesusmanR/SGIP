@@ -29,3 +29,14 @@
 .empresa-pin h2 { margin: 0 0 var(--espacio-2); font-size: var(--t-titulo-tarjeta); font-weight: 600; }
 .empresa-pin p { margin: 0 0 var(--espacio-3); color: var(--tinta-2); font-size: var(--t-cuerpo); }
 .empresa-pin-formulario .campo input { max-width: 12rem; }
+
+.empresa-contacto { margin-bottom: var(--espacio-4); max-width: 36rem; }
+.empresa-contacto h2 { margin: 0 0 var(--espacio-2); font-size: var(--t-titulo-tarjeta); font-weight: 600; }
+.empresa-contacto > .sub-linea { margin: 0 0 var(--espacio-3); color: var(--tinta-2); font-size: var(--t-cuerpo); }
+.empresa-lectura { margin: 0; display: grid; gap: var(--espacio-3); }
+.empresa-lectura > div { display: grid; grid-template-columns: 11rem 1fr; gap: var(--espacio-3); }
+.empresa-lectura dt { color: var(--tinta-2); font-size: var(--t-etiqueta); font-weight: 600; }
+.empresa-lectura dd { margin: 0; font-size: var(--t-cuerpo); overflow-wrap: anywhere; }
+@media (max-width: 30rem) {
+  .empresa-lectura > div { grid-template-columns: 1fr; gap: var(--espacio-1); }
+}

@@ -180,6 +180,27 @@ export function armarSolicitud({
 const dos = (n) => String(n).padStart(2, '0')
 
 /** El recibo con los importes que devolvió el servidor; de la pantalla solo salen los nombres. */
+/**
+ * Lo que el recibo imprime de la empresa. Sale de la copia que la venta guardó; si la venta no la
+ * trae (un reintento anterior a la copia), de los datos actuales de la empresa.
+ */
+const copiaDeLaEmpresa = (actual = {}) => ({
+  nombre: actual.nombreComercial || actual.razonSocial || '',
+  tipoDocumento: actual.tipoDocumento ?? 'NIT',
+  nit: actual.nit ?? null,
+  direccion: actual.direccion ?? null,
+  telefono: actual.telefono ?? null,
+})
+
+/** La misma forma de empresa, armada con los campos `*Empresa` del Recibo que se reimprime. */
+export const empresaDelRecibo = (r) => ({
+  nombre: r.empresa,
+  tipoDocumento: r.tipoDocumentoEmpresa ?? 'NIT',
+  nit: r.nitEmpresa ?? null,
+  direccion: r.direccionEmpresa ?? null,
+  telefono: r.telefonoEmpresa ?? null,
+})
+
 export function armarRecibo({ empresa, venta, lineas, pagos, cliente, cajero, domicilio, ahora = new Date() }) {
   const delServidor = venta.lineas ?? []
   // El servidor devuelve las líneas ordenadas por producto, no como se escanearon: cada una de
@@ -187,7 +208,7 @@ export function armarRecibo({ empresa, venta, lineas, pagos, cliente, cajero, do
   const porId = new Map(delServidor.map((s) => [s.productoId, s]))
   const suma = (campo) => delServidor.reduce((a, l) => a + Number(l[campo]), 0)
   return {
-    empresa,
+    empresa: venta.empresa ?? copiaDeLaEmpresa(empresa),
     consecutivo: venta.consecutivo,
     fecha: `${hoyISO(ahora)}T${dos(ahora.getHours())}:${dos(ahora.getMinutes())}`,
     cajero,

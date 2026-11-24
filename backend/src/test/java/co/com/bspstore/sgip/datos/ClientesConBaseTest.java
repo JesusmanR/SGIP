@@ -128,7 +128,12 @@ class ClientesConBaseTest {
     }
 
     private String nit() {
-        return "K" + marca.toUpperCase();
+        return documento(marca);
+    }
+
+    /** Un documento de solo dígitos (el alta normaliza y rechaza las letras), único por prueba. */
+    private static String documento(String marca) {
+        return new java.math.BigInteger(marca, 16).toString();
     }
 
     private static void exigirLaMigracion() {
@@ -280,7 +285,7 @@ class ClientesConBaseTest {
 
     private void darDeAlta(String ciudad) {
         new ServicioPlataforma(plataforma, usuarios, roles, Clock.systemUTC(), new PoliticaDeBloqueo(15))
-                .darDeAlta(new SolicitudAltaEmpresa(nit(), "Clientes " + marca, null, null, ciudad,
+                .darDeAlta(new SolicitudAltaEmpresa(null, nit(), "Clientes " + marca, null, null, ciudad,
                         null, "Administración", "admin-" + marca + "@ejemplo.co", "ClaveDePrueba2026"));
     }
 

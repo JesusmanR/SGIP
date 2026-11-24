@@ -91,7 +91,12 @@ class CambioDeActivoConcurrenteConBaseTest {
     }
 
     private String nit() {
-        return "C" + marca.toUpperCase();
+        return documento(marca);
+    }
+
+    /** Un documento de solo dígitos (el alta normaliza y rechaza las letras), único por prueba. */
+    private static String documento(String marca) {
+        return new java.math.BigInteger(marca, 16).toString();
     }
 
     private static SecurityContext contexto(UsuarioAutenticado u) {
@@ -103,7 +108,7 @@ class CambioDeActivoConcurrenteConBaseTest {
     @Test
     void dosDesactivacionesALaVezDejanUnMedioActivoYUnSoloExito() throws Exception {
         new ServicioPlataforma(plataforma, usuarios, roles, Clock.systemUTC(), new PoliticaDeBloqueo(15))
-                .darDeAlta(new SolicitudAltaEmpresa(nit(), "Medios concurrentes " + marca, null, null, null,
+                .darDeAlta(new SolicitudAltaEmpresa(null, nit(), "Medios concurrentes " + marca, null, null, null,
                         null, "Administración", "admin-" + marca + "@ejemplo.co", "ClaveDePrueba2026"));
         Integer empresa = jdbc.sql("SELECT empresa_id FROM empresas WHERE nit = :nit")
                 .param("nit", nit()).query(Integer.class).single();

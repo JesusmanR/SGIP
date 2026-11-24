@@ -33,6 +33,9 @@ import java.util.List;
  *   <li>Nunca lleva el costo ni la utilidad, tampoco para el administrador.</li>
  * </ul>
  *
+ * La empresa del recibo (nombre, tipo de documento y número, dirección y teléfono) es la copia que la venta guardó
+ * el día que se hizo, no los datos de hoy (V48); la consulta de la venta ya la trae, sin una consulta más.
+ *
  * Las marcas salen en este orden: los encargos (uno por cada línea con unidades por encargar), el domicilio con sus
  * datos de entrega y, mientras el domicilio no se haya cobrado, «Pago contra entrega — por cobrar». Las fechas de
  * un documento van en dd/mm/aaaa (RNF-16).
@@ -70,7 +73,8 @@ public class ServicioRecibos {
         return new Recibo(v.empresa(), v.nit(), v.consecutivo(), v.fecha().atZone(Hoy.ZONA).toOffsetDateTime(),
                 v.cajero(), v.cliente(), v.tipoDocumento() + " " + v.identificacion(), List.copyOf(lineas),
                 v.subtotal(), v.descuento(), conIva ? v.iva() : null, v.total(), List.copyOf(pagos),
-                cambio(pagados), marcas(v, vendidas));
+                cambio(pagados), marcas(v, vendidas), v.tipoDocumentoEmpresa(), v.direccionEmpresa(),
+                v.telefonoEmpresa());
     }
 
     /** Lo recibido en efectivo menos lo cobrado en efectivo; el saldo a favor y las tarjetas no dan cambio. */
