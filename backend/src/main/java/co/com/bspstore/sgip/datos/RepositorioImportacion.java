@@ -3,7 +3,9 @@ package co.com.bspstore.sgip.datos;
 import co.com.bspstore.sgip.api.dto.CruceDeUmbral;
 import co.com.bspstore.sgip.api.dto.FilaDeCarga;
 import co.com.bspstore.sgip.logica.CabeceraCarga;
+import co.com.bspstore.sgip.logica.ProductoDePlantilla;
 import co.com.bspstore.sgip.logica.ProductoDelCatalogo;
+import co.com.bspstore.sgip.logica.ProveedorDePlantilla;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
@@ -16,6 +18,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Consumer;
 
 /**
  * Las cargas de listas de precios (RF-24, RF-26, RF-27).
@@ -73,7 +76,7 @@ public class RepositorioImportacion {
      */
     public Map<String, ProductoDelCatalogo> catalogoPorReferencia(Integer empresaId) {
         List<ProductoDelCatalogo> filas = jdbc.sql("""
-                        SELECT producto_id, codigo, sku, costo
+                        SELECT producto_id, codigo, sku, costo, proveedor_id
                           FROM productos
                          WHERE empresa_id = :empresa AND activo = TRUE
                         """)
@@ -92,6 +95,17 @@ public class RepositorioImportacion {
             indice.put(normalizar(p.codigo()), p);
         }
         return indice;
+    }
+
+    /** Esqueleto: lo escribe el paso verde. */
+    public Optional<ProveedorDePlantilla> proveedorParaPlantilla(Integer empresaId, Integer proveedorId) {
+        throw new UnsupportedOperationException("pendiente");
+    }
+
+    /** Esqueleto: lo escribe el paso verde. */
+    public void recorrerProductosActivosDelProveedor(Integer empresaId, Integer proveedorId,
+                                                     Consumer<ProductoDePlantilla> alVer) {
+        throw new UnsupportedOperationException("pendiente");
     }
 
     /** Cómo se cotejan las referencias: sin espacios y en mayúsculas. */
