@@ -1,6 +1,8 @@
 package co.com.bspstore.sgip.api;
 
 import co.com.bspstore.sgip.api.dto.Cliente;
+import co.com.bspstore.sgip.api.dto.ClienteEnLista;
+import co.com.bspstore.sgip.api.dto.PaginaDeClientes;
 import co.com.bspstore.sgip.config.ConfiguracionSeguridad;
 import co.com.bspstore.sgip.config.FiltroCambioClave;
 import co.com.bspstore.sgip.config.FiltroEmpresaActiva;
@@ -10,6 +12,7 @@ import co.com.bspstore.sgip.datos.RepositorioPlataforma;
 import co.com.bspstore.sgip.logica.ClienteNoEditableException;
 import co.com.bspstore.sgip.logica.DatoDeClienteInvalidoException;
 import co.com.bspstore.sgip.logica.DatosDeDomicilioIncompletosException;
+import co.com.bspstore.sgip.logica.FiltroInvalidoException;
 import co.com.bspstore.sgip.logica.RecursoNoEncontradoException;
 import co.com.bspstore.sgip.logica.RegistroRepetidoException;
 import co.com.bspstore.sgip.logica.ServicioClientes;
@@ -32,6 +35,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 
@@ -142,6 +146,42 @@ class ClientesAutorizacionTest {
                 .andExpect(jsonPath("$.nombre").value("María Pérez"));
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"ADMINISTRADOR", "VENDEDOR"})
+    void laListaUsaLaPaginaCeroYElTamanoVeinteSiNoSePiden(String rol) throws Exception {
+        var fila = new ClienteEnLista(7, TipoDocumento.CC, "1098765432", "María Pérez", "3001234567",
+                "maria@correo.co", "Calle 5 # 6-7", "Bucaramanga", true, new BigDecimal("1500.00"), true);
+        when(servicio.listar(null, 0, 20)).thenReturn(new PaginaDeClientes(List.of(fila), 0, 20, 1));
+
+        mvc.perform(get(RUTA + "/lista").with(como(rol)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.pagina").value(0))
+                .andExpect(jsonPath("$.tamano").value(20))
+                .andExpect(jsonPath("$.total").value(1))
+                .andExpect(jsonPath("$.elementos[0].id").value(7))
+                .andExpect(jsonPath("$.elementos[0].saldoAFavor").value(1500.00))
+                .andExpect(jsonPath("$.elementos[0].autorizoDatos").value(true))
+                .andExpect(jsonPath("$.elementos[0].editable").value(true));
+    }
+
+    @Test
+    void laListaPasaLaBusquedaLaPaginaYElTamanoAlServicio() throws Exception {
+        when(servicio.listar("ana", 2, 50)).thenReturn(new PaginaDeClientes(List.of(), 2, 50, 0));
+
+        mvc.perform(get(RUTA + "/lista").param("buscar", "ana").param("pagina", "2").param("tamano", "50")
+                        .with(como("ADMINISTRADOR")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.pagina").value(2));
+    }
+
+    @Test
+    void unFiltroInvalidoDeLaListaEsUn400() throws Exception {
+        when(servicio.listar(null, -1, 20)).thenThrow(new FiltroInvalidoException("La página no puede ser negativa."));
+
+        mvc.perform(get(RUTA + "/lista").param("pagina", "-1").with(como("VENDEDOR")))
+                .andExpect(status().isBadRequest());
+    }
+
     // ------------------------------------------------------ lo que no pueden
 
     @ParameterizedTest
@@ -149,7 +189,7 @@ class ClientesAutorizacionTest {
     @NullSource
     void elClienteYElSuperAdministradorRecibenUn403(String rol) throws Exception {
         for (MockHttpServletRequestBuilder llamada : List.of(
-                consultar(), crear(CUERPO), editar(7, CUERPO))) {
+                consultar(), get(RUTA + "/lista"), crear(CUERPO), editar(7, CUERPO))) {
             mvc.perform(llamada.with(como(rol)))
                     .andExpect(status().isForbidden())
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))

@@ -17,6 +17,7 @@ const ESPERADO = [
   ['/caja/turnos', 'Turnos de caja', ADMIN, 'Operación'],
   ['/panel', 'Panel', ADMIN, 'Operación'],
   ['/catalogo', 'Catálogo', TODOS, 'Operación'],
+  ['/clientes', 'Clientes', VENDEN, 'Operación'],
   ['/importar', 'Importar precios', ADMIN, 'Operación'],
   ['/proveedores', 'Proveedores', ADMIN, 'Compras'],
   ['/compras', 'Órdenes de compra', ADMIN, 'Compras'],

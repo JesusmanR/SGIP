@@ -1,6 +1,7 @@
 package co.com.bspstore.sgip.api;
 
 import co.com.bspstore.sgip.api.dto.Cliente;
+import co.com.bspstore.sgip.api.dto.PaginaDeClientes;
 import co.com.bspstore.sgip.api.dto.SolicitudCliente;
 import co.com.bspstore.sgip.logica.RecursoNoEncontradoException;
 import co.com.bspstore.sgip.logica.ServicioClientes;
@@ -42,6 +43,18 @@ public class ClientesControlador {
                                      @RequestParam String identificacion) {
         return servicio.porIdentificacion(tipo, identificacion)
                 .orElseThrow(() -> new RecursoNoEncontradoException("El cliente no existe."));
+    }
+
+    /**
+     * La lista paginada de clientes de la empresa, con lo que cada uno tiene a favor (pantalla «Clientes»).
+     * {@code buscar} filtra por el comienzo del documento o por una parte del nombre; {@code pagina} empieza
+     * en 0 y {@code tamano} vale 20 si no se pide, con 100 como máximo. Un valor fuera de rango es un 400.
+     */
+    @GetMapping("/lista")
+    public PaginaDeClientes lista(@RequestParam(required = false) String buscar,
+                                  @RequestParam(defaultValue = "0") int pagina,
+                                  @RequestParam(defaultValue = "20") int tamano) {
+        return servicio.listar(buscar, pagina, tamano);
     }
 
     /** Sin cabecera {@code Location}: no existe una ruta para leer un cliente por su identificador. */

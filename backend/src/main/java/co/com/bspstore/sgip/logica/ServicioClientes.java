@@ -1,6 +1,8 @@
 package co.com.bspstore.sgip.logica;
 
 import co.com.bspstore.sgip.api.dto.Cliente;
+import co.com.bspstore.sgip.api.dto.ClienteEnLista;
+import co.com.bspstore.sgip.api.dto.PaginaDeClientes;
 import co.com.bspstore.sgip.api.dto.SolicitudCliente;
 import co.com.bspstore.sgip.config.ContextoEmpresa;
 import co.com.bspstore.sgip.datos.RepositorioClientes;
@@ -32,6 +34,9 @@ public class ServicioClientes {
     /** Por dónde se obtuvo el consentimiento: aquí, en el mostrador (Ley 1581, RNF-18). */
     static final String MEDIO_AUTORIZACION = "CAJA";
 
+    /** Lo más que cabe en una página de la lista; un tamaño mayor se recorta a esto. */
+    public static final int TAMANO_MAXIMO = 100;
+
     /** Sin cliente real: al crear, ningún identificador coincide con este. */
     private static final int NINGUN_CLIENTE = 0;
 
@@ -51,6 +56,42 @@ public class ServicioClientes {
             throw new FiltroInvalidoException("La identificación es obligatoria.");
         }
         return clientes.buscarPorIdentificacion(ContextoEmpresa.empresaActual(), tipo, buscada);
+    }
+
+    /**
+     * Una página de los clientes de la empresa, por nombre, con lo que cada uno tiene a favor.
+     *
+     * {@code pagina} empieza en 0 y {@code tamano} en 1; fuera de eso es un 400. Un tamaño mayor que
+     * {@link #TAMANO_MAXIMO} se recorta a ese máximo. {@code buscar} se recorta y se toma al pie de la
+     * letra, sin comodines: el documento debe empezar por el texto o el nombre debe contenerlo, sin
+     * distinguir mayúsculas.
+     */
+    @Transactional(readOnly = true)
+    public PaginaDeClientes listar(String buscar, int pagina, int tamano) {
+        if (pagina < 0) {
+            throw new FiltroInvalidoException("La página no puede ser negativa.");
+        }
+        if (tamano < 1) {
+            throw new FiltroInvalidoException("El tamaño de la página debe ser al menos 1.");
+        }
+        int aplicado = Math.min(tamano, TAMANO_MAXIMO);
+        Integer empresa = ContextoEmpresa.empresaActual();
+        String texto = texto(buscar);
+        String prefijo = null;
+        String contiene = null;
+        if (texto != null) {
+            String literal = escaparComodines(texto);
+            prefijo = literal + "%";
+            contiene = "%" + literal + "%";
+        }
+        List<ClienteEnLista> elementos = clientes.listar(empresa, prefijo, contiene, aplicado,
+                (long) pagina * aplicado);
+        return new PaginaDeClientes(elementos, pagina, aplicado, clientes.contar(empresa, prefijo, contiene));
+    }
+
+    /** La barra invertida, el porcentaje y el guion bajo valen por sí mismos en un LIKE: se les antepone la barra. */
+    private static String escaparComodines(String texto) {
+        return texto.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
     }
 
     @Transactional

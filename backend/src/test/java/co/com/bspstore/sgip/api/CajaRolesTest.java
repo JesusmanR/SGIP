@@ -190,6 +190,8 @@ class CajaRolesTest {
             new Fila("GET", "/api/v1/caja/clientes/{id}/saldo", "/api/v1/caja/clientes/2/saldo", null, LOS_DOS),
             new Fila("GET", "/api/v1/caja/clientes", "/api/v1/caja/clientes?tipo=CC&identificacion=123456",
                     null, LOS_DOS),
+            new Fila("GET", "/api/v1/caja/clientes/lista", "/api/v1/caja/clientes/lista?buscar=ana&pagina=0&tamano=20",
+                    null, LOS_DOS),
             new Fila("POST", "/api/v1/caja/clientes", "/api/v1/caja/clientes", CLIENTE_VALIDO, LOS_DOS),
             new Fila("PUT", "/api/v1/caja/clientes/{id}", "/api/v1/caja/clientes/2", CLIENTE_VALIDO, LOS_DOS),
             new Fila("GET", "/api/v1/caja/domicilios", "/api/v1/caja/domicilios?estado=POR_COBRAR", null, LOS_DOS),

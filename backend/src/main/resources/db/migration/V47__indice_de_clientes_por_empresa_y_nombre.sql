@@ -1,0 +1,31 @@
+-- ---------------------------------------------------------------------
+-- V47 · Un índice para la lista de clientes (pantalla «Clientes»)
+--
+-- La lista pide los clientes de UNA empresa, ordenados por nombre y, a
+-- igual nombre, por identificador, de veinte en veinte:
+--
+--   WHERE empresa_id = ? [AND (nit LIKE 'x%' OR razon_social LIKE '%x%')]
+--   ORDER BY razon_social, cliente_id LIMIT 20
+--
+-- Hasta la V46 el único índice que servía ese orden era `ix_clientes_razon`
+-- (razon_social), que no empieza por la empresa. Con la lista de la
+-- plataforma entera delante, el motor lo recorría de punta a punta
+-- descartando los clientes de las otras empresas hasta juntar veinte: con
+-- 95 000 clientes en 31 empresas, una búsqueda sin coincidencias de una
+-- empresa de 3 000 leía las 95 000 filas (EXPLAIN ANALYZE: 137 ms), y ese
+-- costo crece con la plataforma, no con la empresa.
+--
+-- Con `(empresa_id, razon_social, cliente_id)` el motor entra por la
+-- empresa, ya ordenado, y se detiene a las veinte filas (0,2 ms sin
+-- búsqueda); con una búsqueda que no coincide lee solo las filas de la
+-- empresa (4 ms con 3 000). El índice incluye `cliente_id` para que el
+-- desempate del orden también salga del índice.
+--
+-- `ix_clientes_razon` se conserva: lo nombró la V4 y no se retira un
+-- índice sin saber quién lo usa.
+--
+-- Requiere: V4 (clientes) y V10 (empresa_id).
+-- ---------------------------------------------------------------------
+
+ALTER TABLE clientes
+  ADD INDEX ix_clientes_empresa_razon (empresa_id, razon_social, cliente_id);

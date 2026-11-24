@@ -88,6 +88,21 @@ describe('cliente de la venta', () => {
     expect(actualizarCliente).toHaveBeenCalledWith(7, expect.objectContaining({ correo: 'nuevo@correo.co', autorizacionDatos: true }))
   })
 
+  it('datosClienteDeLaCajaSigueFuncionando: en la caja el documento va fijo, sin campos para cambiarlo', async () => {
+    render(<Pantalla />)
+    await identificar()
+    await userEvent.click(await screen.findByRole('button', { name: /corregir datos/i }))
+    expect(screen.getByText('CC 1020304050')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Número de documento')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Tipo de documento')).not.toBeInTheDocument()
+    actualizarCliente.mockResolvedValue(ANA)
+    await userEvent.click(screen.getByLabelText(/autoriza el tratamiento de sus datos/i))
+    await userEvent.click(screen.getByRole('button', { name: /guardar cambios/i }))
+    expect(actualizarCliente).toHaveBeenCalledWith(7, expect.objectContaining({
+      tipoDocumento: 'CC', identificacion: '1020304050', direccion: 'Calle 1 # 2-3', ciudad: 'Cali',
+    }))
+  })
+
   it('un fallo al buscar se anuncia', async () => {
     clientePorIdentificacion.mockRejectedValue(new Error('Se cayó'))
     render(<Pantalla />)

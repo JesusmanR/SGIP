@@ -27,6 +27,7 @@ export const secciones = [
   { ruta: '/caja/turnos', etiqueta: 'Turnos de caja', roles: ADMIN, grupo: 'Operación' },
   { ruta: '/panel', etiqueta: 'Panel', roles: ADMIN, grupo: 'Operación' },
   { ruta: '/catalogo', etiqueta: 'Catálogo', roles: DE_EMPRESA, grupo: 'Operación' },
+  { ruta: '/clientes', etiqueta: 'Clientes', roles: VENDEN, grupo: 'Operación' },
   { ruta: '/importar', etiqueta: 'Importar precios', roles: ADMIN, grupo: 'Operación' },
   { ruta: '/proveedores', etiqueta: 'Proveedores', roles: ADMIN, grupo: 'Compras' },
   { ruta: '/compras', etiqueta: 'Órdenes de compra', roles: ADMIN, grupo: 'Compras' },

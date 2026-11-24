@@ -1,0 +1,29 @@
+/* Pantalla «Clientes». El color sale solo de tokens.css; la tabla es la común (comun.css). */
+.seccion-clientes .clientes-panel {
+  max-width: 44rem; margin-bottom: var(--espacio-5); padding: var(--espacio-4);
+  background: var(--tarjeta); border: 1px solid var(--borde); border-radius: var(--radio-tarjeta);
+}
+.seccion-clientes .clientes-panel:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }
+.seccion-clientes .clientes-panel h2 {
+  margin: 0; font-size: var(--t-titulo-tarjeta); font-weight: 700; color: var(--tinta);
+}
+.seccion-clientes .clientes-busqueda { align-items: flex-end; }
+.seccion-clientes .clientes-busqueda .campo { flex: 1 1 18rem; max-width: 28rem; }
+.seccion-clientes .clientes-busqueda .campo input { width: 100%; }
+.seccion-clientes .clientes-busqueda > .boton { min-height: var(--toque-minimo); }
+.seccion-clientes .clientes-saldo-cero { color: var(--tinta-3); }
+.seccion-clientes .clientes-paginacion {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: var(--espacio-3); margin-top: var(--espacio-4);
+}
+.seccion-clientes .clientes-total { margin: 0; color: var(--tinta-2); font-size: var(--t-cuerpo); font-variant-numeric: tabular-nums; }
+.seccion-clientes .clientes-paginas { display: flex; align-items: center; gap: var(--espacio-3); }
+.seccion-clientes .clientes-paginas span { color: var(--tinta-2); font-size: var(--t-cuerpo); font-variant-numeric: tabular-nums; }
+.seccion-clientes .clientes-paginas .boton { min-height: var(--toque-minimo); }
+/* En escritorio el botón de la fila es compacto, como el del Catálogo; en celular recupera el tamaño táctil de la caja. */
+.seccion-clientes .tabla-tarjetas .boton { min-height: 0; padding: var(--espacio-1) var(--espacio-3); font-size: .85rem; }
+@media (max-width: 48rem) {
+  .seccion-clientes .tabla-tarjetas .boton { min-height: var(--toque-minimo); padding: 0 var(--espacio-4); }
+}
+/* Un botón de página apagado se distingue por el borde y el texto tenue, no por un relleno que parece activo. */
+.seccion-clientes .clientes-paginas .boton:disabled { background: var(--tarjeta); color: var(--tinta-3); border-color: var(--borde); }

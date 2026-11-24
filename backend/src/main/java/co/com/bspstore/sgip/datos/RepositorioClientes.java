@@ -1,6 +1,8 @@
 package co.com.bspstore.sgip.datos;
 
 import co.com.bspstore.sgip.api.dto.Cliente;
+import co.com.bspstore.sgip.api.dto.ClienteEnLista;
+import co.com.bspstore.sgip.logica.ServicioClientes;
 import co.com.bspstore.sgip.modelo.TipoDocumento;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
@@ -8,6 +10,7 @@ import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -25,6 +28,66 @@ public class RepositorioClientes {
 
     public RepositorioClientes(JdbcClient jdbc) {
         this.jdbc = jdbc;
+    }
+
+    /**
+     * Una página de la lista de clientes, ordenada por nombre y, a igual nombre, por identificador, con
+     * lo que la tienda le debe a cada uno ({@code LEFT JOIN saldos_cliente}: sin fila, cero).
+     *
+     * Los dos patrones llegan ya escritos y con los comodines del texto escapados; los dos son nulos
+     * cuando no hay búsqueda, y entonces el filtro se anula a sí mismo (como en {@code ConsultaCatalogo}).
+     * Si hay, basta que cumpla uno: el documento empieza por el texto o el nombre lo contiene. La página
+     * cuesta una consulta y el total, otra, sin importar cuántos clientes haya (RNF-03); el índice
+     * {@code ix_clientes_empresa_razon} (V47) sirve el orden sin recorrer a las otras empresas.
+     *
+     * {@code editable} es falso para el Consumidor final: el marcado como tal y, por si acaso, el que lleva
+     * su documento genérico.
+     */
+    public List<ClienteEnLista> listar(Integer empresa, String prefijoDeIdentificacion, String contieneNombre,
+                                       int limite, long desplazamiento) {
+        return jdbc.sql("""
+                        SELECT c.cliente_id AS id, c.tipo_documento AS tipoDocumento, c.nit AS identificacion,
+                               c.razon_social AS nombre, c.telefono, c.correo, c.direccion, c.ciudad,
+                               c.autorizacion_datos IS NOT NULL AS autorizoDatos,
+                               COALESCE(s.saldo, 0.00) AS saldoAFavor,
+                               NOT (c.consumidor_final = 1
+                                    OR (c.tipo_documento = :tipoGenerico AND c.nit = :identificacionGenerica))
+                                   AS editable
+                          FROM clientes c
+                          LEFT JOIN saldos_cliente s
+                                 ON s.empresa_id = c.empresa_id AND s.cliente_id = c.cliente_id
+                         WHERE c.empresa_id = :empresa
+                           AND (:prefijo IS NULL
+                                OR c.nit LIKE :prefijo
+                                OR c.razon_social LIKE :contiene)
+                         ORDER BY c.razon_social, c.cliente_id
+                         LIMIT :limite OFFSET :desplazamiento
+                        """)
+                .param("tipoGenerico", ServicioClientes.TIPO_CONSUMIDOR_FINAL.name())
+                .param("identificacionGenerica", ServicioClientes.IDENTIFICACION_CONSUMIDOR_FINAL)
+                .param("empresa", empresa)
+                .param("prefijo", prefijoDeIdentificacion)
+                .param("contiene", contieneNombre)
+                .param("limite", limite)
+                .param("desplazamiento", desplazamiento)
+                .query(ClienteEnLista.class)
+                .list();
+    }
+
+    /** Cuántos clientes de la empresa cumplen la misma búsqueda que {@link #listar}. */
+    public long contar(Integer empresa, String prefijoDeIdentificacion, String contieneNombre) {
+        return jdbc.sql("""
+                        SELECT COUNT(*) FROM clientes c
+                         WHERE c.empresa_id = :empresa
+                           AND (:prefijo IS NULL
+                                OR c.nit LIKE :prefijo
+                                OR c.razon_social LIKE :contiene)
+                        """)
+                .param("empresa", empresa)
+                .param("prefijo", prefijoDeIdentificacion)
+                .param("contiene", contieneNombre)
+                .query(Long.class)
+                .single();
     }
 
     public Optional<Cliente> buscar(Integer empresa, Integer id) {

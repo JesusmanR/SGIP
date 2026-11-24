@@ -15,6 +15,7 @@ import { borrarSesion, debeCambiarClave, haySesion, inicioSegunRol, leerSesion }
 // su carpeta y de sus subrutas: aquí solo se registra una vez.
 const Caja = lazy(() => import('./paginas/caja/Rutas.jsx'))
 const Turnos = lazy(() => import('./paginas/caja/Turnos.jsx'))
+const Clientes = lazy(() => import('./paginas/clientes/Clientes.jsx'))
 const Domicilios = lazy(() => import('./paginas/caja/Domicilios.jsx'))
 const Devolucion = lazy(() => import('./paginas/caja/Devolucion.jsx'))
 const Encargos = lazy(() => import('./paginas/caja/Encargos.jsx'))
@@ -38,6 +39,7 @@ const paginas = {
   '/caja/medios-pago': MediosPago,
   '/panel': Panel,
   '/catalogo': Catalogo,
+  '/clientes': Clientes,
   '/importar': Importacion,
   '/proveedores': Proveedores,
   '/compras': Compras,
