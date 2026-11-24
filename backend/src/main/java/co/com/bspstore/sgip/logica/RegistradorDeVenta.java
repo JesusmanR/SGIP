@@ -1,6 +1,7 @@
 package co.com.bspstore.sgip.logica;
 
 import co.com.bspstore.sgip.api.dto.Cliente;
+import co.com.bspstore.sgip.api.dto.CopiaDeEmpresa;
 import co.com.bspstore.sgip.api.dto.Domicilio;
 import co.com.bspstore.sgip.api.dto.LineaSolicitada;
 import co.com.bspstore.sgip.api.dto.MedioDePago;
@@ -63,6 +64,10 @@ import java.util.Optional;
  *   <li>el <b>consecutivo</b> de {@code VENTA}, {@code FOR UPDATE}, el último antes de insertar;</li>
  *   <li>el <b>kárdex</b>.</li>
  * </ol>
+ *
+ * La copia de los datos de la empresa que la venta guarda (V48) se lee de {@code empresas} sin bloqueo (ni
+ * {@code FOR UPDATE} ni {@code FOR SHARE}), en READ COMMITTED: no es un escalón del orden y no espera a quien
+ * edita la empresa. Los INSERT siguen tomando, por la clave foránea, el bloqueo compartido de siempre (ADR-0030).
  *
  * La caja no crea productos: una línea siempre referencia uno que ya existe (los crea el administrador en
  * el catálogo). {@code TipoConsecutivo.PRODUCTO_RAPIDO} y las columnas de la V45 quedan sin uso.
@@ -218,6 +223,10 @@ public class RegistradorDeVenta {
         // de tomar el consecutivo, que es lo último que se bloquea.
         saldos.exigirSuficiente(pagos.saldoUsado(), saldoDisponible);
 
+        // La copia de los datos de la empresa de hoy (V48): una lectura sin bloqueo, antes del consecutivo para no
+        // alargar el tiempo que se tiene. No toma la fila de la empresa: el orden global de bloqueos no cambia.
+        CopiaDeEmpresa copiaDeLaEmpresa = ventas.copiaDeLaEmpresa(empresa);
+
         // 7. El consecutivo (FOR UPDATE), el último bloqueo antes de insertar.
         String consecutivo = "V-%08d".formatted(consecutivos.tomarSiguiente(empresa, TipoConsecutivo.VENTA));
 
@@ -231,7 +240,8 @@ public class RegistradorDeVenta {
                     hayEncargo ? s.motivoEncargo() : null,
                     autorizadaPor != null && autorizadaPor.equals(cajero), clave, huella,
                     s.descuentoTotal() == null ? null : s.descuentoTotal().tipo(),
-                    s.descuentoTotal() == null ? null : s.descuentoTotal().valor(), domicilio != null, contraEntrega));
+                    s.descuentoTotal() == null ? null : s.descuentoTotal().valor(), domicilio != null, contraEntrega,
+                    copiaDeLaEmpresa));
         } catch (DuplicateKeyException e) {
             if (e.getMessage() != null && e.getMessage().contains(RepositorioVentas.CLAVE_UNICA_DE_IDEMPOTENCIA)) {
                 throw new VentaDuplicadaException(e);
@@ -257,7 +267,7 @@ public class RegistradorDeVenta {
         inventario.registrarEgresos(empresa, cajero, consecutivo, egresos);
 
         return new ResultadoDeVenta(new VentaRegistrada(ventaId, consecutivo, calculada.total(), pagos.cambio(),
-                List.copyOf(calculada.lineas())), false);
+                List.copyOf(calculada.lineas()), copiaDeLaEmpresa), false);
     }
 
     /**

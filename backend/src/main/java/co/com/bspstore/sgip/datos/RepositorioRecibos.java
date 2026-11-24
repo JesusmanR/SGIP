@@ -25,15 +25,22 @@ public class RepositorioRecibos {
     }
 
     /**
-     * La venta con lo que la rodea: la empresa (razón social y NIT), si es responsable de IVA, el cajero, el
-     * cliente y, si es a domicilio, los datos de la entrega. {@code responsableIva} es falso cuando la empresa
-     * no tiene fila en {@code empresa_config} (V34).
+     * La venta con lo que la rodea: la empresa, si es responsable de IVA, el cajero, el cliente y, si es a
+     * domicilio, los datos de la entrega. {@code responsableIva} es falso cuando la empresa no tiene fila en
+     * {@code empresa_config} (V34).
+     *
+     * Los datos de la empresa ({@code empresa}, {@code nit}, {@code tipoDocumentoEmpresa},
+     * {@code direccionEmpresa}, {@code telefonoEmpresa}) son la copia que la venta guardó (V48). La copia está
+     * ausente si y solo si {@code ventas.empresa_nit} es nulo (una venta anterior a la V48): entonces salen todos
+     * los datos actuales de {@code empresas}, y nunca una mezcla de los dos. {@code direccion}, {@code ciudad} y
+     * {@code telefono} siguen siendo los del domicilio de entrega del cliente.
      */
     public record CabeceraDeRecibo(String empresa, String nit, boolean responsableIva, String consecutivo,
                                    LocalDateTime fecha, String cajero, String cliente, String tipoDocumento,
                                    String identificacion, BigDecimal subtotal, BigDecimal descuento, BigDecimal iva,
                                    BigDecimal total, String estadoPago, boolean contraEntrega, boolean domicilio,
-                                   String direccion, String ciudad, String telefono, String recibe) {}
+                                   String direccion, String ciudad, String telefono, String recibe,
+                                   String tipoDocumentoEmpresa, String direccionEmpresa, String telefonoEmpresa) {}
 
     /** Una línea con el nombre del producto; {@code total} ya lleva el descuento y el IVA. */
     public record LineaDeVenta(String nombre, int cantidad, BigDecimal precioUnitario, BigDecimal descuento,
@@ -45,12 +52,21 @@ public class RepositorioRecibos {
 
     public Optional<CabeceraDeRecibo> cabecera(Integer empresaId, Long ventaId) {
         return jdbc.sql("""
-                        SELECT e.razon_social AS empresa, e.nit, COALESCE(ec.responsable_iva, FALSE) AS responsable_iva,
+                        SELECT CASE WHEN v.empresa_nit IS NULL THEN COALESCE(e.nombre_comercial, e.razon_social)
+                                    ELSE v.empresa_nombre END AS empresa,
+                               CASE WHEN v.empresa_nit IS NULL THEN e.nit ELSE v.empresa_nit END AS nit,
+                               COALESCE(ec.responsable_iva, FALSE) AS responsable_iva,
                                v.consecutivo, v.fecha, u.nombre AS cajero, c.razon_social AS cliente,
                                c.tipo_documento, c.nit AS identificacion,
                                v.subtotal, v.descuento, v.iva, v.total, v.estado_pago,
                                v.pago_contra_entrega AS contra_entrega, v.tipo_entrega = 'DOMICILIO' AS domicilio,
-                               d.direccion, d.ciudad, d.telefono, d.recibe
+                               d.direccion, d.ciudad, d.telefono, d.recibe,
+                               CASE WHEN v.empresa_nit IS NULL THEN e.tipo_documento
+                                    ELSE v.empresa_tipo_documento END AS tipo_documento_empresa,
+                               CASE WHEN v.empresa_nit IS NULL THEN e.direccion
+                                    ELSE v.empresa_direccion END AS direccion_empresa,
+                               CASE WHEN v.empresa_nit IS NULL THEN e.telefono
+                                    ELSE v.empresa_telefono END AS telefono_empresa
                           FROM ventas v
                           JOIN empresas e ON e.empresa_id = v.empresa_id
                           LEFT JOIN empresa_config ec ON ec.empresa_id = v.empresa_id
