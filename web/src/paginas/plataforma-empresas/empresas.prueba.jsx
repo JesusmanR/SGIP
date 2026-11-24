@@ -14,12 +14,12 @@ import Empresas from './index.jsx'
 vi.mock('../../servicios/api/plataforma-empresas.js', () => ({
   apiPlataformaEmpresas: {
     listar: vi.fn(), ver: vi.fn(), darDeAlta: vi.fn(),
-    activar: vi.fn(), desactivar: vi.fn(), listarUsuarios: vi.fn(), desbloquearUsuario: vi.fn(),
+    activar: vi.fn(), desactivar: vi.fn(), cambiarIdentidad: vi.fn(), listarUsuarios: vi.fn(), desbloquearUsuario: vi.fn(),
   },
 }))
 
 const BASE = {
-  empresaId: 4, nit: '900123', razonSocial: 'Ferretería Norte', correoContacto: 'f@norte.co',
+  empresaId: 4, tipoDocumento: 'NIT', nit: '900123', razonSocial: 'Ferretería Norte', correoContacto: 'f@norte.co',
   telefono: '3001234567', ciudad: 'Cali', estado: 'ACTIVA', creadaEn: '2026-09-18T09:14:00',
   plan: 'BASICO', inicioPrueba: '2026-09-18', finPrueba: '2026-12-18', estadoSuscripcion: 'AL_DIA', usuarios: 3,
 }
@@ -398,7 +398,7 @@ describe('usuarios de la empresa y desbloqueo por persona', () => {
 
 describe('alta de una empresa', () => {
   const llenar = async ({ clave = 'abcdefgh', repite = clave } = {}) => {
-    await userEvent.type(screen.getByLabelText(/identificación tributaria/i), '900555')
+    await userEvent.type(screen.getByLabelText('Número'), '900555')
     await userEvent.type(screen.getByLabelText('Razón social'), 'Tienda Nueva')
     await userEvent.type(screen.getByLabelText('Nombre del administrador'), 'Ana Gómez')
     await userEvent.type(screen.getByLabelText('Correo del administrador'), 'ana@nueva.co')
@@ -426,7 +426,7 @@ describe('alta de una empresa', () => {
     montar('/plataforma/empresas/nueva')
     await userEvent.click(screen.getByRole('button', { name: 'Dar de alta' }))
     expect(apiPlataformaEmpresas.darDeAlta).not.toHaveBeenCalled()
-    const nit = screen.getByLabelText(/identificación tributaria/i)
+    const nit = screen.getByLabelText('Número')
     expect(nit).toHaveAttribute('aria-invalid', 'true')
     expect(nit).toHaveFocus()
     expect(screen.getByText('Escribe la razón social.')).toBeInTheDocument()
@@ -465,7 +465,7 @@ describe('alta de una empresa', () => {
     montar('/plataforma/empresas/nueva')
     await llenar()
     await userEvent.click(screen.getByRole('button', { name: 'Dar de alta' }))
-    const nit = screen.getByLabelText(/identificación tributaria/i)
+    const nit = screen.getByLabelText('Número')
     await waitFor(() => expect(nit).toHaveAttribute('aria-invalid', 'true'))
     expect(screen.getByText(DETALLE_NIT)).toBeInTheDocument()
     expect(nit).toHaveFocus()
@@ -481,7 +481,7 @@ describe('alta de una empresa', () => {
     await waitFor(() => expect(correo).toHaveAttribute('aria-invalid', 'true'))
     expect(screen.getByText(DETALLE_CORREO)).toBeInTheDocument()
     expect(correo).toHaveFocus()
-    expect(screen.getByLabelText(/identificación tributaria/i)).not.toHaveAttribute('aria-invalid', 'true')
+    expect(screen.getByLabelText('Número')).not.toHaveAttribute('aria-invalid', 'true')
   })
 
   it('tras un 409 por correo, corregir el correo limpia el error y deja volver a enviar', async () => {
@@ -515,7 +515,7 @@ describe('alta de una empresa', () => {
     montar('/plataforma/empresas/nueva')
     await llenar()
     await userEvent.click(screen.getByRole('button', { name: 'Dar de alta' }))
-    const nit = await screen.findByLabelText(/identificación tributaria/i)
+    const nit = await screen.findByLabelText('Número')
     await waitFor(() => expect(nit).toHaveAttribute('aria-invalid', 'true'))
     await userEvent.type(nit, '7')
     expect(nit).not.toHaveAttribute('aria-invalid', 'true')
@@ -528,7 +528,7 @@ describe('alta de una empresa', () => {
     montar('/plataforma/empresas/nueva')
     await llenar()
     await userEvent.click(screen.getByRole('button', { name: 'Dar de alta' }))
-    const nit = screen.getByLabelText(/identificación tributaria/i)
+    const nit = screen.getByLabelText('Número')
     await waitFor(() => expect(nit).toHaveAttribute('aria-invalid', 'true'))
     expect(screen.getByText('Ese dato ya está registrado.')).toBeInTheDocument()
     expect(screen.getByLabelText('Correo del administrador')).not.toHaveAttribute('aria-invalid', 'true')
@@ -542,7 +542,7 @@ describe('alta de una empresa', () => {
     const correo = screen.getByLabelText('Correo del administrador')
     await waitFor(() => expect(correo).toHaveAttribute('aria-invalid', 'true'))
     expect(screen.getByText('Ese dato ya está registrado.')).toBeInTheDocument()
-    expect(screen.getByLabelText(/identificación tributaria/i)).not.toHaveAttribute('aria-invalid', 'true')
+    expect(screen.getByLabelText('Número')).not.toHaveAttribute('aria-invalid', 'true')
   })
 
   it('un 409 sin tipo cuyo texto menciona el NIT o el correo va arriba y no marca ningún campo', async () => {
@@ -551,7 +551,7 @@ describe('alta de una empresa', () => {
     await llenar()
     await userEvent.click(screen.getByRole('button', { name: 'Dar de alta' }))
     expect(await screen.findByRole('alert')).toHaveTextContent(DETALLE_NIT)
-    expect(screen.getByLabelText(/identificación tributaria/i)).not.toHaveAttribute('aria-invalid', 'true')
+    expect(screen.getByLabelText('Número')).not.toHaveAttribute('aria-invalid', 'true')
 
     apiPlataformaEmpresas.darDeAlta.mockRejectedValueOnce(new ErrorApi(409, DETALLE_CORREO))
     await userEvent.click(screen.getByRole('button', { name: 'Dar de alta' }))
@@ -570,7 +570,7 @@ describe('alta de una empresa', () => {
     await llenar()
     await userEvent.click(screen.getByRole('button', { name: 'Dar de alta' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('Dos altas a la vez chocaron.')
-    expect(screen.getByLabelText(/identificación tributaria/i)).not.toHaveAttribute('aria-invalid', 'true')
+    expect(screen.getByLabelText('Número')).not.toHaveAttribute('aria-invalid', 'true')
     expect(screen.getByLabelText('Correo del administrador')).not.toHaveAttribute('aria-invalid', 'true')
     await userEvent.click(screen.getByRole('button', { name: 'Dar de alta' }))
     await waitFor(() => expect(apiPlataformaEmpresas.darDeAlta).toHaveBeenCalledTimes(2))
@@ -607,5 +607,93 @@ describe('alta de una empresa', () => {
     await userEvent.dblClick(screen.getByRole('button', { name: 'Dar de alta' }))
     expect(apiPlataformaEmpresas.darDeAlta).toHaveBeenCalledTimes(1)
     resolver(BASE)
+  })
+})
+
+
+describe('identidad de la empresa (SUPER_ADMIN)', () => {
+  const escribir = async (numero = '900555', motivo = 'Corrección pedida por el cliente') => {
+    const campoNumero = screen.getByLabelText('Número')
+    await userEvent.clear(campoNumero)
+    await userEvent.type(campoNumero, numero)
+    await userEvent.type(screen.getByLabelText('Motivo'), motivo)
+  }
+
+  it('superAdminCambiaIdentidadConMotivoObligatorio', async () => {
+    apiPlataformaEmpresas.ver.mockResolvedValue(BASE)
+    apiPlataformaEmpresas.cambiarIdentidad.mockResolvedValue({ ...BASE, tipoDocumento: 'CC', nit: '1020304050' })
+    montar('/plataforma/empresas/4')
+    await screen.findByRole('heading', { level: 2, name: 'Identidad' })
+    expect(screen.getByLabelText('Razón social')).toHaveValue('Ferretería Norte')
+    await userEvent.click(screen.getByRole('button', { name: 'Cambiar identidad' }))
+    expect(apiPlataformaEmpresas.cambiarIdentidad).not.toHaveBeenCalled()
+    expect(screen.getByLabelText('Motivo')).toHaveAttribute('aria-invalid', 'true')
+    await userEvent.selectOptions(screen.getByLabelText('Tipo de documento'), 'CC')
+    await escribir('1020304050')
+    await userEvent.click(screen.getByRole('button', { name: 'Cambiar identidad' }))
+    await waitFor(() => expect(apiPlataformaEmpresas.cambiarIdentidad).toHaveBeenCalledTimes(1))
+    expect(apiPlataformaEmpresas.cambiarIdentidad).toHaveBeenCalledWith('4', {
+      tipoDocumento: 'CC', numero: '1020304050', razonSocial: 'Ferretería Norte',
+      motivo: 'Corrección pedida por el cliente',
+    })
+    expect(await screen.findByText('Identidad actualizada.')).toBeInTheDocument()
+  })
+
+  it('documentoInvalidoMuestraElError: el detalle del servidor queda junto al número', async () => {
+    apiPlataformaEmpresas.ver.mockResolvedValue(BASE)
+    apiPlataformaEmpresas.cambiarIdentidad.mockRejectedValue(
+      new ErrorApi(400, 'Escribe solo el número, sin el dígito de verificación.', 'urn:sgip:empresa:documento-invalido'),
+    )
+    montar('/plataforma/empresas/4')
+    await screen.findByRole('heading', { level: 2, name: 'Identidad' })
+    await escribir('900555-1')
+    await userEvent.click(screen.getByRole('button', { name: 'Cambiar identidad' }))
+    expect(await screen.findByText('Escribe solo el número, sin el dígito de verificación.')).toBeInTheDocument()
+    expect(screen.getByLabelText('Número')).toHaveAttribute('aria-invalid', 'true')
+  })
+
+  it('numeroRepetidoMuestraElError: el 409 queda junto al número', async () => {
+    apiPlataformaEmpresas.ver.mockResolvedValue(BASE)
+    apiPlataformaEmpresas.cambiarIdentidad.mockRejectedValue(
+      new ErrorApi(409, 'Ya hay una empresa con la identificación 900555.', TIPO_NIT),
+    )
+    montar('/plataforma/empresas/4')
+    await screen.findByRole('heading', { level: 2, name: 'Identidad' })
+    await escribir()
+    await userEvent.click(screen.getByRole('button', { name: 'Cambiar identidad' }))
+    expect(await screen.findByText('Ya hay una empresa con la identificación 900555.')).toBeInTheDocument()
+    expect(screen.getByLabelText('Número')).toHaveAttribute('aria-invalid', 'true')
+  })
+
+  it('el alta acepta CC, avisa que no lleva dígito de verificación y manda el tipo', async () => {
+    apiPlataformaEmpresas.darDeAlta.mockResolvedValue({ ...BASE, empresaId: 12 })
+    apiPlataformaEmpresas.ver.mockResolvedValue({ ...BASE, empresaId: 12 })
+    montar('/plataforma/empresas/nueva')
+    expect(screen.getByText('Escribe solo el número, sin el dígito de verificación.')).toBeInTheDocument()
+    await userEvent.selectOptions(screen.getByLabelText('Tipo de documento'), 'CC')
+    await userEvent.type(screen.getByLabelText('Número'), '1'.repeat(40))
+    await userEvent.type(screen.getByLabelText('Razón social'), 'Tienda Nueva')
+    await userEvent.type(screen.getByLabelText('Nombre del administrador'), 'Ana Gómez')
+    await userEvent.type(screen.getByLabelText('Correo del administrador'), 'ana@nueva.co')
+    await userEvent.type(screen.getByLabelText('Contraseña inicial'), 'abcdefgh')
+    await userEvent.type(screen.getByLabelText('Repite la contraseña'), 'abcdefgh')
+    await userEvent.click(screen.getByRole('button', { name: 'Dar de alta' }))
+    await waitFor(() => expect(apiPlataformaEmpresas.darDeAlta).toHaveBeenCalledTimes(1))
+    expect(apiPlataformaEmpresas.darDeAlta.mock.calls[0][0]).toMatchObject({ tipoDocumento: 'CC', nit: '1'.repeat(40) })
+  })
+
+  it('el alta muestra el documento inválido en el campo del número', async () => {
+    apiPlataformaEmpresas.darDeAlta.mockRejectedValue(
+      new ErrorApi(400, 'Escribe solo el número, sin el dígito de verificación.', 'urn:sgip:empresa:documento-invalido'),
+    )
+    montar('/plataforma/empresas/nueva')
+    await userEvent.type(screen.getByLabelText('Número'), '900555-1')
+    await userEvent.type(screen.getByLabelText('Razón social'), 'Tienda Nueva')
+    await userEvent.type(screen.getByLabelText('Nombre del administrador'), 'Ana Gómez')
+    await userEvent.type(screen.getByLabelText('Correo del administrador'), 'ana@nueva.co')
+    await userEvent.type(screen.getByLabelText('Contraseña inicial'), 'abcdefgh')
+    await userEvent.type(screen.getByLabelText('Repite la contraseña'), 'abcdefgh')
+    await userEvent.click(screen.getByRole('button', { name: 'Dar de alta' }))
+    await waitFor(() => expect(screen.getByLabelText('Número')).toHaveAttribute('aria-invalid', 'true'))
   })
 })

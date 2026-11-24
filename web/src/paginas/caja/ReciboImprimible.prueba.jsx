@@ -4,9 +4,13 @@ import { describe, expect, it } from 'vitest'
 
 import { pesos } from './ayuda.js'
 import ReciboImprimible from './ReciboImprimible.jsx'
+import { armarRecibo, empresaDelRecibo } from './venta.js'
 
 const RECIBO = {
-  empresa: { razonSocial: 'Black Steel Parts', nit: '900123456-7' },
+  empresa: {
+    nombre: 'Black Steel Parts', tipoDocumento: 'NIT', nit: '900123456',
+    direccion: 'Carrera 5 # 10-20', telefono: '6025551234',
+  },
   consecutivo: 'V-0042',
   fecha: '2026-11-16T10:30:00-05:00',
   cajero: 'Marta Ruiz',
@@ -32,7 +36,7 @@ describe('recibo', () => {
     const { container } = render(<ReciboImprimible recibo={RECIBO} />)
     expect(container.querySelector('.recibo')).toBeInTheDocument()
     expect(screen.getByText('Black Steel Parts')).toBeInTheDocument()
-    expect(screen.getByText(/900123456-7/)).toBeInTheDocument()
+    expect(screen.getByText('NIT 900123456')).toBeInTheDocument()
     expect(screen.getByText(/V-0042/)).toBeInTheDocument()
     expect(screen.getByText(/16 nov 2026/)).toBeInTheDocument()
     expect(screen.getByText(/Marta Ruiz/)).toBeInTheDocument()
@@ -93,5 +97,47 @@ describe('hoja de estilos de la caja', () => {
     const sinComentarios = css.replace(/\/\*[\s\S]*?\*\//g, '')
     expect(sinComentarios).not.toMatch(/#[0-9a-fA-F]{3,8}\b/)
     expect(sinComentarios).not.toMatch(/\b(rgb|rgba|hsl|hsla|oklch)\(/)
+  })
+
+  it('reciboMuestraDireccionYTelefono: la dirección y el teléfono de la empresa, y CC si es cédula', () => {
+    const { rerender } = render(<ReciboImprimible recibo={RECIBO} />)
+    const cabecera = document.querySelector('.recibo-cabecera')
+    expect(cabecera).toHaveTextContent('Carrera 5 # 10-20')
+    expect(cabecera).toHaveTextContent('6025551234')
+    rerender(<ReciboImprimible recibo={{ ...RECIBO, empresa: { ...RECIBO.empresa, tipoDocumento: 'CC', nit: '1020304050', direccion: null, telefono: null } }} />)
+    expect(screen.getByText('CC 1020304050')).toBeInTheDocument()
+    expect(document.querySelector('.recibo-cabecera').querySelectorAll('p')).toHaveLength(2)
+  })
+
+  it('reciboInmediatoYReimpresionMuestranLoMismo: la copia de la venta y la del Recibo dan el mismo papel', () => {
+    const copia = { nombre: 'Black Steel Parts', tipoDocumento: 'NIT', nit: '900123456', direccion: 'Carrera 5 # 10-20', telefono: '6025551234' }
+    const inmediato = armarRecibo({
+      empresa: { razonSocial: 'Otro nombre hoy', nit: '1' },
+      venta: { consecutivo: 'V-0042', total: 0, cambio: 0, lineas: [], empresa: copia },
+      lineas: [], pagos: [], cliente: null, cajero: 'Marta Ruiz', domicilio: null,
+    })
+    const reimpreso = {
+      ...inmediato,
+      empresa: empresaDelRecibo({
+        empresa: 'Black Steel Parts', tipoDocumentoEmpresa: 'NIT', nitEmpresa: '900123456',
+        direccionEmpresa: 'Carrera 5 # 10-20', telefonoEmpresa: '6025551234',
+      }),
+    }
+    expect(inmediato.empresa).toEqual(copia)
+    expect(reimpreso.empresa).toEqual(copia)
+    const a = render(<ReciboImprimible recibo={inmediato} />)
+    const textoA = a.container.querySelector('.recibo-cabecera').textContent
+    a.unmount()
+    const b = render(<ReciboImprimible recibo={reimpreso} />)
+    expect(b.container.querySelector('.recibo-cabecera').textContent).toBe(textoA)
+  })
+
+  it('si la venta no trae copia (reintento anterior) cae a los datos actuales de la empresa', () => {
+    const r = armarRecibo({
+      empresa: { razonSocial: 'Razón S.A.S.', nombreComercial: 'Comercial', tipoDocumento: 'CC', nit: '55', direccion: 'Calle 1', telefono: '300' },
+      venta: { consecutivo: 'V-1', total: 0, cambio: 0, lineas: [], empresa: null },
+      lineas: [], pagos: [], cliente: null, cajero: 'M', domicilio: null,
+    })
+    expect(r.empresa).toEqual({ nombre: 'Comercial', tipoDocumento: 'CC', nit: '55', direccion: 'Calle 1', telefono: '300' })
   })
 })
