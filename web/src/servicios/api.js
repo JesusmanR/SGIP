@@ -108,15 +108,31 @@ async function descargar(ruta, respaldo, falla) {
   }
 
   const disposicion = respuesta.headers?.get('Content-Disposition') ?? ''
-  const nombre = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposicion)?.[1]
   const url = URL.createObjectURL(await respuesta.blob())
   const enlace = document.createElement('a')
   enlace.href = url
-  enlace.download = nombre ? decodeURIComponent(nombre.trim()) : respaldo
+  enlace.download = nombreDe(disposicion) ?? respaldo
   document.body.appendChild(enlace)
-  enlace.click()
-  enlace.remove()
-  URL.revokeObjectURL(url)
+  try {
+    enlace.click()
+  } finally {
+    enlace.remove()
+    // Revocar al instante puede cortar la descarga en Safari y navegadores viejos.
+    setTimeout(() => URL.revokeObjectURL(url), 0)
+  }
+}
+
+/** El nombre de `Content-Disposition`; solo `filename*=` viene codificado y un `%` roto no debe fallar. */
+function nombreDe(disposicion) {
+  const coincide = /filename(\*?)=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposicion)
+  if (!coincide) return undefined
+  const crudo = coincide[2].trim()
+  if (!coincide[1]) return crudo
+  try {
+    return decodeURIComponent(crudo)
+  } catch {
+    return crudo
+  }
 }
 
 export async function pedir(ruta, opciones = {}) {

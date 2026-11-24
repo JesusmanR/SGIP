@@ -196,6 +196,7 @@ function ImportacionAdministrador() {
   const [confirmando, setConfirmando] = useState(false)
   const [arrastrando, setArrastrando] = useState(false)
   const [descargando, setDescargando] = useState(false)
+  const descargaEnCurso = useRef(false)
   const volver = useRef(null)
   const botonAplicar = useRef(null)
   const cerradaPorUsuario = useRef(false)
@@ -246,7 +247,8 @@ function ImportacionAdministrador() {
   }
 
   async function descargarPlantilla() {
-    if (descargando) return
+    if (descargaEnCurso.current) return
+    descargaEnCurso.current = true
     setFallo(null)
     setDescargando(true)
     try {
@@ -254,9 +256,13 @@ function ImportacionAdministrador() {
     } catch (e) {
       setFallo({
         mensaje: e.message || 'No se pudo descargar la plantilla.',
-        queHacer: 'Vuelve a intentarlo.',
+        // Reintentar no arregla un proveedor que ya no existe.
+        queHacer: e.estado === 404
+          ? 'Elige otro proveedor o recarga la página.'
+          : 'Vuelve a intentarlo.',
       })
     } finally {
+      descargaEnCurso.current = false
       setDescargando(false)
     }
   }
