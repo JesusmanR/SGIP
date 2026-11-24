@@ -17,9 +17,11 @@
 -- que se identifica con su cédula. Las empresas que ya existen son NIT,
 -- que es lo que dice el valor por omisión. El número vive donde siempre
 -- estuvo, en `nit` (VARCHAR(20) UNIQUE), y NO se toca ninguna fila: las
--- semillas con guion (900000000-0) se quedan como están. Solo se normaliza
--- el valor que entra en un cambio (puntos, espacios y guiones fuera, de 5
--- a 15 dígitos). Nunca se pide ni se valida el dígito de verificación.
+-- semillas con su dígito de verificación (900000000-0) se quedan como están,
+-- y para compararlas con un número nuevo se les descarta el sufijo desde el
+-- guion. Solo se normaliza el valor que entra en un cambio (puntos y
+-- espacios fuera, de 5 a 15 dígitos; un guion se rechaza). Nunca se pide ni
+-- se valida el dígito de verificación.
 --
 -- `nombre_comercial` y `direccion` son nulos hasta que el administrador
 -- los llene. Las dos columnas de contacto que ya existían (`telefono`,

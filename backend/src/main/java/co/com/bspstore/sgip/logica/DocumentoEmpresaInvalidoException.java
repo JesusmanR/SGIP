@@ -10,9 +10,20 @@ public class DocumentoEmpresaInvalidoException extends RuntimeException {
 
     public static final String MENSAJE =
             "El número de documento debe tener solo dígitos, entre 5 y 15, sin dígito de verificación. "
-                    + "Se aceptan puntos, espacios y guiones como separadores.";
+                    + "Se aceptan puntos y espacios como separadores.";
+
+    /** Para el guion: casi siempre es el dígito de verificación, que nunca se pide. */
+    public static final String MENSAJE_SIN_DIGITO = "Escribe solo el número, sin el dígito de verificación.";
 
     public DocumentoEmpresaInvalidoException() {
         super(MENSAJE);
+    }
+
+    private DocumentoEmpresaInvalidoException(String mensaje) {
+        super(mensaje);
+    }
+
+    public static DocumentoEmpresaInvalidoException conDigitoDeVerificacion() {
+        return new DocumentoEmpresaInvalidoException(MENSAJE_SIN_DIGITO);
     }
 }

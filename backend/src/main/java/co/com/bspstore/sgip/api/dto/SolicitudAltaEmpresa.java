@@ -33,7 +33,8 @@ public record SolicitudAltaEmpresa(
         TipoDocumentoEmpresa tipoDocumento,
 
         /**
-         * El número, con o sin puntos, espacios o guiones. Se normaliza (solo dígitos, de 5 a 15) antes de
+         * El número, con o sin puntos o espacios y SIN dígito de verificación: un guion es un 400. Se
+         * normaliza (solo dígitos, de 5 a 15) antes de
          * comprobar que no esté repetido y de guardarlo.
          */
         @NotBlank(message = "La identificación tributaria es obligatoria")

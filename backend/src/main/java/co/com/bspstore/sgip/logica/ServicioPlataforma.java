@@ -127,7 +127,7 @@ public class ServicioPlataforma {
      */
     @Transactional
     public EmpresaEnPlataforma darDeAlta(SolicitudAltaEmpresa solicitud) {
-        // NIT o CC más el número, sin puntos, espacios ni guiones y sin dígito de verificación (que nunca se
+        // NIT o CC más el número, sin puntos ni espacios y sin dígito de verificación (que nunca se
         // pide). Es la misma regla del cambio de identidad, para que las dos rutas no discrepen.
         TipoDocumentoEmpresa tipoDocumento = solicitud.tipoDocumento() == null
                 ? TipoDocumentoEmpresa.NIT : solicitud.tipoDocumento();

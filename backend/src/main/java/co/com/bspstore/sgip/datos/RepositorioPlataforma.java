@@ -128,15 +128,17 @@ public class RepositorioPlataforma {
      * Si alguna empresa, distinta de {@code excluirEmpresaId}, ya tiene ese número.
      *
      * Compara el número normalizado con el de la columna normalizado también: las semillas anteriores
-     * a la V48 guardan el NIT con guion ({@code 900000000-0}) y {@code 9000000000} es el mismo número.
-     * Compararlo como texto dejaría pasar un duplicado que la gente lee como el mismo. La empresa que se
-     * edita se excluye para que cambiar solo la razón social no choque consigo misma.
+     * a la V48 guardan el NIT con su dígito de verificación ({@code NNNNNNNNN-D}, como
+     * {@code 900000000-0}), y ese número es {@code 900000000}. Se descarta el sufijo desde el primer guion
+     * y se quitan los puntos y los espacios, que es lo que hace {@code DocumentoEmpresa}. Compararlo como
+     * texto dejaría pasar un duplicado que la gente lee como el mismo. La empresa que se edita se excluye
+     * para que cambiar solo la razón social no choque consigo misma.
      * {@code empresas} tiene una fila por comercio, de modo que no hay índice que cuidar.
      */
     public boolean existeNit(String numero, Integer excluirEmpresaId) {
         return jdbc.sql("""
                         SELECT COUNT(*) FROM empresas
-                         WHERE REPLACE(REPLACE(REPLACE(nit, '.', ''), ' ', ''), '-', '') = :nit
+                         WHERE REPLACE(REPLACE(SUBSTRING_INDEX(nit, '-', 1), '.', ''), ' ', '') = :nit
                            AND (:excluir IS NULL OR empresa_id <> :excluir)
                         """)
                 .param("nit", numero)

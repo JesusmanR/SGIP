@@ -9,8 +9,8 @@ import jakarta.validation.constraints.Size;
  * El cambio de identidad de una empresa (PUT /plataforma/empresas/{id}/identidad): el documento con que se
  * identifica (NIT o CC más el número) y su razón social, siempre con el motivo.
  *
- * El número llega como lo escribió el usuario, con o sin puntos, espacios o guiones, y el servicio lo
- * normaliza; nunca lleva dígito de verificación. El motivo es obligatorio y mide de 10 a 200 caracteres:
+ * El número llega como lo escribió el usuario, con o sin puntos o espacios, y el servicio lo normaliza;
+ * nunca lleva dígito de verificación, y un guion es un 400. El motivo es obligatorio y mide de 10 a 200 caracteres:
  * 200 es lo que cabe en {@code auditoria_plataforma.motivo}, y menos de 10 no explica nada.
  *
  * Los textos se recortan antes de validar, de modo que diez espacios no cuentan como un motivo.

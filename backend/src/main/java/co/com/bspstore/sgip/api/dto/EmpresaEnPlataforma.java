@@ -12,7 +12,7 @@ import java.time.LocalDateTime;
  * administrador gobierna.
  *
  * {@code tipoDocumento} es NIT o CC, y {@code nit} es el número tal como está guardado: las semillas
- * anteriores a la V48 pueden llevar guion.
+ * anteriores a la V48 pueden llevar su dígito de verificación (NNNNNNNNN-D).
  *
  * Lo que no trae, y no por olvido: nada operativo. Ni catálogo, ni
  * ventas, ni inventario, ni los correos de los usuarios del comercio. La
