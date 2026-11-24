@@ -569,6 +569,28 @@ describe('importación de lista de precios', () => {
       expect(await screen.findByRole('alert')).toHaveTextContent('El proveedor no existe.')
     })
 
+    it('si el proveedor no existe (404), la indicación no pide reintentar', async () => {
+      api.descargarPlantilla.mockRejectedValue(Object.assign(new Error('El proveedor no existe.'), { estado: 404 }))
+      montar()
+      await teclado.selectOptions(await screen.findByLabelText(/proveedor/i), '1')
+      await teclado.click(screen.getByRole('button', { name: /descargar plantilla con mis productos/i }))
+      const aviso = await screen.findByRole('alert')
+      expect(aviso).toHaveTextContent('Elige otro proveedor o recarga la página.')
+      expect(aviso).not.toHaveTextContent('Vuelve a intentarlo')
+    })
+
+    it('un doble clic seguido pide la plantilla una sola vez', async () => {
+      let terminar
+      api.descargarPlantilla.mockReturnValue(new Promise((r) => { terminar = r }))
+      montar()
+      await teclado.selectOptions(await screen.findByLabelText(/proveedor/i), '1')
+      const boton = screen.getByRole('button', { name: /descargar plantilla con mis productos/i })
+      fireEvent.click(boton)
+      fireEvent.click(boton)
+      expect(api.descargarPlantilla).toHaveBeenCalledTimes(1)
+      terminar()
+    })
+
     it('no se ofrece para «Sin proveedor», que no tiene plantilla', async () => {
       montar()
       await teclado.selectOptions(await screen.findByLabelText(/proveedor/i), '9')

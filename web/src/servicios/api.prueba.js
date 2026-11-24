@@ -320,7 +320,29 @@ describe('descarga de la plantilla de precios', () => {
     expect(enlaces).toHaveLength(1)
     expect(enlaces[0].download).toBe('plantilla-precios-mayorista-tech.xlsx')
     expect(enlaces[0].click).toHaveBeenCalledTimes(1)
-    expect(global.URL.revokeObjectURL).toHaveBeenCalledWith('blob:plantilla')
+    // Se libera después del clic: en Safari y navegadores viejos, revocar de inmediato corta la descarga.
+    expect(global.URL.revokeObjectURL).not.toHaveBeenCalled()
+    await vi.waitFor(() => expect(global.URL.revokeObjectURL).toHaveBeenCalledWith('blob:plantilla'))
+  })
+
+  it('acepta el nombre sin comillas', async () => {
+    const enlaces = conBinario('attachment; filename=plantilla.xlsx')
+    await api.descargarPlantilla(7)
+    expect(enlaces[0].download).toBe('plantilla.xlsx')
+  })
+
+  it('un filename* mal codificado no lanza y la descarga sigue', async () => {
+    const enlaces = conBinario("attachment; filename*=UTF-8''%E0%A4%A")
+    await expect(api.descargarPlantilla(7)).resolves.toBeUndefined()
+    expect(enlaces[0].click).toHaveBeenCalledTimes(1)
+    expect(enlaces[0].download).toMatch(/\.xlsx$|%E0%A4%A$/)
+    expect(enlaces[0].download).not.toBe('')
+  })
+
+  it('un 500 con JSON sin detail da el mensaje genérico', async () => {
+    global.fetch.mockResolvedValue({ ok: false, status: 500, json: async () => ({ title: 'Error' }) })
+    await expect(api.descargarPlantilla(7)).rejects.toMatchObject({
+      estado: 500, message: 'No se pudo descargar la plantilla.' })
   })
 
   it('sin Content-Disposition usa el nombre de respaldo', async () => {
