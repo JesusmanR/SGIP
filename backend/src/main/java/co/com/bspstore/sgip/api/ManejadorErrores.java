@@ -94,6 +94,7 @@ public class ManejadorErrores {
      */
     public static final URI TIPO_NIT_REPETIDO = URI.create("urn:sgip:nit-repetido");
     public static final URI TIPO_CORREO_REPETIDO = URI.create("urn:sgip:correo-repetido");
+    public static final URI TIPO_CAMPO_NO_PERMITIDO = URI.create("urn:sgip:campo-no-permitido");
     public static final URI TIPO_DOCUMENTO_EMPRESA_INVALIDO =
             URI.create("urn:sgip:empresa:documento-invalido");
     public static final URI TIPO_CLAVE_ACTUAL_INCORRECTA = URI.create("urn:sgip:clave-actual-incorrecta");
@@ -285,6 +286,7 @@ public class ManejadorErrores {
         // 400: el cuerpo trae un campo que esta operación no acepta (por ejemplo el NIT en la edición de
         // los datos de contacto). El mensaje lo arma la excepción, que limita lo que cita del cliente.
         ProblemDetail p = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
+        p.setType(TIPO_CAMPO_NO_PERMITIDO);
         p.setTitle("Campo no permitido");
         p.setDetail(e.getMessage());
         return p;

@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonAnySetter;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.Size;
 
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -50,8 +51,10 @@ public record SolicitudDatosEmpresa(
         ciudad = limpio(ciudad);
         telefono = limpio(telefono);
         correoContacto = limpio(correoContacto);
+        // No Map.copyOf: un campo desconocido puede traer valor null ({"nit": null}) y copyOf lo rechaza con
+        // un NPE, que llegaba al cliente como el «Cuerpo no válido» genérico sin nombrar el campo.
         camposDesconocidos = camposDesconocidos == null
-                ? Map.of() : Map.copyOf(new LinkedHashMap<>(camposDesconocidos));
+                ? Map.of() : Collections.unmodifiableMap(new LinkedHashMap<>(camposDesconocidos));
     }
 
     public SolicitudDatosEmpresa(String nombreComercial, String direccion, String ciudad,

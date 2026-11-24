@@ -136,7 +136,7 @@ public class ServicioPlataforma {
 
         if (plataforma.existeNit(nit)) {
             throw new NitRepetidoException(
-                    "Ya hay una empresa registrada con la identificación tributaria " + nit + ".");
+                    "Ya existe una empresa con el número de documento " + nit + ".");
         }
         if (usuarios.existsByCorreo(correoAdmin)) {
             throw new CorreoRepetidoException(
@@ -219,14 +219,17 @@ public class ServicioPlataforma {
      * bitácora, y la respuesta es la misma 200.
      *
      * «Cambió el número» se mide sobre el número normalizado, no sobre el texto: la semilla
-     * {@code 900000000-0} y un {@code 9000000000} son el mismo número, y una edición que solo toca la razón
-     * social no reescribe la columna del documento ni dice que lo cambió. Por la misma razón el choque con
-     * otra empresa (409) excluye a la que se edita: cambiar solo la razón social no puede chocar consigo
-     * misma.
+     * {@code 900000000-0} y un {@code 900000000} son el mismo número (se descarta el sufijo del dígito de
+     * verificación), y una edición que solo toca la razón social no reescribe la columna del documento ni
+     * dice que lo cambió. El choque con otra empresa (409) solo se pregunta si el número cambia, y excluye
+     * a la que se edita: cambiar solo la razón social no puede dar un 409 falso. Si cambia el tipo, la
+     * columna se escribe con el número normalizado y sin el sufijo viejo.
      *
      * El orden de los errores es 404 (la empresa), luego 400 (el documento) y luego 409. La fila se lee con
-     * bloqueo, para que dos cambios simultáneos no anoten el mismo valor anterior. Vacío si la empresa no
-     * existe, para que el controlador responda 404.
+     * bloqueo, para que dos cambios simultáneos de la misma empresa no anoten el mismo valor anterior. Dos
+     * cambios al MISMO número en empresas distintas sí pueden cruzarse: solo actúa el super administrador,
+     * y la UNIQUE de {@code nit} atrapa al perdedor con un 409 genérico. Vacío si la empresa no existe, para
+     * que el controlador responda 404.
      */
     @Transactional
     public Optional<EmpresaEnPlataforma> cambiarIdentidad(Integer empresaId, SolicitudIdentidad solicitud) {
@@ -236,20 +239,20 @@ public class ServicioPlataforma {
         }
         IdentidadDeEmpresa antes = actual.get();
         String numero = DocumentoEmpresa.normalizar(solicitud.numero());
-        if (plataforma.existeNit(numero, empresaId)) {
-            throw new NitRepetidoException(
-                    "Ya hay otra empresa registrada con la identificación tributaria " + numero + ".");
-        }
 
         boolean cambiaElTipo = antes.tipoDocumento() != solicitud.tipoDocumento();
         boolean cambiaElNumero = !DocumentoEmpresa.normalizadoOTalCual(antes.nit()).equals(numero);
+        if (cambiaElNumero && plataforma.existeNit(numero, empresaId)) {
+            throw new NitRepetidoException(
+                    "Ya existe otra empresa con el número de documento " + numero + ".");
+        }
         boolean cambiaLaRazon = !antes.razonSocial().equals(solicitud.razonSocial());
         if (!cambiaElTipo && !cambiaElNumero && !cambiaLaRazon) {
             return plataforma.buscar(empresaId);
         }
 
         plataforma.cambiarIdentidad(empresaId, solicitud.tipoDocumento(),
-                cambiaElNumero ? numero : antes.nit(), solicitud.razonSocial());
+                cambiaElNumero || cambiaElTipo ? numero : antes.nit(), solicitud.razonSocial());
 
         // La referencia es el NIT que tenía antes de este cambio, igual en las tres filas: es lo que
         // alguien busca en la bitácora para encontrar «qué le pasó a esta empresa».

@@ -6,6 +6,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import org.hibernate.annotations.DynamicUpdate;
 
 /**
  * La empresa, vista desde dentro de ella.
@@ -21,10 +22,16 @@ import jakarta.persistence.Table;
  * cambio de identidad que la plataforma hizo entremedias. Esos tres los cambia solo
  * {@code RepositorioPlataforma#cambiarIdentidad}, con motivo y bitácora.
  *
+ * {@code @DynamicUpdate}: el UPDATE lleva solo las columnas que cambiaron. El logo se sube tras normalizar
+ * la imagen, que tarda, y el contacto se edita desde otra petición; por omisión Hibernate escribe todas las
+ * columnas de la fila que leyó y cada una devolvería a la otra a su valor viejo (el mismo caso que
+ * {@link Usuario}).
+ *
  * El estado de la suscripción y la fecha de alta los gobierna el módulo de plataforma, y traerlos aquí
  * invitaría a que una pantalla de empresa los modificara.
  */
 @Entity
+@DynamicUpdate
 @Table(name = "empresas")
 public class Empresa {
 

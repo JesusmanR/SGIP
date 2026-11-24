@@ -38,7 +38,7 @@ public record SolicitudAltaEmpresa(
          * comprobar que no esté repetido y de guardarlo.
          */
         @NotBlank(message = "La identificación tributaria es obligatoria")
-        @Size(max = 20, message = "La identificación tributaria no puede pasar de 20 caracteres")
+        @Size(max = 40, message = "La identificación tributaria no puede pasar de 40 caracteres")
         String nit,
 
         @NotBlank(message = "La razón social es obligatoria")
