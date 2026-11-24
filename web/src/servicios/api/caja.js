@@ -70,6 +70,9 @@ export const clientePorIdentificacion = (tipo, identificacion) =>
   olvidandoElNoEncontrado(pedir(
     `/caja/clientes?tipo=${encodeURIComponent(tipo)}&identificacion=${encodeURIComponent(identificacion)}`,
   ))
+/** Una página de la lista de clientes de la empresa (el servidor pone el tamaño: 20 por omisión). */
+export const listarClientes = ({ buscar = '', pagina = 0 } = {}) =>
+  pedir(`/caja/clientes/lista?buscar=${encodeURIComponent(buscar)}&pagina=${pagina}`)
 export const crearCliente = (datos) => pedir('/caja/clientes', { method: 'POST', body: datos })
 export const actualizarCliente = (id, datos) =>
   pedir(`/caja/clientes/${id}`, { method: 'PUT', body: datos })
