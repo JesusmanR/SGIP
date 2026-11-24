@@ -9,6 +9,7 @@ import co.com.bspstore.sgip.datos.ProductoImagenRepositorio;
 import co.com.bspstore.sgip.datos.RepositorioPlataforma;
 import co.com.bspstore.sgip.logica.AlmacenArchivos;
 import co.com.bspstore.sgip.logica.ServicioImagenes;
+import co.com.bspstore.sgip.logica.GeneradorPlantillaPrecios;
 import co.com.bspstore.sgip.logica.ServicioImportacion;
 import co.com.bspstore.sgip.logica.ServicioProducto;
 import co.com.bspstore.sgip.logica.ServicioSesion;
@@ -62,6 +63,7 @@ class ErroresDeLaApiTest {
 
     @MockitoBean ServicioProducto productos;
     @MockitoBean ServicioImportacion importaciones;
+    @MockitoBean GeneradorPlantillaPrecios plantillas;
     @MockitoBean ServicioImagenes imagenes;
     @MockitoBean ProductoImagenRepositorio repositorioImagenes;
     @MockitoBean AlmacenArchivos almacen;

@@ -7,6 +7,7 @@ import co.com.bspstore.sgip.logica.ProductoDePlantilla;
 import co.com.bspstore.sgip.logica.ProductoDelCatalogo;
 import co.com.bspstore.sgip.logica.ProveedorDePlantilla;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowCallbackHandler;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
@@ -97,15 +98,46 @@ public class RepositorioImportacion {
         return indice;
     }
 
-    /** Esqueleto: lo escribe el paso verde. */
+    /**
+     * El nombre y el NIT de un proveedor de esta empresa, para la plantilla de precios.
+     *
+     * Una consulta aparte y terminada antes de recorrer los productos: un resultado que se
+     * está leyendo con cursor ocupa la conexión, y nada más puede pasar por ella mientras tanto.
+     */
     public Optional<ProveedorDePlantilla> proveedorParaPlantilla(Integer empresaId, Integer proveedorId) {
-        throw new UnsupportedOperationException("pendiente");
+        return jdbc.sql("""
+                        SELECT razon_social AS nombre, nit
+                          FROM proveedores
+                         WHERE empresa_id = :empresa AND proveedor_id = :proveedor
+                        """)
+                .param("empresa", empresaId)
+                .param("proveedor", proveedorId)
+                .query(ProveedorDePlantilla.class)
+                .optional();
     }
 
-    /** Esqueleto: lo escribe el paso verde. */
+    /**
+     * Entrega, de una en una y por código, las filas de la plantilla: los productos activos del
+     * proveedor con su costo actual.
+     *
+     * Es un cursor y no una lista a propósito. Con el tope de veinte mil filas de una carga,
+     * juntar el catálogo del proveedor para escribirlo después sería memoria que crece con el
+     * volumen. El tamaño de lote de `Integer.MIN_VALUE` es la forma que tiene el conector de
+     * MySQL de pedir el resultado fila a fila en vez de traerlo entero al cliente.
+     */
     public void recorrerProductosActivosDelProveedor(Integer empresaId, Integer proveedorId,
                                                      Consumer<ProductoDePlantilla> alVer) {
-        throw new UnsupportedOperationException("pendiente");
+        jdbc.sql("""
+                        SELECT codigo, nombre, costo
+                          FROM productos
+                         WHERE empresa_id = :empresa AND proveedor_id = :proveedor AND activo = TRUE
+                         ORDER BY codigo
+                        """)
+                .withFetchSize(Integer.MIN_VALUE)
+                .param("empresa", empresaId)
+                .param("proveedor", proveedorId)
+                .query((RowCallbackHandler) fila -> alVer.accept(new ProductoDePlantilla(
+                        fila.getString("codigo"), fila.getString("nombre"), fila.getBigDecimal("costo"))));
     }
 
     /** Cómo se cotejan las referencias: sin espacios y en mayúsculas. */

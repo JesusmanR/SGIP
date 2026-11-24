@@ -20,8 +20,11 @@ import java.util.Locale;
 /**
  * Lee listas de precios en hoja de cálculo: .xlsx y .csv (RF-24).
  *
- * Es la única clase del backend que importa Apache POI. Esa acotación es
- * la razón de ser de {@link LectorListaPrecios} (ADR-0007).
+ * Apache POI solo se importa en las clases que leen y escriben hojas de
+ * cálculo: esta, que lee, y {@link GeneradorPlantillaPrecios}, que escribe la
+ * plantilla de precios. Esa acotación es la razón de ser de
+ * {@link LectorListaPrecios} (ADR-0007): el resto del backend no sabe qué
+ * biblioteca hay detrás de una hoja.
  *
  * ## Cómo encuentra las columnas
  *
