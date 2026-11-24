@@ -147,7 +147,7 @@ function DatosDeContacto({ empresa, puedeEditar, alGuardar, alFallar }) {
   return (
     <section className="tarjeta empresa-contacto" aria-labelledby="t-contacto">
       <h2 id="t-contacto">Datos de contacto</h2>
-      <p className="sub-linea">Aparecen en el encabezado del recibo de cada venta.</p>
+      <p className="sub-linea">El nombre comercial, la dirección y el teléfono salen en el encabezado del recibo.</p>
       <form onSubmit={guardar} noValidate className="empresa-contacto-formulario">
         {CONTACTO.map(([campo, etiqueta, max]) => (
           <Campo key={campo} etiqueta={etiqueta} motivo={motivos[campo]}>
@@ -238,7 +238,7 @@ export default function Empresa() {
             <div className="empresa-datos">
               <p className="titulo-empresa">{empresa.razonSocial}</p>
               <p className="sub-linea">{empresa.tipoDocumento ?? 'NIT'} {empresa.nit}</p>
-              <p className="sub-linea">Para cambiarlos, contacta a soporte</p>
+              {esAdmin && <p className="sub-linea">Para cambiarlos, contacta a soporte</p>}
               <p className="sub-linea">
                 {esAdmin
                   ? 'Toca el logo para subir o reemplazarlo. JPEG, PNG o WebP; se ajusta solo, sin recortarlo ni deformarlo.'

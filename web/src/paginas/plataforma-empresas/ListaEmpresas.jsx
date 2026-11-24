@@ -15,7 +15,7 @@ const COLUMNAS = [
     clave: 'razonSocial', titulo: 'Empresa', principal: true,
     render: (e) => <Link to={`/plataforma/empresas/${e.empresaId}`}>{e.razonSocial}</Link>,
   },
-  { clave: 'nit', titulo: 'NIT' },
+  { clave: 'nit', titulo: 'Documento', render: (e) => `${e.tipoDocumento ?? 'NIT'} ${e.nit}` },
   { clave: 'ciudad', titulo: 'Ciudad', render: (e) => e.ciudad || '—' },
   { clave: 'usuarios', titulo: 'Usuarios', numerica: true, render: (e) => NUMERO.format(e.usuarios) },
   { clave: 'estado', titulo: 'Estado', render: (e) => <EstadoEmpresa estado={e.estado} /> },

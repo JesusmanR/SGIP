@@ -33,7 +33,8 @@ function motivos(d) {
 export default function IdentidadEmpresa({ empresa, alExito }) {
   const [datos, setDatos] = useState({
     tipoDocumento: empresa.tipoDocumento ?? 'NIT',
-    numero: empresa.nit ?? '',
+    // Las empresas anteriores a la V48 guardan el dígito de verificación («NNN-D»): el servidor rechaza el guion.
+    numero: (empresa.nit ?? '').split('-')[0],
     razonSocial: empresa.razonSocial ?? '',
     motivo: '',
   })
@@ -80,6 +81,8 @@ export default function IdentidadEmpresa({ empresa, alExito }) {
         razonSocial: datos.razonSocial.trim(),
         motivo: datos.motivo.trim(),
       })
+      setDatos((d) => ({ ...d, motivo: '' }))
+      setIntentos(0)
       alExito('Identidad actualizada.')
     } catch (err) {
       const campo = [400, 409].includes(err.estado) ? (CAMPO_POR_TIPO[err.tipo] ?? null) : null

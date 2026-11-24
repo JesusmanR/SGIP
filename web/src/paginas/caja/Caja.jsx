@@ -222,7 +222,7 @@ function Venta({ turno }) {
     }
     if (resultado.venta) {
       setRecibo(armarRecibo({
-        empresa: empresa.datos ?? { razonSocial: '' }, venta: resultado.venta, lineas, pagos, cliente,
+        empresa: empresa.datos ?? {}, venta: resultado.venta, lineas, pagos, cliente,
         cajero: sesion?.nombre ?? turno.cajero, domicilio,
       }))
       setDialogo(null)
