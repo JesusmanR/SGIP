@@ -102,7 +102,7 @@ describe('el logo', () => {
     await screen.findByText('Comercial Andina S.A.S.')
     await teclado.upload(document.querySelector('input[type="file"]'), logo())
     await waitFor(() => expect(api.subirLogo).toHaveBeenCalled())
-    expect(await screen.findByText(/logo actualizado/i)).toBeInTheDocument()
+    expect(await screen.findByText(/logo actualizado/i)).toHaveAttribute('role', 'status')
   })
 
   it('si la subida falla muestra el motivo y no dice que salió bien', async () => {
@@ -298,5 +298,12 @@ describe('datos de contacto editables', () => {
     expect(screen.getByText('3001112233')).toBeInTheDocument()
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Guardar cambios' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/contacta a soporte/i)).not.toBeInTheDocument()
+  })
+
+  it('el texto de ayuda solo promete lo que el recibo imprime', async () => {
+    montar()
+    await screen.findByText('Comercial Andina S.A.S.')
+    expect(screen.getByText('El nombre comercial, la dirección y el teléfono salen en el encabezado del recibo.')).toBeInTheDocument()
   })
 })

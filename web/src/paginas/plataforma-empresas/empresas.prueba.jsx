@@ -53,6 +53,17 @@ beforeEach(() => {
   apiPlataformaEmpresas.listarUsuarios.mockResolvedValue([])
 })
 
+describe('lista de empresas: documento', () => {
+  it('la columna se llama Documento y rotula NIT o CC', async () => {
+    apiPlataformaEmpresas.listar.mockResolvedValue([BASE, { ...PRUEBA, tipoDocumento: 'CC', nit: '1020304050' }])
+    montar()
+    const tabla = await screen.findByRole('table', { name: /empresas/i })
+    expect(within(tabla).getByRole('columnheader', { name: 'Documento' })).toBeInTheDocument()
+    expect(within(tabla).getByText('NIT 900123')).toBeInTheDocument()
+    expect(within(tabla).getByText('CC 1020304050')).toBeInTheDocument()
+  })
+})
+
 describe('lista de empresas', () => {
   it('muestra carga, una fila por empresa con el estado en texto y un resumen con lo que da la lista', async () => {
     apiPlataformaEmpresas.listar.mockResolvedValue([BASE, PRUEBA, APAGADA])
@@ -663,6 +674,46 @@ describe('identidad de la empresa (SUPER_ADMIN)', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Cambiar identidad' }))
     expect(await screen.findByText('Ya hay una empresa con la identificación 900555.')).toBeInTheDocument()
     expect(screen.getByLabelText('Número')).toHaveAttribute('aria-invalid', 'true')
+  })
+
+  it('una empresa con dígito de verificación guardado cambia solo la razón social sin mandar el guion', async () => {
+    apiPlataformaEmpresas.ver.mockResolvedValue({ ...BASE, nit: '900123-4' })
+    apiPlataformaEmpresas.cambiarIdentidad.mockResolvedValue(BASE)
+    montar('/plataforma/empresas/4')
+    await screen.findByRole('heading', { level: 2, name: 'Identidad' })
+    expect(screen.getByLabelText('Número')).toHaveValue('900123')
+    const razon = screen.getByLabelText('Razón social')
+    await userEvent.clear(razon)
+    await userEvent.type(razon, 'Ferretería Norte S.A.S.')
+    await userEvent.type(screen.getByLabelText('Motivo'), 'Corrección de la razón social')
+    await userEvent.click(screen.getByRole('button', { name: 'Cambiar identidad' }))
+    await waitFor(() => expect(apiPlataformaEmpresas.cambiarIdentidad).toHaveBeenCalledTimes(1))
+    expect(apiPlataformaEmpresas.cambiarIdentidad).toHaveBeenCalledWith('4', {
+      tipoDocumento: 'NIT', numero: '900123', razonSocial: 'Ferretería Norte S.A.S.',
+      motivo: 'Corrección de la razón social',
+    })
+  })
+
+  it('un 404 va en el aviso de arriba y no marca el número', async () => {
+    apiPlataformaEmpresas.ver.mockResolvedValue(BASE)
+    apiPlataformaEmpresas.cambiarIdentidad.mockRejectedValue(new ErrorApi(404, 'La empresa no existe.'))
+    montar('/plataforma/empresas/4')
+    await screen.findByRole('heading', { level: 2, name: 'Identidad' })
+    await escribir()
+    await userEvent.click(screen.getByRole('button', { name: 'Cambiar identidad' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('La empresa no existe.')
+    expect(screen.getByLabelText('Número')).not.toHaveAttribute('aria-invalid', 'true')
+  })
+
+  it('tras guardar, el motivo se vacía', async () => {
+    apiPlataformaEmpresas.ver.mockResolvedValue(BASE)
+    apiPlataformaEmpresas.cambiarIdentidad.mockResolvedValue(BASE)
+    montar('/plataforma/empresas/4')
+    await screen.findByRole('heading', { level: 2, name: 'Identidad' })
+    await escribir('900555')
+    await userEvent.click(screen.getByRole('button', { name: 'Cambiar identidad' }))
+    await screen.findByText('Identidad actualizada.')
+    expect(screen.getByLabelText('Motivo')).toHaveValue('')
   })
 
   it('el alta acepta CC, avisa que no lleva dígito de verificación y manda el tipo', async () => {
