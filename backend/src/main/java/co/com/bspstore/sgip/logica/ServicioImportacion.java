@@ -276,7 +276,7 @@ public class ServicioImportacion {
             Integer repetidaEn = vistas.putIfAbsent(referencia, fila.numeroFila());
             if (repetidaEn != null) {
                 juzgadas.add(rechazo(fila, null, null, "REFERENCIA_REPETIDA",
-                        "La referencia " + fila.referencia() + " ya venía en la fila "
+                        "La referencia " + recortar(fila.referencia()) + " ya venía en la fila "
                                 + repetidaEn + " de este archivo."));
                 continue;
             }
@@ -284,7 +284,7 @@ public class ServicioImportacion {
             ProductoDelCatalogo producto = catalogo.get(referencia);
             if (producto == null) {
                 juzgadas.add(rechazo(fila, null, null, "REFERENCIA_INEXISTENTE",
-                        "La referencia " + fila.referencia()
+                        "La referencia " + recortar(fila.referencia())
                                 + " no existe en el catálogo de esta empresa."));
                 continue;
             }

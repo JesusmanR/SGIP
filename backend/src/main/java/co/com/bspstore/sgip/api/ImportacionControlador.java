@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.io.OutputStream;
 
 /**
  * Importación de listas de precios (RF-24, RF-26, RF-27).
@@ -81,10 +82,54 @@ public class ImportacionControlador {
         Integer empresa = ContextoEmpresa.empresaActual();
         String nombre = plantillas.nombreDeArchivo(empresa, proveedorId);
 
-        respuesta.setContentType(XLSX);
-        respuesta.setHeader("Content-Disposition", "attachment; filename=\"" + nombre + "\"");
-        respuesta.setHeader("Cache-Control", "no-store");
-        plantillas.escribir(empresa, proveedorId, respuesta.getOutputStream());
+        // Las cabeceras de descarga se ponen con el primer byte y no antes: si la lectura de la base
+        // falla a medias, el manejador de errores contesta su problema normal y no un «adjunto». No se
+        // usa `reset()` para deshacerlas: borraría también las cabeceras de seguridad.
+        SalidaDeDescarga salida = new SalidaDeDescarga(respuesta, nombre);
+        plantillas.escribir(empresa, proveedorId, salida);
+        salida.aplicarCabeceras();
+    }
+
+    /**
+     * La salida de la respuesta, que fija las cabeceras de descarga al primer `write` o `flush`.
+     * No cierra la respuesta: eso es del contenedor.
+     */
+    private static final class SalidaDeDescarga extends OutputStream {
+        private final HttpServletResponse respuesta;
+        private final String nombre;
+        private OutputStream destino;
+
+        SalidaDeDescarga(HttpServletResponse respuesta, String nombre) {
+            this.respuesta = respuesta;
+            this.nombre = nombre;
+        }
+
+        void aplicarCabeceras() throws IOException {
+            if (destino == null) {
+                respuesta.setContentType(XLSX);
+                respuesta.setHeader("Content-Disposition", "attachment; filename=\"" + nombre + "\"");
+                respuesta.setHeader("Cache-Control", "no-store");
+                destino = respuesta.getOutputStream();
+            }
+        }
+
+        @Override
+        public void write(int b) throws IOException {
+            aplicarCabeceras();
+            destino.write(b);
+        }
+
+        @Override
+        public void write(byte[] b, int desde, int largo) throws IOException {
+            aplicarCabeceras();
+            destino.write(b, desde, largo);
+        }
+
+        @Override
+        public void flush() throws IOException {
+            aplicarCabeceras();
+            destino.flush();
+        }
     }
 
     /** El resumen de una carga con su muestra para la vista previa. */
