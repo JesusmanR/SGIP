@@ -291,6 +291,62 @@ class InformeInventarioConBaseTest {
         assertEquals(3, informe.pagina(null, "-" + empresa.marca, 0, 50).totalFilas(), "también por código");
     }
 
+    // ------------------------------------------------- el precio de los totales y el de la vista
+
+    /**
+     * Los totales y el Excel calculan el precio con v_regla_margen y no con v_precios_producto (que con 10 000
+     * productos cuesta unos 4,5 s: ver el repositorio). Esta prueba es la que impide que las dos rutas se
+     * separen: con una regla propia en porcentaje, una de precio fijo y una de categoría «sobre precio», el
+     * valor a precio de los totales y el del Excel salen igual que el que suma la vista, y el precio de cada
+     * fila de la página (que sí viene de la vista) es el que usan.
+     */
+    @Test
+    void elValorAPrecioCoincideConLaVista() throws IOException {
+        conPrecio("Porcentaje", 1000, 3);                       // 1200
+        Integer fijo = conPrecio("Fijo", 1000, 2);              // precio fijo 1750
+        jdbc.sql("""
+                UPDATE reglas_margen SET factor = NULL, precio_fijo = 1750
+                 WHERE empresa_id = :e AND producto_id = :p AND forma_pago = 'CONTADO'
+                """).param("e", empresa.empresaId).param("p", fijo).update();
+        Integer otraCategoria = categorias.save(new Categoria(empresa.empresaId, "Sobre precio", null)).getId();
+        jdbc.sql("""
+                INSERT INTO reglas_margen (empresa_id, categoria_id, forma_pago, forma_calculo, factor, vigente_desde)
+                VALUES (:e, :c, 'CONTADO', 'SOBRE_PRECIO', 1.2500, DATE_SUB(CURDATE(), INTERVAL 1 DAY))
+                """).param("e", empresa.empresaId).param("c", otraCategoria).update();
+        sinPrecio(empresa, otraCategoria, "Por categoría", 1500, 4);   // 1500 / 0,75 = 2000
+        Integer inactivo = conPrecio("Retirado", 1000, 5);
+        desactivar(inactivo);
+        sinPrecio("Sin regla", 1000, 6);
+
+        InformeInventario resultado = todo();
+        BigDecimal deLaVista = jdbc.sql("""
+                SELECT SUM(existencia * precio_contado) FROM v_precios_producto
+                 WHERE empresa_id = :e AND existencia > 0 AND precio_contado IS NOT NULL
+                """).param("e", empresa.empresaId).query(BigDecimal.class).single();
+
+        igual("15100", resultado.totales().valorAPrecio(), "3 x 1200 + 2 x 1750 + 4 x 2000");
+        igual(deLaVista.toPlainString(), resultado.totales().valorAPrecio(), "lo que suma la vista");
+        assertEquals(2, resultado.totales().sinPrecio(), "el inactivo y el que no tiene regla");
+        BigDecimal sumaDeLasFilas = resultado.filas().stream().map(InformeInventario.Fila::valorAPrecio)
+                .filter(java.util.Objects::nonNull).reduce(BigDecimal.ZERO, BigDecimal::add);
+        igual("15100", sumaDeLasFilas, "los precios de las filas, que salen de la vista");
+
+        ByteArrayOutputStream salida = new ByteArrayOutputStream();
+        informe.escribirExcel(null, null, salida);
+        double sumaDelExcel = 0;
+        try (XSSFWorkbook libro = new XSSFWorkbook(new ByteArrayInputStream(salida.toByteArray()))) {
+            boolean enTabla = false;
+            for (Row fila : libro.getSheetAt(0)) {
+                if (enTabla && fila.getCell(7) != null && fila.getCell(7).getCellType() == CellType.NUMERIC) {
+                    sumaDelExcel += fila.getCell(7).getNumericCellValue();
+                } else if ("Código".equals(texto(fila.getCell(0)))) {
+                    enTabla = true;
+                }
+            }
+        }
+        assertEquals(15100, sumaDelExcel, 0.001, "los precios del Excel, que salen de v_regla_margen");
+    }
+
     // ---------------------------------------------------------------------------- las consultas
 
     @Test
