@@ -44,6 +44,7 @@ import co.com.bspstore.sgip.logica.ReferenciaAjenaException;
 import co.com.bspstore.sgip.logica.RolNoAsignableException;
 import co.com.bspstore.sgip.logica.UltimoAdministradorException;
 import co.com.bspstore.sgip.logica.UltimoMedioActivoException;
+import co.com.bspstore.sgip.logica.informes.PeriodoInvalidoException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.Ordered;
@@ -739,6 +740,16 @@ public class ManejadorErrores {
         // validación declarativa no lo alcanza.
         ProblemDetail p = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
         p.setTitle("Filtro no válido");
+        p.setDetail(e.getMessage());
+        return p;
+    }
+
+    @ExceptionHandler(PeriodoInvalidoException.class)
+    public ProblemDetail periodoInvalido(PeriodoInvalidoException e) {
+        // Las fechas de un informe llegan por la dirección, no por el cuerpo. El texto del mensaje ya
+        // está escrito para quien usa la pantalla.
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
+        p.setTitle("Período no válido");
         p.setDetail(e.getMessage());
         return p;
     }

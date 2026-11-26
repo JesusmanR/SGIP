@@ -173,8 +173,8 @@ class InformesRolesTest {
     @ParameterizedTest(name = "{0}")
     @MethodSource("rutas")
     void unaEmpresaEnModoConsultaDejaPasarAlAdministrador(String ruta) throws Exception {
-        // El filtro de la empresa en consulta solo bloquea escrituras: ver y descargar informes es leer.
-        when(plataforma.estadoDe(4)).thenReturn(Optional.of(EstadoEmpresa.CONSULTA));
+        // Consulta es DESACTIVADA o PRUEBA vencida; el filtro solo bloquea escrituras: ver y descargar informes es leer.
+        when(plataforma.estadoDe(4)).thenReturn(Optional.of(EstadoEmpresa.DESACTIVADA));
 
         mvc.perform(get(ruta).with(como("ADMINISTRADOR"))).andExpect(status().isOk());
     }
