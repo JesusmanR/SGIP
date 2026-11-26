@@ -51,6 +51,7 @@ nueva. La decisión original se deja tal como se escribió.
 | 0033 | El saldo a favor es del cliente identificado y no vence | vigente |
 | 0034 | El marco de la app pasa al diseño nuevo | vigente |
 | 0035 | El PDF del recibo se genera con Apache PDFBox | vigente |
+| 0036 | El correo saliente tiene dos modos (registro y smtp) y se envía fuera de la petición | vigente |
 
 ## Las cuatro que conviene leer antes de escribir código
 
