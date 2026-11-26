@@ -52,7 +52,12 @@ public class ServicioRecuperacion {
         return normalizado.length() <= CORREO_MAXIMO ? normalizado : normalizado.substring(0, CORREO_MAXIMO);
     }
 
-    private static String recortarOrigen(String origen) {
+    /**
+     * El origen tal como se guarda en la bitácora y se cuenta para el tope por IP: a lo sumo 60
+     * caracteres, y «(desconocido)» si no llega. Es pública para que la confirmación (tarea 4)
+     * registre y cuente con el mismo valor.
+     */
+    public static String recortarOrigen(String origen) {
         if (origen == null || origen.isBlank()) {
             return ORIGEN_DESCONOCIDO;
         }

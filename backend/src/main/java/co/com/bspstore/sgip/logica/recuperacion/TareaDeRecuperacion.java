@@ -13,6 +13,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -20,6 +21,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.util.Locale;
 
 /**
  * La parte de la solicitud del código que no debe hacer esperar a quien la pide (RF-65, §5.3 de
@@ -33,6 +35,14 @@ import java.time.LocalDateTime;
  * Con las dos anotaciones en el mismo método, Spring pone el aviso asíncrono por fuera del
  * transaccional: la transacción se abre en el hilo del ejecutor, y el hilo de la petición no
  * toca la base ni abre una conexión. Una prueba lo fija ({@code TareaDeRecuperacionConBaseTest}).
+ *
+ * ## Solicitudes simultáneas del mismo correo
+ *
+ * Se ordenan con {@code SELECT ... FOR UPDATE} sobre la fila del usuario, después de
+ * encontrarlo y antes de contar los topes por correo. La transacción va en READ COMMITTED: con
+ * el nivel por omisión de MySQL (REPEATABLE READ) la lectura de los conteos usaría la foto que
+ * se tomó en la primera consulta, antes de esperar el turno, y no vería el código que la otra
+ * solicitud acaba de confirmar; la segunda pasaría el tope de tres.
  *
  * ## Una sola fila de bitácora por solicitud
  *
@@ -88,7 +98,7 @@ public class TareaDeRecuperacion {
      *                          guarda y con el que se cuenta el tope por IP
      */
     @Async("ejecutorDeCorreo")
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public void procesar(String correoNormalizado, String origen) {
         LocalDateTime ahora = Hoy.ahora(reloj);
 
@@ -110,6 +120,10 @@ public class TareaDeRecuperacion {
             return;
         }
 
+        // Dos solicitudes del mismo correo a la vez se ordenan aquí: la segunda espera a que la
+        // primera confirme y entonces ve su código, tanto al contar como al invalidar.
+        codigos.bloquearUsuario(usuario.getId());
+
         // 3. Tope por correo.
         if (codigos.contarCreadosDesde(usuario.getId(), ahora.minusMinutes(VENTANA_DE_CODIGOS_MINUTOS))
                 >= CODIGOS_POR_VENTANA) {
@@ -125,7 +139,7 @@ public class TareaDeRecuperacion {
 
         // 5. El código nuevo reemplaza a los anteriores: se invalidan antes de crearlo, porque la
         // invalidación alcanza a todo lo vigente y alcanzaría también al nuevo.
-        String codigo = String.format("%06d", ALEATORIO.nextInt(1_000_000));
+        String codigo = String.format(Locale.ROOT, "%06d", ALEATORIO.nextInt(1_000_000));
         codigos.invalidarVigentes(usuario.getId(), ahora);
         codigos.crear(usuario.getId(), Seguridad.derivar(codigo), ahora, ahora.plusMinutes(VIGENCIA_MINUTOS), origen);
 

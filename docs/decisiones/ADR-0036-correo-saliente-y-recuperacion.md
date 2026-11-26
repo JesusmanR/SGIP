@@ -77,6 +77,19 @@ servidor (un «pimienta») para que la base sola no bastara. Se descartó: es ot
 clave que guardar, rotar y proteger, y para los 15 minutos de vida de un código no
 compensa. Si esta decisión se revisa, es una decisión nueva con su ADR.
 
+**Despliegue: la IP del tope.** El tope de 10 solicitudes por hora se cuenta por
+`getRemoteAddr()`. No se debe activar `server.forward-headers-strategy` (ni confiar en
+`X-Forwarded-For`) salvo detrás de un proxy propio que **reemplace** esa cabecera con
+la dirección real del cliente. Si la aplicación acepta la cabecera tal como llega, quien
+pide códigos puede falsificarla en cada petición y saltarse el tope por IP. Sin proxy,
+la dirección es la del último salto; con un proxy sin configurar, el tope cuenta la del
+proxy (ver el §8 de la spec).
+
+**Solicitudes simultáneas.** La tarea toma la fila del usuario (`FOR UPDATE`) antes de
+contar los topes por correo, y su transacción va en `READ COMMITTED`: con el nivel por
+omisión de MySQL, la segunda solicitud leería los conteos con la foto anterior a su
+espera y no vería el código de la primera.
+
 ## Consecuencias
 
 - Una dependencia más en el `pom.xml`, y tres variables de entorno más en

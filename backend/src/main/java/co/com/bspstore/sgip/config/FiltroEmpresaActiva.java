@@ -118,9 +118,9 @@ public class FiltroEmpresaActiva extends OncePerRequestFilter {
         }
 
         if (FiltroCambioClave.esRutaDeLaCuenta(peticion)) {
-            // Cambiar la propia contraseña, salir y recuperarla son del
-            // usuario, no del negocio. Bloquearlos atraparía a quien tiene la clave inicial
-            // en una empresa desactivada: el otro filtro le exige cambiarla.
+            // Cambiar la propia contraseña, salir y recuperarla son del usuario, no del
+            // negocio. Bloquearlos atraparía a quien tiene la clave inicial en una empresa
+            // desactivada: el otro filtro le exige cambiarla.
             cadena.doFilter(peticion, respuesta);
             return;
         }

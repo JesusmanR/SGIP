@@ -120,6 +120,19 @@ public class RepositorioCodigosRecuperacion {
                 .optional();
     }
 
+    /**
+     * Toma la fila del usuario ({@code FOR UPDATE}) hasta el final de la transacción: es el
+     * turno de las solicitudes de código de un mismo usuario. Sin él, dos a la vez cuentan los
+     * códigos antes de que cualquiera escriba el suyo, ninguna invalida a la otra y el tope de
+     * tres no se respeta. Supone una transacción abierta por quien llama.
+     */
+    public void bloquearUsuario(Integer usuarioId) {
+        jdbc.sql("SELECT usuario_id FROM usuarios WHERE usuario_id = :usuario FOR UPDATE")
+                .param("usuario", usuarioId)
+                .query(Integer.class)
+                .optional();
+    }
+
     /** Suma una confirmación fallida a este código. */
     public void sumarIntento(long codigoId) {
         jdbc.sql("""

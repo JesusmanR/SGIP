@@ -95,7 +95,8 @@ public class AutenticacionControlador {
 
     /**
      * Pide el código con el que se recupera la contraseña (RF-65). Pública: quien la olvidó no
-     * tiene sesión, y si llega con un token viejo ni se mira.
+     * tiene sesión, y si llega con un token viejo no se usa: FiltroSesion lo valida, pero la ruta es
+     * pública y no depende de que valga.
      *
      * Responde siempre 200 y el mismo texto, exista el correo o no, sea válido o no. Sin
      * {@code @Valid}: rechazar un formato con un 400 diría qué se acepta. El trabajo (y todo lo que
