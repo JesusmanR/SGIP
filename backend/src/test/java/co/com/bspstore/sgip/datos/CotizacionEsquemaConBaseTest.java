@@ -136,6 +136,26 @@ class CotizacionEsquemaConBaseTest {
                 .param("e", empresa.empresaId).param("cot", cotizacionId).query(BigDecimal.class).single()));
     }
 
+    @Test
+    void laLineaRechazaMontosNegativos() {
+        Integer producto = repositorioProductos.save(new Producto(empresa.empresaId, empresa.categoriaId,
+                empresa.proveedorId, "NEG-" + empresa.marca, "NEG-" + empresa.marca, "Artículo",
+                new BigDecimal("1000.00"))).getId();
+        String insertar = """
+                INSERT INTO cotizacion_items (empresa_id, cotizacion_id, producto_id, cantidad, precio_unitario,
+                                              tarifa_iva, tratamiento_iva, subtotal, valor_iva)
+                VALUES (:e, :cot, :producto, 1, 12345, 0.19, 'GRAVADO', :subtotal, :iva)
+                """;
+
+        assertThrows(DataAccessException.class, () -> jdbc.sql(insertar).param("e", empresa.empresaId)
+                .param("cot", cotizacionId).param("producto", producto)
+                .param("subtotal", new BigDecimal("-1")).param("iva", BigDecimal.ZERO).update(), "subtotal negativo");
+        assertThrows(DataAccessException.class, () -> jdbc.sql(insertar).param("e", empresa.empresaId)
+                .param("cot", cotizacionId).param("producto", producto)
+                .param("subtotal", new BigDecimal("12345")).param("iva", new BigDecimal("-1")).update(),
+                "IVA negativo");
+    }
+
     // ------------------------------------------------------------ el consecutivo
 
     @Test

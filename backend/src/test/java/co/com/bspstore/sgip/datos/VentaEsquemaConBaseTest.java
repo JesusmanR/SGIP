@@ -131,7 +131,7 @@ class VentaEsquemaConBaseTest {
 
         assertEquals("1", jdbc.sql("SELECT siguiente FROM consecutivos WHERE empresa_id = :e AND tipo = 'VENTA'")
                 .param("e", empresa.empresaId).query(String.class).single());
-        assertEquals("enum('VENTA','DEVOLUCION','PRODUCTO_RAPIDO')", columna("consecutivos", "tipo", "column_type"));
+        assertEquals("enum('VENTA','DEVOLUCION','PRODUCTO_RAPIDO','COTIZACION')", columna("consecutivos", "tipo", "column_type"));
         assertThrows(DuplicateKeyException.class, () -> jdbc.sql("INSERT INTO consecutivos (empresa_id, tipo) VALUES (:e, 'VENTA')")
                 .param("e", empresa.empresaId).update(), "una sola fila por empresa y tipo");
         // Otro tipo de la misma empresa y el mismo tipo de otra empresa sí entran.
