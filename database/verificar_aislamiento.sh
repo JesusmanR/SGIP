@@ -539,13 +539,15 @@ else
   else
     rechaza "un renglón de cotización con el producto de otra empresa" fk_cotitems_producto_emp \
       "INSERT INTO cotizacion_items (cotizacion_id, empresa_id, producto_id, cantidad,
-                                      precio_unitario, tarifa_iva, tratamiento_iva)
-       VALUES ($COTIZA, $ID, $PROD_DE_OTRA, 1, 2500000, 0.19, 'GRAVADO');"
+                                      precio_unitario, tarifa_iva, tratamiento_iva,
+                                      subtotal, valor_iva)
+       VALUES ($COTIZA, $ID, $PROD_DE_OTRA, 1, 2500000, 0.19, 'GRAVADO', 2500000, 475000);"
 
     salida=$(ejecutar "INSERT INTO cotizacion_items (cotizacion_id, empresa_id, producto_id,
                                                       cantidad, precio_unitario, tarifa_iva,
-                                                      tratamiento_iva)
-                       VALUES ($COTIZA, $ID, $PROD_PROPIO, 1, 2500000, 0.19, 'GRAVADO');")
+                                                      tratamiento_iva, subtotal, valor_iva)
+                       VALUES ($COTIZA, $ID, $PROD_PROPIO, 1, 2500000, 0.19, 'GRAVADO',
+                               2500000, 475000);")
     [[ -z "$salida" ]] && ok "el renglón de cotización propio entra" \
                        || falla "el renglón de cotización propio fue rechazado: $(solo_error "$salida")"
   fi

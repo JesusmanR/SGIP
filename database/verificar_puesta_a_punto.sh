@@ -350,8 +350,9 @@ acepta "una línea de cotización con NO_GRAVADO se guarda" \
    SELECT 1, 'PAP-C1', (SELECT cliente_id FROM clientes WHERE empresa_id = 1 LIMIT 1),
           (SELECT usuario_id FROM usuarios WHERE empresa_id = 1 LIMIT 1);
    INSERT INTO cotizacion_items (cotizacion_id, empresa_id, producto_id, cantidad,
-                                 precio_unitario, tarifa_iva, tratamiento_iva)
-   VALUES (LAST_INSERT_ID(), 1, $PIDB, 1, 1500, 0, 'NO_GRAVADO');
+                                 precio_unitario, tarifa_iva, tratamiento_iva,
+                                 subtotal, valor_iva)
+   VALUES (LAST_INSERT_ID(), 1, $PIDB, 1, 1500, 0, 'NO_GRAVADO', 1500, 0);
    ROLLBACK;"
 rechaza "y un tratamiento inventado sigue rechazado" 1265 tratamiento_iva \
   "START TRANSACTION;

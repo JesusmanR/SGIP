@@ -193,7 +193,7 @@ jobs:
             "SELECT COUNT(*) FROM information_schema.referential_constraints
              WHERE constraint_schema='sgip' AND constraint_name LIKE '%\\_emp';")
           echo "claves foráneas por empresa: $n"
-          test "$n" -eq 66
+          test "$n" -eq 67
 
           descuidadas=$(mysql -h 127.0.0.1 -u root -psgip_ci -N -B -e \
             "SELECT GROUP_CONCAT(x.table_name, '.', x.constraint_name SEPARATOR ', ')
