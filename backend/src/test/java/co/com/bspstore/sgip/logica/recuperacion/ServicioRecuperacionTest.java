@@ -1,6 +1,7 @@
 package co.com.bspstore.sgip.logica.recuperacion;
 
 import co.com.bspstore.sgip.api.dto.MensajeRecuperacion;
+import co.com.bspstore.sgip.config.ConfiguracionAsincrona;
 import co.com.bspstore.sgip.datos.AuditoriaAccesoRepositorio;
 import co.com.bspstore.sgip.datos.RepositorioCodigosRecuperacion;
 import co.com.bspstore.sgip.datos.UsuarioRepositorio;
@@ -12,6 +13,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableAsync;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Optional;
@@ -21,6 +23,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -201,5 +204,78 @@ class ServicioRecuperacionTest {
             verify(ConfiguracionDePrueba.USUARIOS, timeout(5000)).findByCorreo(eq("ana@tienda.com"));
             assertThat(ConfiguracionDePrueba.EJECUTOR.hilo.get()).isEqualTo("ejecutor-de-prueba");
         });
+    }
+
+    // ------------------------------------------------------- la cola llena
+
+    /**
+     * Con el ejecutor real de la aplicación ({@link ConfiguracionAsincrona}: 2 hilos y una cola de
+     * 50) y una tarea que se queda esperando dentro de la base simulada.
+     */
+    @Configuration
+    static class ConfiguracionConColaLlena {
+        static final CountDownLatch RETENIDA = new CountDownLatch(1);
+
+        @Bean
+        UsuarioRepositorio usuarios() {
+            return mock(UsuarioRepositorio.class);
+        }
+
+        @Bean
+        AuditoriaAccesoRepositorio auditoria() {
+            return mock(AuditoriaAccesoRepositorio.class);
+        }
+
+        @Bean
+        RepositorioCodigosRecuperacion codigos() throws InterruptedException {
+            RepositorioCodigosRecuperacion codigos = mock(RepositorioCodigosRecuperacion.class);
+            when(codigos.contarSolicitudesDesdeOrigen(any(), any())).thenAnswer(invocacion -> {
+                RETENIDA.await(20, TimeUnit.SECONDS);
+                return 0;
+            });
+            return codigos;
+        }
+
+        @Bean
+        EnviadorDeCorreo enviador() {
+            return mock(EnviadorDeCorreo.class);
+        }
+
+        @Bean
+        Clock reloj() {
+            return Clock.fixed(Instant.parse("2026-11-26T15:00:00Z"), ZoneOffset.UTC);
+        }
+
+        @Bean
+        TareaDeRecuperacion tarea(UsuarioRepositorio usuarios, AuditoriaAccesoRepositorio auditoria,
+                                  RepositorioCodigosRecuperacion codigos, EnviadorDeCorreo enviador, Clock reloj) {
+            return new TareaDeRecuperacion(usuarios, auditoria, codigos, enviador, reloj);
+        }
+
+        @Bean
+        ServicioRecuperacion servicio(TareaDeRecuperacion tarea) {
+            return new ServicioRecuperacion(tarea);
+        }
+    }
+
+    @Test
+    void conLaColaLlenaLaRespuestaSigueSiendo200YNingunaPeticionSeBloquea() {
+        // Los dos hilos quedan retenidos y la cola admite 50: de 60 solicitudes, 8 se descartan. Ninguna
+        // debe esperar (nada de CallerRuns, que haría la tarea en el hilo de la petición) ni fallar.
+        new ApplicationContextRunner()
+                .withUserConfiguration(ConfiguracionAsincrona.class, ConfiguracionConColaLlena.class)
+                .run(contexto -> {
+                    ServicioRecuperacion servicio = contexto.getBean(ServicioRecuperacion.class);
+                    try {
+                        assertTimeoutPreemptively(Duration.ofSeconds(2), () -> {
+                            for (int i = 0; i < 60; i++) {
+                                assertThat(servicio.solicitar("ana" + i + "@tienda.com", "10.0.0.5").mensaje())
+                                        .isEqualTo(MENSAJE);
+                            }
+                        });
+                    } finally {
+                        ConfiguracionConColaLlena.RETENIDA.countDown();
+                    }
+                });
     }
 }
