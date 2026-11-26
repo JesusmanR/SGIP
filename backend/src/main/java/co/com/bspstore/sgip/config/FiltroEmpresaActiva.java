@@ -117,9 +117,9 @@ public class FiltroEmpresaActiva extends OncePerRequestFilter {
             return;
         }
 
-        if (FiltroCambioClave.esClaveOSalida(peticion)) {
-            // Cambiar la propia contraseña y salir son del usuario, no del
-            // negocio. Bloquearlos atraparía a quien tiene la clave inicial
+        if (FiltroCambioClave.esRutaDeLaCuenta(peticion)) {
+            // Cambiar la propia contraseña, salir y recuperarla son del
+            // usuario, no del negocio. Bloquearlos atraparía a quien tiene la clave inicial
             // en una empresa desactivada: el otro filtro le exige cambiarla.
             cadena.doFilter(peticion, respuesta);
             return;
@@ -166,7 +166,7 @@ public class FiltroEmpresaActiva extends OncePerRequestFilter {
     /**
      * Si la petición es exactamente el POST que cierra el turno del cajero. Una ruta, no un prefijo: abrir otro
      * turno, vender, cobrar y devolver mueven dinero y siguen bloqueados. Se compara la ruta tal como llegó, sin
-     * decodificar, como en {@link FiltroCambioClave#esClaveOSalida}.
+     * decodificar, como en {@link FiltroCambioClave#esRutaDeLaCuenta}.
      */
     private static boolean esCierreDeTurno(HttpServletRequest peticion) {
         if (!HttpMethod.POST.name().equals(peticion.getMethod())) {

@@ -1,12 +1,15 @@
 package co.com.bspstore.sgip.api;
 
+import co.com.bspstore.sgip.api.dto.MensajeRecuperacion;
 import co.com.bspstore.sgip.api.dto.RespuestaLogin;
 import co.com.bspstore.sgip.api.dto.SolicitudCambioClave;
 import co.com.bspstore.sgip.api.dto.SolicitudLogin;
+import co.com.bspstore.sgip.api.dto.SolicitudRecuperacion;
 import co.com.bspstore.sgip.config.ContextoEmpresa;
 import co.com.bspstore.sgip.config.UsuarioAutenticado;
 import co.com.bspstore.sgip.logica.ServicioAutenticacion;
 import co.com.bspstore.sgip.logica.ServicioSesion;
+import co.com.bspstore.sgip.logica.recuperacion.ServicioRecuperacion;
 import co.com.bspstore.sgip.modelo.Usuario;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -26,10 +29,13 @@ public class AutenticacionControlador {
 
     private final ServicioAutenticacion servicio;
     private final ServicioSesion sesiones;
+    private final ServicioRecuperacion recuperacion;
 
-    public AutenticacionControlador(ServicioAutenticacion servicio, ServicioSesion sesiones) {
+    public AutenticacionControlador(ServicioAutenticacion servicio, ServicioSesion sesiones,
+                                    ServicioRecuperacion recuperacion) {
         this.servicio = servicio;
         this.sesiones = sesiones;
+        this.recuperacion = recuperacion;
     }
 
     /** CU-01 · Iniciar sesión. */
@@ -85,5 +91,20 @@ public class AutenticacionControlador {
         servicio.cambiarClave(quien.usuarioId(), solicitud.claveActual(), solicitud.claveNueva(),
                 peticion.getRemoteAddr(), token);
         return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Pide el código con el que se recupera la contraseña (RF-65). Pública: quien la olvidó no
+     * tiene sesión, y si llega con un token viejo ni se mira.
+     *
+     * Responde siempre 200 y el mismo texto, exista el correo o no, sea válido o no. Sin
+     * {@code @Valid}: rechazar un formato con un 400 diría qué se acepta. El trabajo (y todo lo que
+     * toca la base) corre en otro hilo; aquí solo se normaliza y se entrega. Un cuerpo que no es
+     * JSON sí da el 400 normal de Spring: no dice nada del correo.
+     */
+    @PostMapping("/recuperacion")
+    public MensajeRecuperacion solicitarRecuperacion(@RequestBody SolicitudRecuperacion solicitud,
+                                                     HttpServletRequest peticion) {
+        return recuperacion.solicitar(solicitud.correo(), peticion.getRemoteAddr());
     }
 }

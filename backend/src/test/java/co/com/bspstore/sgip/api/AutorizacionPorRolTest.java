@@ -13,6 +13,7 @@ import co.com.bspstore.sgip.logica.ServicioInventario;
 import co.com.bspstore.sgip.logica.ServicioProducto;
 import co.com.bspstore.sgip.logica.ServicioProveedor;
 import co.com.bspstore.sgip.logica.ServicioSesion;
+import co.com.bspstore.sgip.logica.recuperacion.ServicioRecuperacion;
 import co.com.bspstore.sgip.modelo.EstadoEmpresa;
 import co.com.bspstore.sgip.modelo.Producto;
 import org.junit.jupiter.api.BeforeEach;
@@ -77,6 +78,7 @@ class AutorizacionPorRolTest {
     @MockitoBean ServicioProveedor proveedores;
     @MockitoBean ServicioInventario inventario;
     @MockitoBean ServicioAutenticacion autenticacion;
+    @MockitoBean ServicioRecuperacion recuperacion;
     // Dependencias de los filtros: con ellas simuladas, los filtros son los
     // de verdad y lo único que se finge es la base de datos.
     @MockitoBean ServicioSesion sesiones;

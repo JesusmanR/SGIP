@@ -24,8 +24,10 @@ import java.io.IOException;
  *
  * ## La lista de excepciones
  *
- * Son dos pares de método y ruta, comparados de forma exacta:
- * {@code POST /api/v1/auth/clave} y {@code POST /api/v1/auth/logout}.
+ * Son cuatro pares de método y ruta, comparados de forma exacta:
+ * {@code POST /api/v1/auth/clave}, {@code POST /api/v1/auth/logout} y las dos de
+ * la recuperación de la contraseña, {@code POST /api/v1/auth/recuperacion} y
+ * {@code POST /api/v1/auth/recuperacion/confirmar}.
  * Nada de prefijos ni de «empieza por»: cualquier variante de la ruta
  * —barra final, doble barra, un carácter codificado, un parámetro de
  * ruta— no coincide y cae del lado que rechaza. Se compara contra la
@@ -50,6 +52,8 @@ public class FiltroCambioClave extends OncePerRequestFilter {
 
     private static final String RUTA_CLAVE = "/api/v1/auth/clave";
     private static final String RUTA_SALIDA = "/api/v1/auth/logout";
+    private static final String RUTA_RECUPERACION = "/api/v1/auth/recuperacion";
+    private static final String RUTA_CONFIRMACION = "/api/v1/auth/recuperacion/confirmar";
 
     @Override
     protected void doFilterInternal(HttpServletRequest peticion,
@@ -61,7 +65,7 @@ public class FiltroCambioClave extends OncePerRequestFilter {
                 .map(UsuarioAutenticado::debeCambiarClave)
                 .orElse(false);
 
-        if (!pendiente || esClaveOSalida(peticion)) {
+        if (!pendiente || esRutaDeLaCuenta(peticion)) {
             cadena.doFilter(peticion, respuesta);
             return;
         }
@@ -70,12 +74,15 @@ public class FiltroCambioClave extends OncePerRequestFilter {
     }
 
     /**
-     * Si la petición es exactamente un POST a cambiar la clave o a salir.
-     * Lo comparte {@link FiltroEmpresaActiva}: las dos cosas son del
-     * usuario y no del negocio, y una empresa en modo de consulta no debe
-     * impedirlas.
+     * Si la petición es exactamente un POST a cambiar la clave, a salir o a
+     * recuperar la contraseña (pedir el código y confirmarlo, RF-65).
+     * Lo comparte {@link FiltroEmpresaActiva}: son cosas del usuario y no
+     * del negocio, y una empresa en modo de consulta no debe impedirlas.
+     * Las dos de la recuperación son públicas y las puede llamar un
+     * navegador que aún guarda un token viejo: si ese token es de un usuario
+     * con el cambio de clave pendiente, no puede responderle un 403.
      */
-    static boolean esClaveOSalida(HttpServletRequest peticion) {
+    static boolean esRutaDeLaCuenta(HttpServletRequest peticion) {
         if (!"POST".equals(peticion.getMethod())) {
             return false;
         }
@@ -87,7 +94,8 @@ public class FiltroCambioClave extends OncePerRequestFilter {
         String ruta = (contexto != null && !contexto.isEmpty() && uri.startsWith(contexto))
                 ? uri.substring(contexto.length())
                 : uri;
-        return RUTA_CLAVE.equals(ruta) || RUTA_SALIDA.equals(ruta);
+        return RUTA_CLAVE.equals(ruta) || RUTA_SALIDA.equals(ruta)
+                || RUTA_RECUPERACION.equals(ruta) || RUTA_CONFIRMACION.equals(ruta);
     }
 
     /**

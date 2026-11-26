@@ -60,6 +60,10 @@ public class ConfiguracionSeguridad {
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(a -> a
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/login").permitAll()
+                        // La recuperación de la contraseña (RF-65) la pide quien no puede entrar.
+                        // Dos rutas exactas, solo POST: nada de prefijos.
+                        .requestMatchers(HttpMethod.POST, "/api/v1/auth/recuperacion").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/auth/recuperacion/confirmar").permitAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(filtroSesion, UsernamePasswordAuthenticationFilter.class)
                 // Después del de sesión y no antes: necesita saber quién
