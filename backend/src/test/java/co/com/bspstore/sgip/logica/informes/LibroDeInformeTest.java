@@ -15,12 +15,14 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -94,9 +96,9 @@ class LibroDeInformeTest {
     @Test
     void unTextoQueEmpiezaPorIgualEsTextoYNoFormula() throws Exception {
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-        try (LibroDeInforme libro = new LibroDeInforme(bytes, "Informe")) {
+        try (LibroDeInforme libro = new LibroDeInforme(bytes, "=HYPERLINK(\"x\")")) {
             libro.filtro("Búsqueda", "=2+2");
-            libro.encabezados("Referencia", "Descripción");
+            libro.encabezados("=Referencia", "@Descripción");
             libro.fila("=1+1", "+cmd|'/C calc'!A0");
             libro.fila("@SUM(1)", "-5");
         }
@@ -114,6 +116,15 @@ class LibroDeInformeTest {
             Cell filtro = celdaCon(hoja, 1, "=2+2");
             assertEquals(CellType.STRING, filtro.getCellType());
             assertTrue(filtro.getCellStyle().getQuotePrefixed());
+            // El título y los encabezados también son texto.
+            for (String texto : List.of("=HYPERLINK(\"x\")", "=Referencia")) {
+                Cell c = celdaCon(hoja, 0, texto);
+                assertEquals(CellType.STRING, c.getCellType(), texto);
+                assertTrue(c.getCellStyle().getQuotePrefixed(), texto);
+            }
+            Cell encabezado = celdaCon(hoja, 1, "@Descripción");
+            assertEquals(CellType.STRING, encabezado.getCellType());
+            assertTrue(encabezado.getCellStyle().getQuotePrefixed());
             // Ninguna celda del libro es una fórmula.
             for (Row fila : hoja) {
                 for (Cell c : fila) {
@@ -238,6 +249,161 @@ class LibroDeInformeTest {
 
         assertEquals("informe-nandu-raro-x-2026-11-26.xlsx", nombre);
         assertTrue(nombre.matches("[a-z0-9.-]+"), nombre);
+    }
+
+    // ------------------------------------------------------------- escribir: el punto único de uso seguro
+
+    /** Una salida que cuenta lo que le escriben. */
+    private static final class SalidaContada extends OutputStream {
+        int bytes;
+        int escrituras;
+
+        @Override
+        public void write(int b) {
+            bytes++;
+            escrituras++;
+        }
+
+        @Override
+        public void write(byte[] b, int desde, int largo) {
+            bytes += largo;
+            escrituras++;
+        }
+    }
+
+    @Test
+    void escribirDejaElLibroEnLaSalida() throws Exception {
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+
+        LibroDeInforme.escribir(bytes, "Informe", libro -> {
+            libro.encabezados("A");
+            libro.fila("uno");
+        });
+
+        try (XSSFWorkbook wb = abrir(bytes)) {
+            assertEquals("uno", celdaCon(wb.getSheetAt(0), 0, "uno").getStringCellValue());
+        }
+    }
+
+    @Test
+    void siElLlenadorLanzaAMitadLaSalidaQuedaVaciaYLaExcepcionSePropaga() {
+        SalidaContada salida = new SalidaContada();
+        IllegalStateException causa = new IllegalStateException("se cayó la base");
+
+        IllegalStateException e = assertThrows(IllegalStateException.class,
+                () -> LibroDeInforme.escribir(salida, "Informe", libro -> {
+                    libro.encabezados("A");
+                    for (int i = 0; i < 150; i++) {
+                        libro.fila("x" + i);
+                    }
+                    throw causa;
+                }));
+
+        assertSame(causa, e);
+        assertEquals(0, salida.bytes);
+    }
+
+    @Test
+    void siElLlenadorLanzaUnaIOExceptionLaSalidaQuedaVaciaYSePropaga() {
+        SalidaContada salida = new SalidaContada();
+
+        IOException e = assertThrows(IOException.class,
+                () -> LibroDeInforme.escribir(salida, "Informe", libro -> {
+                    libro.fila("x");
+                    throw new IOException("disco");
+                }));
+
+        assertEquals("disco", e.getMessage());
+        assertEquals(0, salida.bytes);
+    }
+
+    @Test
+    void descartarYCerrarNoEscribeNada() throws Exception {
+        SalidaContada salida = new SalidaContada();
+
+        try (LibroDeInforme libro = new LibroDeInforme(salida, "Informe")) {
+            libro.encabezados("A");
+            libro.descartar();
+        }
+
+        assertEquals(0, salida.bytes);
+    }
+
+    @Test
+    void cerrarDosVecesNoEscribeDosVeces() throws Exception {
+        SalidaContada salida = new SalidaContada();
+        LibroDeInforme libro = new LibroDeInforme(salida, "Informe");
+        libro.encabezados("A");
+
+        libro.close();
+        int tras = salida.bytes;
+        int escrituras = salida.escrituras;
+        libro.close();
+
+        assertTrue(tras > 0);
+        assertEquals(tras, salida.bytes);
+        assertEquals(escrituras, salida.escrituras);
+    }
+
+    // -------------------------------------------------------------------- tipos de celda y formatos
+
+    @Test
+    void unBigDecimalConFormatoTextoSaleSinNotacionCientifica() throws Exception {
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        try (LibroDeInforme libro = new LibroDeInforme(bytes, "Informe")) {
+            libro.encabezados("N");
+            libro.fila(LibroDeInforme.celda(new BigDecimal("1E+10"), Formato.TEXTO));
+            libro.fila(LibroDeInforme.celda(new BigDecimal("0.0000001"), Formato.TEXTO));
+        }
+
+        try (XSSFWorkbook wb = abrir(bytes)) {
+            Sheet hoja = wb.getSheetAt(0);
+            assertEquals(CellType.STRING, celdaCon(hoja, 0, "10000000000").getCellType());
+            celdaCon(hoja, 0, "0.0000001");
+        }
+    }
+
+    @Test
+    void unBooleanSaleSiONoEnCualquierFormato() throws Exception {
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        try (LibroDeInforme libro = new LibroDeInforme(bytes, "Informe")) {
+            libro.encabezados("A", "B", "C", "D");
+            libro.fila(true, false,
+                    LibroDeInforme.celda(true, Formato.PESOS), LibroDeInforme.celda(false, Formato.UNIDADES));
+        }
+
+        try (XSSFWorkbook wb = abrir(bytes)) {
+            Sheet hoja = wb.getSheetAt(0);
+            Row datos = hoja.getRow(celdaCon(hoja, 0, "A").getRowIndex() + 1);
+            assertEquals("Sí", datos.getCell(0).getStringCellValue());
+            assertEquals("No", datos.getCell(1).getStringCellValue());
+            assertEquals("Sí", datos.getCell(2).getStringCellValue());
+            assertEquals("No", datos.getCell(3).getStringCellValue());
+        }
+    }
+
+    @Test
+    void unaFechaConHoraConFormatoFechaEsUnaFechaSinHora() throws Exception {
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        try (LibroDeInforme libro = new LibroDeInforme(bytes, "Informe")) {
+            libro.encabezados("F", "G");
+            libro.fila(LibroDeInforme.celda(LocalDateTime.of(2026, 11, 26, 15, 30), Formato.FECHA),
+                    LocalDateTime.of(2026, 11, 26, 15, 30));
+        }
+
+        try (XSSFWorkbook wb = abrir(bytes)) {
+            Sheet hoja = wb.getSheetAt(0);
+            Row datos = hoja.getRow(celdaCon(hoja, 0, "F").getRowIndex() + 1);
+            Cell soloFecha = datos.getCell(0);
+            assertEquals(CellType.NUMERIC, soloFecha.getCellType());
+            assertTrue(DateUtil.isCellDateFormatted(soloFecha));
+            assertEquals("yyyy-mm-dd", soloFecha.getCellStyle().getDataFormatString());
+            assertEquals(LocalDateTime.of(2026, 11, 26, 0, 0), soloFecha.getLocalDateTimeCellValue());
+            // Sin formato explícito conserva la hora.
+            Cell conHora = datos.getCell(1);
+            assertTrue(DateUtil.isCellDateFormatted(conHora));
+            assertEquals(LocalDateTime.of(2026, 11, 26, 15, 30), conHora.getLocalDateTimeCellValue());
+        }
     }
 
     @Test
