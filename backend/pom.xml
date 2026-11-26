@@ -49,6 +49,16 @@
 		</dependency>
 
 		<!--
+			Envío de correo saliente (ADR-0036): el código de recuperación de la
+			contraseña. Solo se usa con sgip.correo.modo=smtp; por omisión el
+			correo se escribe en el log. Versión heredada del parent.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-mail</artifactId>
+		</dependency>
+
+		<!--
 			Lectura de hojas de cálculo para la importación de listas de
 			precios (RF-24). El formato .xlsx es un ZIP de XML y se podría
 			recorrer con la biblioteca estándar, pero sería código propio
