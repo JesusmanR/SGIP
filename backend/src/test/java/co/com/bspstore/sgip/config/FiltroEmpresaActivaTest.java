@@ -156,6 +156,37 @@ class FiltroEmpresaActivaTest {
     }
 
     @Test
+    void laEmpresaEnConsultaDejaPedirYConfirmarLaRecuperacion() throws Exception {
+        for (String ruta : List.of("/api/v1/auth/recuperacion", "/api/v1/auth/recuperacion/confirmar")) {
+            comoUsuarioDe(4);
+            when(plataforma.estadoDe(4)).thenReturn(Optional.of(EstadoEmpresa.DESACTIVADA));
+            var r = new MockHttpServletResponse();
+            var c = org.mockito.Mockito.mock(FilterChain.class);
+
+            filtro().doFilter(peticion("POST", ruta), r, c);
+
+            verify(c).doFilter(any(), any());
+            assertEquals(200, r.getStatus(), ruta);
+        }
+    }
+
+    @Test
+    void laExencionDeLaRecuperacionNoSeExtiendeAVariantes() throws Exception {
+        for (String ruta : List.of("/api/v1/auth/recuperacion/", "/api/v1/auth/recuperacion/otra",
+                "/api/v1/auth/recuperaciones")) {
+            comoUsuarioDe(4);
+            when(plataforma.estadoDe(4)).thenReturn(Optional.of(EstadoEmpresa.DESACTIVADA));
+            var r = new MockHttpServletResponse();
+            var c = org.mockito.Mockito.mock(FilterChain.class);
+
+            filtro().doFilter(peticion("POST", ruta), r, c);
+
+            verify(c, never()).doFilter(any(), any());
+            assertEquals(403, r.getStatus(), ruta);
+        }
+    }
+
+    @Test
     void laExencionNoSeExtiendeAOtrasRutasNiAVariantes() throws Exception {
         for (String ruta : List.of("/api/v1/productos", "/api/v1/auth/clave/",
                 "/api/v1/auth/otra", "/api/v1/auth/%63lave")) {

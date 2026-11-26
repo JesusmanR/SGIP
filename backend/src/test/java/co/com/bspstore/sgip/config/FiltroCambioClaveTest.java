@@ -128,6 +128,31 @@ class FiltroCambioClaveTest {
     }
 
     @Test
+    void pedirYConfirmarLaRecuperacionSiguenConElCambioPendiente() throws Exception {
+        // Un token viejo de quien aún tiene la clave inicial no puede bloquear la recuperación.
+        for (String ruta : List.of("/api/v1/auth/recuperacion", "/api/v1/auth/recuperacion/confirmar")) {
+            comoUsuario(true);
+            var r = new MockHttpServletResponse();
+            var c = mock(FilterChain.class);
+
+            filtro.doFilter(peticion("POST", ruta), r, c);
+
+            verify(c).doFilter(any(), any());
+            assertEquals(200, r.getStatus(), ruta);
+        }
+    }
+
+    @Test
+    void laExencionDeLaRecuperacionEsExactaYSoloDelPost() throws Exception {
+        comoUsuario(true);
+        verificarRechazo(peticion("GET", "/api/v1/auth/recuperacion"));
+        verificarRechazo(peticion("POST", "/api/v1/auth/recuperacion/"));
+        verificarRechazo(peticion("POST", "/api/v1/auth/recuperacion/otra"));
+        verificarRechazo(peticion("POST", "/api/v1/auth/recuperacion/confirmar/"));
+        verificarRechazo(peticion("POST", "/api/v1/auth/recuperaciones"));
+    }
+
+    @Test
     void cerrarSesionSigue() throws Exception {
         comoUsuario(true);
 

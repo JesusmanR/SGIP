@@ -5,6 +5,7 @@ import co.com.bspstore.sgip.config.UsuarioAutenticado;
 import co.com.bspstore.sgip.logica.ClaveActualIncorrectaException;
 import co.com.bspstore.sgip.logica.ServicioAutenticacion;
 import co.com.bspstore.sgip.logica.ServicioSesion;
+import co.com.bspstore.sgip.logica.recuperacion.ServicioRecuperacion;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -30,13 +31,14 @@ class AutenticacionControladorTest {
 
     @Mock ServicioAutenticacion servicio;
     @Mock ServicioSesion sesiones;
+    @Mock ServicioRecuperacion recuperacion;
 
     AutenticacionControlador controlador;
     MockHttpServletRequest peticion = new MockHttpServletRequest();
 
     @BeforeEach
     void preparar() {
-        controlador = new AutenticacionControlador(servicio, sesiones);
+        controlador = new AutenticacionControlador(servicio, sesiones, recuperacion);
         peticion.setRemoteAddr("10.0.0.5");
         var u = new UsuarioAutenticado(7, "ana@tienda.co", "VENDEDOR", 4, true);
         SecurityContext c = SecurityContextHolder.createEmptyContext();
