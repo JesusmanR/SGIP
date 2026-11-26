@@ -467,16 +467,51 @@ class CotizacionConBaseTest {
     }
 
     @Test
-    void unaVigenteConUnProductoDesactivadoSigueDisponibleEnElDetalle() {
+    void unaVigenteConUnProductoDesactivadoNoEstaDisponible() {
         Integer producto = caja.producto("A", 5, "10000");
-        CotizacionDetalle c = crear(caja.clienteId, linea(producto, 1));
+        Integer otro = caja.producto("B", 5, "5000");
+        CotizacionDetalle c = crear(caja.clienteId, linea(producto, 1), linea(otro, 1));
         caja.desactivarProducto(producto);
 
         CotizacionDetalle vigente = cotizaciones.detalle(caja.empresa.empresaId, c.id());
 
         assertEquals("VIGENTE", vigente.estado());
-        assertTrue(vigente.lineas().get(0).disponible(), "RF-17 se aplica al cobrar (tarea 6), no al leer");
+        assertFalse(vigente.lineas().get(0).disponible(), "RF-17: un producto inactivo no se vende");
+        assertNull(vigente.lineas().get(0).precioHoy(), "una vigente no muestra el precio de hoy");
+        igual("10000", vigente.lineas().get(0).precioUnitario(), "el congelado se conserva para mostrarlo");
+        assertTrue(vigente.lineas().get(1).disponible(), "el producto activo sigue disponible");
+    }
+
+    @Test
+    void unaVigenteConUnProductoActivoSinPrecioHoySigueDisponible() {
+        Integer producto = caja.producto("A", 5, "10000");
+        CotizacionDetalle c = crear(caja.clienteId, linea(producto, 1));
+        jdbc.sql("DELETE FROM reglas_margen WHERE empresa_id = :e AND producto_id = :p")
+                .param("e", caja.empresa.empresaId).param("p", producto).update();
+        assertNull(repositorioVentas.preciosVigentes(caja.empresa.empresaId, List.of(producto)).get(0).precio(),
+                "hoy el producto no tiene regla de precio");
+
+        CotizacionDetalle vigente = cotizaciones.detalle(caja.empresa.empresaId, c.id());
+
+        assertEquals("VIGENTE", vigente.estado());
+        assertTrue(vigente.lineas().get(0).disponible(), "el congelado vale mientras el producto siga activo");
         assertNull(vigente.lineas().get(0).precioHoy());
+        igual("10000", vigente.lineas().get(0).precioUnitario(), "el precio congelado");
+    }
+
+    @Test
+    void lasObservacionesSeRecortanYUnTextoEnBlancoQuedaNulo() {
+        Integer producto = caja.producto("A", 5, "10000");
+
+        CotizacionDetalle enBlanco = cotizaciones.crear(caja.empresa.empresaId, caja.vendedorId,
+                new SolicitudCotizacion(caja.clienteId, List.of(linea(producto, 1)), "   "));
+        CotizacionDetalle conEspacios = cotizaciones.crear(caja.empresa.empresaId, caja.vendedorId,
+                new SolicitudCotizacion(caja.clienteId, List.of(linea(producto, 1)), "  hola  "));
+
+        assertNull(enBlanco.observaciones());
+        assertNull(cabecera(caja, enBlanco.id()).get("observaciones"));
+        assertEquals("hola", conEspacios.observaciones());
+        assertEquals("hola", cabecera(caja, conEspacios.id()).get("observaciones"));
     }
 
     @Test
