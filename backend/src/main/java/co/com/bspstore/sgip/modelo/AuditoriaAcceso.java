@@ -62,6 +62,24 @@ public class AuditoriaAcceso {
         return new AuditoriaAcceso(usuario, correo, false, motivo, origen);
     }
 
+    /**
+     * Un hecho de la bitácora que no es un ingreso, como los de la recuperación de
+     * la contraseña. A diferencia de las otras dos fábricas acepta que no haya
+     * usuario (el correo pedido puede no existir) y deja que el motivo diga si fue
+     * un éxito o un rechazo. El correo y el origen vienen de quien llama a la API
+     * y la columna no los admite más largos: se recortan aquí, para que un correo
+     * escrito a propósito muy largo no haga fallar la inserción de la auditoría.
+     */
+    public static AuditoriaAcceso evento(Usuario usuarioONull, String correo, boolean exitoso,
+                                         MotivoRechazo motivo, String origen) {
+        return new AuditoriaAcceso(usuarioONull, recortar(correo, 120), exitoso, motivo,
+                recortar(origen, 60));
+    }
+
+    private static String recortar(String texto, int maximo) {
+        return texto == null || texto.length() <= maximo ? texto : texto.substring(0, maximo);
+    }
+
     public Long getId() { return id; }
     public String getCorreo() { return correo; }
     public boolean isExitoso() { return exitoso; }

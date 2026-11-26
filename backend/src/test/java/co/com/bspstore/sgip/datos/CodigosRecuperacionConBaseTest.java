@@ -129,6 +129,12 @@ class CodigosRecuperacionConBaseTest {
     }
 
     @Test
+    void elRelojFijoEsHoraDeBogotaYNoUtc() {
+        // 03:30:45 UTC del 15 es 22:30:45 del 14 en Bogotá (UTC-5, sin horario de verano).
+        assertEquals(LocalDateTime.of(2030, 1, 14, 22, 30, 45), ahora);
+    }
+
+    @Test
     void creaYBloqueaElVigente() {
         LocalDateTime expira = ahora.plusMinutes(15);
         long id = codigos.crear(usuarioId, "hash-del-codigo", ahora, expira, "10.0.0.7");
