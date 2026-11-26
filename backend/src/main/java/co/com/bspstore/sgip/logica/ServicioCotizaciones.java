@@ -119,7 +119,7 @@ public class ServicioCotizaciones {
 
         // 8 y 9. La cabecera y las líneas.
         Long id = cotizaciones.insertarCabecera(new NuevaCotizacion(empresaId, numero, clienteId, usuarioId, hoy, vence,
-                vigenciaDias, calculada.subtotal(), calculada.iva(), s.observaciones()));
+                vigenciaDias, calculada.subtotal(), calculada.iva(), texto(s.observaciones())));
         List<NuevaLinea> lineas = new ArrayList<>(calculada.lineas().size());
         for (LineaCalculada l : calculada.lineas()) {
             lineas.add(new NuevaLinea(l.productoId(), l.cantidad(), l.precioUnitario(), l.tarifaIva(),
@@ -181,6 +181,15 @@ public class ServicioCotizaciones {
         return pedidas;
     }
 
+    /** El texto sin espacios sobrantes; vacío es nulo. */
+    private static String texto(String valor) {
+        if (valor == null) {
+            return null;
+        }
+        String limpio = valor.strip();
+        return limpio.isEmpty() ? null : limpio;
+    }
+
     private static VentaCalculada calcular(List<LineaPedida> pedidas) {
         try {
             return CalculoDeVenta.calcular(pedidas, null);
@@ -237,7 +246,8 @@ public class ServicioCotizaciones {
                     : LineaVendible.de(l.productoId(), l.cantidad(), null, vigente);
             lineas.add(new LineaDeCotizacion(l.productoId(), l.codigo(), l.nombre(), l.cantidad(), l.precioUnitario(),
                     l.tarifaIva(), l.tratamientoIva(), l.subtotal(), l.valorIva(),
-                    vendibleHoy.map(LineaPedida::precioUnitario).orElse(null), !vencida || vendibleHoy.isPresent()));
+                    vendibleHoy.map(LineaPedida::precioUnitario).orElse(null),
+                    vencida ? vendibleHoy.isPresent() : l.activo()));
         }
         return new CotizacionDetalle(c.id(), c.numero(), c.estado(), c.fechaEmision(), c.fechaVencimiento(),
                 c.vigenciaDias(), c.clienteId(), c.clienteNombre(), c.clienteIdentificacion(), c.usuarioId(),

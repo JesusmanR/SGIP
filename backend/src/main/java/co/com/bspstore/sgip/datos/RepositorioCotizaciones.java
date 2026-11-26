@@ -52,9 +52,10 @@ public class RepositorioCotizaciones {
                            Integer usuarioId, String creadaPor, BigDecimal subtotal, BigDecimal iva,
                            BigDecimal total, String observaciones, Long ventaId, String motivoAnulacion) {}
 
-    /** Una línea leída, con el nombre y el código del producto. */
-    public record Linea(Integer productoId, String codigo, String nombre, int cantidad, BigDecimal precioUnitario,
-                        BigDecimal tarifaIva, String tratamientoIva, BigDecimal subtotal, BigDecimal valorIva) {}
+    /** Una línea leída, con el nombre y el código del producto y si el producto sigue activo. */
+    public record Linea(Integer productoId, String codigo, String nombre, boolean activo, int cantidad,
+                        BigDecimal precioUnitario, BigDecimal tarifaIva, String tratamientoIva, BigDecimal subtotal,
+                        BigDecimal valorIva) {}
 
     /** Cuáles de esos productos existen en la empresa, estén activos o no. */
     public Set<Integer> productosDeLaEmpresa(Integer empresaId, Collection<Integer> ids) {
@@ -139,7 +140,7 @@ public class RepositorioCotizaciones {
     /** Las líneas de la cotización, por producto. */
     public List<Linea> lineas(Integer empresaId, Long cotizacionId) {
         return jdbc.sql("""
-                        SELECT i.producto_id AS productoId, p.codigo, p.nombre, i.cantidad,
+                        SELECT i.producto_id AS productoId, p.codigo, p.nombre, p.activo, i.cantidad,
                                i.precio_unitario AS precioUnitario, i.tarifa_iva AS tarifaIva,
                                i.tratamiento_iva AS tratamientoIva, i.subtotal, i.valor_iva AS valorIva
                           FROM cotizacion_items i
