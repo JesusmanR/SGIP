@@ -10,6 +10,7 @@ import co.com.bspstore.sgip.datos.RepositorioPlataforma;
 import co.com.bspstore.sgip.logica.ServicioSesion;
 import co.com.bspstore.sgip.logica.informes.Periodo;
 import co.com.bspstore.sgip.logica.informes.PeriodoInvalidoException;
+import co.com.bspstore.sgip.logica.informes.ServicioInformeInventario;
 import co.com.bspstore.sgip.modelo.EstadoEmpresa;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -68,7 +69,8 @@ class InformesRolesTest {
 
     /** Las rutas de los informes, con la petición concreta que usa esta prueba (todas son GET). */
     private static final List<String> RUTAS = List.of(
-            RAIZ + "/inventario-valorizado");
+            RAIZ + "/inventario-valorizado",
+            RAIZ + "/inventario-valorizado/excel");
 
     /** Las identidades que no deben entrar; {@code null} es un usuario sin ningún rol. */
     private static final List<String> SIN_ACCESO = java.util.Arrays.asList("VENDEDOR", "SUPER_ADMIN", "CLIENTE", null);
@@ -78,6 +80,8 @@ class InformesRolesTest {
     // Dependencias de los filtros: los filtros son los de verdad y lo único que se finge es la base.
     @MockitoBean ServicioSesion sesiones;
     @MockitoBean RepositorioPlataforma plataforma;
+    // Lo que se finge es el servicio de cada informe: aquí solo se prueba quién entra.
+    @MockitoBean ServicioInformeInventario inventario;
 
     private static RequestPostProcessor como(String rol) {
         Integer empresa = "SUPER_ADMIN".equals(rol) ? null : 4;
