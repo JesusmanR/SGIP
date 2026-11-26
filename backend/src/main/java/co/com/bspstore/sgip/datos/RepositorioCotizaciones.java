@@ -1,5 +1,6 @@
 package co.com.bspstore.sgip.datos;
 
+import co.com.bspstore.sgip.api.dto.CotizacionEnLista;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
@@ -8,6 +9,7 @@ import org.springframework.stereotype.Repository;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
@@ -56,6 +58,129 @@ public class RepositorioCotizaciones {
     public record Linea(Integer productoId, String codigo, String nombre, boolean activo, int cantidad,
                         BigDecimal precioUnitario, BigDecimal tarifaIva, String tratamientoIva, BigDecimal subtotal,
                         BigDecimal valorIva) {}
+
+    /**
+     * Lo que pide la lista: el estado (uno de {@code VIGENTE}, {@code VENCIDA}, {@code CONVERTIDA},
+     * {@code ANULADA}, o nulo para todos) y la búsqueda ya preparada: el número exacto con que se escribió (si lo
+     * parece) y los patrones de {@code LIKE} para la identificación y el nombre del cliente. Sin búsqueda, los
+     * tres van nulos.
+     */
+    public record Filtro(String estado, String numero, String prefijo, String contiene) {}
+
+    /** El estado que ve quien lee: {@code VENCIDA} se calcula, no se guarda. */
+    private static final String ESTADO_CALCULADO = """
+            CASE WHEN c.estado = 'VIGENTE' AND c.fecha_vencimiento < :hoy THEN 'VENCIDA' ELSE c.estado END""";
+
+    /**
+     * De dónde salen las filas y qué las filtra, siempre con la empresa. Es una sola sentencia fija, con los
+     * filtros como parámetros nulos cuando no se piden (como la lista de clientes): nada de lo que escribe quien
+     * consulta entra en el texto de la sentencia. Con el estado dado, el motor ve un valor y no un parámetro, y
+     * recorre el índice {@code (empresa_id, estado, fecha_vencimiento)}.
+     */
+    private static final String DESDE_Y_FILTRO = """
+              FROM cotizaciones c
+              JOIN clientes cl ON cl.empresa_id = c.empresa_id AND cl.cliente_id = c.cliente_id
+             WHERE c.empresa_id = :empresa
+               AND (:estado IS NULL
+                    OR (:estado = 'VIGENTE' AND c.estado = 'VIGENTE' AND c.fecha_vencimiento >= :hoy)
+                    OR (:estado = 'VENCIDA' AND c.estado = 'VIGENTE' AND c.fecha_vencimiento < :hoy)
+                    OR (:estado IN ('CONVERTIDA', 'ANULADA') AND c.estado = :estado))
+               AND (:prefijo IS NULL
+                    OR c.consecutivo = :numero
+                    OR cl.nit LIKE :prefijo
+                    OR cl.razon_social LIKE :contiene)
+            """;
+
+    /**
+     * Una página de las cotizaciones de la empresa, la más reciente primero ({@code cotizacion_id DESC} sobre
+     * {@code uq_cotizaciones_empresa}), con su estado calculado para {@code hoy}. Una sola consulta, con el cliente
+     * unido, sea cual sea el tamaño de la página.
+     */
+    public List<CotizacionEnLista> listar(Integer empresaId, LocalDate hoy, Filtro filtro, int limite,
+                                          long desplazamiento) {
+        return jdbc.sql("""
+                        SELECT c.cotizacion_id AS id, c.consecutivo AS numero, c.fecha_emision AS fechaEmision,
+                               cl.razon_social AS clienteNombre, c.total, c.fecha_vencimiento AS fechaVencimiento,
+                               """ + ESTADO_CALCULADO + """
+                         AS estado
+                        """ + DESDE_Y_FILTRO + """
+                         ORDER BY c.cotizacion_id DESC
+                         LIMIT :limite OFFSET :desplazamiento
+                        """)
+                .param("empresa", empresaId)
+                .param("hoy", hoy)
+                .param("estado", filtro.estado())
+                .param("numero", filtro.numero())
+                .param("prefijo", filtro.prefijo())
+                .param("contiene", filtro.contiene())
+                .param("limite", limite)
+                .param("desplazamiento", desplazamiento)
+                .query(CotizacionEnLista.class)
+                .list();
+    }
+
+    /** Cuántas cotizaciones de la empresa cumplen el mismo filtro que {@link #listar}. */
+    public long contar(Integer empresaId, LocalDate hoy, Filtro filtro) {
+        return jdbc.sql("""
+                        SELECT COUNT(*)
+                        """ + DESDE_Y_FILTRO)
+                .param("empresa", empresaId)
+                .param("hoy", hoy)
+                .param("estado", filtro.estado())
+                .param("numero", filtro.numero())
+                .param("prefijo", filtro.prefijo())
+                .param("contiene", filtro.contiene())
+                .query(Long.class)
+                .single();
+    }
+
+    /** El identificador de la cotización de la empresa con ese número exacto ({@code COT-00000012}). */
+    public Optional<Long> idPorNumero(Integer empresaId, String numero) {
+        return jdbc.sql("""
+                        SELECT cotizacion_id FROM cotizaciones
+                         WHERE empresa_id = :empresa AND consecutivo = :numero
+                        """)
+                .param("empresa", empresaId)
+                .param("numero", numero)
+                .query(Long.class)
+                .optional();
+    }
+
+    /** Lo mínimo de una cotización tomada para anularla: su estado guardado y quién la creó. */
+    public record Tomada(String estado, Integer usuarioId) {}
+
+    /**
+     * Toma la fila de la cotización de la empresa con {@code FOR UPDATE}: quien la anula (o la convierte en
+     * venta) espera a que el otro confirme y ve el estado ya confirmado. Vacía si no existe o es de otra empresa.
+     * Solo vale dentro de una transacción.
+     */
+    public Optional<Tomada> tomar(Integer empresaId, Long id) {
+        return jdbc.sql("""
+                        SELECT estado, usuario_id AS usuarioId FROM cotizaciones
+                         WHERE empresa_id = :empresa AND cotizacion_id = :id
+                           FOR UPDATE
+                        """)
+                .param("empresa", empresaId)
+                .param("id", id)
+                .query(Tomada.class)
+                .optional();
+    }
+
+    /** Deja la cotización anulada, con quién, cuándo y por qué. Ya se tomó con {@link #tomar} y era vigente. */
+    public void anular(Integer empresaId, Long id, Integer usuarioId, LocalDateTime cuando, String motivo) {
+        jdbc.sql("""
+                        UPDATE cotizaciones
+                           SET estado = 'ANULADA', anulada_por = :usuario, anulada_en = :cuando,
+                               motivo_anulacion = :motivo
+                         WHERE empresa_id = :empresa AND cotizacion_id = :id
+                        """)
+                .param("usuario", usuarioId)
+                .param("cuando", cuando)
+                .param("motivo", motivo)
+                .param("empresa", empresaId)
+                .param("id", id)
+                .update();
+    }
 
     /** Cuáles de esos productos existen en la empresa, estén activos o no. */
     public Set<Integer> productosDeLaEmpresa(Integer empresaId, Collection<Integer> ids) {

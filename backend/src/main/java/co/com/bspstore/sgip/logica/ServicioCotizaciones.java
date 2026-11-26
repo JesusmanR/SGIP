@@ -2,16 +2,20 @@ package co.com.bspstore.sgip.logica;
 
 import co.com.bspstore.sgip.api.dto.Cliente;
 import co.com.bspstore.sgip.api.dto.CotizacionDetalle;
+import co.com.bspstore.sgip.api.dto.CotizacionEnLista;
 import co.com.bspstore.sgip.api.dto.LineaCotizada;
 import co.com.bspstore.sgip.api.dto.LineaDeCotizacion;
+import co.com.bspstore.sgip.api.dto.PaginaDeCotizaciones;
 import co.com.bspstore.sgip.api.dto.SolicitudCotizacion;
 import co.com.bspstore.sgip.datos.RepositorioCalendarioHabil;
 import co.com.bspstore.sgip.datos.RepositorioClientes;
 import co.com.bspstore.sgip.datos.RepositorioConsecutivos;
 import co.com.bspstore.sgip.datos.RepositorioCotizaciones;
 import co.com.bspstore.sgip.datos.RepositorioCotizaciones.Cabecera;
+import co.com.bspstore.sgip.datos.RepositorioCotizaciones.Filtro;
 import co.com.bspstore.sgip.datos.RepositorioCotizaciones.NuevaCotizacion;
 import co.com.bspstore.sgip.datos.RepositorioCotizaciones.NuevaLinea;
+import co.com.bspstore.sgip.datos.RepositorioCotizaciones.Tomada;
 import co.com.bspstore.sgip.datos.RepositorioVentas;
 import co.com.bspstore.sgip.datos.RepositorioVentas.PrecioVigente;
 import co.com.bspstore.sgip.logica.cotizacion.VigenciaHabil;
@@ -25,6 +29,7 @@ import co.com.bspstore.sgip.modelo.TipoConsecutivo;
 import co.com.bspstore.sgip.util.Hoy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,10 +39,13 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Crear y ver una cotización (RF-37). La cotización congela exactamente lo que hoy cobraría la caja: el precio, la
@@ -56,6 +64,19 @@ import java.util.TreeMap;
  *
  * El estado {@code VENCIDA} se calcula con {@code Hoy.de(reloj)}: una cotización vigente cuyo vencimiento ya pasó.
  * Una vencida muestra, junto al precio congelado, el precio de hoy de cada línea, o que ya no está disponible.
+ *
+ * <h2>Lista y búsqueda por número</h2>
+ *
+ * La lista muestra todas las cotizaciones de la empresa, no solo las del usuario, para que cualquier cajero
+ * encuentre la que va a cobrar. Cuesta dos consultas (la página y el total) sin importar cuántas haya. El número
+ * se escribe como sea ({@code 12}, {@code cot-12}, {@code COT-00000012}) y se convierte a {@code COT-00000012}
+ * para buscarlo por igualdad exacta.
+ *
+ * <h2>Anular</h2>
+ *
+ * Toma la fila con {@code FOR UPDATE} antes de mirar su estado, de modo que no compite con la conversión en venta:
+ * quien llega segundo espera y ve el estado ya confirmado. El permiso (el administrador, o el vendedor que la
+ * creó) se comprueba antes que el estado.
  */
 @Service
 public class ServicioCotizaciones {
@@ -68,6 +89,14 @@ public class ServicioCotizaciones {
     static final String PRODUCTO_NO_EXISTE = "El producto no existe.";
     static final String CLIENTE_NO_EXISTE = "El cliente no existe.";
     static final String COTIZACION_NO_EXISTE = "La cotización no existe.";
+    static final String ESTADO_NO_VALIDO = "El estado no es válido.";
+    static final String MOTIVO_NO_VALIDO = "El motivo es obligatorio y admite hasta 200 caracteres.";
+    static final String SIN_PERMISO_PARA_ANULAR = "Solo el administrador o quien la creó la anula.";
+    static final int TAMANO_MAXIMO = 100;
+    static final int MOTIVO_MAXIMO = 200;
+    private static final List<String> ESTADOS = List.of("VIGENTE", "VENCIDA", "CONVERTIDA", "ANULADA");
+    /** Lo que se acepta como número: con o sin {@code COT-}, sin distinguir mayúsculas, y solo cifras después. */
+    private static final Pattern NUMERO_ESCRITO = Pattern.compile("(?i)(?:COT-)?(\\d+)");
     static final String CANTIDAD_FUERA_DE_RANGO =
             "La cantidad de una línea va de 1 a " + LimitesDeVenta.CANTIDAD + " unidades.";
 
@@ -134,6 +163,108 @@ public class ServicioCotizaciones {
     @Transactional(readOnly = true)
     public CotizacionDetalle detalle(Integer empresaId, Long id) {
         return leer(empresaId, id, Hoy.de(reloj));
+    }
+
+    /**
+     * Una página de las cotizaciones de la empresa, la más reciente primero. {@code estado} es uno de
+     * {@code VIGENTE}, {@code VENCIDA}, {@code CONVERTIDA} o {@code ANULADA} (nulo o en blanco, todas) y calcula
+     * {@code VENCIDA} con el día de hoy de Bogotá. {@code texto} busca por número exacto, por el comienzo de la
+     * identificación del cliente o por una parte de su nombre, al pie de la letra y sin distinguir mayúsculas.
+     * {@code pagina} empieza en 0 y {@code tamano} en 1, con 100 como máximo; fuera de rango es un 400, igual que
+     * un estado que no existe.
+     */
+    @Transactional(readOnly = true)
+    public PaginaDeCotizaciones listar(Integer empresaId, String estado, String texto, int pagina, int tamano) {
+        if (pagina < 0) {
+            throw new FiltroInvalidoException("La página no puede ser negativa.");
+        }
+        if (tamano < 1) {
+            throw new FiltroInvalidoException("El tamaño de la página debe ser al menos 1.");
+        }
+        int aplicado = Math.min(tamano, TAMANO_MAXIMO);
+        LocalDate hoy = Hoy.de(reloj);
+        Filtro filtro = filtro(estado, texto);
+        List<CotizacionEnLista> elementos = cotizaciones.listar(empresaId, hoy, filtro, aplicado,
+                (long) pagina * aplicado);
+        return new PaginaDeCotizaciones(elementos, pagina, aplicado, cotizaciones.contar(empresaId, hoy, filtro));
+    }
+
+    /**
+     * La cotización de la empresa con ese número, escrito como sea: {@code 12}, {@code cot-12} o
+     * {@code COT-00000012}. Un texto que no es un número, o un número que la empresa no tiene (incluido uno que
+     * solo existe en otra empresa), es un 404.
+     */
+    @Transactional(readOnly = true)
+    public CotizacionDetalle porNumero(Integer empresaId, String numero) {
+        String normalizado = normalizarNumero(numero).orElseThrow(() ->
+                new RecursoNoEncontradoException(COTIZACION_NO_EXISTE));
+        Long id = cotizaciones.idPorNumero(empresaId, normalizado).orElseThrow(() ->
+                new RecursoNoEncontradoException(COTIZACION_NO_EXISTE));
+        return leer(empresaId, id, Hoy.de(reloj));
+    }
+
+    /**
+     * Anula una cotización vigente o vencida y guarda quién, cuándo y por qué. Puede el administrador, o el
+     * vendedor que la creó (403 si no). Una anulada o convertida es un 409; una de otra empresa o inexistente,
+     * un 404. El motivo se recorta y debe quedar de 1 a 200 caracteres (400).
+     *
+     * La fila se toma con {@code FOR UPDATE} antes de mirar su estado, así que no compite con la conversión en
+     * venta. Una vencida sigue guardada como {@code VIGENTE}, por lo que se anula igual que una vigente.
+     */
+    @Transactional
+    public CotizacionDetalle anular(Integer empresaId, Integer usuarioId, boolean esAdministrador, Long id,
+                                    String motivo) {
+        String limpio = texto(motivo);
+        if (limpio == null || limpio.length() > MOTIVO_MAXIMO) {
+            throw new FiltroInvalidoException(MOTIVO_NO_VALIDO);
+        }
+        Tomada tomada = cotizaciones.tomar(empresaId, id)
+                .orElseThrow(() -> new RecursoNoEncontradoException(COTIZACION_NO_EXISTE));
+        if (!esAdministrador && !tomada.usuarioId().equals(usuarioId)) {
+            throw new AccessDeniedException(SIN_PERMISO_PARA_ANULAR);
+        }
+        if (!"VIGENTE".equals(tomada.estado())) {
+            throw new CotizacionNoAnulableException();
+        }
+        cotizaciones.anular(empresaId, id, usuarioId, Hoy.ahora(reloj), limpio);
+        return leer(empresaId, id, Hoy.de(reloj));
+    }
+
+    // ------------------------------------------------------------ lista
+
+    private static Filtro filtro(String estado, String texto) {
+        String pedido = texto(estado);
+        String normalizado = pedido == null ? null : pedido.toUpperCase(Locale.ROOT);
+        if (normalizado != null && !ESTADOS.contains(normalizado)) {
+            throw new FiltroInvalidoException(ESTADO_NO_VALIDO);
+        }
+        String buscado = texto(texto);
+        if (buscado == null) {
+            return new Filtro(normalizado, null, null, null);
+        }
+        String literal = escaparComodines(buscado);
+        return new Filtro(normalizado, normalizarNumero(buscado).orElse(null), literal + "%", "%" + literal + "%");
+    }
+
+    /** El número escrito como {@code COT-%08d}; vacío si no es un número que pueda existir. */
+    static Optional<String> normalizarNumero(String escrito) {
+        if (escrito == null) {
+            return Optional.empty();
+        }
+        Matcher m = NUMERO_ESCRITO.matcher(escrito.strip());
+        if (!m.matches()) {
+            return Optional.empty();
+        }
+        String cifras = m.group(1).replaceFirst("^0+", "");
+        if (cifras.isEmpty() || cifras.length() > 8) {
+            return Optional.empty();
+        }
+        return Optional.of("COT-%08d".formatted(Integer.parseInt(cifras)));
+    }
+
+    /** La barra invertida, el porcentaje y el guion bajo valen por sí mismos en un LIKE: se les antepone la barra. */
+    private static String escaparComodines(String texto) {
+        return texto.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
     }
 
     // ------------------------------------------------------------ crear

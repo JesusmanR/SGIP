@@ -22,6 +22,7 @@ import co.com.bspstore.sgip.logica.ImpuestoNoDisponibleException;
 import co.com.bspstore.sgip.logica.AlmacenArchivos;
 import co.com.bspstore.sgip.logica.ArchivoInvalidoException;
 import co.com.bspstore.sgip.logica.ClienteNoEditableException;
+import co.com.bspstore.sgip.logica.CotizacionNoAnulableException;
 import co.com.bspstore.sgip.logica.DatoDeClienteInvalidoException;
 import co.com.bspstore.sgip.logica.DatoDeTurnoInvalidoException;
 import co.com.bspstore.sgip.logica.DescuentoInvalidoException;
@@ -486,6 +487,15 @@ public class ManejadorErrores {
         // entregado) lo que impide atenderla. Texto fijo, sin repetir lo enviado.
         ProblemDetail p = ProblemDetail.forStatus(HttpStatus.CONFLICT);
         p.setTitle("Estado que no admite la operación");
+        p.setDetail(e.getMessage());
+        return p;
+    }
+
+    @ExceptionHandler(CotizacionNoAnulableException.class)
+    public ProblemDetail cotizacionNoAnulable(CotizacionNoAnulableException e) {
+        // 409: la cotización ya está anulada o convertida en venta. Texto fijo, sin repetir lo enviado.
+        ProblemDetail p = ProblemDetail.forStatus(HttpStatus.CONFLICT);
+        p.setTitle("Cotización que no se puede anular");
         p.setDetail(e.getMessage());
         return p;
     }
