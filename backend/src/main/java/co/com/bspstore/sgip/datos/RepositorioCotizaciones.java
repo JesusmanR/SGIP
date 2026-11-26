@@ -74,8 +74,9 @@ public class RepositorioCotizaciones {
     /**
      * De dónde salen las filas y qué las filtra, siempre con la empresa. Es una sola sentencia fija, con los
      * filtros como parámetros nulos cuando no se piden (como la lista de clientes): nada de lo que escribe quien
-     * consulta entra en el texto de la sentencia. Con el estado dado, el motor ve un valor y no un parámetro, y
-     * recorre el índice {@code (empresa_id, estado, fecha_vencimiento)}.
+     * consulta entra en el texto de la sentencia. El orden {@code cotizacion_id DESC} sale de
+     * {@code uq_cotizaciones_empresa}; qué índice conviene con muchas cotizaciones lo decide el motor y se mide
+     * con {@code EXPLAIN} sobre datos reales (hoy no hay una medida que justifique más).
      */
     private static final String DESDE_Y_FILTRO = """
               FROM cotizaciones c
