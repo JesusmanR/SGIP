@@ -23,7 +23,7 @@ final class EmpresaDePrueba {
     // turnos, los clientes, los medios, los productos y los usuarios, así que va antes que ellos.
     private static final List<String> TABLAS = List.of("movimientos_saldo", "reembolsos", "devolucion_items",
             "devoluciones", "saldos_cliente", "pagos_venta", "venta_items", "domicilios_venta", "ventas",
-            "consecutivos", "recepciones", "orden_compra_items",
+            "cotizacion_items", "cotizaciones", "consecutivos", "recepciones", "orden_compra_items",
             "ordenes_compra", "historico_costos", "detalle_carga_precios", "cargas_precios",
             "movimientos_inventario", "reglas_iva", "reglas_margen", "productos", "proveedores",
             "categorias", "cierres_caja", "clientes", "medios_pago", "usuarios", "suscripciones",
