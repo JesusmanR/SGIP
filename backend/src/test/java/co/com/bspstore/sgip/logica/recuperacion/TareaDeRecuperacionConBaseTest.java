@@ -28,11 +28,17 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -533,5 +539,55 @@ class TareaDeRecuperacionConBaseTest {
             }
         }
         assertThat(log.toString()).doesNotContain(correo).doesNotContain("482913").doesNotContain(mensajeDelFallo);
+    }
+
+    // ------------------------------------------------- solicitudes simultáneas del mismo correo
+
+    /** Lanza {@code n} solicitudes del mismo correo a la vez y espera a que todas terminen. */
+    private void pedirALaVez(int n) throws Exception {
+        ExecutorService hilos = Executors.newFixedThreadPool(n);
+        CountDownLatch salida = new CountDownLatch(1);
+        try {
+            List<Future<?>> tareas = new ArrayList<>();
+            for (int i = 0; i < n; i++) {
+                tareas.add(hilos.submit(() -> {
+                    salida.await();
+                    pedir();
+                    return null;
+                }));
+            }
+            salida.countDown();
+            for (Future<?> f : tareas) {
+                f.get(60, TimeUnit.SECONDS);
+            }
+        } finally {
+            hilos.shutdownNow();
+        }
+    }
+
+    private int codigosVigentesDelUsuario() {
+        return jdbc.sql("SELECT COUNT(*) FROM codigos_recuperacion WHERE usuario_id = :usuario AND usado_en IS NULL")
+                .param("usuario", usuarioId).query(Integer.class).single();
+    }
+
+    @Test
+    void dosSolicitudesSimultaneasDelMismoCorreoDejanUnSoloCodigoVigente() throws Exception {
+        pedirALaVez(2);
+
+        assertThat(codigosDelUsuario()).isEqualTo(2);
+        assertThat(codigosVigentesDelUsuario()).as("solo el último sirve").isEqualTo(1);
+        assertThat(enviador.enviados).hasSize(2);
+    }
+
+    @Test
+    void cuatroSolicitudesSimultaneasRespetanElTopeDeTresEnQuinceMinutos() throws Exception {
+        pedirALaVez(4);
+
+        assertThat(codigosDelUsuario()).isEqualTo(3);
+        assertThat(codigosVigentesDelUsuario()).isEqualTo(1);
+        assertThat(enviador.enviados).hasSize(3);
+        List<Map<String, Object>> filas = auditoriaDe(correo);
+        assertThat(filas).hasSize(4);
+        assertThat(filas.stream().filter(f -> "RECUPERACION_LIMITE".equals(f.get("motivo"))).count()).isEqualTo(1);
     }
 }

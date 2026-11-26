@@ -109,6 +109,27 @@ class ServicioRecuperacionTest {
         verify(tarea).procesar("ana@tienda.com", "(desconocido)");
     }
 
+    // ------------------------------------------------------------ recortarOrigen
+
+    @Test
+    void recortarOrigenDejaIgualUnOrigenQueCabe() {
+        assertThat(ServicioRecuperacion.recortarOrigen("10.0.0.5")).isEqualTo("10.0.0.5");
+        assertThat(ServicioRecuperacion.recortarOrigen("x".repeat(60))).isEqualTo("x".repeat(60));
+    }
+
+    @Test
+    void recortarOrigenRecortaA60() {
+        assertThat(ServicioRecuperacion.recortarOrigen("x".repeat(61))).isEqualTo("x".repeat(60));
+        assertThat(ServicioRecuperacion.recortarOrigen("y".repeat(300))).hasSize(60);
+    }
+
+    @Test
+    void recortarOrigenNuloOEnBlancoEsDesconocido() {
+        assertThat(ServicioRecuperacion.recortarOrigen(null)).isEqualTo("(desconocido)");
+        assertThat(ServicioRecuperacion.recortarOrigen("")).isEqualTo("(desconocido)");
+        assertThat(ServicioRecuperacion.recortarOrigen("   ")).isEqualTo("(desconocido)");
+    }
+
     // ------------------------------------------- el hilo de la petición no toca la base
 
     /**
