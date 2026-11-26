@@ -23,6 +23,7 @@ import co.com.bspstore.sgip.logica.venta.CalculoDeVenta;
 import co.com.bspstore.sgip.logica.venta.Descuento;
 import co.com.bspstore.sgip.logica.venta.LineaCalculada;
 import co.com.bspstore.sgip.logica.venta.LineaPedida;
+import co.com.bspstore.sgip.logica.venta.LineaVendible;
 import co.com.bspstore.sgip.logica.ValidadorDePagos.Validados;
 import co.com.bspstore.sgip.logica.venta.VentaCalculada;
 import co.com.bspstore.sgip.modelo.TipoConsecutivo;
@@ -55,6 +56,12 @@ import java.util.Optional;
  * <ol>
  *   <li>el <b>turno</b> ({@code cierres_caja}), {@code FOR SHARE} por clave primaria en
  *       {@link ServicioTurnos#exigirTurnoAbierto()};</li>
+ *   <li>la <b>cotización</b> ({@code FOR UPDATE}), solo si la venta convierte una: se valida que sea de la
+ *       empresa (404) y el resto de sus reglas (estado, vencimiento, cliente y cantidades) se decide después de
+ *       buscar la clave de idempotencia, para que un reintento devuelva su venta aunque la cotización ya esté
+ *       convertida por ella. Anular una cotización bloquea solo esta fila, y por eso anular y convertir se
+ *       excluyen entre sí. Aquí solo queda el lugar en el orden: la conversión llega con la tarea 6 de las
+ *       cotizaciones (diseño §5.5);</li>
  *   <li>la <b>venta</b> ({@code FOR UPDATE}): solo devoluciones y cobros contra entrega; esta
  *       operación crea la suya y no la bloquea;</li>
  *   <li>los <b>productos</b>, por {@code producto_id} ascendente con {@code FORCE INDEX (PRIMARY)};</li>
@@ -114,15 +121,12 @@ public class RegistradorDeVenta {
     /** El piso que la V9 puso en {@code productos} y la V18 en el kárdex. */
     private static final int PISO_EXISTENCIA = -9999;
 
-    /** Lo que cabe en {@code DECIMAL(14,2)} sin centavos: 12 dígitos. */
-    private static final BigDecimal PRECIO_MAXIMO = new BigDecimal("999999999999");
-    /** La suma de los subtotales tiene que dejar sitio al IVA (hasta el 100 %) dentro de DECIMAL(14,2). */
-    private static final BigDecimal SUBTOTAL_MAXIMO = new BigDecimal("499999999999");
     private static final BigDecimal IMPORTE_MAXIMO = new BigDecimal("999999999999.99");
 
-    static final String NO_VENDIBLE = "Este producto no se puede vender: no tiene un precio de venta válido.";
+    /** La regla de «vendible» y sus textos viven en {@link LineaVendible}: la comparte la cotización. */
+    static final String NO_VENDIBLE = LineaVendible.NO_VENDIBLE;
     static final String TOTAL_POR_COBRAR_EN_CERO = "Una venta por cobrar necesita un total mayor que cero.";
-    static final String IMPORTE_DESMEDIDO = "El importe de la venta es demasiado grande para guardarse.";
+    static final String IMPORTE_DESMEDIDO = LineaVendible.IMPORTE_DESMEDIDO;
 
     private final ServicioTurnos turnos;
     private final RepositorioVentas ventas;
@@ -199,7 +203,7 @@ public class RegistradorDeVenta {
 
         // 6. El precio, con una sola consulta a la vista.
         List<LineaPedida> pedidas = lineasConPrecio(empresa, s, ids);
-        topar(pedidas);
+        LineaVendible.toparSubtotal(pedidas);
 
         // La existencia y el encargo.
         List<Existencia> existencias = repartirExistencias(s, productos, autorizacion);
@@ -339,46 +343,14 @@ public class RegistradorDeVenta {
         List<LineaPedida> pedidas = new ArrayList<>(s.lineas().size());
         for (LineaSolicitada l : s.lineas()) {
             PrecioVigente vigente = precios.get(l.productoId());
-            LineaPedida p = vigente == null ? null : lineaVendible(l, vigente);
+            LineaPedida p = vigente == null ? null
+                    : LineaVendible.de(l.productoId(), l.cantidad(), l.descuento(), vigente).orElse(null);
             if (p == null) {
                 throw new VentaInvalidaException(NO_VENDIBLE);
             }
             pedidas.add(p);
         }
         return pedidas;
-    }
-
-    /**
-     * La línea con el precio del servidor, o nulo si el producto no se puede vender: sin precio, con
-     * precio cero o desmedido, o con una tarifa o un tratamiento que el cálculo no admite. Lo último
-     * se averigua ensayando el propio cálculo con una unidad, de modo que la regla es una sola.
-     */
-    private static LineaPedida lineaVendible(LineaSolicitada l, PrecioVigente v) {
-        if (v.precio() == null) {
-            return null;
-        }
-        BigDecimal precio = v.precio().setScale(0, RoundingMode.HALF_UP);
-        if (precio.signum() <= 0 || precio.compareTo(PRECIO_MAXIMO) > 0) {
-            return null;
-        }
-        BigDecimal tarifa = v.tarifa() == null ? BigDecimal.ZERO : v.tarifa();
-        try {
-            CalculoDeVenta.calcular(List.of(new LineaPedida(l.productoId(), 1, precio, tarifa, v.tratamiento(), null)), null);
-        } catch (IllegalArgumentException e) {
-            return null;
-        }
-        return new LineaPedida(l.productoId(), l.cantidad(), precio, tarifa, v.tratamiento(), l.descuento());
-    }
-
-    /** Que la suma de los subtotales quepa, con su IVA, en DECIMAL(14,2) antes de calcular. */
-    private static void topar(List<LineaPedida> pedidas) {
-        BigDecimal suma = BigDecimal.ZERO;
-        for (LineaPedida p : pedidas) {
-            suma = suma.add(p.precioUnitario().multiply(BigDecimal.valueOf(p.cantidad())));
-            if (suma.compareTo(SUBTOTAL_MAXIMO) > 0) {
-                throw new VentaInvalidaException(IMPORTE_DESMEDIDO);
-            }
-        }
     }
 
     private static VentaCalculada calcular(List<LineaPedida> pedidas, Descuento total) {
