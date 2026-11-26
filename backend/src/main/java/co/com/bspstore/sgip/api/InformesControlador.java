@@ -1,6 +1,7 @@
 package co.com.bspstore.sgip.api;
 
 import co.com.bspstore.sgip.api.dto.InformeInventario;
+import co.com.bspstore.sgip.logica.FiltroInvalidoException;
 import co.com.bspstore.sgip.logica.informes.ServicioInformeInventario;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -26,6 +27,9 @@ import java.io.IOException;
 @PreAuthorize("hasRole('ADMINISTRADOR')")
 public class InformesControlador {
 
+    /** Más que esto no es un código ni un nombre: es un error o un abuso, y se corta antes de la base. */
+    static final int LARGO_MAXIMO_DE_LA_BUSQUEDA = 100;
+
     private final ServicioInformeInventario inventario;
 
     public InformesControlador(ServicioInformeInventario inventario) {
@@ -43,6 +47,7 @@ public class InformesControlador {
             @RequestParam(required = false) String q,
             @RequestParam(defaultValue = "0") int pagina,
             @RequestParam(defaultValue = "50") int tamano) {
+        buscarConLargoValido(q);
         return inventario.pagina(categoriaId, q, pagina, tamano);
     }
 
@@ -56,8 +61,16 @@ public class InformesControlador {
             @RequestParam(required = false) Integer categoriaId,
             @RequestParam(required = false) String q,
             HttpServletResponse respuesta) throws IOException {
+        buscarConLargoValido(q);
         Descarga salida = new Descarga(respuesta, inventario.nombreDeArchivo());
         inventario.escribirExcel(categoriaId, q, salida);
         salida.aplicarCabeceras();
+    }
+
+    private static void buscarConLargoValido(String q) {
+        if (q != null && q.length() > LARGO_MAXIMO_DE_LA_BUSQUEDA) {
+            throw new FiltroInvalidoException(
+                    "La búsqueda no puede pasar de " + LARGO_MAXIMO_DE_LA_BUSQUEDA + " caracteres.");
+        }
     }
 }

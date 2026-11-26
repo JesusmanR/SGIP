@@ -73,8 +73,8 @@ public class RepositorioInformeInventario {
     /** La regla de contado que rige hoy para cada producto, por empresa (la vista busca solo las suyas). */
     private static final String REGLA_DE_CONTADO = """
             LEFT JOIN v_regla_margen mc
-                   ON mc.empresa_id = p.empresa_id AND mc.producto_id = p.producto_id
-                  AND mc.forma_pago = 'CONTADO'""";
+                   ON mc.empresa_id = p.empresa_id AND mc.empresa_id = :empresa
+                  AND mc.producto_id = p.producto_id AND mc.forma_pago = 'CONTADO'""";
 
     private static final String ORDEN = "ORDER BY " + VALOR_AL_COSTO + " DESC, p.producto_id";
 
