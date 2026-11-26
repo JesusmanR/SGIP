@@ -41,9 +41,10 @@ public class ServicioRecuperacion {
     /**
      * Quita espacios, pasa a minúsculas y recorta a lo que cabe en la bitácora. Se recorta al final
      * porque al bajar ciertas mayúsculas el texto puede alargarse. Un correo ausente se registra
-     * como «(vacío)».
+     * como «(vacío)». Es pública porque la confirmación del código busca al usuario con el mismo
+     * criterio.
      */
-    static String normalizar(String correo) {
+    public static String normalizar(String correo) {
         String normalizado = correo == null ? "" : correo.trim().toLowerCase(Locale.ROOT);
         if (normalizado.isEmpty()) {
             return CORREO_VACIO;
