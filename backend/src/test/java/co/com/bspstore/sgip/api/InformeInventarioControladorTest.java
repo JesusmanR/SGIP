@@ -33,6 +33,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -102,6 +103,28 @@ class InformeInventarioControladorTest {
     void unaPaginaQueNoEsUnNumeroEsUn400() throws Exception {
         mvc.perform(get("/api/v1/informes/inventario-valorizado").with(administrador()).param("pagina", "abc"))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void unaBusquedaDeMasDeCienCaracteresEsUn400ConSuMensaje() throws Exception {
+        String larga = "a".repeat(101);
+        for (String ruta : List.of("/api/v1/informes/inventario-valorizado",
+                "/api/v1/informes/inventario-valorizado/excel")) {
+            mvc.perform(get(ruta).with(administrador()).param("q", larga))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.detail").value("La búsqueda no puede pasar de 100 caracteres."));
+        }
+        verifyNoInteractions(servicio);
+    }
+
+    @Test
+    void unaBusquedaDeExactamenteCienCaracteresPasa() throws Exception {
+        when(servicio.pagina(any(), any(), anyInt(), anyInt()))
+                .thenReturn(new InformeInventario(null, List.of(), 0));
+
+        mvc.perform(get("/api/v1/informes/inventario-valorizado").with(administrador())
+                        .param("q", "a".repeat(100)))
+                .andExpect(status().isOk());
     }
 
     @Test

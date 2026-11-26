@@ -317,6 +317,9 @@ class InformeInventarioConBaseTest {
         Integer inactivo = conPrecio("Retirado", 1000, 5);
         desactivar(inactivo);
         sinPrecio("Sin regla", 1000, 6);
+        // Con decimales en la división, para que el ROUND de cada ruta cuente: 1001 x 1,2 = 1201,2 y 1501 / 0,75 = 2001,33.
+        conPrecio("Redondeo al costo", 1001, 1);                       // 1201
+        sinPrecio(empresa, otraCategoria, "Redondeo sobre precio", 1501, 1);   // 2001
 
         InformeInventario resultado = todo();
         BigDecimal deLaVista = jdbc.sql("""
@@ -324,27 +327,40 @@ class InformeInventarioConBaseTest {
                  WHERE empresa_id = :e AND existencia > 0 AND precio_contado IS NOT NULL
                 """).param("e", empresa.empresaId).query(BigDecimal.class).single();
 
-        igual("15100", resultado.totales().valorAPrecio(), "3 x 1200 + 2 x 1750 + 4 x 2000");
+        igual("18302", resultado.totales().valorAPrecio(), "3 x 1200 + 2 x 1750 + 4 x 2000 + 1201 + 2001");
         igual(deLaVista.toPlainString(), resultado.totales().valorAPrecio(), "lo que suma la vista");
         assertEquals(2, resultado.totales().sinPrecio(), "el inactivo y el que no tiene regla");
+        assertEquals(1201, precioDe(resultado, "Redondeo al costo"), "ROUND(1001 x 1,2)");
+        assertEquals(2001, precioDe(resultado, "Redondeo sobre precio"), "ROUND(1501 / 0,75)");
         BigDecimal sumaDeLasFilas = resultado.filas().stream().map(InformeInventario.Fila::valorAPrecio)
                 .filter(java.util.Objects::nonNull).reduce(BigDecimal.ZERO, BigDecimal::add);
-        igual("15100", sumaDeLasFilas, "los precios de las filas, que salen de la vista");
+        igual("18302", sumaDeLasFilas, "los precios de las filas, que salen de la vista");
 
+        // Fila por fila, no solo la suma: la página sale de la vista y el Excel de v_regla_margen.
+        Map<String, Double> preciosDelExcel = new HashMap<>();
         ByteArrayOutputStream salida = new ByteArrayOutputStream();
         informe.escribirExcel(null, null, salida);
-        double sumaDelExcel = 0;
         try (XSSFWorkbook libro = new XSSFWorkbook(new ByteArrayInputStream(salida.toByteArray()))) {
             boolean enTabla = false;
             for (Row fila : libro.getSheetAt(0)) {
-                if (enTabla && fila.getCell(7) != null && fila.getCell(7).getCellType() == CellType.NUMERIC) {
-                    sumaDelExcel += fila.getCell(7).getNumericCellValue();
+                if (enTabla) {
+                    Cell precio = fila.getCell(5);
+                    preciosDelExcel.put(texto(fila.getCell(0)),
+                            precio.getCellType() == CellType.NUMERIC ? precio.getNumericCellValue() : null);
                 } else if ("Código".equals(texto(fila.getCell(0)))) {
                     enTabla = true;
                 }
             }
         }
-        assertEquals(15100, sumaDelExcel, 0.001, "los precios del Excel, que salen de v_regla_margen");
+        assertEquals(resultado.filas().size(), preciosDelExcel.size());
+        for (InformeInventario.Fila fila : resultado.filas()) {
+            Double delExcel = preciosDelExcel.get(fila.codigo());
+            if (fila.precio() == null) {
+                assertNull(delExcel, "sin precio en la página y en el Excel: " + fila.nombre());
+            } else {
+                assertEquals(fila.precio().doubleValue(), delExcel, 0.001, "precio de " + fila.nombre());
+            }
+        }
     }
 
     // ---------------------------------------------------------------------------- las consultas
@@ -362,7 +378,6 @@ class InformeInventarioConBaseTest {
         }
         long conSesenta = consultasDeLaPagina();
 
-        System.out.println("CONSULTAS del inventario valorizado con 5 productos: " + conCinco + " ; con 60: " + conSesenta);
         assertEquals(conCinco, conSesenta, "el número de consultas no puede depender de cuántos productos haya");
         assertTrue(conSesenta <= 3, "totales, página y precios de la página: fueron " + conSesenta);
     }
@@ -384,6 +399,7 @@ class InformeInventarioConBaseTest {
         conPrecio("=SUMA(1+1)", 500, 4);
         sinPrecio("Sin regla", 1000, 3);
         fijarExistencia(conPrecio("Lenteja", 1000, 5), -3);
+        desactivar(conPrecio("Retirado", 1000, 2));
         InformeInventario pantalla = todo();
 
         ByteArrayOutputStream salida = new ByteArrayOutputStream();
@@ -421,12 +437,67 @@ class InformeInventarioConBaseTest {
                     .orElseThrow(() -> new AssertionError("el nombre que empieza por = debe quedar como texto"));
             assertEquals(CellType.STRING, deLaFormula.getCell(1).getCellType());
             assertTrue(deLaFormula.getCell(1).getCellStyle().getQuotePrefixed());
+
+            Row deLosInactivos = filasDeLaTabla.stream()
+                    .filter(f -> "Retirado".equals(texto(f.getCell(1)))).findFirst().orElseThrow();
+            assertEquals("Inactivo", texto(deLosInactivos.getCell(8)), "la marca va en la columna Estado");
+            assertNull(texto(deLaFormula.getCell(8)), "un activo no lleva marca");
+            assertEquals("\"$\"#,##0", deLaFormula.getCell(6).getCellStyle().getDataFormatString(),
+                    "un monto lleva el formato de pesos");
+            assertEquals("#,##0", deLaFormula.getCell(3).getCellStyle().getDataFormatString(),
+                    "las unidades, el de miles");
         }
+    }
+
+    /**
+     * Con más de una pantalla de SXSSF (100 filas en memoria) y datos de otra empresa de por medio, las filas de la
+     * tabla son exactamente las propias: ninguna se pierde al vaciar a disco y ninguna ajena se cuela. Nació
+     * verde: es una guarda del filtro por empresa del cursor, no un rojo.
+     */
+    @Test
+    void elExcelTraeSoloLasReferenciasPropiasConMasDeCienFilas() throws IOException {
+        for (int i = 0; i < 205; i++) {
+            sinPrecio("Propio " + i, 1000, 1 + i % 7);
+        }
+        conPrecio("Propio con precio", 1000, 2);
+        EmpresaDePrueba otra = nuevaEmpresa("Inventario ajeno del Excel");
+        for (int i = 0; i < 10; i++) {
+            conPrecio(otra, "Ajeno con precio " + i, 1000, 5);
+            sinPrecio(otra, otra.categoriaId, "Ajeno sin precio " + i, 1000, 5);
+        }
+        sinPrecio(otra, otra.categoriaId, "Ajeno negativo", 1000, -2);
+        java.util.Set<String> propios = new java.util.TreeSet<>(jdbc.sql("""
+                SELECT codigo FROM productos WHERE empresa_id = :e AND existencia <> 0
+                """).param("e", empresa.empresaId).query(String.class).list());
+        assertEquals(206, propios.size());
+
+        ByteArrayOutputStream salida = new ByteArrayOutputStream();
+        informe.escribirExcel(null, null, salida);
+
+        List<String> delExcel = new ArrayList<>();
+        try (XSSFWorkbook libro = new XSSFWorkbook(new ByteArrayInputStream(salida.toByteArray()))) {
+            boolean enTabla = false;
+            for (Row fila : libro.getSheetAt(0)) {
+                if (enTabla) {
+                    delExcel.add(texto(fila.getCell(0)));
+                } else if ("Código".equals(texto(fila.getCell(0)))) {
+                    enTabla = true;
+                }
+            }
+        }
+        assertEquals(206, delExcel.size(), "ni una menos ni una más");
+        assertEquals(propios, new java.util.TreeSet<>(delExcel), "exactamente las propias");
+        assertTrue(delExcel.stream().noneMatch(c -> c.endsWith(otra.marca)), "ningún código ajeno");
     }
 
     @Test
     void elExcelSeLlamaComoElInformeYLaFechaDeHoy() {
         assertEquals("informe-inventario-valorizado-" + Hoy.de(reloj) + ".xlsx", informe.nombreDeArchivo());
+    }
+
+    private static int precioDe(InformeInventario resultado, String nombre) {
+        return resultado.filas().stream().filter(f -> nombre.equals(f.nombre())).findFirst().orElseThrow()
+                .precio().intValueExact();
     }
 
     private static String texto(Cell celda) {
