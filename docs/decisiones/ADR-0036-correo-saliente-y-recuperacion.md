@@ -34,9 +34,19 @@ elegida con la propiedad `sgip.correo.modo` en `ConfiguracionCorreo`:
     de su causa raíz.
   - Un fallo del envío se registra como error y no cambia la respuesta al usuario.
 
-Un valor de `sgip.correo.modo` que no sea ninguno de los dos no activa ningún
-`EnviadorDeCorreo`: quien lo necesite no arranca. No se cae en silencio al
-registro.
+El modo se lee con `trim` y en minúsculas: «SMTP» y « smtp » valen como `smtp`. Un
+valor que no sea `registro` ni `smtp`, incluido el vacío (la variable definida pero
+sin valor), impide arrancar con «sgip.correo.modo debe ser «registro» o «smtp»; se
+recibió «...».». Una errata no deja la aplicación sin correo ni cae en silencio al
+registro. Un único método `@Bean` elige la implementación, para que la
+normalización no pueda contradecirse con una condición aparte.
+
+El modo `smtp` tampoco arranca a medias: falla con un mensaje claro si falta
+`SGIP_CORREO_REMITENTE` (o está en blanco), si no hay un `JavaMailSenderImpl` (es
+decir, falta `SPRING_MAIL_HOST`), o si `spring.mail.protocol` es algo distinto de
+`smtp` (por ejemplo `smtps`). Con otro protocolo las propiedades `mail.smtp.*`
+(STARTTLS obligatorio y tiempos de espera) no rigen, y se prefiere no arrancar a
+enviar sin ellas. Si algún día hace falta SMTPS (puerto 465), es una decisión nueva.
 
 **Dependencia nueva: `spring-boot-starter-mail`**, con la versión que fija el
 parent de Spring Boot (4.1.2). Trae `jakarta.mail-api` y la implementación Angus
@@ -78,6 +88,11 @@ compensa. Si esta decisión se revisa, es una decisión nueva con su ADR.
   (`applicationTaskExecutor`).
 - Cuando el servidor se cae justo después de responder, la solicitud en cola se
   pierde y el usuario pide otro código. Se acepta.
+- Con `DiscardPolicy` una tarea descartada no se ejecuta ni se completa: un
+  `@Async` futuro que devuelva `CompletableFuture` (o `Future`) en este ejecutor
+  dejaría ese futuro sin completar para siempre si la cola está llena. Hoy los
+  métodos son `void`; quien añada uno con retorno debe decidirlo (otro ejecutor o
+  un tiempo de espera).
 - Cuando la cola está llena el usuario recibe la misma respuesta de siempre y no
   llega correo; solo el log lo dice.
 - En el modo `registro` el código queda en el log. Quien lea logs de un entorno de

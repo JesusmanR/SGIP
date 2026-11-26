@@ -53,7 +53,9 @@ public class CorreoSmtp implements EnviadorDeCorreo {
         if (arroba < 1) {
             return "***";
         }
-        return correo.charAt(0) + "***" + correo.substring(arroba);
+        // Con una sola letra antes de la arroba, mostrarla sería mostrar toda la parte local.
+        String inicio = arroba == 1 ? "" : correo.substring(0, 1);
+        return inicio + "***" + correo.substring(arroba);
     }
 
     private static Throwable causaRaiz(Throwable e) {
