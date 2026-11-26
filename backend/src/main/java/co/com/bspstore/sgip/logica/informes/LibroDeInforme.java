@@ -40,8 +40,12 @@ import java.util.Locale;
  *
  * {@code close()} escribe lo que haya, también cuando el cuerpo del {@code try} lanzó una excepción:
  * try-with-resources no se lo dice. Con una {@code Descarga} eso significa un 200 con un libro incompleto.
- * Quien llena el libro con datos que pueden fallar a medias debe llamar a {@link #descartar()} antes de
- * dejar que la excepción salga (por ejemplo en un {@code catch} que la relanza).
+ *
+ * **Los informes deben usar {@link #escribir(OutputStream, String, Llenador)} y no el constructor
+ * directo.** {@code escribir} abre el libro, lo llena y, si el llenado lanza, llama a {@link #descartar()}
+ * antes de relanzar, de modo que la salida no recibe ni un byte y el manejador de errores contesta su
+ * problema normal. El constructor queda para quien necesite controlar el ciclo de vida a mano, y entonces
+ * debe llamar a {@code descartar()} él mismo.
  */
 public final class LibroDeInforme implements AutoCloseable {
 
@@ -50,6 +54,29 @@ public final class LibroDeInforme implements AutoCloseable {
 
     /** Un valor con el formato que debe llevar en una {@link #fila}. */
     public record Celda(Object valor, Formato formato) {
+    }
+
+    /** Quien llena el libro: filtros, totales, encabezados y filas, con los datos que lee de donde sea. */
+    @FunctionalInterface
+    public interface Llenador {
+        void llenar(LibroDeInforme libro) throws IOException;
+    }
+
+    /**
+     * El uso seguro del libro: lo abre, lo llena con {@code llenador} y lo escribe en {@code salida}.
+     * Si el llenado lanza (una {@link IOException} o cualquier {@link RuntimeException}), el libro se
+     * descarta antes de relanzar y la salida queda sin un solo byte. No cierra la salida.
+     */
+    public static void escribir(OutputStream salida, String titulo, Llenador llenador) throws IOException {
+        try (LibroDeInforme libro = new LibroDeInforme(salida, titulo)) {
+            try {
+                llenador.llenar(libro);
+            } catch (Throwable e) {
+                // También un Error: un libro a medias no se entrega por ningún motivo.
+                libro.descartar();
+                throw e;
+            }
+        }
     }
 
     /** Filas que SXSSF conserva en memoria antes de mandarlas al disco. */
@@ -195,11 +222,21 @@ public final class LibroDeInforme implements AutoCloseable {
         if (valor == null) {
             celda.setBlank();
             celda.setCellStyle(estilos.texto);
+        } else if (valor instanceof Boolean b) {
+            // Sí o No sea cual sea el formato pedido: «true» no le dice nada a quien lee el informe.
+            texto(celda, b ? "Sí" : "No", estilos.texto);
         } else if (formato == Formato.TEXTO || formato == null && !esNumeroOFecha(valor)) {
-            texto(celda, valor instanceof Boolean b ? (b ? "Sí" : "No") : String.valueOf(valor), estilos.texto);
+            // BigDecimal.toString() puede dar notación científica («1E+10»); toPlainString() no.
+            texto(celda, valor instanceof BigDecimal d ? d.toPlainString() : String.valueOf(valor),
+                    estilos.texto);
         } else if (valor instanceof LocalDateTime momento) {
-            celda.setCellValue(DateUtil.getExcelDate(momento));
-            celda.setCellStyle(estilos.fechaHora);
+            if (formato == Formato.FECHA) {
+                celda.setCellValue(DateUtil.getExcelDate(momento.toLocalDate()));
+                celda.setCellStyle(estilos.fecha);
+            } else {
+                celda.setCellValue(DateUtil.getExcelDate(momento));
+                celda.setCellStyle(estilos.fechaHora);
+            }
         } else if (valor instanceof LocalDate fecha) {
             celda.setCellValue(DateUtil.getExcelDate(fecha));
             celda.setCellStyle(estilos.fecha);
