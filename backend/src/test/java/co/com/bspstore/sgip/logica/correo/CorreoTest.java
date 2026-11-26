@@ -91,7 +91,7 @@ class CorreoTest {
     @Test
     void enmascarar() {
         assertEquals("j***@dominio.com", CorreoSmtp.enmascarar("juan@dominio.com"));
-        assertEquals("a***@x.co", CorreoSmtp.enmascarar("a@x.co"));
+        assertEquals("***@x.co", CorreoSmtp.enmascarar("a@x.co"));
     }
 
     @Test

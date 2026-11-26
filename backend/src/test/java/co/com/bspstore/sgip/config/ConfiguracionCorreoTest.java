@@ -149,4 +149,112 @@ class ConfiguracionCorreoTest {
                 .withPropertyValues("sgip.correo.modo=smtp", REMITENTE)
                 .run(c -> assertThat(c).hasNotFailed());
     }
+
+    // --- Ronda 1 -----------------------------------------------------------
+
+    private static final String MODO_INVALIDO = "sgip.correo.modo debe ser «registro» o «smtp»; se recibió «%s».";
+
+    @Test
+    void unModoConErrataNoArranca() {
+        contexto.withPropertyValues("sgip.correo.modo=smpt").run(c -> {
+            assertThat(c).hasFailed();
+            assertThat(c.getStartupFailure()).hasRootCauseMessage(MODO_INVALIDO.formatted("smpt"));
+        });
+    }
+
+    @Test
+    void unModoVacioNoArranca() {
+        contexto.withPropertyValues("sgip.correo.modo=").run(c -> {
+            assertThat(c).hasFailed();
+            assertThat(c.getStartupFailure()).hasRootCauseMessage(MODO_INVALIDO.formatted(""));
+        });
+    }
+
+    @Test
+    void elModoSeNormalizaConMayusculasYEspacios() {
+        contexto.withUserConfiguration(ConEmisor.class)
+                .withPropertyValues("sgip.correo.modo=SMTP", REMITENTE)
+                .run(c -> assertThat(c.getBean(EnviadorDeCorreo.class)).isInstanceOf(CorreoSmtp.class));
+        contexto.withUserConfiguration(ConEmisor.class)
+                .withPropertyValues("sgip.correo.modo= smtp ", REMITENTE)
+                .run(c -> assertThat(c.getBean(EnviadorDeCorreo.class)).isInstanceOf(CorreoSmtp.class));
+        contexto.withPropertyValues("sgip.correo.modo= Registro ")
+                .run(c -> assertThat(c.getBean(EnviadorDeCorreo.class)).isInstanceOf(CorreoEnRegistro.class));
+    }
+
+    @Test
+    void registroConVariosPerfilesIncluidoProdNoArranca() {
+        contexto.withInitializer(c -> c.getEnvironment().setActiveProfiles("prod", "otro"))
+                .run(c -> assertThat(c.getStartupFailure()).hasRootCauseMessage(NO_EN_PRODUCCION));
+        contexto.withInitializer(c -> c.getEnvironment().setActiveProfiles("otro", "prod"))
+                .run(c -> assertThat(c.getStartupFailure()).hasRootCauseMessage(NO_EN_PRODUCCION));
+    }
+
+    @Configuration
+    static class ConEmisorQueNoEsImpl {
+        @Bean
+        JavaMailSender emisor() {
+            return org.mockito.Mockito.mock(JavaMailSender.class);
+        }
+    }
+
+    @Test
+    void smtpConUnEmisorQueNoEsImplNoArranca() {
+        contexto.withUserConfiguration(ConEmisorQueNoEsImpl.class)
+                .withPropertyValues("sgip.correo.modo=smtp", REMITENTE)
+                .run(c -> {
+                    assertThat(c).hasFailed();
+                    assertThat(c.getStartupFailure()).hasRootCauseInstanceOf(IllegalStateException.class);
+                    assertThat(c.getStartupFailure().getMessage() + rootMessage(c.getStartupFailure()))
+                            .contains("JavaMailSenderImpl");
+                });
+    }
+
+    @Test
+    void smtpConRemitenteEnBlancoNoArranca() {
+        contexto.withUserConfiguration(ConEmisor.class)
+                .withPropertyValues("sgip.correo.modo=smtp", "SGIP_CORREO_REMITENTE=   ")
+                .run(c -> {
+                    assertThat(c).hasFailed();
+                    assertThat(c.getStartupFailure()).hasRootCauseInstanceOf(IllegalStateException.class);
+                    assertThat(rootMessage(c.getStartupFailure())).contains("SGIP_CORREO_REMITENTE");
+                });
+    }
+
+    @Test
+    void smtpSinRemitenteNoArranca() {
+        contexto.withUserConfiguration(ConEmisor.class)
+                .withPropertyValues("sgip.correo.modo=smtp")
+                .run(c -> {
+                    assertThat(c).hasFailed();
+                    assertThat(c.getStartupFailure()).hasRootCauseInstanceOf(IllegalStateException.class);
+                    assertThat(rootMessage(c.getStartupFailure())).contains("SGIP_CORREO_REMITENTE");
+                });
+    }
+
+    @Test
+    void smtpConOtroProtocoloNoArranca() {
+        contexto.withUserConfiguration(ConEmisor.class)
+                .withPropertyValues("sgip.correo.modo=smtp", REMITENTE, "spring.mail.protocol=smtps")
+                .run(c -> {
+                    assertThat(c).hasFailed();
+                    assertThat(c.getStartupFailure()).hasRootCauseInstanceOf(IllegalStateException.class);
+                    assertThat(rootMessage(c.getStartupFailure())).contains("spring.mail.protocol").contains("smtps");
+                });
+    }
+
+    @Test
+    void smtpConElProtocoloSmtpExplicitoArranca() {
+        contexto.withUserConfiguration(ConEmisor.class)
+                .withPropertyValues("sgip.correo.modo=smtp", REMITENTE, "spring.mail.protocol=smtp")
+                .run(c -> assertThat(c).hasNotFailed());
+    }
+
+    private static String rootMessage(Throwable e) {
+        Throwable r = e;
+        while (r.getCause() != null) {
+            r = r.getCause();
+        }
+        return String.valueOf(r.getMessage());
+    }
 }
